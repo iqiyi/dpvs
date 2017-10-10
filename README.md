@@ -36,10 +36,23 @@ Major features of `DPVS` including:
 
 # Quick Start
 
+## Test Environment
+
+This *quick start* is tested with the environment below.
+
+* Linux Distribution: CentOS 7.2
+* Kernel: 3.10.0-327.el7.x86_64
+* CPU: Intel(R) Xeon(R) CPU E5-2650
+* NIC: Intel X540
+* Memory: 64G
+* GCC: gcc version 4.8.5 20150623 (Red Hat 4.8.5-4)
+
+Other environment should also OK if DPDK works, pls check [dpdk.org](www.dpdk.org) for more info.
+
 ## Clone DPVS
 
 ```bash
-% git clone ...
+% git clone https://github.com/iqiyi/dpvs.git
 % cd dpvs
 ```
 
