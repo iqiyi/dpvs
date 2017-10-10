@@ -137,7 +137,7 @@ struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
             (svc->fwmark ||
              (inet_addr_equal(svc->af, &dest->vaddr, &svc->addr) &&
               dest->vport == svc->port))) {
-             return dest;  
+             return dest;
             }
         if (rte_atomic32_read(&dest->refcnt) == 1) {
             RTE_LOG(DEBUG, SERVICE, "%s: Removing destination from trash.\n", __func__);
@@ -160,7 +160,7 @@ void dp_vs_trash_cleanup(void)
         list_del(&dest->n_list);
         //dp_vs_dst_reset(dest);
         __dp_vs_unbind_svc(dest);
-        
+
         dp_vs_del_stats(dest->stats);
         rte_free(dest);
     }
@@ -170,7 +170,7 @@ static void __dp_vs_update_dest(struct dp_vs_service *svc,
                             struct dp_vs_dest *dest, struct dp_vs_dest_conf *udest)
 {
     int conn_flags;
-   
+
     rte_atomic16_set(&dest->weight, udest->weight);
     conn_flags = udest->conn_flags | DPVS_CONN_F_INACTIVE;
 
@@ -194,13 +194,13 @@ static void __dp_vs_update_dest(struct dp_vs_service *svc,
             __dp_vs_bind_svc(dest, svc);
         }
     }
-   
+
     dest->flags |= DPVS_DEST_F_AVAILABLE;
 
     if (udest->max_conn == 0 || udest->max_conn > dest->max_conn)
         dest->flags &= ~DPVS_DEST_F_OVERLOAD;
     dest->max_conn = udest->max_conn;
-    dest->min_conn = udest->min_conn;    
+    dest->min_conn = udest->min_conn;
 }
 
 
@@ -211,7 +211,7 @@ int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
     struct dp_vs_dest *dest;
 #ifdef CONFIG_IP_VS_IPV6
 #endif
-    size = RTE_CACHE_LINE_ROUNDUP(sizeof(struct dp_vs_dest));       
+    size = RTE_CACHE_LINE_ROUNDUP(sizeof(struct dp_vs_dest));
     dest = rte_zmalloc("dpvs_new_dest", size, 0);
     if(dest == NULL){
         RTE_LOG(DEBUG, SERVICE, "%s: no memory.\n", __func__);
@@ -231,7 +231,7 @@ int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
     rte_atomic32_set(&dest->inactconns, 0);
     rte_atomic32_set(&dest->persistconns, 0);
     rte_atomic32_set(&dest->refcnt, 0);
-    
+
     INIT_LIST_HEAD(&dest->d_list);
 
     dp_vs_new_stats(&(dest->stats));

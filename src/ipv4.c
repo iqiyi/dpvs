@@ -72,8 +72,8 @@ void install_ipv4_keywords(void)
 static struct list_head inet_hooks[INET_HOOK_NUMHOOKS];
 /**
  * if remove this inet_hook_lock for performance,
- * it assume all hook registeration are done 
- * during initialization, there's no race condition 
+ * it assume all hook registeration are done
+ * during initialization, there's no race condition
  * at that time. and never changed after that.
  */
 #ifdef CONFIG_DPVS_IPV4_INET_HOOK
@@ -94,7 +94,7 @@ struct ip4_stats ip4_statistics;
 rte_spinlock_t ip4_stats_lock;
 #endif
 
-int INET_HOOK(unsigned int hook, struct rte_mbuf *mbuf, 
+int INET_HOOK(unsigned int hook, struct rte_mbuf *mbuf,
         struct netif_port *in, struct netif_port *out,
         int (*okfn)(struct rte_mbuf *mbuf))
 {
@@ -154,9 +154,9 @@ static void ip4_dump_hdr(const struct ipv4_hdr *iph, portid_t port)
 
     fprintf(stderr, "lcore %u port%u ipv4 hl %u tos %u tot %u "
             "id %u ttl %u prot %u src %s dst %s\n",
-            lcore, port, IPV4_HDR_IHL_MASK & iph->version_ihl, 
-            iph->type_of_service, ntohs(iph->total_length), 
-            ntohs(iph->packet_id), iph->time_to_live, 
+            lcore, port, IPV4_HDR_IHL_MASK & iph->version_ihl,
+            iph->type_of_service, ntohs(iph->total_length),
+            ntohs(iph->packet_id), iph->time_to_live,
             iph->next_proto_id, saddr, daddr);
 
     return;
@@ -201,16 +201,16 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
         mbuf->userdata = NULL;
     }
 
-    /* 
+    /*
      * give a change for upper layer to get IP header.
      * skb uses ->data, ->transport_header, ->network_header, etc.
      * but mbuf do not. Consider the length of header is variable
-     * (e.g., IPv4 options), it's not make sence for every layer 
+     * (e.g., IPv4 options), it's not make sence for every layer
      * to parse lower layer's headers.
-     * note if mbuf->userdata is not suitable, we can use 'extened' 
+     * note if mbuf->userdata is not suitable, we can use 'extened'
      * mbuf to save offsets like skb.
      *
-     * BTW, if netif_port_get() called too many times we can also 
+     * BTW, if netif_port_get() called too many times we can also
      * use 'extend' mbuf to save 'netif_port *dev'.
      */
     mbuf->userdata = iph;
@@ -242,7 +242,7 @@ static int ipv4_local_in(struct rte_mbuf *mbuf)
         }
     }
 
-    return INET_HOOK(INET_HOOK_LOCAL_IN, mbuf, 
+    return INET_HOOK(INET_HOOK_LOCAL_IN, mbuf,
             netif_port_get(mbuf->port), NULL, ipv4_local_in_fin);
 }
 
@@ -290,7 +290,7 @@ int ipv4_output(struct rte_mbuf *mbuf)
 
     IP4_UPD_PO_STATS(out, mbuf->pkt_len);
 
-    return INET_HOOK(INET_HOOK_POST_ROUTING, mbuf, 
+    return INET_HOOK(INET_HOOK_POST_ROUTING, mbuf,
             NULL, rt->port, ipv4_output_fin);
 }
 
@@ -317,7 +317,7 @@ static int ipv4_forward(struct rte_mbuf *mbuf)
     }
 
     mtu = rt->mtu;
-    if (mbuf->pkt_len > mtu 
+    if (mbuf->pkt_len > mtu
             && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
         IP4_INC_STATS(fragfails);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
@@ -330,7 +330,7 @@ static int ipv4_forward(struct rte_mbuf *mbuf)
     iph->hdr_checksum = (uint16_t)(csum + (csum >= 0xffff));
     iph->time_to_live--;
 
-    return INET_HOOK(INET_HOOK_FORWARD, mbuf, 
+    return INET_HOOK(INET_HOOK_FORWARD, mbuf,
             netif_port_get(mbuf->port), rt->port, ipv4_forward_fin);
 
 drop:
@@ -353,8 +353,8 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
 
     /* input route decision */
-    rt = route4_input(mbuf, (struct in_addr *)&iph->dst_addr, 
-            (struct in_addr *)&iph->src_addr, 
+    rt = route4_input(mbuf, (struct in_addr *)&iph->dst_addr,
+            (struct in_addr *)&iph->src_addr,
             iph->type_of_service, netif_port_get(mbuf->port));
     if (unlikely(!rt))
         return EDPVS_KNICONTINUE; /* KNI may like it, don't drop */
@@ -366,7 +366,7 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
             goto drop;
         }
     }
-    
+
     /* use extended mbuf if have more data then @rt */
     mbuf->userdata = (void *)rt;
 
@@ -468,7 +468,7 @@ int ipv4_init(void)
 {
     int err, i;
 
-    ip4_idents = rte_malloc(NULL, IP4_IDENTS_SZ * sizeof(*ip4_idents), 
+    ip4_idents = rte_malloc(NULL, IP4_IDENTS_SZ * sizeof(*ip4_idents),
                             RTE_CACHE_LINE_SIZE);
     if (!ip4_idents)
         return EDPVS_NOMEM;
@@ -593,7 +593,7 @@ int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
     if (iph->src_addr == htonl(INADDR_ANY)) {
         union inet_addr saddr;
 
-        inet_addr_select(AF_INET, rt->port, (union inet_addr *)&fl4->daddr, 
+        inet_addr_select(AF_INET, rt->port, (union inet_addr *)&fl4->daddr,
                          fl4->scope, &saddr);
         iph->src_addr = saddr.in.s_addr;
     }
@@ -601,7 +601,7 @@ int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
     return ipv4_local_out(mbuf);
 }
 
-int ipv4_register_protocol(struct inet_protocol *prot, 
+int ipv4_register_protocol(struct inet_protocol *prot,
         unsigned char protocol)
 {
     int err = EDPVS_OK;
@@ -616,7 +616,7 @@ int ipv4_register_protocol(struct inet_protocol *prot,
     return err;
 }
 
-int ipv4_unregister_protocol(struct inet_protocol *prot, 
+int ipv4_unregister_protocol(struct inet_protocol *prot,
         unsigned char protocol)
 {
     int err = EDPVS_OK;
@@ -631,7 +631,7 @@ int ipv4_unregister_protocol(struct inet_protocol *prot,
     return err;
 }
 
-static int __inet_register_hooks(struct list_head *head, 
+static int __inet_register_hooks(struct list_head *head,
                                  struct inet_hook_ops *reg)
 {
     struct inet_hook_ops *elem;
