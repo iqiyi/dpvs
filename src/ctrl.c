@@ -1081,7 +1081,7 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg **pmsg)
     //printf("%d bytes header recieved: msg-id = %u, msg-data-len = %zu\n",
     //      res, msg_hdr.id, msg_hdr.len);
 
-    *pmsg = rte_malloc("sockopt_msg", 
+    *pmsg = rte_malloc("sockopt_msg",
             sizeof(struct dpvs_sock_msg) + msg_hdr.len, RTE_CACHE_LINE_SIZE);
     if (unlikely(NULL == *pmsg)) {
         RTE_LOG(ERR, MSGMGR, "[%s] no memory\n", __func__);

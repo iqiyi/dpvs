@@ -23,7 +23,7 @@ static inline unsigned int dp_vs_wlc_dest_overhead(struct dp_vs_dest *dest)
            rte_atomic32_read(&dest->inactconns);
 }
 
-static struct dp_vs_dest *dp_vs_wlc_schedule(struct dp_vs_service *svc, 
+static struct dp_vs_dest *dp_vs_wlc_schedule(struct dp_vs_service *svc,
                    const struct rte_mbuf *mbuf)
 {
     struct dp_vs_dest *dest, *least;
