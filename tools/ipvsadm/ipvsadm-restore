@@ -1,0 +1,26 @@
+#!/bin/bash
+#      ipvsadm-restore - Restore IPVS rules
+#
+#      A very simple wrapper to restore IPVS rules
+#      Inspired by ipchains-save.
+#
+#      Version: $Id$
+#
+#      Script Author: Horms <horms@vergenet.net>
+#
+#      This file:
+#
+#      ChangeLog
+#      Horms               :        Clear IPVS rules before adding from STDIN
+#      Horms               :        Filter out "^#"
+#
+#
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+
+# All the work is actually done in ipvsadm, hooray
+
+INPUT="$(grep -v '^#')"
+ipvsadm -C
+echo "$INPUT" | ipvsadm -R
+

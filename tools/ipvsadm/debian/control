@@ -1,0 +1,12 @@
+Source: ipvsadm
+Section: net
+Priority: optional
+Maintainer: Horms <horms@vergenet.net>
+Standards-Version: 3.1.1
+
+Package: ipvsadm
+Architecture: any
+Depends: ${shlibs:Depends}
+Description:
+  ipvsadm is a utility to administer the IP virtual server services
+  offered by the Linux kernel augmented with the virtual server patch.

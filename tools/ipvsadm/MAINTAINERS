@@ -1,0 +1,33 @@
+
+List of maintainers for the different parts of the IPVS project.
+(using kernel style MAINTAINERS listing)
+
+Userspace ipvsadm tool (this tool)
+M:	Jesper Dangaard Brouer <brouer@redhat.com>
+M:	Simon Horman <horms@verge.net.au>
+T:	git://git.kernel.org/pub/scm/utils/kernel/ipvsadm/ipvsadm.git
+W:	https://kernel.org/pub/linux/utils/kernel/ipvsadm/ (tarballs)
+L:	lvs-devel@vger.kernel.org
+L:	lvs-users@linuxvirtualserver.org
+
+Kernel IPVS
+M:	Simon Horman <horms@verge.net.au>
+M:	Julian Anastasov <ja@ssi.bg>
+M:	Wensong Zhang <wensong@linux-vs.org>
+L:	netdev@vger.kernel.org
+L:	lvs-devel@vger.kernel.org
+S:	Maintained
+F:	Documentation/networking/ipvs-sysctl.txt
+F:	include/net/ip_vs.h
+F:	include/uapi/linux/ip_vs.h
+F:	net/netfilter/ipvs/
+
+Homepage: http://www.linuxvirtualserver.org/
+M:	Wensong Zhang <wensong@linux-vs.org>
+W:	http://www.linuxvirtualserver.org/
+W:	http://www.Linux-vs.org/
+
+Wikipage: http://kb.linuxvirtualserver.org/
+M:	Wensong Zhang <wensong@linux-vs.org>
+M:	Jesper Dangaard Brouer <brouer@redhat.com>
+W:	http://kb.linuxvirtualserver.org/wiki/Main_Page

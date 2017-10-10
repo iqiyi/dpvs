@@ -1,0 +1,599 @@
+.\"
+.\"     ipvsadm(8) manual page
+.\"
+.\"	$Id$
+.\"
+.\"     Authors: Mike Wangsmo <wanger@redhat.com>
+.\"              Wensong Zhang <wensong@linux-vs.org>
+.\"
+.\"     Changes:
+.\"       Horms            :  Updated to reflect recent change of ipvsadm
+.\"                        :  Style guidance taken from ipchains(8)
+.\"                           where appropriate.
+.\"       Wensong Zhang    :  Added a short note about the defense strategies
+.\"       Horms            :  Tidy up some of the description and the
+.\"                           grammar in the -f and sysctl sections
+.\"       Wensong Zhang    :  --set option description taken from ipchains(8)
+.\"
+.\"     This program is free software; you can redistribute it and/or modify
+.\"     it under the terms of the GNU General Public License as published by
+.\"     the Free Software Foundation; either version 2 of the License, or
+.\"     (at your option) any later version.
+.\"
+.\"     This program is distributed in the hope that it will be useful,
+.\"     but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"     GNU General Public License for more details.
+.\"
+.\"     You should have received a copy of the GNU General Public License
+.\"     along with this program; if not, write to the Free Software
+.\"     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.\"
+.TH IPVSADM 8 "5th July 2003" "LVS Administration" "Linux Administrator's Guide"
+.UC 4
+.SH NAME
+ipvsadm \- Linux Virtual Server administration
+.SH SYNOPSIS
+.B ipvsadm -A|E -t|u|f \fIservice-address\fP [-s \fIscheduler\fP]
+.ti 15
+.B [-p [\fItimeout\fP]] [-M \fInetmask\fP] [-b \fIsched-flags\fP]
+.br
+.B ipvsadm -D -t|u|f \fIservice-address\fP
+.br
+.B ipvsadm -C
+.br
+.B ipvsadm -R
+.br
+.B ipvsadm -S [-n]
+.br
+.B ipvsadm -a|e -t|u|f \fIservice-address\fP -r \fIserver-address\fP
+.ti 15
+.B [-g|i|m] [-w \fIweight\fP] [-x \fIupper\fP] [-y \fIlower\fP]
+.br
+.B ipvsadm -d -t|u|f \fIservice-address\fP -r \fIserver-address\fP
+.br
+.B ipvsadm -L|l [options]
+.br
+.B ipvsadm -Z [-t|u|f \fIservice-address\fP]
+.br
+.B ipvsadm --set \fItcp\fP \fItcpfin\fP \fIudp\fP
+.br
+.B ipvsadm --start-daemon \fIstate\fP [--mcast-interface \fIinterface\fP]
+.ti 15
+.B [--syncid \fIsyncid\fP]
+.br
+.B ipvsadm --stop-daemon \fIstate\fP
+.br
+.B ipvsadm -h
+.SH DESCRIPTION
+\fBIpvsadm\fR(8) is used to set up, maintain or inspect the virtual
+server table in the Linux kernel. The Linux Virtual Server can be used
+to build scalable network services based on a cluster of two or more
+nodes. The active node of the cluster redirects service requests to a
+collection of server hosts that will actually perform the
+services. Supported features include two protocols (TCP and UDP),
+three packet-forwarding methods (NAT, tunneling, and direct routing),
+and eight load balancing algorithms (round robin, weighted round
+robin, least-connection, weighted least-connection, locality-based
+least-connection, locality-based least-connection with replication,
+destination-hashing, and source-hashing).
+.PP
+The command has two basic formats for execution:
+.TP
+.B ipvsadm \fICOMMAND\fP [\fIprotocol\fP] \fIservice-address\fP
+.ti 15
+.B [\fIscheduling-method\fP] [\fIpersistence options\fP]
+.TP
+.B ipvsadm \fIcommand\fP [\fIprotocol\fP] \fIservice-address\fP
+.ti 15
+.B \fIserver-address\fP [\fIpacket-forwarding-method\fP]
+.ti 15
+.B [\fIweight options\fP]
+.PP
+The first format manipulates a virtual service and the algorithm for
+assigning service requests to real servers. Optionally, a persistent
+timeout and network mask for the granularity of a persistent service
+may be specified. The second format manipulates a real server that is
+associated with an existing virtual service. When specifying a real
+server, the packet-forwarding method and the weight of the real
+server, relative to other real servers for the virtual service, may be
+specified, otherwise defaults will be used.
+.SS COMMANDS
+\fBipvsadm\fR(8) recognises the commands described below. Upper-case
+commands maintain virtual services. Lower-case commands maintain real
+servers that are associated with a virtual service.
+.TP
+.B -A, --add-service
+Add a virtual service. A service address is uniquely defined by a
+triplet: IP address, port number, and protocol. Alternatively, a
+virtual service may be defined by a firewall-mark.
+.TP
+.B -E, --edit-service
+Edit a virtual service.
+.TP
+.B -D, --delete-service
+Delete a virtual service, along with any associated real servers.
+.TP
+.B -C, --clear
+Clear the virtual server table.
+.TP
+.B -R, --restore
+Restore Linux Virtual Server rules from stdin. Each line read from
+stdin will be treated as the command line options to a separate
+invocation of \fIipvsadm\fP. Lines read from stdin can optionally
+begin with "ipvsadm".  This option is useful to avoid executing a
+large number or \fIipvsadm\fP  commands when constructing an extensive
+routing table.
+.TP
+.B -S, --save
+Dump the Linux Virtual Server rules to stdout in a format that can be
+read by -R|--restore.
+.TP
+.B -a, --add-server
+Add a real server to a virtual service.
+.TP
+.B -e, --edit-server
+Edit a real server in a virtual service.
+.TP
+.B -d, --delete-server
+Remove a real server from a virtual service.
+.TP
+.B -L, -l, --list
+List the virtual server table if no argument is specified. If a
+\fIservice-address\fP is selected, list this service only. If the
+\fI-c\fP option is selected, then display the connection table. The
+exact output is affected by the other arguments given.
+.TP
+.B -Z, --zero
+Zero the packet, byte and rate counters in a service or all services.
+.TP
+.B --set \fItcp\fP \fItcpfin\fP \fIudp\fP
+Change the timeout values used for IPVS connections. This command
+always takes 3 parameters,  representing  the  timeout  values (in
+seconds) for TCP sessions, TCP sessions after receiving a  FIN
+packet, and  UDP  packets, respectively.  A timeout value 0 means that
+the current timeout value of the  corresponding  entry  is preserved.
+.TP
+.B --start-daemon \fIstate\fP
+Start the connection synchronization daemon. The \fIstate\fP is to
+indicate that the daemon is started as \fImaster\fP or \fIbackup\fP. The
+connection synchronization daemon is implemented inside the Linux
+kernel. The master daemon running at the primary load balancer
+multicasts changes of connections periodically, and the backup daemon
+running at the backup load balancers receives multicast message and
+creates corresponding connections. Then, in case the primary load
+balancer fails, a backup load balancer will takeover, and it has state
+of almost all connections, so that almost all established connections
+can continue to access the service.
+.PP
+The sync daemon currently only supports IPv4 connections.
+.TP
+.B --stop-daemon
+Stop the connection synchronization daemon.
+.TP
+\fB-h, --help\fR
+Display a description of the command syntax.
+.SS PARAMETERS
+The commands above accept or require zero or more of the following
+parameters.
+.TP
+.B -t, --tcp-service \fIservice-address\fP
+Use TCP service. The \fIservice-address\fP is of the form
+\fIhost[:port]\fP.  \fIHost\fP may be one of a plain IP address or a
+hostname. \fIPort\fP may be either a plain port number or the service
+name of port. The \fIPort\fP may be omitted, in which case zero will
+be used. A \fIPort\fP  of zero is only valid if the service is
+persistent as the -p|--persistent option, in which case it is a
+wild-card port, that is connections will be accepted to any port.
+.TP
+.B -u, --udp-service \fIservice-address\fP
+Use UDP service. See the -t|--tcp-service for the description of  the
+\fIservice-address\fP.
+.TP
+.B -f, --fwmark-service \fIinteger\fP
+Use a firewall-mark, an integer value greater than zero, to denote a
+virtual service instead of an address, port and protocol (UDP or
+TCP). The marking of packets with a firewall-mark is configured using
+the -m|--mark option to \fBiptables\fR(8). It can be used to build a
+virtual service associated with the same real servers, covering
+multiple IP address, port and protocol triplets. If IPv6 addresses
+are used, the -6 option must be used.
+.sp
+Using firewall-mark virtual services provides a convenient method of
+grouping together different IP addresses, ports and protocols into a
+single virtual service. This is useful for both simplifying
+configuration if a large number of virtual services are required and
+grouping persistence across what would otherwise be multiple virtual
+services.
+.TP
+.B -s, --scheduler \fIscheduling-method\fP
+\fIscheduling-method\fP  Algorithm for allocating TCP connections and
+UDP datagrams to real servers.  Scheduling algorithms are implemented
+as kernel modules. Ten are shipped with the Linux Virtual Server:
+.sp
+\fBrr\fR - Round Robin: distributes jobs equally amongst the available
+real servers.
+.sp
+\fBwrr\fR - Weighted Round Robin: assigns jobs to real servers
+proportionally to there real servers' weight. Servers with higher
+weights receive new jobs first and get more jobs than servers with
+lower weights. Servers with equal weights get an equal distribution of
+new jobs.
+.sp
+\fBlc\fR - Least-Connection: assigns more jobs to real servers with
+fewer active jobs.
+.sp
+\fBwlc\fR - Weighted Least-Connection: assigns more jobs to servers
+with fewer jobs and relative to the real servers' weight (Ci/Wi). This
+is the default.
+.sp
+\fBlblc\fR - Locality-Based Least-Connection: assigns jobs destined
+for the same IP address to the same server if the server is not
+overloaded and available; otherwise assign jobs to servers with fewer
+jobs, and keep it for future assignment.
+.sp
+\fBlblcr\fR - Locality-Based Least-Connection with Replication:
+assigns jobs destined for the same IP address to the least-connection
+node in the server set for the IP address. If all the node in the
+server set are over loaded, it picks up a node with fewer jobs in the
+cluster and adds it in the sever set for the target. If the server set
+has not been modified for the specified time, the most loaded node is
+removed from the server set, in order to avoid high degree of
+replication.
+.sp
+\fBdh\fR - Destination Hashing: assigns jobs to servers through
+looking up a statically assigned hash table by their destination IP
+addresses.
+.sp
+\fBsh\fR - Source Hashing: assigns jobs to servers through looking up
+a statically assigned hash table by their source IP addresses.
+This scheduler has two flags: sh-fallback, which enables fallback to a
+different server if the selected server was unavailable, and sh-port,
+which adds the source port number to the hash computation.
+.sp
+\fBsed\fR - Shortest Expected Delay: assigns an incoming job to the
+server with the shortest expected delay. The expected delay that the
+job will experience is (Ci + 1) / Ui if  sent to the ith server, in
+which Ci is the number of jobs on the the ith server and Ui is the
+fixed service rate (weight) of the ith server.
+.sp
+\fBnq\fR - Never Queue: assigns an incoming job to an idle server if
+there is, instead of waiting for a fast one; if all the servers are
+busy, it adopts the Shortest Expected Delay policy to assign the job.
+.TP
+.B -p, --persistent [\fItimeout\fP]
+Specify that a virtual service is persistent. If this option is
+specified, multiple requests from a client are redirected to the same
+real server selected for the first request.  Optionally, the
+\fItimeout\fP of persistent sessions may be specified given in
+seconds, otherwise the default of 300 seconds will be used. This
+option may be used in conjunction with protocols such as SSL or FTP
+where it is important that clients consistently connect with the same
+real server.
+.sp
+\fBNote:\fR If a virtual service is to handle FTP connections then
+persistence must be set for the virtual service if Direct Routing or
+Tunnelling is used as the forwarding mechanism. If Masquerading is
+used in conjunction with an FTP service than persistence is not
+necessary, but the ip_vs_ftp kernel module must be used.  This module
+may be manually inserted into the kernel using insmod(8).
+.TP
+.B -M, --netmask \fInetmask\fP
+Specify the granularity with which clients are grouped for persistent
+virtual services.  The source address of the request is masked with
+this netmask to direct all clients from a network to the same real
+server. The default is \fI255.255.255.255\fP, that is, the persistence
+granularity is per client host. Less specific netmasks may be used to
+resolve problems with non-persistent cache clusters on the client side.
+IPv6 netmasks should be specified as a prefix length between 1 and 128.
+The default prefix length is 128.
+.TP
+.B -b, --sched-flags \fIsched-flags\fP
+Set scheduler flags for this virtual server.  \fIsched-flags\fP is a
+comma-separated list of flags.  See the scheduler descriptions for
+valid scheduler flags.
+.TP
+.B -r, --real-server \fIserver-address\fP
+Real server that an associated request for service may be assigned to.
+The \fIserver-address\fP is the \fIhost\fP address of a real server,
+and may plus \fIport\fP. \fIHost\fP can be either a plain IP address
+or a hostname.  \fIPort\fP can be either a plain port number or the
+service name of port.  In the case of the masquerading method, the
+host address is usually an RFC 1918 private IP address, and the port
+can be different from that of the associated service. With the
+tunneling and direct routing methods, \fIport\fP must be equal to that
+of the service address. For normal services, the port specified  in
+the service address will be used if \fIport\fP is not specified. For
+fwmark services, \fIport\fP may be omitted, in which case  the
+destination port on the real server will be the destination port of
+the request sent to the virtual service.
+.TP
+.B [packet-forwarding-method]
+.sp
+\fB-g, --gatewaying\fR  Use gatewaying (direct routing). This is the default.
+.sp
+\fB-i, --ipip\fR  Use ipip encapsulation (tunneling).
+.sp
+\fB-m, --masquerading\fR  Use masquerading (network access translation, or NAT).
+.sp
+\fBNote:\fR  Regardless of the packet-forwarding mechanism specified,
+real servers for addresses for which there are interfaces on the local
+node will be use the local forwarding method, then packets for the
+servers will be passed to upper layer on the local node. This cannot
+be specified by \fIipvsadm\fP, rather it set by the kernel as real
+servers are added or modified.
+.TP
+.B -w, --weight \fIweight\fP
+\fIWeight\fP is an integer specifying the capacity  of a server
+relative to the others in the pool. The valid values of \fIweight\fP
+are 0 through to 65535. The default is 1. Quiescent servers are
+specified with a weight of zero. A quiescent server will receive no
+new jobs but still serve the existing jobs, for all scheduling
+algorithms distributed with the Linux Virtual Server. Setting a
+quiescent server may be useful if the server is overloaded or needs to
+be taken out of service for maintenance.
+.TP
+.B -x, --u-threshold \fIuthreshold\fP
+\fIuthreshold\fP is an integer specifying the upper connection
+threshold of a server. The valid values of \fIuthreshold\fP are 0
+through to 65535. The default is 0, which means the upper connection
+threshold is not set. If \fIuthreshold\fP is set with other values, no
+new connections will be sent to the server when the number of its
+connections exceeds its upper connection threshold.
+.TP
+.B -y, --l-threshold \fIlthreshold\fP
+\fIlthreshold\fP is an integer specifying the lower connection
+threshold of a server. The valid values of \fIlthreshold\fP are 0
+through to 65535. The default is 0, which means the lower connection
+threshold is not set. If \fIlthreshold\fP is set with other values,
+the server will receive new connections when the number of its
+connections drops below its lower connection threshold. If
+\fIlthreshold\fP is not set but \fIuthreshold\fP is set, the server
+will receive new connections when the number of its connections drops
+below three forth of its upper connection threshold.
+.TP
+.B --mcast-interface \fIinterface\fP
+Specify the multicast interface that the sync master daemon sends
+outgoing multicasts through, or the sync backup daemon listens to for
+multicasts.
+.TP
+.B --syncid \fIsyncid\fP
+Specify the \fIsyncid\fP that the sync master daemon fills in the
+SyncID header while sending multicast messages, or the sync backup
+daemon uses to filter out multicast messages not matched with the
+SyncID value. The valid values of \fIsyncid\fP are 0 through to
+255. The default is 0, which means no filtering at all.
+.TP
+.B -c, --connection
+Connection output. The \fIlist\fP command with this option will list
+current IPVS connections.
+.TP
+.B --timeout
+Timeout output. The \fIlist\fP command with this option will display
+the  timeout values (in seconds) for TCP sessions, TCP sessions after
+receiving a FIN packet, and UDP packets.
+.TP
+.B --daemon
+Daemon information output. The \fIlist\fP command with this option
+will display the daemon status and its multicast interface.
+.TP
+.B --stats
+Output of statistics information. The \fIlist\fP command with this
+option will display the statistics information of services and their
+servers.
+.TP
+.B --rate
+Output of rate information. The \fIlist\fP command with this option
+will display the rate information (such as connections/second,
+bytes/second and packets/second) of services and their servers.
+.TP
+.B --thresholds
+Output of thresholds information. The \fIlist\fP command with this
+option will display the upper/lower connection threshold information
+of each server in service listing.
+.TP
+.B --persistent-conn
+Output of persistent connection information. The \fIlist\fP command
+with this option will display the persistent connection counter
+information of each server in service listing. The persistent
+connection is used to forward the actual connections from the same
+client/network to the same server.
+.sp
+The \fIlist\fP command with the -c, --connection option and this option
+will include persistence engine data, if any is present, when listing
+connections.
+.TP
+.B --sort
+Sort the list of virtual services and real servers. The virtual
+service entries are sorted in ascending order by <protocol, address,
+port>. The real server entries are sorted in ascending order by
+<address, port>. (default)
+.TP
+.B --nosort
+Do not sort the list of virtual services and real servers.
+.TP
+.B -n, --numeric
+Numeric output.  IP addresses and port numbers will be printed in
+numeric format rather than as as host names and services respectively,
+which is the  default.
+.TP
+.B --exact
+Expand numbers.  Display the exact value of the packet and  byte
+counters,  instead  of only the rounded number in K's (multiples of
+1000) M's (multiples of 1000K) or G's (multiples  of 1000M).  This
+option is only relevant for the -L command.
+.TP
+.B -6, --ipv6
+Use with -f to signify fwmark rule uses IPv6 addresses.
+.TP
+.B -o, --ops
+One-packet scheduling.
+Used in conjunction with a UDP virtual service or
+a fwmark virtual service that handles only UDP packets.
+All connections are created such that they only schedule one packet.
+.SH EXAMPLE 1 - Simple Virtual Service
+The following commands configure a Linux Director to distribute
+incoming requests addressed to port 80 on 207.175.44.110 equally to
+port 80 on five real servers. The forwarding method used in this
+example is NAT, with each of the real servers being masqueraded by the
+Linux Director.
+.PP
+.nf
+ipvsadm -A -t 207.175.44.110:80 -s rr
+ipvsadm -a -t 207.175.44.110:80 -r 192.168.10.1:80 -m
+ipvsadm -a -t 207.175.44.110:80 -r 192.168.10.2:80 -m
+ipvsadm -a -t 207.175.44.110:80 -r 192.168.10.3:80 -m
+ipvsadm -a -t 207.175.44.110:80 -r 192.168.10.4:80 -m
+ipvsadm -a -t 207.175.44.110:80 -r 192.168.10.5:80 -m
+.fi
+.PP
+Alternatively, this could be achieved in a single ipvsadm command.
+.PP
+.nf
+echo "
+-A -t 207.175.44.110:80 -s rr
+-a -t 207.175.44.110:80 -r 192.168.10.1:80 -m
+-a -t 207.175.44.110:80 -r 192.168.10.2:80 -m
+-a -t 207.175.44.110:80 -r 192.168.10.3:80 -m
+-a -t 207.175.44.110:80 -r 192.168.10.4:80 -m
+-a -t 207.175.44.110:80 -r 192.168.10.5:80 -m
+" | ipvsadm -R
+.fi
+.PP
+As masquerading is used as the forwarding mechanism in this example,
+the default route of the real servers must be set to the linux
+director, which will need to be configured to forward and masquerade
+packets. This can be achieved using the following commands:
+.PP
+.nf
+echo "1" > /proc/sys/net/ipv4/ip_forward
+.fi
+.SH EXAMPLE 2 - Firewall-Mark Virtual Service
+The following commands configure a Linux Director to distribute
+incoming requests addressed to any port on 207.175.44.110 or
+207.175.44.111 equally to the corresponding port on five real
+servers. As per the previous example, the forwarding method used in
+this example is NAT, with each of the real servers being masqueraded
+by the Linux Director.
+.PP
+.nf
+ipvsadm -A -f 1  -s rr
+ipvsadm -a -f 1 -r 192.168.10.1:0 -m
+ipvsadm -a -f 1 -r 192.168.10.2:0 -m
+ipvsadm -a -f 1 -r 192.168.10.3:0 -m
+ipvsadm -a -f 1 -r 192.168.10.4:0 -m
+ipvsadm -a -f 1 -r 192.168.10.5:0 -m
+.fi
+.PP
+As masquerading is used as the forwarding mechanism in this example,
+the default route of the real servers must be set to the linux
+director, which will need to be configured to forward and masquerade
+packets. The real server should also be configured to mark incoming
+packets addressed to any port on 207.175.44.110 and  207.175.44.111
+with firewall-mark 1. If FTP traffic is to be handled by this virtual
+service, then the ip_vs_ftp kernel module needs to be inserted into
+the kernel.  These operations can be achieved using the following
+commands:
+.PP
+.nf
+echo "1" > /proc/sys/net/ipv4/ip_forward
+modprobe ip_tables
+iptables  -A PREROUTING -t mangle -d 207.175.44.110/31 -j MARK --set-mark 1
+modprobe ip_vs_ftp
+.fi
+.SH IPv6
+IPv6 addresses should be surrounded by square brackets ([ and ]).
+.PP
+.nf
+ipvsadm -A -t [2001:db8::80]:80 -s rr
+ipvsadm -a -t [2001:db8::80]:80 -r [2001:db8::a0a0]:80 -m
+.fi
+.PP
+fwmark IPv6 services require the -6 option.
+.SH NOTES
+The Linux Virtual Server implements three defense strategies against
+some types of denial of service (DoS) attacks. The Linux Director
+creates an entry for each connection in order to keep its state, and
+each entry occupies 128 bytes effective memory. LVS's vulnerability to
+a DoS attack lies in the potential to increase the number entries as
+much as possible until the linux director runs out of memory. The
+three defense strategies against the attack are: Randomly drop some
+entries in the table. Drop 1/rate packets before forwarding them. And
+use secure tcp state transition table and short timeouts. The
+strategies are controlled by sysctl variables and corresponding
+entries in the /proc filesystem:
+.sp
+/proc/sys/net/ipv4/vs/drop_entry
+/proc/sys/net/ipv4/vs/drop_packet
+/proc/sys/net/ipv4/vs/secure_tcp
+.PP
+Valid values for each variable are 0 through to 3. The default value
+is 0, which disables the respective defense strategy. 1 and 2 are
+automatic modes - when there is no enough available memory, the
+respective strategy will be enabled and the variable is automatically
+set to 2, otherwise the strategy is disabled and the variable is set
+to 1. A value of 3 denotes that the respective strategy is always
+enabled.  The available memory threshold and secure TCP timeouts can
+be tuned using the sysctl variables and corresponding entries in the
+/proc filesystem:
+.sp
+/proc/sys/net/ipv4/vs/amemthresh
+/proc/sys/net/ipv4/vs/timeout_*
+.SH FILES
+.I /proc/net/ip_vs
+.br
+.I /proc/net/ip_vs_app
+.br
+.I /proc/net/ip_vs_conn
+.br
+.I /proc/net/ip_vs_stats
+.br
+.I /proc/sys/net/ipv4/vs/am_droprate
+.br
+.I /proc/sys/net/ipv4/vs/amemthresh
+.br
+.I /proc/sys/net/ipv4/vs/drop_entry
+.br
+.I /proc/sys/net/ipv4/vs/drop_packet
+.br
+.I /proc/sys/net/ipv4/vs/secure_tcp
+.br
+.I /proc/sys/net/ipv4/vs/timeout_close
+.br
+.I /proc/sys/net/ipv4/vs/timeout_closewait
+.br
+.I /proc/sys/net/ipv4/vs/timeout_established
+.br
+.I /proc/sys/net/ipv4/vs/timeout_finwait
+.br
+.I /proc/sys/net/ipv4/vs/timeout_icmp
+.br
+.I /proc/sys/net/ipv4/vs/timeout_lastack
+.br
+.I /proc/sys/net/ipv4/vs/timeout_listen
+.br
+.I /proc/sys/net/ipv4/vs/timeout_synack
+.br
+.I /proc/sys/net/ipv4/vs/timeout_synrecv
+.br
+.I /proc/sys/net/ipv4/vs/timeout_synsent
+.br
+.I /proc/sys/net/ipv4/vs/timeout_timewait
+.br
+.I /proc/sys/net/ipv4/vs/timeout_udp
+.SH SEE ALSO
+The LVS web site (http://www.linuxvirtualserver.org/) for more
+documentation about LVS.
+.PP
+\fBipvsadm-save\fP(8), \fBipvsadm-restore\fP(8), \fBiptables\fP(8),
+.br
+\fBinsmod\fP(8), \fBmodprobe\fP(8)
+.SH AUTHORS
+.nf
+ipvsadm - Wensong Zhang <wensong@linuxvirtualserver.org>
+	  Peter Kese <peter.kese@ijs.si>
+man page - Mike Wangsmo <wanger@redhat.com>
+	   Wensong Zhang <wensong@linuxvirtualserver.org>
+	   Horms <horms@verge.net.au>
+.fi

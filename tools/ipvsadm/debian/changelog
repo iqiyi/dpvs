@@ -1,0 +1,41 @@
+ipvsadm (1.25-nl-5) hardy; urgency=low
+
+  * use strtoul to convert ip addresses from hex
+    from Simon Horman <horms@verge.net.au>
+
+ -- Vince Busam <vbusam@google.com>  Wed, 20 Aug 2008 10:34:58 -0700
+
+ipvsadm (1.25-nl-4) unstable; urgency=low
+
+  * Fixed sorting of IPv6 addresses
+
+ -- Vince Busam <vbusam@google.com>  Fri, 15 Aug 2008 13:15:06 -0700
+
+ipvsadm (1.25-nl-2) hardy; urgency=low
+
+  * Code cleanups
+
+ -- Vince Busam <vbusam@google.com>  Wed, 23 Jul 2008 13:17:46 -0700
+
+ipvsadm (1.25-nl-1) hardy; urgency=low
+
+  * Add support for experimental netlink interface
+
+ -- Vince Busam <vbusam@google.com>  Tue, 22 Jul 2008 15:50:38 -0700
+
+ipvsadm (1.25-ipv6-1) nstable; urgency=low
+
+  * Add IPv6 support
+
+ -- "Vince Busam" <vbusam@google.com>  Wed, 21 May 2008 15:12:42 +0200
+
+ipvsadm (1.13-1) nstable; urgency=low
+
+  * A release
+
+ -- Horms <horms@vergenet.net>  Thu, 14 Dec 2000 17:00:00 -0800
+
+Local variables:
+mode: debian-changelog
+End:
+eoch

@@ -1,0 +1,109 @@
+# Makefile
+#
+# Keepalived OpenSource project.
+#
+# Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+
+EXEC      = keepalived
+BIN       = ../bin
+KERNEL    = @KERN@
+IPVS_FLAG = @IPVS_SUPPORT@
+VRRP_FLAG = @VRRP_SUPPORT@
+
+prefix      = @prefix@
+exec_prefix = @exec_prefix@
+sbindir     = @sbindir@
+sysconfdir  = @sysconfdir@
+datarootdir = @datarootdir@
+mandir      = @mandir@
+init_dir    = $(sysconfdir)/rc.d/init.d
+conf_dir    = $(sysconfdir)/keepalived
+sysconf_dir = $(sysconfdir)/sysconfig
+
+CC = @CC@
+STRIP = @STRIP@
+LDFLAGS = @LIBS@ @LDFLAGS@ -ldl
+SUBDIRS = core
+
+ifeq ($(IPVS_FLAG),_WITH_LVS_)
+  SUBDIRS += check
+endif
+
+ifeq ($(VRRP_FLAG),_WITH_VRRP_)
+  SUBDIRS += vrrp
+endif
+
+ifeq ($(IPVS_FLAG),_WITH_LVS_)
+  ifeq ($(KERNEL),_KRNL_2_4_)
+    SUBDIRS += libipvs-2.4
+  else
+    SUBDIRS += libipvs-2.6
+  endif
+endif
+
+all:
+	@set -e; \
+	for i in $(SUBDIRS); do \
+	$(MAKE) -C $$i || exit 1; done && \
+	echo "Building $(BIN)/$(EXEC)" && \
+	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(LDFLAGS)
+	$(STRIP) $(BIN)/$(EXEC)
+	@echo ""
+	@echo "Make complete"
+
+debug:
+	@set -e; \
+	for i in $(SUBDIRS); do \
+	$(MAKE) -C $$i || exit 1; done && \
+	echo "Building $(BIN)/$(EXEC)" && \
+	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(LDFLAGS) -ggdb
+	@echo ""
+	@echo "Make complete"
+
+profile:
+	@set -e; \
+	for i in $(SUBDIRS); do \
+	$(MAKE) -C $$i || exit 1; done && \
+	echo "Building $(BIN)/$(EXEC)" && \
+	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(LDFLAGS) -pg
+	@echo ""
+	@echo "Make complete"
+
+clean:
+	@set -e; \
+	for i in $(SUBDIRS); do \
+	$(MAKE) -C $$i clean; done
+	@echo ""
+	@echo "Make complete"
+
+distclean:
+	@set -e; \
+	for i in $(SUBDIRS); do \
+	$(MAKE) -C $$i distclean; done
+	rm -f Makefile $(BIN)/$(EXEC)
+
+mrproper: distclean
+	rm -f config.*
+
+uninstall:
+	rm -f $(DESTDIR)$(sbindir)/$(EXEC)
+	rm -f $(DESTDIR)$(init_dir)/keepalived.init
+	rm -f $(DESTDIR)$(sysconf_dir)/keepalived
+	rm -rf $(DESTDIR)$(sysconfdir)/keepalived
+	rm -f $(DESTDIR)$(mandir)/man/man5/keepalived.conf.5
+	rm -f $(DESTDIR)$(mandir)/man/man8/keepalived.8
+
+install:
+	install -d $(DESTDIR)$(sbindir)
+	install -m 700 $(BIN)/$(EXEC) $(DESTDIR)$(sbindir)/
+	install -d $(DESTDIR)$(init_dir)
+	install -m 755 etc/init.d/keepalived.init $(DESTDIR)$(init_dir)/keepalived
+	install -d $(DESTDIR)$(sysconf_dir)
+	install -m 755 etc/init.d/keepalived.sysconfig $(DESTDIR)$(sysconf_dir)/keepalived
+	install -d $(DESTDIR)$(sysconfdir)/keepalived/samples
+	install -m 644 etc/keepalived/keepalived.conf $(DESTDIR)$(sysconfdir)/keepalived/
+	install -m 644 ../doc/samples/* $(DESTDIR)$(sysconfdir)/keepalived/samples/
+	install -d $(DESTDIR)$(mandir)/man5
+	install -d $(DESTDIR)$(mandir)/man8
+	install -m 644 ../doc/man/man5/keepalived.conf.5 $(DESTDIR)$(mandir)/man5
+	install -m 644 ../doc/man/man8/keepalived.8 $(DESTDIR)$(mandir)/man8

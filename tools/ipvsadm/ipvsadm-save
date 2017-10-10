@@ -1,0 +1,44 @@
+#!/bin/bash
+#      ipvsadm-save - Save IPVS rules
+#
+#      A very simple wrapper to save IPVS rules
+#      Inspired by ipchains-save.
+#
+#      Version: $Id$
+#
+#      Script Author: Horms <horms@vergenet.net>
+#
+#      This file:
+#
+#      ChangeLog
+#
+#	 Wensong Zhang          :  Added the "-n" option and the help()
+#
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+NUMERIC=""
+
+
+help()
+{
+    exec 1>&2
+    echo `basename $0`: Script to save the IPVS table to stdout.
+    echo "   With the -n option, prints out the table in numeric format."
+
+    exit 1
+}
+
+
+for arg
+do
+    case "$arg"
+    in
+        -n) NUMERIC="-n" ;;
+        -*) help ;;
+    esac
+done
+
+
+# All the work is actually done in ipvsadm, horay
+
+ipvsadm -S $NUMERIC

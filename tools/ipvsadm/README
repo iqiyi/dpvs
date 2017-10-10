@@ -1,0 +1,66 @@
+--------------------------------------------------------------------------
+
+ipvsadm
+
+This is free software.  See below for details.
+
+ipvsadm is a utility to administer the IP Virtual Server (IPVS)
+services offered by the Linux kernel with IPVS support to create a
+wide range of load-balancer setups.
+
+Check out the Linux Virtual Server Project home page on the
+World Wide Web:
+	http://www.LinuxVirtualServer.org/
+	or
+	http://www.Linux-VS.org/
+for the most recent information about ipvsadm.
+
+Releases can be downloaded from:
+ https://kernel.org/pub/linux/utils/kernel/ipvsadm/
+
+The source code is available via git from kernel.org:
+ https://git.kernel.org/cgit/utils/kernel/ipvsadm/ipvsadm.git
+ git://git.kernel.org/pub/scm/utils/kernel/ipvsadm/ipvsadm.git
+
+A wikipage is available at:
+ http://kb.linuxvirtualserver.org/wiki/Main_Page
+
+To make, make sure your Linux kernel is compiled with IPVS, e.g. by invoking
+"make menuconfig" or "make xconfig" to setup the right compiling options, 
+see the README of the virtual server patch for detail, then simply type
+	make
+in the source directory.
+
+Install to your liking.  We suggest the following pathnames:
+	/sbin/ipvsadm
+	/sbin/ipvsadm-save
+	/sbin/ipvsadm-restore
+	/usr/man/man8/ipvsadm.8
+	/usr/man/man8/ipvsadm-save.8
+	/usr/man/man8/ipvsadm-restore.8
+	/etc/rc.d/init.d/ipvsadm
+This will be done automatically when calling
+	make install
+in the source directory.
+
+
+Wensong Zhang <wensong@linuxvirtualserver.org>
+Jesper Dangaard Brouer <brouer@redhat.com>
+
+--------------------------------------------------------------------------
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+--------------------------------------------------------------------

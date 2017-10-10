@@ -1,0 +1,29 @@
+Jan Holmberg, <jan@artech.net> :
+	o Memory framework
+	o HTTP/SSL checkers
+
+Bradley Baetz, <bradley.baetz@optusnet.com.au> :
+	o MISC checker redesign
+	o Scheduler framework extension to support
+	  child process handling.
+	o Daemon framework extension to block SIGCHLD
+	  to only receive it when its unblocked in the
+	  scheduling select loop.
+
+Jeremy Rumpf, <rumpf.6@osu.edu> :
+	o Added SMTP checker
+
+Chris Caputo, <ccaputo@alt.net> :
+	o Added dont_track_primary, nopreempt,
+	  preempt_delay, and misc_dynamic.
+
+Kevin Lindsay, <kevinl@netnation.com> :
+	o Fixed shadowed declaration reported by -Wshadow.
+	o Redesigned signal handling.
+
+Nick Couchman, <nick.couchman at seakr.com> :
+        o Patch for u_threshold and l_threshold support.
+
+Willy Tarreau, <w at 1wt.eu> :
+	o Extended VRRP framework to support floating
+	  priority.

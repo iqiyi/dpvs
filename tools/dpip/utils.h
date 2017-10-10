@@ -1,0 +1,39 @@
+/*
+ * DPVS is a software load balancer (Virtual Server) based on DPDK.
+ *
+ * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+#ifndef __DPIP_UTILS_H__
+#define __DPIP_UTILS_H__
+#include "inet.h"
+
+#define __init __attribute__((constructor))
+#define __exit __attribute__((destructor))
+
+#define NEXTARG(c)          ((c)->argc--, (c)->argv++)
+
+#define NEXTARG_CHECK(c, m) do { \
+    NEXTARG((c)); \
+    if ((c)->argc <= 0) { \
+        fprintf(stderr, "missing argument for `%s'\n", (m)); \
+        return -1; \
+    } \
+} while (0)
+
+const char *af_itoa(int af);
+
+int inet_pton_try(int *af, const char *src, union inet_addr *dst);
+
+#endif /* __DPIP_UTILS_H__ */

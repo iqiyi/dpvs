@@ -1,0 +1,1 @@
+shlibs:Depends=libpopt0 (>= 1.10), libnl1, libc6 (>= 2.4)

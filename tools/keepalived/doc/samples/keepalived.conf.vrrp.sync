@@ -1,0 +1,113 @@
+! Configuration File for keepalived
+
+vrrp_sync_group G1 {
+  group {
+    VI_1
+    VI_2
+    VI_5
+    VI_6
+    VI_7
+    VI_8
+    VI_9
+  }
+  notify_backup "/usr/local/bin/vrrp.back arg1 arg2"
+  notify_master "/usr/local/bin/vrrp.mast arg1 arg2"
+  notify_fault "/usr/local/bin/vrrp.fault arg1 arg2"
+}
+
+vrrp_sync_group G2 {
+  group {
+    VI_3
+    VI_4
+  }
+}
+
+vrrp_instance VI_1 {
+    interface eth0
+    state MASTER
+    virtual_router_id 51
+    priority 100
+    virtual_ipaddress {
+        192.168.200.18/25
+    }
+}
+
+vrrp_instance VI_2 {
+    interface eth1
+    state MASTER
+    virtual_router_id 52
+    priority 100
+    virtual_ipaddress {
+        192.168.201.18/26
+    }
+}
+
+vrrp_instance VI_3 {
+    interface eth0
+    virtual_router_id 53
+    priority 100
+    virtual_ipaddress {
+        192.168.200.19/27
+    }
+}
+
+vrrp_instance VI_4 {
+    interface eth1
+    virtual_router_id 54
+    priority 100
+    virtual_ipaddress {
+        192.168.201.19/28
+    }
+}
+
+vrrp_instance VI_5 {
+    state MASTER
+    interface eth0
+    virtual_router_id 55
+    priority 100
+    virtual_ipaddress {
+        192.168.200.20/27
+    }
+}
+
+
+vrrp_instance VI_6 {
+    state MASTER
+    interface eth0
+    virtual_router_id 56
+    priority 100
+    virtual_ipaddress {
+        192.168.200.21/27
+    }
+}
+
+vrrp_instance VI_7 {
+    state MASTER
+    interface eth0
+    virtual_router_id 57
+    priority 100
+    virtual_ipaddress {
+        192.168.200.22/27
+    }
+}
+
+vrrp_instance VI_8 {
+    state MASTER
+    interface eth0
+    virtual_router_id 58
+    priority 100
+    virtual_ipaddress {
+        192.168.200.23/27
+    }
+}
+
+vrrp_instance VI_9 {
+    state MASTER
+    interface eth0
+    virtual_router_id 59
+    priority 100
+    virtual_ipaddress {
+        192.168.200.24/27
+    }
+}
+

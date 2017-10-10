@@ -1,0 +1,25 @@
+--- rpm-4.0.4/popt/popt.c~	Sat Jan 19 07:28:30 2002
++++ rpm-4.0.4/popt/popt.c	Fri Aug  9 17:08:15 2002
+@@ -840,12 +840,17 @@
+ 			canstrip) {
+ 			poptStripArg(con, con->os->next);
+ 		    }
+-		
++
+ 		    if (con->os->argv != NULL) {	/* XXX can't happen */
+-			/* XXX watchout: subtle side-effects live here. */
+-			longArg = con->os->argv[con->os->next++];
+-			longArg = expandNextArg(con, longArg);
+-			con->os->nextArg = longArg;
++			if (opt->argInfo & POPT_ARGFLAG_OPTIONAL &&
++			    con->os->argv[con->os->next][0] == '-') {
++			    con->os->nextArg = NULL;
++			} else {
++			    /* XXX watchout: subtle side-effects live here. */
++			    longArg = con->os->argv[con->os->next++];
++			    longArg = expandNextArg(con, longArg);
++			    con->os->nextArg = longArg;
++			}
+ 		    }
+ 		}
+ 	    }

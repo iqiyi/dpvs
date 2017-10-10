@@ -1,0 +1,439 @@
+This file describe all the Keepalived available keywords. The keepalived.conf
+file is compounded by three configurations parts :
+
+	* Globals configurations
+	* VRRP configuration
+	* LVS configuration
+
+0. Comment string
+
+There is 2 valid comment valid string : # or ! If you want to add comment
+in you configuration file use this char.
+
+1. Globals configurations
+
+This block is divided in 2 sub-block :
+
+	* Global definitions
+	* Static routes
+
+	1.1. Global definitions
+
+	The configuration block looks like :
+
+global_defs {				# Block identification
+    notification_email {		# Email to send alertes to
+       <EMAIL ADDRESS>			# Standard email address
+       <EMAIL ADDRESS>
+       ...
+    }
+    notification_email_from <EMAIL ADDRESS> # Email From dealing with SMTP proto
+    smtp_server <IP ADDRESS>		   # SMTP server IP address
+    smtp_connect_timeout <INTEGER>	   # Number of seconds timeout connect
+ 					   #  remote SMTP server
+    router_id <STRING>			   # String identifying router
+    vrrp_mcast_group4 <IPv4 ADDRESS>	   # optional, default 224.0.0.18
+    vrrp_mcast_group6 <IPv6 ADDRESS>	   # optional, default ff02::12
+}
+
+linkbeat_use_polling	# Use media link failure detection polling fashion
+
+	1.2. Static addresses
+
+	The configuration block looks like :
+
+static_ipaddress {			# block identification
+    <IP ADDRESS>/<MASK> brd <IP ADDRESS> dev <STRING> scope <SCOPE>
+    <IP ADDRESS>/<MASK> brd <IP ADDRESS> dev <STRING> scope <SCOPE>
+    ...
+}
+
+SCOPE can take the following values :
+	* site
+	* link
+	* host
+	* nowhere
+	* global
+
+	1.3. Static routes
+
+	The configuration block looks like :
+
+static_routes {							# block identification
+    src <IP ADDRESS> [to] <IP ADDRESS>/<MASK> via|gw <IP ADDRESS> dev <STRING> scope <SCOPE> table <TABLE-ID> # to is optional
+    src <IP ADDRESS> [to] <IP ADDRESS>/<MASK> via|gw <IP ADDRESS> dev <STRING> scope <SCOPE> table <TABLE-ID> # to is optional
+    src <IP ADDRESS> [to] <IP ADDRESS>/<MASK> via|gw <IP ADDRESS> or <IP ADDRESS> dev <STRING> scope <SCOPE> table <TABLE-ID> # will use multipath route
+    blackhole <IP ADDRESS>[/<MASK>]
+    ...
+}
+
+SCOPE can take the following values :
+	* site
+	* link
+	* host
+	* nowhere
+	* global
+
+2. VRRP configuration
+
+This block is divided in 3 sub-block :
+
+	* VRRP scripts
+	* VRRP synchronization group
+	* VRRP instance
+
+	2.1. VRRP scripts
+
+	The configuration block looks like :
+
+vrrp_script <STRING> {          # VRRP script declaration
+    script <QUOTED_STRING>      # script to run periodically
+    interval <INTEGER>          # run the script this every seconds
+    weight <INTEGER:-254..254>  # adjust priority by this weight
+    fall <INTEGER>              # required number of failures for KO switch
+    rise <INTEGER>              # required number of successes for OK switch
+}
+
+The script will be executed periodically, every <interval> seconds. Its exit
+code will be recorded for all VRRP instances which will want to monitor it.
+Note that the script will only be executed if at least one VRRP instance
+monitors it with a non-zero weight. Thus, any number of scripts may be
+declared without taking the system down.
+
+If unspecified, the weight equals 2, which means that a success will add +2
+to the priority of all VRRP instances which monitor it. On the opposite, a
+negative weight will be subtracted from the initial priority in case of
+failure.
+
+	2.2. VRRP synchronization group
+
+	The configuration block looks like :
+
+vrrp_sync_group <STRING> {	# VRRP sync group declaration
+    group {			# group of instance to sync together
+      <STRING>			#   a
+      <STRING>			#       set
+      ...			#             of VRRP_Instance string
+    }
+    notify_master <STRING>|<QUOTED-STRING> # Script to run during MASTER transit
+    notify_backup <STRING>|<QUOTED-STRING> # Script to run during BACKUP transit
+    notify_fault <STRING>|<QUOTED-STRING>  # Script to run during FAULT transit
+    notify <STRING>|<QUOTED-STRING>	   # Script to run during ANY state transit (1)
+    smtp_alert		 # Send email notif during state transit
+}
+
+(1) The "notify" script is called AFTER the corresponding notify_* script has
+    been called, and is given exactly 4 arguments (the whole string is interpreted
+    as a litteral filename so don't add parameters!):
+
+    $1 = A string indicating whether it's a "GROUP" or an "INSTANCE"
+    $2 = The name of said group or instance
+    $3 = The state it's transitioning to ("MASTER", "BACKUP" or "FAULT")
+    $4 = The priority value
+
+    $1 and $3 are ALWAYS sent in uppercase, and the possible strings sent are the
+    same ones listed above ("GROUP"/"INSTANCE", "MASTER"/"BACKUP"/"FAULT").
+
+Important: for a SYNC group to run reliably, it is vital that all instances in
+           the group are MASTER or that they are all either BACKUP or FAULT. A
+           situation with half instances having higher priority on machine A
+           half others with higher priority on machine B will lead to constant
+           re-elections. For this reason, when instances are grouped, their
+           tracking weights are automatically set to zero, in order to avoid
+           inconsistent priorities across instances.
+
+	2.3. VRRP instance
+
+	The configuration block looks like :
+
+vrrp_instance <STRING> {		# VRRP instance declaration
+    use_vmac				# Use VRRP Virtual MAC
+    vmac_xmit_base			# Send/Recv VRRP messages from base
+					#  interface instead of VMAC interface
+    native_ipv6				# Force instance to use IPv6
+					#  when using mixed IPv4&IPv6 conf
+    state MASTER|BACKUP			# Start-up default state
+    interface <STRING>			# Binding interface
+    track_interface {			# Interfaces state we monitor
+      <STRING>
+      <STRING>
+      <STRING> weight <INTEGER:-254..254>
+      ...
+    }
+    track_script {                     # Scripts state we monitor
+      <STRING>
+      <STRING> weight <INTEGER:-254..254>
+      ...
+    }
+    dont_track_primary                  # (default unset) ignore VRRP interface faults.
+                                        #  useful for cross-connect VRRP config.
+    mcast_src_ip <IP ADDRESS>		# src_ip to use into the VRRP packets
+    unicast_src_ip <IP ADDRESS>		# src_ip to use into the VRRP packets (alias to mcast_src_ip)
+    unicast_peer {			# Do not use multicast, instead send VRRP
+      <IP ADDRESS>			#  adverts to following list of ip address
+      ...				#  in unicast design fashion
+    }
+    lvs_sync_daemon_interface <STRING>	# Binding interface for lvs syncd
+    garp_master_delay <INTEGER>		# delay for gratuitous ARP after MASTER
+					#  state transition
+    garp_master_refresh <INTEGER>	# Periodic delay in seconds sending
+					#  gratuitous ARP while in MASTER state
+    virtual_router_id <INTEGER-0..255>	# VRRP VRID
+    priority <INTEGER-0..255>		# VRRP PRIO
+    advert_int <INTEGER>		# VRRP Advert interval (use default)
+    authentication {			# Authentication block
+        auth_type PASS|AH		# Simple Passwd or IPSEC AH
+        auth_pass <STRING>		# Password string (up to 8 characters)
+    }
+    virtual_ipaddress {			# VRRP IP addres block
+        <IP ADDRESS>/<MASK> brd <IP ADDRESS> dev <STRING> scope <SCOPE> label <LABEL>
+        <IP ADDRESS>/<MASK> brd <IP ADDRESS> dev <STRING> scope <SCOPE> label <LABEL>
+        ...
+    }
+    virtual_ipaddress_excluded {       	# VRRP IP excluded from VRRP
+        <IP ADDRESS>/<MASK> brd <IP ADDRESS> dev <STRING> scope <SCOPE>	# packets
+        <IP ADDRESS>/<MASK> brd <IP ADDRESS> dev <STRING> scope <SCOPE>
+        ...
+    }
+    virtual_routes {			# VRRP virtual routes
+    	src <IP ADDRESS> [to] <IP ADDRESS>/<MASK> via|gw <IP ADDRESS> dev <STRING> scope <SCOPE> table <TABLE-ID> metric <METRIC> # to is optional
+    	src <IP ADDRESS> [to] <IP ADDRESS>/<MASK> via|gw <IP ADDRESS> dev <STRING> scope <SCOPE> table <TABLE-ID> metric <METRIC> # to is optional
+    	src <IP ADDRESS> [to] <IP ADDRESS>/<MASK> via|gw <IP ADDRESS> or <IP ADDRESS> dev <STRING> scope <SCOPE> table <TABLE-ID> # will use multipath route
+        ...
+	blackhole <IP ADDRESS>[/<MASK>]
+    }
+    nopreempt					# Override VRRP RFC preemption default
+    preempt_delay				# Seconds after startup until
+						#  preemption. 0 (default) to 1,000
+    debug					# Debug level
+    notify_master <STRING>|<QUOTED-STRING>	# Same as vrrp_sync_group
+    notify_backup <STRING>|<QUOTED-STRING>	# Same as vrrp_sync_group
+    notify_fault <STRING>|<QUOTED-STRING>	# Same as vrrp_sync_group
+    notify_stop <STRING>|<QUOTED-STRING>	# Script to launch when stopping vrrp
+    notify <STRING>|<QUOTED-STRING>		# Same as vrrp_sync_group
+    smtp_alert					# Same as vrrp_sync_group
+}
+
+SCOPE can take the following values :
+	* site
+	* link
+	* host
+	* nowhere
+	* global
+
+LABEL is optional and creates a name for the alias. For compatibility with
+"ifconfig", it should be of the form <realdev>:<anytext>, for example
+eth0:1 for an alias on eth0.
+
+METRIC is optional and specify a route priority.
+
+When a weight is specified in track_interface, instead of setting the vrrp
+instance to the FAULT state in case of failure, its priority will be
+increased by the weight when the interface is up (for positive weights),
+or decreased by the weight's absolute value when the interface is down
+(for negative weights). The weight must be comprised between -254 and +254
+inclusive. 0 is the default behaviour which means that a failure implies a
+FAULT state. The common practise is to use positive weights to count a
+limited number of good services so that the server with the highest count
+becomes master. Negative weights are better to count unexpected failures
+among a high number of interfaces, as it will not saturate even with high
+number of interfaces.
+
+The same principle can be applied to track_script entries, except that an
+unspecified weight means that the default weight declared in the script
+will be used.
+
+
+3. LVS configuration
+
+This block is divided in 2 sub-block :
+
+	* Virtual server group
+	* Virtual server
+
+	3.1. Virtual server group
+	
+	The configuration block looks like :
+
+virtual_server_group <STRING> {
+	<IP ADDRESS> <PORT>		# VIP VPORT
+	<IP ADDRESS> <PORT>
+	...
+	<IP ADDRESS RANGE> <PORT>	# VIP range VPORT
+	<IP ADDRESS RANGE> <PORT>
+	...
+	fwmark <INTEGER>		# fwmark
+	fwmark <INTEGER>
+	...
+}
+
+Note:	<IP ADDRESS RANGE> has the form of : XXX.YYY.ZZZ.WWW-VVV, define
+	the IP address range starting at WWW and monotonaly incremented by
+	one to VVV. Example : 192.168.200.1-10 means .1 to .10 IP addresses.
+
+	3.2. Virtual server
+	
+	The configuration block looks like :
+
+	A virtual_server can be either :
+	* vip vport declaration
+	* fwmark declaration
+	* group declaration
+
+virtual_server <IP ADDRESS> <PORT> {	# VS IP/PORT declaration
+virtual_server fwmark <INTEGER>    {	# VS fwmark declaration
+virtual_server group <STRING>      {	# VS group declaration
+    delay_loop <INTEGER>		# delay timer for service polling
+    lvs_sched rr|wrr|lc|wlc|lblc|sh|dh	# LVS scheduler used
+    ops					# Apply One-Packet-Scheduling (only for UDP)
+    lvs_method NAT|DR|TUN		# LVS method used
+    persistence_timeout <INTEGER>	# LVS persistence timeout
+    persistence_granularity <NETMASK>	# LVS granularity mask
+    protocol TCP			# Only TCP is implemented
+    ha_suspend				# If VS IP address is not set, suspend
+					#  healthcheckers activity
+    virtualhost <STRING>		# VirtualHost string to use for
+					#  HTTP_GET or SSL_GET
+
+    # Assume silently all RSs down and healthchecks
+    # failed on start. This helps preventing false
+    # positive actions on startup. Alpha mode is
+    # disabled by default.
+    alpha
+
+    # On daemon shutdown, consider quorum and RS
+    # down notifiers for execution, where appropriate.
+    # Omega mode is disabled by default.
+    omega
+
+    # Minimum total weight of all live servers in
+    # the pool necessary to operate VS with no
+    # quality regression. Defaults to 1.
+    quorum <INT>
+
+    # Tolerate this much weight units compared to the
+    # nominal quorum, when considering quorum gain
+    # or loss. A flap dampener. Defaults to 0.
+    hysteresis <INT>
+
+    # Script to launch when quorum is gained.
+    quorum_up <STRING>|<QUOTED-STRING>
+
+    # Script to launch when quorum is lost.
+    quorum_down <STRING>|<QUOTED-STRING>
+
+    sorry_server <IP ADDRESS> <PORT>	# RS to add to LVS topology when all
+					#   realserver are down
+    sorry_server_inhibit		# applies inhibit_on_failure behaviour
+					# to the preceding sorry_server
+					# directive
+
+    real_server <IP ADDRESS> <PORT> {	# RS declaration
+        weight <INTEGER>		# weight to use (default: 1)
+        inhibit_on_failure		# Set weight to 0 on healthchecker
+					#  failure
+        notify_up <STRING>|<QUOTED-STRING> # Script to launch when
+					   #  healthchecker consider service
+					   #  as up.
+        notify_down <STRING>|<QUOTED-STRING> # Script to launch when 
+					     #  healthchecker consider service
+					     #  as down.
+	
+        HTTP_GET|SSL_GET {		# HTTP and SSL healthcheckers
+            url {			# A set of url to test
+              path <STRING>		# Path
+              digest <STRING>		# Digest computed with genhash
+              status_code <INTEGER>	# status code returned into the HTTP
+            }                           #   header.
+            url {
+              path <STRING>
+              digest <STRING>
+              status_code <INTEGER>
+            }
+            ...
+            connect_ip <IP ADDRESS> # IP address to connect
+            connect_port <PORT>     # TCP port to connect
+            bindto <IP ADDRESS>     # IP address to bind to
+            bind_port <PORT>        # TCP port to bind to
+            connect_timeout <INTEGER>   # Timeout connection
+            fwmark <INTEGER>        # fwmark to set on socket (SO_MARK)
+            nb_get_retry <INTEGER>  # number of get retry
+            delay_before_retry <INTEGER> # delay before retry
+            warmup <INTEGER>        # random delay for maximum N seconds
+        }
+    }
+
+    real_server <IP ADDRESS> <PORT> {	# Idem
+        weight <INTEGER>		# Idem
+        inhibit_on_failure		# Idem
+        notify_up <STRING>|<QUOTED-STRING> # Idem
+        notify_down <STRING>|<QUOTED-STRING> # Idem
+
+        TCP_CHECK {			# TCP healthchecker
+            connect_ip <IP ADDRESS> # IP address to connect
+            connect_port <PORT>     # TCP port to connect
+            bindto <IP ADDRESS>     # IP address to bind to
+            bind_port <PORT>        # TCP port to bind to
+            connect_timeout <INTEGER>   # Timeout connection
+            fwmark <INTEGER>        # fwmark to set on socket (SO_MARK)
+            warmup <INTEGER>        # random delay for maximum N seconds
+        }
+    }
+
+    real_server <IP ADDRESS> <PORT> {	# Idem
+        weight <INTEGER>		# Idem
+        inhibit_on_failure		# Idem
+        notify_up <STRING>|<QUOTED-STRING> # Idem
+        notify_down <STRING>|<QUOTED-STRING> # Idem
+
+        SMTP_CHECK {                   # SMTP healthchecker
+            host {                      # Optional additional host/port to check
+                connect_ip <IP ADDRESS> # IP address to connect
+                connect_port <PORT>     # TCP port to connect
+                bindto <IP ADDRESS>     # IP address to bind to
+                bind_port <PORT>        # TCP port to bind to
+                connect_timeout <INTEGER>   # Timeout connection
+                fwmark <INTEGER>        # fwmark to set on socket (SO_MARK)
+            }
+            host {
+                connect_ip <IP ADDRESS> # IP address to connect
+                connect_port <PORT>     # TCP port to connect
+                bindto <IP ADDRESS>     # IP address to bind to
+                bind_port <PORT>        # TCP port to bind to
+                connect_timeout <INTEGER>   # Timeout connection
+                fwmark <INTEGER>        # fwmark to set on socket (SO_MARK)
+            }
+            ...
+            connect_timeout <INTEGER>  # Connection and read/write timeout
+            warmup <INTEGER>        # random delay for maximum N seconds
+            retry <INTEGER>             # Number of times to retry a failed check
+            delay_before_retry <INTEGER> # Delay in seconds before retrying
+            helo_name <STRING>|<QUOTED-STRING> # Host to use for the HELO request
+        }
+    }
+
+    real_server <IP ADDRESS> <PORT> {	# Idem
+        weight <INTEGER>		# Idem
+        inhibit_on_failure		# Idem
+        notify_up <STRING>|<QUOTED-STRING> # Idem
+        notify_down <STRING>|<QUOTED-STRING> # Idem
+
+        MISC_CHECK {				# MISC healthchecker
+            misc_path <STRING>|<QUOTED-STRING>	# External system script or program
+            misc_timeout <INTEGER>		# Script execution timeout
+            warmup <INTEGER>        # random delay for maximum N seconds
+
+            # If set, exit code from healthchecker is used
+            # to dynamically adjust the weight as follows:
+            #   exit status 0: svc check success, weight
+            #     unchanged.
+            #   exit status 1: svc check failed.
+            #   exit status 2-255: svc check success, weight
+            #     changed to 2 less than exit status.
+            #   (for example: exit status of 255 would set
+            #     weight to 253)
+            misc_dynamic
+        }
+    }
+}
+
