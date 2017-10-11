@@ -63,7 +63,7 @@ Well, let's start from DPDK then.
 Currently, `DPDK-16.07` is used for `DPVS` and latest `DPDK` stable version will be integrated soon.
 
 ```bash
-% wget http://fast.dpdk.org/rel/dpdk-16.07.2.tar.xz   # download form dpdk.org if link failed.
+% wget http://fast.dpdk.org/rel/dpdk-16.07.2.tar.xz   # download from dpdk.org if link failed.
 % tar vxf dpdk-16.07.2.tar.xz
 ```
 
@@ -99,7 +99,7 @@ Now to set up DPDK hugepage,
 % mount -t hugetlbfs nodev /mnt/huge
 ```
 
-Install Kernel modules and bind NIC with `igb_uio` driver. Quick start uses only one NIC, normally we use 2 for Full-NAT cluster, even 4 for bonding mode. Assuming `eth0` will be used for DPVS/DPDK, and another stand alone Linux NIC for debug, for example, `eth1`.
+Install Kernel modules and bind NIC with `igb_uio` driver. Quick start uses only one NIC, normally we use 2 for Full-NAT cluster, even 4 for bonding mode. Assuming `eth0` will be used for DPVS/DPDK, and another standalone Linux NIC for debug, for example, `eth1`.
 
 ```bash
 % modprob uio
@@ -139,7 +139,7 @@ dpip  dpvs  ipvsadm  keepalived
 
 * `dpvs` is the main program.
 * `dpip` is the tool to set IP address, route, vlan, neigh etc.
-* `ipvsadm` and `keepalived` comes from LVS, both are modified.
+* `ipvsadm` and `keepalived` come from LVS, both are modified.
 
 ## Launch DPVS
 
