@@ -47,7 +47,7 @@ This *quick start* is tested with the environment below.
 * Memory: 64G
 * GCC: gcc version 4.8.5 20150623 (Red Hat 4.8.5-4)
 
-Other environment should also OK if DPDK works, pls check [dpdk.org](www.dpdk.org) for more info.
+Other environment should also OK if DPDK works, pls check [dpdk.org](http://www.dpdk.org) for more info.
 
 ## Clone DPVS
 
@@ -113,7 +113,7 @@ Install Kernel modules and bind NIC with `igb_uio` driver. Quick start uses only
 % ./tools/dpdk-devbind.py -b igb_uio 0000:06:00.0
 ```
 
-`dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver like `ixgbe`. You can also use `lspci` or `ethtool -i eth0` to check the NIC PCI bus-id. Pls see [DPDK site](www.dpdk.org) for details.
+`dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver like `ixgbe`. You can also use `lspci` or `ethtool -i eth0` to check the NIC PCI bus-id. Pls see [DPDK site](http://www.dpdk.org) for details.
 
 ## Build DPVS
 
@@ -218,4 +218,4 @@ Pls see the [License](./LICENSE.md) file.
 
 # Contact Us
 
-`DPVS` is developing by [iQiYi](www.iqiyi.com) [QLB](mailto:qlb-devel@dev.qiyi.com) team since Arpil 2016 and now open-sourced. It's already widely used in iQiYi IDC for L4 load balancer and SNAT clusters, and we plan to replace all our LVS clusters with DPVS. We are very happy that **more people can get involved** in this project. Welcome to try, report issues and submit pull requests. And pls feel free to contact us through **Github** or [Email](mailto:qlb-devel@dev.qiyi.com).
+`DPVS` is developing by [iQiYi](https://www.iqiyi.com) [QLB](mailto:qlb-devel@dev.qiyi.com) team since Arpil 2016 and now open-sourced. It's already widely used in iQiYi IDC for L4 load balancer and SNAT clusters, and we plan to replace all our LVS clusters with DPVS. We are very happy that **more people can get involved** in this project. Welcome to try, report issues and submit pull requests. And pls feel free to contact us through **Github** or [Email](mailto:qlb-devel@dev.qiyi.com).
