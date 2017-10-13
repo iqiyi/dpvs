@@ -43,7 +43,7 @@ typedef enum msg_mode {
 #define DPVS_MSG_F_STATE_RECV       8
 /* msg finished, all Slaves replied if multicast msg */
 #define DPVS_MSG_F_STATE_FIN        16
-/* msg drop, callback not called,  for reason such as unregister, timeout ... */
+/* msg drop, callback not called, for reason such as unregister, timeout ... */
 #define DPVS_MSG_F_STATE_DROP       32
 /* msg callback failed */
 #define DPVS_MSG_F_CALLBACK_FAIL    64
@@ -63,55 +63,51 @@ struct dpvs_msg {
     DPVS_MSG_MODE mode;     /* msg mode */
     lcoreid_t cid;          /* which lcore the msg from, for multicast always Master */
     uint32_t flags;         /* msg flags */
-    rte_spinlock_t f_lock;  /* msg flags lock */
+    rte_atomic16_t refcnt;  /* reference count */
+    rte_spinlock_t lock;    /* msg lock */
     struct dpvs_msg_reply reply;
     /* response data, created with rte_malloc... and filled by callback */
     uint32_t len;           /* msg data length */
     char data[0];           /* msg data */
 };
 
-static inline void init_msg_flags(struct dpvs_msg *msg)
-{
-    rte_spinlock_init(&msg->f_lock);
-}
-
 static inline uint32_t get_msg_flags(struct dpvs_msg *msg)
 {
     uint32_t flags;
-    rte_spinlock_lock(&msg->f_lock);
+    rte_spinlock_lock(&msg->lock);
     flags = msg->flags;
-    rte_spinlock_unlock(&msg->f_lock);
+    rte_spinlock_unlock(&msg->lock);
     return flags;
 }
 
 static inline bool test_msg_flags(struct dpvs_msg *msg, uint32_t flags)
 {
     bool ret;
-    rte_spinlock_lock(&msg->f_lock);
+    rte_spinlock_lock(&msg->lock);
     ret = (msg->flags & flags) ? true : false;
-    rte_spinlock_unlock(&msg->f_lock);
+    rte_spinlock_unlock(&msg->lock);
     return ret;
 }
 
 static inline void set_msg_flags(struct dpvs_msg *msg, uint32_t flags)
 {
-    rte_spinlock_lock(&msg->f_lock);
+    rte_spinlock_lock(&msg->lock);
     msg->flags = flags;
-    rte_spinlock_unlock(&msg->f_lock);
+    rte_spinlock_unlock(&msg->lock);
 }
 
 static inline void add_msg_flags(struct dpvs_msg *msg, uint32_t flags)
 {
-    rte_spinlock_lock(&msg->f_lock);
+    rte_spinlock_lock(&msg->lock);
     msg->flags |= flags;
-    rte_spinlock_unlock(&msg->f_lock);
+    rte_spinlock_unlock(&msg->lock);
 }
 
 static inline void del_msg_flags(struct dpvs_msg *msg, uint32_t flags)
 {
-    rte_spinlock_lock(&msg->f_lock);
-    msg->flags |= (~flags);
-    rte_spinlock_unlock(&msg->f_lock);
+    rte_spinlock_lock(&msg->lock);
+    msg->flags &= (~flags);
+    rte_spinlock_unlock(&msg->lock);
 }
 
 /* Master->Slave multicast msg queue */
@@ -157,7 +153,6 @@ struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
         lcoreid_t cid,
         uint32_t len, const void *data);
 int msg_destroy(struct dpvs_msg **pmsg);
-int multicast_msg_destroy(struct dpvs_multicast_queue **msg);
 
 /* send msg to lcore cid */
 int msg_send(struct dpvs_msg *msg,
