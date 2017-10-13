@@ -557,6 +557,7 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
      *    Unlink the whole destination list
      */
     list_for_each_entry_safe(dest, nxt, &svc->dests, n_list) {
+        DPVS_WAIT_WHILE(rte_atomic32_read(&svc->usecnt) > 1);
         __dp_vs_unlink_dest(svc, dest, 0);
         __dp_vs_del_dest(dest);
     }
