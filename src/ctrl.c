@@ -33,15 +33,9 @@ uint8_t slave_lcore_nb;        /* slave lcore number */
 lcoreid_t master_lcore;        /* master lcore id */
 
 struct netif_lcore_loop_job ctrl_lcore_job;
-//#define MC_MSG_WAIT_TTL 1
 
 #define MSG_TIMEOUT_US 2000
 static int msg_timeout = MSG_TIMEOUT_US;
-
-#ifdef CONFIG_MSG_DEBUG
-static rte_atomic32_t msg_alive_cnt;
-static rte_atomic64_t msg_alloc_cnt;
-#endif
 
 #define DPVS_MSG_BITS 8
 #define DPVS_MSG_LEN (1 << DPVS_MSG_BITS)
@@ -280,15 +274,6 @@ struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
     if (unlikely(NULL == msg))
         return NULL;
 
-#ifdef CONFIG_MSG_DEBUG
-    rte_atomic32_inc(&msg_alive_cnt);
-    rte_atomic64_inc(&msg_alloc_cnt);
-    if (rte_atomic64_read(&msg_alloc_cnt) % 100000 == 0)
-        RTE_LOG(INFO, MSGMGR, "msg memory debug: msg_alive_cnt=%d, msg_alloc_cnt=%ld\n",
-                rte_atomic32_read(&msg_alive_cnt),
-                rte_atomic64_read(&msg_alloc_cnt));
-#endif
-
     rte_spinlock_init(&msg->lock);
 
     flags = get_msg_flags(msg);
@@ -319,7 +304,7 @@ int msg_destroy(struct dpvs_msg **pmsg)
     msg = *pmsg;
 
     if (!rte_atomic16_dec_and_test(&msg->refcnt)) {
-        msg = NULL;
+        *pmsg = NULL;
         return EDPVS_OK;
     }
 
@@ -348,11 +333,7 @@ int msg_destroy(struct dpvs_msg **pmsg)
         msg->reply.len = 0;
     }
     rte_free(msg);
-    msg = NULL;
-
-#ifdef CONFIG_MSG_DEBUG
-    rte_atomic32_dec(&msg_alive_cnt);
-#endif
+    *pmsg = NULL;
 
     return EDPVS_OK;
 }
@@ -915,11 +896,6 @@ static inline int msg_init(void)
         rte_ring_set_water_mark(msg_ring[ii], (int)(msg_ring_size * 0.8));
     }
 
-#ifdef CONFIG_MSG_DEBUG
-    rte_atomic32_init(&msg_alive_cnt);
-    rte_atomic64_init(&msg_alloc_cnt);
-#endif
-
     /* register netif-lcore-loop-job for Slaves */
     snprintf(ctrl_lcore_job.name, sizeof(ctrl_lcore_job.name) - 1, "%s", "slave_ctrl_plane");
     ctrl_lcore_job.func = slave_lcore_loop_func;
@@ -1086,10 +1062,8 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg **pmsg)
                 __func__, strerror(errno));
         return EDPVS_IO;
     }
-    //printf("%d bytes header recieved: msg-id = %u, msg-data-len = %zu\n",
-    //      res, msg_hdr.id, msg_hdr.len);
 
-    *pmsg = rte_malloc("sockopt_msg", 
+    *pmsg = rte_malloc("sockopt_msg",
             sizeof(struct dpvs_sock_msg) + msg_hdr.len, RTE_CACHE_LINE_SIZE);
     if (unlikely(NULL == *pmsg)) {
         RTE_LOG(ERR, MSGMGR, "%s: no memory\n", __func__);
@@ -1111,7 +1085,6 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg **pmsg)
             *pmsg = NULL;
             return EDPVS_IO;
         }
-    // printf("%d bytes body recieved (msg_len=%zu): %s\n", res, msg->len, msg->data);
     }
 
     return EDPVS_OK;
@@ -1132,7 +1105,6 @@ static int sockopt_msg_send(int clt_fd,
 {
     int res;
 
-    //res = write(clt_fd, hdr, sizeof(struct dpvs_sock_msg_reply));
     res = send(clt_fd, hdr, sizeof(struct dpvs_sock_msg_reply), MSG_NOSIGNAL);
     if (sizeof(struct dpvs_sock_msg_reply) != res) {
         RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg header send error: %s\n",
@@ -1147,7 +1119,6 @@ static int sockopt_msg_send(int clt_fd,
     }
 
     if (data_len) {
-        //res = write(clt_fd, data, data_len);
         res = send(clt_fd, data, data_len, MSG_NOSIGNAL);
         if (data_len != res) {
             RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg body send error: %s\n",
@@ -1179,7 +1150,6 @@ int sockopt_ctl(__rte_unused void *arg)
     if (clt_fd < 0) {
         if (EWOULDBLOCK != errno) {
             RTE_LOG(WARNING, MSGMGR, "%s: Fail to accept client request\n", __func__);
-            //unlink(ipc_unix_domain);
         }
         return EDPVS_IO;
     }
@@ -1188,7 +1158,6 @@ int sockopt_ctl(__rte_unused void *arg)
     ret = sockopt_msg_recv(clt_fd, &msg);
     if (unlikely(EDPVS_OK != ret)) {
         close(clt_fd);
-        //unlink(ipc_unix_domain);
         return ret;
     }
 
