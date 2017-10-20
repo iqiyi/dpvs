@@ -146,7 +146,6 @@ void neigh_keyword_value_init(void)
         /* KW_TYPE_INIT keyword */
         arp_unres_qlen = ARP_ENTRY_BUFF_SIZE_DEF;
         arp_pktpool_cache = ARP_PKTPOOL_CACHE_MBUF_DEF;
-        arp_pktpool_cache = ARP_PKTPOOL_CACHE_MBUF_DEF;
         arp_timeout = DPVS_NEIGH_TIMEOUT_DEF;
     }
     /* KW_TYPE_NORMAL keyword */
