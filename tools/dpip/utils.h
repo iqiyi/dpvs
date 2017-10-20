@@ -32,8 +32,11 @@
     } \
 } while (0)
 
+#define CURRARG(c)          ((c)->argv[0])
+
 const char *af_itoa(int af);
 
+bool inet_is_addr_any(int af, const union inet_addr *addr);
 int inet_pton_try(int *af, const char *src, union inet_addr *dst);
 
 #endif /* __DPIP_UTILS_H__ */

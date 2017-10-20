@@ -6,10 +6,10 @@
 #ifndef __DPVS_TC_CLS_H__
 #define __DPVS_TC_CLS_H__
 #include "common.h"
-#include "dpdk.h"
 #include "match.h"
-
-struct tc_cls;
+#ifdef __DPVS__
+#include "dpdk.h"
+#endif /* __DPVS__ */
 
 struct tc_cls_result {
     bool                    drop;
@@ -21,6 +21,10 @@ struct tc_cls_match_copt {
     struct dp_vs_match      match;
     struct tc_cls_result    result;
 } __attribute__((__packed__));
+
+#ifdef __DPVS__
+
+struct tc_cls;
 
 struct tc_cls_ops {
     char                    name[TCNAMESIZ];
@@ -64,5 +68,7 @@ void tc_cls_destroy(struct tc_cls *cls);
 int tc_cls_change(struct tc_cls *cls, const void *arg);
 
 struct tc_cls *tc_cls_lookup(struct Qsch *sch, tc_handle_t handle);
+
+#endif /* __DPVS__ */
 
 #endif /* __DPVS_TC_CLS_H__ */

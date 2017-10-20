@@ -9,13 +9,30 @@
 #define __DPVS_TC_SCH_H__
 #include <assert.h>
 #include "common.h"
+#ifdef __DPVS__
 #include "dpdk.h"
 #include "timer.h"
+#endif /* __DPVS__ */
 
 enum {
     QSCH_F_INGRESS          = 0x00000001,
     QSCH_F_INVISIBLE        = 0x00000002,
 };
+
+struct qsch_qstats {
+    uint32_t                qlen;
+    uint32_t                backlog;
+    uint32_t                drops;
+    uint32_t                requeues;
+    uint32_t                overlimits;
+};
+
+struct qsch_bstats {
+    uint64_t                bytes;
+    uint32_t                packets;
+};
+
+#ifdef __DPVS__
 
 struct Qsch_ops {
     char                    name[TCNAMESIZ];
@@ -34,19 +51,6 @@ struct Qsch_ops {
     /* internal use */
     struct list_head        list;       /* global sch ops list */
     rte_atomic32_t          refcnt;
-};
-
-struct qsch_qstats {
-    uint32_t                qlen;
-    uint32_t                backlog;
-    uint32_t                drops;
-    uint32_t                requeues;
-    uint32_t                overlimits;
-};
-
-struct qsch_bstats {
-    uint64_t                bytes;
-    uint32_t                packets;
 };
 
 /* queue scheduler, see kernel Qdisc */
@@ -222,5 +226,7 @@ static inline void qsch_put(struct Qsch *sch)
 int fifo_set_limit(struct Qsch *sch, unsigned int limit);
 struct Qsch *fifo_create_dflt(struct Qsch *sch, struct Qsch_ops *ops,
                               unsigned int limit);
+
+#endif /* __DPVS__ */
 
 #endif /* __DPVS_TC_SCH_H__ */

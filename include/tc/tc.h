@@ -8,18 +8,22 @@
 #define __DPVS_TC_H__
 #include <linux/pkt_cls.h>
 #include <linux/pkt_sched.h>
+#ifdef __DPVS__
 #include "list.h"
 #include "dpdk.h"
+#endif /* __DPVS__ */
 
 #define TCNAMESIZ           16
+
+typedef uint32_t            tc_handle_t;
+
+#ifdef __DPVS__
 
 #define TC
 #define RTE_LOGTYPE_TC      RTE_LOGTYPE_USER1
 
 #define TC_ALIGNTO          64
 #define TC_ALIGN(len)       (((len) + TC_ALIGNTO-1) & ~(TC_ALIGNTO-1))
-
-typedef uint32_t            tc_handle_t;
 
 /* need a wrapper to save mbuf list,
  * since there's no way to link mbuf by it's own elem.
@@ -92,5 +96,6 @@ static inline void tc_mbuf_head_init(struct tc_mbuf_head *qh)
     INIT_LIST_HEAD(&qh->mbufs);
     qh->qlen = 0;
 }
+#endif /* __DPVS__ */
 
 #endif /* __DPVS_TC_H__ */

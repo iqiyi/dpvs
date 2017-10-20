@@ -7,6 +7,7 @@
 #include "ctrl.h"
 #include "netif.h"
 #include "tc/tc.h"
+#include "tc/cls.h"
 #include "tc/sch.h"
 #include "conf/tc.h"
 

@@ -49,7 +49,11 @@ SRCS-y := main.c netif.c ipv4.c ipv4_frag.c neigh.c timer.c route.c inet.c commo
 		  ip_vs_service.c ip_vs_dest.c  ip_vs_blklst.c ip_vs_proto_udp.c \
 		  ip_vs_proto_tcp.c ip_vs_proto_icmp.c ip_vs_stats.c ip_vs_sched.c \
 		  ip_vs_rr.c ip_vs_wrr.c ip_vs_wlc.c ip_vs_synproxy.c pidfile.c \
-		  parser.c cfgfile.c global_conf.c
+		  parser.c cfgfile.c global_conf.c \
+		  tc/sch_tbf.c tc/tc_ctrl.c tc/cls_match.c tc/sch_fifo.c \
+		  tc/sch_pfifo_fast.c tc/sch_generic.c tc/cls.c tc/tc.c
+
+CFLAGS += -D __DPVS__
 
 CFLAGS += -O3
 #CFLAGS += -g -O0

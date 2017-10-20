@@ -7,6 +7,8 @@
 #include <assert.h>
 #include "netif.h"
 #include "tc/tc.h"
+#include "tc/sch.h"
+#include "tc/cls.h"
 #include "conf/tc.h"
 
 extern struct Qsch_ops bfifo_sch_ops;

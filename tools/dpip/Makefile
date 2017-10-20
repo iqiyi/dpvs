@@ -28,7 +28,7 @@ CFLAGS += -I ../../include
 CFLAGS += -I ../keepalived/keepalived/libipvs-2.6
 
 OBJS = dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
-	   ../../src/common.o \
+	   qsch.o cls.o ../../src/common.o \
 	   ../keepalived/keepalived/libipvs-2.6/sockopt.o
 
 all: $(TARGET)
