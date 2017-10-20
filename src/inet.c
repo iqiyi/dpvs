@@ -202,8 +202,8 @@ int inet_addr_range_parse(int af, const char *param,
     return EDPVS_OK;
 }
 
-void inet_addr_range_dump(int af, const struct inet_addr_range *range,
-                          char *buf, size_t size)
+int inet_addr_range_dump(int af, const struct inet_addr_range *range,
+                         char *buf, size_t size)
 {
     char min_ip[64], max_ip[64];
     char min_port[16], max_port[16];
@@ -213,6 +213,6 @@ void inet_addr_range_dump(int af, const struct inet_addr_range *range,
     snprintf(min_port, sizeof(min_port), "%u",  ntohs(range->min_port));
     snprintf(max_port, sizeof(max_port), "%u",  ntohs(range->max_port));
 
-    snprintf(buf, size, "%s-%s:%s-%s", min_ip, max_ip, min_port, max_port);
-    return;
+    return snprintf(buf, size, "%s-%s:%s-%s",
+                    min_ip, max_ip, min_port, max_port);
 }

@@ -21,6 +21,7 @@
 #include "dpdk.h"
 #include "inetaddr.h"
 #include "timer.h"
+#include "tc/tc.h"
 
 #define RTE_LOGTYPE_NETIF RTE_LOGTYPE_USER1
 
@@ -255,14 +256,14 @@ struct netif_port {
     struct inet_device      *in6_ptr;
     struct netif_kni        kni;                        /* kni device */
     union netif_bond        *bond;                      /* bonding conf */
-
     struct vlan_info        *vlan_info;                 /* VLANs info for real device */
-
+    struct netif_tc         tc;                         /* traffic control */
     struct netif_ops        *netif_ops;
 } __rte_cache_aligned;
 
 /**************************** lcore API *******************************/
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
 int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
 void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask);
@@ -317,6 +318,11 @@ void kni_process_on_master(void);
 static inline void *netif_get_priv(struct netif_port *dev)
 {
     return (char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
+}
+
+static inline struct netif_tc *netif_tc(struct netif_port *dev)
+{
+    return &dev->tc;
 }
 
 struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,

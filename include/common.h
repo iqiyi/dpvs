@@ -25,8 +25,27 @@
 #define NELEMS(a)       (sizeof(a) / sizeof((a)[0]))
 #endif
 
+#ifndef min
+#define min(x,y) ({ \
+	typeof(x) _x = (x);	\
+	typeof(y) _y = (y);	\
+	(void) (&_x == &_y);	\
+	_x < _y ? _x : _y; })
+#endif
+
 #ifndef max
-#define max(a, b)       ((a) > (b) ? (a) : (b))
+#define max(x,y) ({ \
+	typeof(x) _x = (x);	\
+	typeof(y) _y = (y);	\
+	(void) (&_x == &_y);	\
+	_x > _y ? _x : _y; })
+#endif
+
+#ifndef min_t
+#define min_t(type, a, b) min(((type) a), ((type) b))
+#endif
+#ifndef max_t
+#define max_t(type, a, b) max(((type) a), ((type) b))
 #endif
 
 #ifndef __be32

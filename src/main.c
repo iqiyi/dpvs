@@ -117,28 +117,32 @@ int main(int argc, char *argv[])
     if ((err = dpvs_timer_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail init timer on %s\n", dpvs_strerror(err));
 
-    if ((err = netif_init(NULL)) != 0)
+    if ((err = netif_init(NULL)) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init netif: %s\n", dpvs_strerror(err));
     /* Default lcore conf and port conf are used and may be changed here 
      * with "netif_port_conf_update" and "netif_lcore_conf_set" */
 
-    if ((err = ctrl_init()) != 0 )
+    if ((err = ctrl_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init ctrl plane: %s\n",
+                 dpvs_strerror(err));
+
+    if ((err = tc_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init traffic control: %s\n",
                  dpvs_strerror(err));
 
     if ((err = vlan_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init vlan: %s\n", dpvs_strerror(err));
 
-    if ((err = inet_init()) != 0)
+    if ((err = inet_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init inet: %s\n", dpvs_strerror(err));
 
-    if ((err = sa_pool_init()) != 0)
+    if ((err = sa_pool_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init sa_pool: %s\n", dpvs_strerror(err));
 
     if ((err = dp_vs_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init ipvs: %s\n", dpvs_strerror(err));
 
-    if ((err = netif_ctrl_init()) !=0 )
+    if ((err = netif_ctrl_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init netif_ctrl: %s\n",
                  dpvs_strerror(err));
 

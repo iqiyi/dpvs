@@ -45,15 +45,6 @@ static struct list_head dp_vs_svc_fwm_table[DP_VS_SVC_TAB_SIZE];
 
 static struct list_head dp_vs_svc_match_list;
 
-static inline bool is_empty_match(const struct dp_vs_match *match)
-{
-    const static struct inet_addr_range zero_range = {{{0}}}; /* just reminder */
-
-    return !memcmp(&match->srange, &zero_range, sizeof(struct inet_addr_range)) &&
-           !memcmp(&match->drange, &zero_range, sizeof(struct inet_addr_range)) &&
-           match->iif == NETIF_PORT_ID_ALL && match->oif == NETIF_PORT_ID_ALL;
-}
-
 static inline unsigned dp_vs_svc_hashkey(int af, unsigned proto, const union inet_addr *addr)
 {
     /* now IPv4 only */
@@ -199,11 +190,12 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
 
     list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
         struct dp_vs_match *m = svc->match;
+        struct netif_port *idev, *odev;
         assert(m);
 
         /* snat is handled at pre-routing to check if oif
          * is match perform route here. */
-        if (m->oif != NETIF_PORT_ID_ALL) {
+        if (strlen(m->oifname)) {
             if (!rt) {
                 rt = route4_input(mbuf, &daddr.in, &saddr.in,
                                   iph->type_of_service,
@@ -220,11 +212,14 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
             }
         }
 
+        idev = netif_port_get_by_name(m->iifname);
+        odev = netif_port_get_by_name(m->oifname);
+
         if (svc->af == af && svc->proto == iph->next_proto_id &&
             __svc_in_range(af, &saddr, ports[0], &m->srange) &&
             __svc_in_range(af, &daddr, ports[1], &m->drange) &&
-            (m->iif == NETIF_PORT_ID_ALL || m->iif == mbuf->port) &&
-            (m->oif == NETIF_PORT_ID_ALL || m->oif == oif)
+            (!idev || idev->id == mbuf->port) &&
+            (!odev || odev->id == oif)
            ) {
             rte_atomic32_inc(&svc->usecnt);
             return svc;
@@ -239,7 +234,6 @@ int dp_vs_match_parse(int af, const char *srange, const char *drange,
                       struct dp_vs_match *match)
 {
     int err;
-    struct netif_port *dev;
 
     memset(match, 0, sizeof(*match));
 
@@ -255,23 +249,8 @@ int dp_vs_match_parse(int af, const char *srange, const char *drange,
             return err;
     }
 
-    match->iif = match->oif = NETIF_PORT_ID_ALL;
-
-    if (iifname && strlen(iifname)) {
-        dev = netif_port_get_by_name(iifname);
-        if (!dev)
-            return EDPVS_NODEV;
-
-        match->iif = dev->id;
-    }
-
-    if (oifname && strlen(oifname)) {
-        dev = netif_port_get_by_name(oifname);
-        if (!dev)
-            return EDPVS_NODEV;
-
-        match->oif = dev->id;
-    }
+    snprintf(match->iifname, IFNAMSIZ, "%s", iifname ? : "");
+    snprintf(match->oifname, IFNAMSIZ, "%s", oifname ? : "");
 
     return EDPVS_OK;
 }
@@ -601,7 +580,6 @@ static int
 dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
 {
     int err = 0;
-    struct netif_port *dev;
     struct dp_vs_match *m;
 
     memset(dst, 0, sizeof(*dst));
@@ -627,11 +605,8 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     inet_addr_range_dump(AF_INET, &m->srange, dst->srange, sizeof(dst->srange));
     inet_addr_range_dump(AF_INET, &m->drange, dst->drange, sizeof(dst->drange));
 
-    if (m->iif != NETIF_PORT_ID_ALL && (dev = netif_port_get(m->iif)))
-        snprintf(dst->iifname, sizeof(dst->iifname), "%s", dev->name);
-
-    if (m->oif != NETIF_PORT_ID_ALL && (dev = netif_port_get(m->oif)))
-        snprintf(dst->oifname, sizeof(dst->oifname), "%s", dev->name);
+    snprintf(dst->iifname, sizeof(dst->iifname), "%s", m->iifname);
+    snprintf(dst->oifname, sizeof(dst->oifname), "%s", m->oifname);
 
     return err;
 }

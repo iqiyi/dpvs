@@ -1911,7 +1911,7 @@ static inline int validate_xmit_mbuf(struct rte_mbuf *mbuf,
     return err;
 }
 
-int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     lcoreid_t cid;
     int pid, qindex;
@@ -1926,12 +1926,12 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
         return EDPVS_INVAL;
     }
 
-    if (ops && ops->op_xmit)
-        return ops->op_xmit(mbuf, dev);
-
     /* assert mbuf not placed in a place which original mbuf freed*/
     mbuf_refcnt = rte_mbuf_refcnt_read(mbuf);
     assert((mbuf_refcnt >= 1) && (mbuf_refcnt <= 64));
+
+    if (ops && ops->op_xmit)
+        return ops->op_xmit(mbuf, dev);
 
     /* send pkt on current lcore */
     cid = rte_lcore_id();
@@ -1989,6 +1989,23 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     txq->mbufs[txq->len] = mbuf;
     txq->len++;
     return EDPVS_OK;
+}
+
+int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
+{
+    int ret = EDPVS_OK;
+
+    if (unlikely(NULL == mbuf || NULL == dev)) {
+        if (mbuf)
+            rte_pktmbuf_free(mbuf);
+        return EDPVS_INVAL;
+    }
+
+    mbuf = tc_handle_egress(netif_tc(dev), mbuf, &ret);
+    if (!mbuf)
+        return ret;
+
+    return netif_hard_xmit(mbuf, dev);
 }
 
 static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
@@ -2602,6 +2619,12 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
     dev->in_ptr->af = AF_INET;
     INIT_LIST_HEAD(&dev->in_ptr->ifa_list);
 
+    if (tc_init_dev(dev) != EDPVS_OK) {
+        RTE_LOG(ERR, NETIF, "%s: fail to init TC\n", __func__);
+        rte_free(dev);
+        return NULL;
+    }
+
     return dev;
 }
 
@@ -2773,6 +2796,12 @@ static struct netif_port* netif_port_alloc(portid_t id, int nrxq,
     port->in_ptr->dev = port;
     port->in_ptr->af = AF_INET;
     INIT_LIST_HEAD(&port->in_ptr->ifa_list);
+
+    if (tc_init_dev(port) != EDPVS_OK) {
+        RTE_LOG(ERR, NETIF, "%s: fail to init TC\n", __func__);
+        rte_free(port);
+        return NULL;
+    }
 
     return port;
 }
