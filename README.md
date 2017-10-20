@@ -77,7 +77,7 @@ There's a patch for DPDK `kni` driver for hardware multicast, apply it if needed
 $ cd <path-of-dpvs>
 $ cp patch/dpdk-16.07/0001-kni-use-netlink-event-for-multicast-driver-part.patch dpdk-stable-16.07.2/
 $ cd dpdk-stable-16.07.2/
-$ patch -n 1 < 0001-kni-use-netlink-event-for-multicast-driver-part.patch
+$ patch -p 1 < 0001-kni-use-netlink-event-for-multicast-driver-part.patch
 ```
 
 Now build DPDK and export `RTE_SDK` env variable for DPDK app (DPVS).
@@ -106,7 +106,7 @@ $ mount -t hugetlbfs nodev /mnt/huge
 Install Kernel modules and bind NIC with `igb_uio` driver. Quick start uses only one NIC, normally we use 2 for Full-NAT cluster, even 4 for bonding mode. Assuming `eth0` will be used for DPVS/DPDK, and another standalone Linux NIC for debug, for example, `eth1`.
 
 ```bash
-$ modprob uio
+$ modprobe uio
 $ cd dpdk-stable-16.07.2/
 
 $ insmod build/kmod/igb_uio.ko
