@@ -264,7 +264,7 @@ static void rx_desc_nb_handler(vector_t tokens)
         is_power2(desc_nb, 0, &desc_nb);
         RTE_LOG(INFO, NETIF, "%s:nb_rx_desc = %d (round to 2^n)\n",
                 current_device->name, desc_nb);
-        current_device->tx_desc_nb = desc_nb;
+        current_device->rx_desc_nb = desc_nb;
     }
 
     FREE_PTR(str);
