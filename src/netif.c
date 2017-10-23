@@ -864,7 +864,7 @@ static inline int pkt_type_tab_hashkey(uint16_t type)
 static inline void netif_pkt_type_tab_init(void)
 {
     int i;
-    for (i = 0; i < NETIF_PKT_TYPE_TABLE_MASK; i++)
+    for (i = 0; i < NETIF_PKT_TYPE_TABLE_BUCKETS; i++)
         INIT_LIST_HEAD(&pkt_type_tab[i]);
 }
 
