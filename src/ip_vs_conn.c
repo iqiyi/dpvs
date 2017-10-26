@@ -337,8 +337,6 @@ static void conn_expire(void *priv)
     else
         conn->timeout.tv_sec = 60;
         
-    dpvs_time_rand_delay(&conn->timeout, 1000000);
-
     rte_atomic32_inc(&conn->refcnt);
 
     /* retransmit syn packet to rs */
@@ -654,7 +652,6 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     this_conn_count++;
 
     /* schedule conn timer */
-    dpvs_time_rand_delay(&new->timeout, 1000000);
     if (new->flags & DPVS_CONN_F_TEMPLATE)
         dpvs_timer_sched(&new->timer, &new->timeout, conn_expire, new, true);
     else

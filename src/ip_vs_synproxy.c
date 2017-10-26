@@ -936,7 +936,6 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
             cp->timeout.tv_sec = conn_timeout;
         else
             cp->timeout.tv_sec = pp->timeout_table[cp->state];
-        dpvs_time_rand_delay(&cp->timeout, 1000000);
         if (dest) {
             rte_atomic32_inc(&dest->actconns);
             rte_atomic32_dec(&dest->inactconns);
@@ -1005,7 +1004,6 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
             ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
         cp->state = DPVS_TCP_S_CLOSE;
         cp->timeout.tv_sec = pp->timeout_table[cp->state];
-        dpvs_time_rand_delay(&cp->timeout, 1000000);
         th->seq = htonl(ntohl(th->seq) + 1);
         //syn_proxy_seq_csum_update ?
 
@@ -1063,7 +1061,6 @@ static inline int __syn_proxy_reuse_conn(struct dp_vs_conn *cp,
     /* Set timeout value */
     cp->state = DPVS_TCP_S_SYN_SENT;
     cp->timeout.tv_sec = pp->timeout_table[cp->state];
-    dpvs_time_rand_delay(&cp->timeout, 1000000);
 
     return EDPVS_OK;
 }
