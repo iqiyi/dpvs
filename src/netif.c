@@ -1408,7 +1408,7 @@ inline static void recv_on_isol_lcore(void)
 {
     struct rx_partner *isol_rxq;
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
-    uint16_t rx_len;
+    unsigned int rx_len, qspc;
     int i, res;
     lcoreid_t cid = rte_lcore_id();
 
@@ -1420,20 +1420,13 @@ inline static void recv_on_isol_lcore(void)
          * always lays on different lcores from packet processing. */
         lcore_stats_burst(&lcore_stats[cid], rx_len);
 
-        res = rte_ring_enqueue_bulk(isol_rxq->rb, (void *const * )mbufs, rx_len);
-        /* note that dpdk-17.07 has changed API rte_ring_enqueue_bulk!!! */
-        if (res) {
-            if (res == -EDQUOT) {
-                RTE_LOG(WARNING, NETIF, "%s [%d]: isolate recieve ring quato"
-                        " exceeded!\n", __func__, cid);
-            } else {
-                RTE_LOG(WARNING, NETIF, "%s [%d]: %d packets failed to enqueue\n",
-                        __func__, cid, rx_len);
-                lcore_stats[cid].dropped += rx_len;
-                for (i = 0; i < rx_len; i++) {
-                    rte_pktmbuf_free(mbufs[i]);
-                }
-            }
+        res = rte_ring_enqueue_bulk(isol_rxq->rb, (void *const * )mbufs, rx_len, &qspc);
+        if (res < rx_len) {
+            RTE_LOG(WARNING, NETIF, "%s [%d]: %d packets failed to enqueue,"
+                    " space avail: %u\n", __func__, cid, rx_len - res, qspc);
+            lcore_stats[cid].dropped += (rx_len - res);
+            for (i = res; i < rx_len; i++)
+                rte_pktmbuf_free(mbufs[i]);
         }
     }
 }
@@ -2209,7 +2202,7 @@ static void lcore_process_arp_ring(struct netif_queue_conf *qconf, lcoreid_t cid
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     uint16_t nb_rb;
 
-    nb_rb = rte_ring_dequeue_burst(arp_ring[cid], (void**)mbufs, NETIF_MAX_PKT_BURST);
+    nb_rb = rte_ring_dequeue_burst(arp_ring[cid], (void**)mbufs, NETIF_MAX_PKT_BURST, NULL);
 
     if (nb_rb > 0) {
         lcore_process_packets(qconf, mbufs, cid, nb_rb, 0);

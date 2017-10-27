@@ -753,7 +753,7 @@ void neigh_process_ring(void *arg)
     struct neighbour_entry *neigh;
     struct raw_neigh *param;
     lcoreid_t cid = rte_lcore_id();
-    nb_rb = rte_ring_dequeue_burst(neigh_ring[cid], (void **)&params, NETIF_MAX_PKT_BURST);
+    nb_rb = rte_ring_dequeue_burst(neigh_ring[cid], (void **)&params, NETIF_MAX_PKT_BURST, NULL);
     if (nb_rb > 0) {
        int i;
        for (i = 0; i < nb_rb; i++) {

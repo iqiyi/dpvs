@@ -877,7 +877,6 @@ static inline int msg_init(void)
             RTE_LOG(ERR, MSGMGR, "Fail to init ctrl !\n");
                     return EDPVS_DPDKAPIFAIL;
         }
-        rte_ring_set_water_mark(msg_ring[ii], (int)(msg_ring_size * 0.8));
     }
 
     /* register netif-lcore-loop-job for Slaves */
