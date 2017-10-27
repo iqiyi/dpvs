@@ -49,7 +49,7 @@ netif_defs {
         kni_name                dpdk1.kni
     }
 
-!    <init> device bond0 {
+!    <init> bonding bond0 {
 !        mode        0
 !        slave       dpdk0
 !        slave       dpdk1
