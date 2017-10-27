@@ -117,6 +117,10 @@ int main(int argc, char *argv[])
     if ((err = dpvs_timer_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail init timer on %s\n", dpvs_strerror(err));
 
+    if ((err = tc_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init traffic control: %s\n",
+                 dpvs_strerror(err));
+
     if ((err = netif_init(NULL)) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init netif: %s\n", dpvs_strerror(err));
     /* Default lcore conf and port conf are used and may be changed here 
@@ -126,8 +130,8 @@ int main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "Fail to init ctrl plane: %s\n",
                  dpvs_strerror(err));
 
-    if ((err = tc_init()) != EDPVS_OK)
-        rte_exit(EXIT_FAILURE, "Fail to init traffic control: %s\n",
+    if ((err = tc_ctrl_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init tc control plane: %s\n",
                  dpvs_strerror(err));
 
     if ((err = vlan_init()) != EDPVS_OK)

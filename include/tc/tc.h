@@ -104,7 +104,7 @@ static inline int64_t tc_get_ns(void)
 {
     struct timespec ts;
 
-    clock_gettime(CLOCK_REALTIME, &ts);
+    clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
     return ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
 

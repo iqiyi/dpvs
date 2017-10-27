@@ -70,6 +70,7 @@ static int __tc_so_qsch_set(struct netif_tc *tc, tc_oper_t oper,
                             const struct tc_qsch_param *qpar)
 {
     struct Qsch *sch = NULL;
+    tc_handle_t where;
     int err;
 
     if (oper == SOCKOPT_TC_DEL ||
@@ -78,6 +79,10 @@ static int __tc_so_qsch_set(struct netif_tc *tc, tc_oper_t oper,
         sch = qsch_lookup_noref(tc, qpar->handle);
         if (!sch)
             return EDPVS_NOTEXIST;
+
+        /* egress root is readonly */
+        if (sch == tc->qsch)
+            return EDPVS_NOTSUPP;
     }
 
     switch (oper) {
@@ -93,8 +98,14 @@ static int __tc_so_qsch_set(struct netif_tc *tc, tc_oper_t oper,
         return qsch_change(sch, &qpar->qopt);
 
     case SOCKOPT_TC_REPLACE:
+        /* keep parent unchanged if not indicated */
+        if (qpar->where == TC_H_UNSPEC)
+            where = sch->parent;
+        else
+            where = qpar->where;
+
         qsch_destroy(sch);
-        qsch_create(tc->dev, qpar->kind, qpar->where, qpar->handle,
+        qsch_create(tc->dev, qpar->kind, where, qpar->handle,
                     &qpar->qopt, &err);
         return err;
 
@@ -110,7 +121,7 @@ static int __tc_so_qsch_get(struct netif_tc *tc, tc_oper_t oper,
 {
     int nparam, off, h, err;
     union tc_param *params = NULL;
-    struct Qsch *sch;
+    struct Qsch *sch = NULL;
 
     if (oper != SOCKOPT_TC_SHOW)
         return EDPVS_INVAL;
@@ -128,7 +139,7 @@ static int __tc_so_qsch_get(struct netif_tc *tc, tc_oper_t oper,
         err = fill_qsch_param(sch, &params[0].qsch);
         if (err != EDPVS_OK)
             goto errout;
-    } else {
+    } else { /* get all Qsch */
         nparam = tc->qsch_cnt;
 
         params = rte_zmalloc(NULL, nparam * sizeof(*params), 0);
@@ -152,6 +163,11 @@ static int __tc_so_qsch_get(struct netif_tc *tc, tc_oper_t oper,
 
         for (h = 0; h < tc->qsch_hash_size; h++) {
             hlist_for_each_entry(sch, &tc->qsch_hash[h], hlist) {
+                if (sch->flags & QSCH_F_INVISIBLE) {
+                    nparam--;
+                    continue;
+                }
+
                 err = fill_qsch_param(sch, &params[off++].qsch);
                 if (err != EDPVS_OK)
                     goto errout;
@@ -159,6 +175,9 @@ static int __tc_so_qsch_get(struct netif_tc *tc, tc_oper_t oper,
         }
         assert(off == nparam);
     }
+
+    *arr = params;
+    *narr = nparam;
 
     return EDPVS_OK;
 
@@ -259,6 +278,9 @@ static int __tc_so_cls_get(struct netif_tc *tc, tc_oper_t oper,
         }
     }
 
+    *arr = params;
+    *narr = nparam;
+
     return EDPVS_OK;
 
 errout:
@@ -335,7 +357,7 @@ static int tc_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         *outsize = nparam * sizeof(union tc_param);
     }
 
-    rte_rwlock_read_lock(&tc->lock);
+    rte_rwlock_read_unlock(&tc->lock);
     return err;
 }
 

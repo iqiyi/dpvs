@@ -51,6 +51,7 @@ static struct tc_cls *cls_alloc(struct Qsch *sch, struct tc_cls_ops *ops)
     if (!cls)
         return NULL;
 
+    INIT_LIST_HEAD(&cls->list);
     cls->sch = sch;
     cls->ops = ops;
     cls->pkt_type = ETH_P_ALL; /* default */

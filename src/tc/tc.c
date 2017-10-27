@@ -282,13 +282,13 @@ int tc_init_dev(struct netif_port *dev)
     tc->dev = dev;
     tc->tc_mbuf_pool = tc_mbuf_pools[dev->socket];
 
+    /* egress "root" Qsch, which handle is 0, parent is TC_H_ROOT. */
     tc->qsch = qsch_create_dflt(dev, default_qsch_ops, TC_H_ROOT);
     if (!tc->qsch) {
         rte_rwlock_write_unlock(&tc->lock);
         tc_destroy_dev(dev);
         return EDPVS_NOMEM;
     }
-    tc->qsch->handle = TC_H_MAKE(TC_H_ROOT, 0);
 
     tc->qsch_cnt = 1;
     tc->qsch_ingress = NULL;
@@ -343,10 +343,11 @@ int tc_destroy_dev(struct netif_port *dev)
 
 int tc_init(void)
 {
-    int s, err;
+    int s;
 
     /* scheduler */
     rte_rwlock_init(&qsch_ops_lock);
+    INIT_LIST_HEAD(&qsch_ops_base);
 
     tc_register_qsch(&pfifo_sch_ops);
     tc_register_qsch(&bfifo_sch_ops);
@@ -355,6 +356,7 @@ int tc_init(void)
 
     /* classifier */
     rte_rwlock_init(&cls_ops_lock);
+    INIT_LIST_HEAD(&cls_ops_base);
 
     tc_register_cls(&match_cls_ops);
 
@@ -372,10 +374,6 @@ int tc_init(void)
         if (!tc_mbuf_pools[s])
             return EDPVS_NOMEM;
     }
-
-    err = tc_ctrl_init();
-    if (err != EDPVS_OK)
-        return err;
 
     return EDPVS_OK;
 }

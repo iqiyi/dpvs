@@ -94,7 +94,8 @@ static inline char *dump_match(uint8_t proto, const struct dp_vs_match *match,
         return NULL;
 
     buf[0] = '\0';
-    left -= snprintf(buf + strlen(buf), left, "%s", inet_proto_name(proto));
+    left -= snprintf(buf + strlen(buf), left, "%s",
+                     proto ? inet_proto_name(proto) : "unspec");
 
     if (memcmp(&match->srange, &zero_range, sizeof(zero_range)) != 0) {
         left -= snprintf(buf + strlen(buf), left, ",from=");

@@ -114,7 +114,7 @@ static char *rate_itoa(uint32_t rate, char *buf, size_t size)
 
 static uint32_t latency_to_limit(const char *latency, uint32_t rate)
 {
-    int64_t lat = atol(latency);
+    int64_t lat = atol(latency); /* ms */
 
     return (uint32_t)(lat * rate / 1000 / 8);
 }
@@ -137,9 +137,10 @@ static int qsch_parse(struct dpip_obj *obj, struct dpip_conf *cf)
             param->where = TC_H_ROOT;
         } else if (strcmp(CURRARG(cf), "ingress") == 0) {
             param->where = TC_H_INGRESS;
+            param->handle = TC_H_INGRESS;
         } else if (strcmp(CURRARG(cf), "parent") == 0) {
             NEXTARG_CHECK(cf, CURRARG(cf));
-            param->where = atoi(CURRARG(cf));
+            param->where = tc_handle_atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "bfifo") == 0 ||
                    strcmp(CURRARG(cf), "pfifo") == 0 ||
                    strcmp(CURRARG(cf), "tbf") == 0) {
@@ -218,16 +219,9 @@ static int qsch_check(const struct dpip_obj *obj, dpip_cmd_t cmd)
     }
 
     switch (cmd) {
-    case DPIP_CMD_REPLACE:
-        if (!param->handle)
-            goto missing_handle;
-        /* fall through */
-
     case DPIP_CMD_ADD:
-        if (param->where == TC_H_UNSPEC) {
-            fprintf(stderr, "where to add ?\n");
-            return EDPVS_INVAL;
-        }
+    case DPIP_CMD_REPLACE:
+        /* handle 0: is root qdisc for egress */
 
         if (strcmp(param->kind, "pfifo") == 0 ||
             strcmp(param->kind, "bfifo") == 0) {
@@ -259,9 +253,9 @@ static int qsch_check(const struct dpip_obj *obj, dpip_cmd_t cmd)
         if (!param->handle)
             goto missing_handle;
 
-        if (strcmp(param->kind, "pfifo") == 0 ||
-            strcmp(param->kind, "bfifo") == 0 ||
-            strcmp(param->kind, "tbf") == 0) {
+        if (strcmp(param->kind, "pfifo") != 0 &&
+            strcmp(param->kind, "bfifo") != 0 &&
+            strcmp(param->kind, "tbf") != 0) {
             fprintf(stderr, "invalid qsch kind.\n");
             return EDPVS_INVAL;
         }
@@ -299,7 +293,7 @@ static void qsch_dump_param(const char *ifname, const union tc_param *param,
     const struct tc_qsch_param *qsch = &param->qsch;
     int i;
 
-    printf("qsch %s %s: dev %s %s", qsch->kind,
+    printf("qsch %s %s dev %s %s", qsch->kind,
            tc_handle_itoa(qsch->handle, handle, sizeof(handle)), ifname,
            tc_handle_itoa(qsch->where, where, sizeof(where)));
 
@@ -384,7 +378,7 @@ static int qsch_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
 }
 
 static struct tc_conf qsch_conf = {
-    .obj = TC_OBJ_QSCH,
+    .obj    = TC_OBJ_QSCH,
 };
 
 static struct dpip_obj dpip_qsch = {

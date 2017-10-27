@@ -33,6 +33,9 @@ static int pfifo_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     if (likely(sch->q.qlen < sch->limit))
         return qsch_enqueue_tail(sch, mbuf);
 
+#if defined(CONFIG_TC_DEBUG)
+    RTE_LOG(WARNING, TC, "%s: queue is full.\n", __func__);
+#endif
     return qsch_drop(sch, mbuf);
 }
 
@@ -41,6 +44,9 @@ static int bfifo_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     if (likely(sch->qstats.backlog + mbuf->pkt_len <= sch->limit))
         return qsch_enqueue_tail(sch, mbuf);
 
+#if defined(CONFIG_TC_DEBUG)
+    RTE_LOG(WARNING, TC, "%s: queue is full.\n", __func__);
+#endif
     return qsch_drop(sch, mbuf);
 }
 
@@ -56,7 +62,14 @@ static int fifo_init(struct Qsch *sch, const void *arg)
         uint32_t sch_mtu = dev->mtu + sizeof(struct ethhdr);
         assert(dev);
 
+        /* FIXME: txq_desc_nb is not set when alloc device.
+         * we can move tc_init_dev to dev start phase but not
+         * all dev will be start now, netif need be modified. */
+#if 0
         limit = dev->txq_desc_nb;
+#else
+        limit = 128;
+#endif
 
         if (is_bfifo)
             limit *= sch_mtu;

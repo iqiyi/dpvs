@@ -102,14 +102,14 @@ struct tc_conf {
     union tc_param  param;              /* object specific parameters */
 } __attribute__((__packed__));
 
-static inline tc_handle_t tc_handle_atoi(const char *rate)
+static inline tc_handle_t tc_handle_atoi(const char *handle)
 {
     uint32_t maj, min;
 
-    if (sscanf(rate, "%u:%u", &maj, &min) == 2)
+    if (sscanf(handle, "%x:%x", &maj, &min) == 2)
         return (maj << 16) | min;
 
-    if (sscanf(rate, "%u:", &maj) == 1)
+    if (sscanf(handle, "%x:", &maj) == 1)
         return (maj << 16);
 
     return TC_H_UNSPEC;
@@ -126,10 +126,10 @@ static inline char *tc_handle_itoa(tc_handle_t handle, char *buf, size_t size)
         break;
     default:
         if (TC_H_MIN(handle))
-            snprintf(buf, size, "%u:%u",
+            snprintf(buf, size, "%x:%x",
                      TC_H_MAJ(handle) >> 16, TC_H_MIN(handle));
         else
-            snprintf(buf, size, "%u:", TC_H_MAJ(handle) >> 16);
+            snprintf(buf, size, "%x:", TC_H_MAJ(handle) >> 16);
         break;
     }
 

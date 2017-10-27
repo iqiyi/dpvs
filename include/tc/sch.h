@@ -73,6 +73,8 @@ struct Qsch_ops {
 /* queue scheduler, see kernel Qdisc */
 struct Qsch {
     tc_handle_t             handle;
+    tc_handle_t             parent;
+
     struct list_head        cls_list;   /* classifiers */
     int                     cls_cnt;
     struct hlist_node       hlist;      /* netif_tc.qsch_hash node */
@@ -83,11 +85,9 @@ struct Qsch {
     struct tc_mbuf_head     q;
     uint32_t                flags;
 
-    tc_handle_t             parent;
-
     struct Qsch_ops         *ops;
 
-    /* per-lcore status */
+    /* per-lcore statistics */
     struct qsch_qstats      qstats;
     struct qsch_bstats      bstats;
 
@@ -137,6 +137,7 @@ static inline int __qsch_enqueue_tail(struct Qsch *sch, struct rte_mbuf *mbuf,
     assert(sch && sch->tc && sch->tc->tc_mbuf_pool && mbuf);
 
     if (rte_mempool_get(sch->tc->tc_mbuf_pool, (void **)&tm) != 0) {
+        RTE_LOG(WARNING, TC, "%s: no memory\n", __func__);
         qsch_drop(sch, mbuf);
         return EDPVS_NOMEM;
     }
@@ -145,6 +146,7 @@ static inline int __qsch_enqueue_tail(struct Qsch *sch, struct rte_mbuf *mbuf,
     list_add_tail(&tm->list, &qh->mbufs);
     qh->qlen++;
     sch->qstats.backlog += mbuf->pkt_len;
+    sch->qstats.qlen++;
 
     return EDPVS_OK;
 }
@@ -170,6 +172,7 @@ static inline struct rte_mbuf *__qsch_dequeue_head(struct Qsch *sch,
     sch->qstats.backlog -= mbuf->pkt_len;
     sch->bstats.packets += 1;
     sch->bstats.bytes += mbuf->pkt_len;
+    sch->qstats.qlen--;
 
     rte_mempool_put(sch->tc->tc_mbuf_pool, tm);
     return mbuf;
@@ -202,7 +205,7 @@ static inline void __qsch_reset_queue(struct Qsch *sch,
     }
     INIT_LIST_HEAD(&qh->mbufs);
     qh->qlen = 0;
-
+    sch->qstats.qlen = 0;
     sch->qstats.backlog = 0;
 }
 

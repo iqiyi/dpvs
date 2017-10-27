@@ -59,8 +59,10 @@ static int tbf_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     struct tbf_sch_priv *priv = qsch_priv(sch);
     int err;
 
-    if (unlikely(mbuf->pkt_len > priv->max_size))
+    if (unlikely(mbuf->pkt_len > priv->max_size)) {
+        RTE_LOG(WARNING, TC, "%s: packet too big.\n", __func__);
         return qsch_drop(sch, mbuf);
+    }
 
     assert(priv->qsch);
 
@@ -75,6 +77,7 @@ static int tbf_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     }
 
     sch->qstats.backlog += mbuf->pkt_len;
+    sch->qstats.qlen++;
     sch->q.qlen++;
     return EDPVS_OK;
 }
@@ -85,6 +88,8 @@ static struct rte_mbuf *tbf_dequeue(struct Qsch *sch)
     struct rte_mbuf *mbuf;
     int64_t now, toks, ptoks; /* need "signed" to compare with 0 */
     unsigned int pkt_len;
+
+    assert(priv->qsch);
 
     mbuf = priv->qsch->ops->peek(priv->qsch);
     if (unlikely(!mbuf))
@@ -129,6 +134,7 @@ static struct rte_mbuf *tbf_dequeue(struct Qsch *sch)
         priv->ptokens = ptoks;
 
         sch->qstats.backlog -= pkt_len;
+        sch->qstats.qlen--;
         sch->q.qlen--;
         sch->bstats.bytes += pkt_len;
         sch->bstats.packets++;
@@ -153,7 +159,7 @@ static int tbf_change(struct Qsch *sch, const void *arg)
 
     /* set new values or used original */
     if (qopt->rate.rate)
-        rate.rate_bytes_ps = qopt->rate.rate;
+        rate.rate_bytes_ps = qopt->rate.rate / 8;
     else
         rate = priv->rate;
 
@@ -168,19 +174,21 @@ static int tbf_change(struct Qsch *sch, const void *arg)
         buffer = priv->buffer;
 
     if (qopt->peakrate.rate)
-        peak.rate_bytes_ps = qopt->peakrate.rate;
+        peak.rate_bytes_ps = qopt->peakrate.rate / 8;
     else
         peak = priv->peak;
 
     if (qopt->mtu) /* minburst */
-        mtu = qsch_l2t_ns(&priv->peak, qopt->mtu);
+        mtu = qsch_l2t_ns(&peak, qopt->mtu);
+    else if (peak.rate_bytes_ps)
+        mtu = qsch_l2t_ns(&peak, qsch_t2l_ns(&peak, priv->mtu));
     else
-        mtu = qsch_l2t_ns(&priv->peak, qsch_t2l_ns(&peak, priv->mtu));
+        mtu = 0;
 
     /* max_size is min(burst, minburst) */
     max_size = ~0U;
     if (mtu)
-        max_size = min_t(uint64_t, qsch_t2l_ns(&peak, priv->mtu), ~0U);
+        max_size = min_t(uint64_t, qsch_t2l_ns(&peak, mtu), ~0U);
     if (buffer)
         max_size = min_t(uint64_t, max_size, qsch_t2l_ns(&rate, buffer));
 
@@ -196,9 +204,9 @@ static int tbf_change(struct Qsch *sch, const void *arg)
     }
 
     /* set or create inner backlog queue */
-    if (!priv->qsch) {
+    if (priv->qsch) {
         fifo_set_limit(priv->qsch, limit);
-    } else if (limit) {
+    } else {
         child = fifo_create_dflt(sch, &bfifo_sch_ops, limit);
         if (!child)
             return EDPVS_INVAL;
@@ -235,7 +243,8 @@ static int tbf_init(struct Qsch *sch, const void *arg)
 static void tbf_destroy(struct Qsch *sch)
 {
     struct tbf_sch_priv *priv = qsch_priv(sch);
-    qsch_destroy(priv->qsch);
+    if (priv->qsch)
+        qsch_destroy(priv->qsch);
 }
 
 static void tbf_reset(struct Qsch *sch)
@@ -244,6 +253,7 @@ static void tbf_reset(struct Qsch *sch)
 
     qsch_reset(priv->qsch);
     sch->qstats.backlog = 0;
+    sch->qstats.qlen = 0;
     sch->q.qlen = 0;
 
     priv->t_c = tc_get_ns();
@@ -261,8 +271,8 @@ static int tbf_dump(struct Qsch *sch, void *arg)
         return EDPVS_INVAL;
 
     memset(qopt, 0, sizeof(&qopt));
-    qopt->rate.rate     = priv->rate.rate_bytes_ps;
-    qopt->peakrate.rate = priv->peak.rate_bytes_ps;
+    qopt->rate.rate     = priv->rate.rate_bytes_ps * 8;
+    qopt->peakrate.rate = priv->peak.rate_bytes_ps * 8;
     qopt->limit         = priv->limit;
     qopt->buffer        = qsch_t2l_ns(&priv->rate, priv->buffer);
     qopt->mtu           = qsch_t2l_ns(&priv->peak, priv->mtu);

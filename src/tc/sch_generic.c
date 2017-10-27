@@ -177,8 +177,12 @@ struct Qsch *qsch_create(struct netif_port *dev, const char *kind,
             goto errout;
         }
 
-        /* parent not exist ? */
-        if (parent != TC_H_ROOT) {
+        /* if use this API, parent must not be root
+         * and must be exist */
+        if (parent == TC_H_ROOT) {
+            err = EDPVS_INVAL;
+            goto errout;
+        } else {
             q = qsch_lookup_noref(tc, parent);
             if (!q) {
                 err = EDPVS_NOTEXIST;
@@ -195,7 +199,7 @@ struct Qsch *qsch_create(struct netif_port *dev, const char *kind,
         goto errout;
     }
 
-    if (handle == TC_H_INGRESS) {
+    if (sch->flags & QSCH_F_INGRESS) {
         tc->qsch_ingress = sch;
         sch->tc->qsch_cnt++;
     } else
@@ -242,13 +246,13 @@ void qsch_destroy(struct Qsch *sch)
     if (sch->flags & QSCH_F_INGRESS) {
         assert(sch->tc->qsch_ingress == sch);
         sch->tc->qsch_ingress = NULL;
+        sch->tc->qsch_cnt--;
     } else if (sch == sch->tc->qsch) {
         sch->tc->qsch = NULL;
+        sch->tc->qsch_cnt--;
     } else {
         qsch_hash_del(sch);
     }
-
-    sch->tc->qsch_cnt--;
 
     if (!rte_atomic32_dec_and_test(&sch->refcnt)) {
         RTE_LOG(WARNING, TC, "%s: sch %u is in use.\n", __func__, sch->handle);
@@ -299,6 +303,7 @@ void qsch_hash_del(struct Qsch *sch)
         return;
 
     hlist_del_init(&sch->hlist);
+    sch->tc->qsch_cnt--;
 }
 
 struct Qsch *qsch_lookup_noref(const struct netif_tc *tc, tc_handle_t handle)
@@ -307,11 +312,16 @@ struct Qsch *qsch_lookup_noref(const struct netif_tc *tc, tc_handle_t handle)
     struct Qsch *sch;
     assert(tc->qsch_hash && tc->qsch_hash_size);
 
+    if (tc->qsch && tc->qsch->handle == handle)
+        return tc->qsch;
+
+    if (tc->qsch_ingress && tc->qsch_ingress->handle == handle)
+        return tc->qsch_ingress;
+
     hash = sch_hash(handle, tc->qsch_hash_size);
     hlist_for_each_entry(sch, &tc->qsch_hash[hash], hlist) {
-        if (sch->handle == handle) {
+        if (sch->handle == handle)
             return sch;
-        }
     }
 
     return NULL;

@@ -30,6 +30,7 @@
 #include "tc/tc.h"
 #include "tc/sch.h"
 #include "tc/cls.h"
+#include "conf/tc.h"
 
 struct match_cls_priv {
     struct tc_cls           *cls;
@@ -46,7 +47,7 @@ static int match_classify(struct tc_cls *cls, struct rte_mbuf *mbuf,
     struct match_cls_priv *priv = tc_cls_priv(cls);
     struct dp_vs_match *m = &priv->match;
     struct ether_hdr *eh = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-    struct iphdr *iph;
+    struct iphdr *iph = NULL;
     struct tcphdr *th;
     struct udphdr *uh;
     int offset = sizeof(*eh);
@@ -54,28 +55,32 @@ static int match_classify(struct tc_cls *cls, struct rte_mbuf *mbuf,
     __be16 sport, dport;
     struct netif_port *idev, *odev;
     struct vlan_ethhdr *veh;
+    int err = TC_ACT_RECLASSIFY; /* by default */
 
     idev = netif_port_get_by_name(m->iifname);
     odev = netif_port_get_by_name(m->oifname);
+    sport = dport = 0;
 
     /* check input device for ingress */
     if (idev && (cls->sch->flags & QSCH_F_INGRESS)) {
         if (idev->id != mbuf->port)
-            return TC_ACT_RECLASSIFY;
+            goto done;
     }
 
     /* check output device for egress */
     if (odev && !(cls->sch->flags & QSCH_F_INGRESS)) {
         if (odev->id != mbuf->port)
-            return TC_ACT_RECLASSIFY;
+            goto done;
     }
 
     /* support IPv4 and 802.1q/IPv4 */
 l2parse:
     switch (ntohs(pkt_type)) {
     case ETH_P_IP:
-        if (mbuf_may_pull(mbuf, offset + sizeof(struct iphdr)) != 0)
-            return TC_ACT_SHOT;
+        if (mbuf_may_pull(mbuf, offset + sizeof(struct iphdr)) != 0) {
+            err = TC_ACT_SHOT;
+            goto done;
+        }
 
         iph = rte_pktmbuf_mtod_offset(mbuf, struct iphdr *, offset);
 
@@ -83,13 +88,13 @@ l2parse:
         if (m->srange.max_addr.in.s_addr != htonl(INADDR_ANY)) {
             if (ntohl(iph->saddr) < ntohl(m->srange.min_addr.in.s_addr) ||
                 ntohl(iph->saddr) > ntohl(m->srange.max_addr.in.s_addr))
-                return TC_ACT_RECLASSIFY;
+                goto done;
         }
 
         if (m->drange.max_addr.in.s_addr != htonl(INADDR_ANY)) {
             if (ntohl(iph->daddr) < ntohl(m->drange.min_addr.in.s_addr) ||
                 ntohl(iph->daddr) > ntohl(m->drange.max_addr.in.s_addr))
-                return TC_ACT_RECLASSIFY;
+                goto done;
         }
 
         offset += (iph->ihl << 2);
@@ -102,17 +107,19 @@ l2parse:
         goto l2parse;
 
     default:
-        return TC_ACT_RECLASSIFY;
+        goto done;
     }
 
     /* check if protocol matches */
     if (priv->proto && priv->proto != iph->protocol)
-        return TC_ACT_RECLASSIFY;
+        goto done;
 
     switch (iph->protocol) {
     case IPPROTO_TCP:
-        if (mbuf_may_pull(mbuf, offset + sizeof(struct tcphdr)) != 0)
-            return TC_ACT_SHOT;
+        if (mbuf_may_pull(mbuf, offset + sizeof(struct tcphdr)) != 0) {
+            err = TC_ACT_SHOT;
+            goto done;
+        }
 
         th = rte_pktmbuf_mtod_offset(mbuf, struct tcphdr *, offset);
         sport = th->source;
@@ -120,34 +127,59 @@ l2parse:
         break;
 
     case IPPROTO_UDP:
-        if (mbuf_may_pull(mbuf, offset + sizeof(struct udphdr)) != 0)
-            return TC_ACT_SHOT;
+        if (mbuf_may_pull(mbuf, offset + sizeof(struct udphdr)) != 0) {
+            err = TC_ACT_SHOT;
+            goto done;
+        }
 
         uh = rte_pktmbuf_mtod_offset(mbuf, struct udphdr *, offset);
         sport = uh->source;
         dport = uh->dest;
         break;
 
-    default:
-        return TC_ACT_RECLASSIFY;
+    default: /* priv->proto is not assigned */
+        goto match;
     }
 
     /* check if source/dest port in range */
     if (m->srange.max_port) {
         if (ntohs(sport) < ntohs(m->srange.min_port) ||
             ntohs(sport) > ntohs(m->srange.max_port))
-            return TC_ACT_RECLASSIFY;
+            goto done;
     }
 
     if (m->drange.max_port) {
         if (ntohs(dport) < ntohs(m->drange.min_port) ||
             ntohs(dport) > ntohs(m->drange.max_port))
-            return TC_ACT_RECLASSIFY;
+            goto done;
     }
 
+match:
     /* all matchs */
     *result = priv->result;
-    return TC_ACT_OK;
+    err = TC_ACT_OK;
+
+done:
+#if defined(CONFIG_TC_DEBUG)
+    if (iph) {
+        char sip[64], dip[64];
+        char cls_id[16], qsch_id[16];
+
+        inet_ntop(AF_INET, &iph->saddr, sip, sizeof(sip));
+        inet_ntop(AF_INET, &iph->daddr, dip, sizeof(dip));
+        tc_handle_itoa(cls->handle, cls_id, sizeof(cls_id));
+        tc_handle_itoa(priv->result.sch_id, qsch_id, sizeof(qsch_id));
+
+        RTE_LOG(DEBUG, TC, "cls %s %s %s:%u -> %s:%u %s %s\n",
+                cls_id, inet_proto_name(iph->protocol),
+                sip, sport, dip, dport,
+                (err == TC_ACT_OK ? "target" : "miss"),
+                (err == TC_ACT_OK ? \
+                    (priv->result.drop ? "drop" : qsch_id) : ""));
+    }
+#endif
+
+    return err;
 }
 
 static int match_init(struct tc_cls *cls, const void *arg)
@@ -187,8 +219,13 @@ static int match_init(struct tc_cls *cls, const void *arg)
         priv->match.drange.max_port = copt->match.drange.max_port;
     }
 
-    if (copt->result.sch_id != TC_H_UNSPEC)
-        priv->result.sch_id = copt->result.sch_id;
+    if (copt->result.drop) {
+        priv->result.drop = copt->result.drop;
+    } else {
+        /* 0: (TC_H_UNSPEC) is valid handle but not valid target */
+        if (copt->result.sch_id != TC_H_UNSPEC)
+            priv->result.sch_id = copt->result.sch_id;
+    }
 
     return EDPVS_OK;
 }

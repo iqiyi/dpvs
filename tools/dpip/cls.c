@@ -71,19 +71,20 @@ static void cls_dump_param(const char *ifname, const union tc_param *param)
     const struct tc_cls_param *cls = &param->cls;
     char handle[16], sch_id[16];
 
-    printf("cls %s %s: dev %s %s pkttype 0x%08x prio %d",
+    printf("cls %s %s dev %s %s pkttype 0x%04x prio %d ",
            cls->kind, tc_handle_itoa(cls->handle, handle, sizeof(handle)),
            ifname, tc_handle_itoa(cls->sch_id, sch_id, sizeof(sch_id)),
            cls->pkt_type, cls->priority);
 
     if (strcmp(cls->kind, "match") == 0) {
-        char result[32], patt[256];
+        char result[32], patt[256], target[16];
         const struct tc_cls_match_copt *m = &cls->copt.match;
 
         if (m->result.drop)
             snprintf(result, sizeof(result), "%s", "drop");
         else
-            snprintf(result, sizeof(result), "%u", m->result.sch_id);
+            snprintf(result, sizeof(result), "%s",
+                     tc_handle_itoa(m->result.sch_id, target, sizeof(target)));
 
         printf("%s target %s",
                dump_match(m->proto, &m->match, patt, sizeof(patt)), result);
@@ -102,7 +103,7 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
     /* default values */
     param->pkt_type = ETH_P_IP;
     param->handle = TC_H_UNSPEC;
-    param->sch_id = TC_H_ROOT;
+    param->sch_id = TC_H_ROOT; /* invalid qsch handle */
     param->priority = 0;
 
     while (cf->argc > 0) {
@@ -114,7 +115,7 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
             param->handle = tc_handle_atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "qsch") == 0) {
             NEXTARG_CHECK(cf, CURRARG(cf));
-            param->sch_id = atoi(CURRARG(cf));
+            param->sch_id = tc_handle_atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "pkttype") == 0) {
             NEXTARG_CHECK(cf, CURRARG(cf));
             if (strcasecmp(CURRARG(cf), "ipv4") == 0)
@@ -129,7 +130,6 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
             NEXTARG_CHECK(cf, CURRARG(cf));
             param->priority = atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "match") == 0) {
-            NEXTARG_CHECK(cf, CURRARG(cf));
             snprintf(param->kind, TCNAMESIZ, "%s", "match");
         } else { /* kind must be set adead then COPTIONS */
             if (strcmp(param->kind, "match") == 0) {
@@ -147,13 +147,15 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
                     if (strcmp(CURRARG(cf), "drop") == 0)
                         m->result.drop = true;
                     else
-                        m->result.sch_id = atoi(CURRARG(cf));
+                        m->result.sch_id = tc_handle_atoi(CURRARG(cf));
                 }
             } else {
                 fprintf(stderr, "invalid/miss cls type: `%s'\n", param->kind);
                 return EDPVS_INVAL;
             }
         }
+
+        NEXTARG(cf);
     }
 
     return EDPVS_OK;
@@ -176,10 +178,7 @@ static int cls_check(const struct dpip_obj *obj, dpip_cmd_t cmd)
         /* fall through */
 
     case DPIP_CMD_ADD:
-        if (param->sch_id == TC_H_UNSPEC) {
-            fprintf(stderr, "which qsch to attach ?\n");
-            return EDPVS_INVAL;
-        }
+        /* sch_id 0: is root qdisc for egress */
 
         if (strcmp(param->kind, "match") == 0) {
             if (is_empty_match(&param->copt.match.match)) {

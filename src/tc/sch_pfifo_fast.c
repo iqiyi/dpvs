@@ -59,8 +59,12 @@ static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     struct tc_mbuf_head *qh;
 
     /* sch->limit is same as dev->txq_desc_nb */
-    if (sch->q.qlen >= sch->limit)
+    if (sch->q.qlen >= sch->limit) {
+#if defined(CONFIG_TC_DEBUG)
+        RTE_LOG(WARNING, TC, "%s: queue is full.\n", __func__);
+#endif
         return qsch_drop(sch, mbuf);
+    }
 
     /*
      * XXX:
@@ -87,7 +91,9 @@ static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     if (err == EDPVS_OK) {
         priv->bitmap |= (1 << band);
         sch->q.qlen++;
+        sch->qstats.qlen++;
     }
+
     return err;
 }
 
@@ -104,8 +110,10 @@ static struct rte_mbuf *pfifo_fast_dequeue(struct Qsch *sch)
     qh = band2list(priv, band);
     mbuf = __qsch_dequeue_head(sch, qh);
 
-    if (mbuf)
+    if (mbuf) {
         sch->q.qlen--;
+        sch->qstats.qlen--;
+    }
 
     if (qh->qlen == 0)
         priv->bitmap &= ~(1 << band);
@@ -139,7 +147,14 @@ static int pfifo_fast_init(struct Qsch *sch, const void *arg)
     for (band = 0; band < PFIFO_FAST_BANDS; band++)
         tc_mbuf_head_init(band2list(priv, band));
 
+    /* FIXME: txq_desc_nb is not set when alloc device.
+     * we can move tc_init_dev to dev start phase but not
+     * all dev will be start now, netif need be modified. */
+#if 0
     sch->limit = qsch_dev(sch)->txq_desc_nb;
+#else
+    sch->limit = 128;
+#endif
     return EDPVS_OK;
 }
 
@@ -153,6 +168,7 @@ static void pfifo_fast_reset(struct Qsch *sch)
 
     priv->bitmap = 0;
     sch->q.qlen = 0;
+    sch->qstats.qlen = 0;
 }
 
 static int pfifo_fast_dump(struct Qsch *sch, void *arg)
