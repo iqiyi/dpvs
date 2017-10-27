@@ -149,12 +149,17 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
         return EDPVS_INVAL;
     }
 
+    timer->left = timer->delay;
     /* add to corresponding wheel, from higher level to lower. */
     for (level = LEVEL_DEPTH - 1; level >= 0; level--) {
-        off = timer->delay / get_level_ticks(level);
+        off = timer->left / get_level_ticks(level);
         if (off > 0) {
             hash = (sched->cursors[level] + off) % LEVEL_SIZE;
             list_add_tail(&timer->list, &sched->hashs[level][hash]);
+            /* store the remainder */
+            timer->left = timer->left % get_level_ticks(level);
+            for (level = level - 1; level >= 0; level--)
+                timer->left += sched->cursors[level] * get_level_ticks(level);
             return EDPVS_OK;
         }
     }
@@ -233,7 +238,7 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
 {
     struct timer_scheduler *sched = arg;
     struct dpvs_timer *timer, *next;
-    uint64_t left, hash, off;
+    uint64_t hash, off;
     int level, lower;
     uint32_t *cursor;
     bool carry;
@@ -262,26 +267,28 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
         list_for_each_entry_safe(timer, next,
                                  &sched->hashs[level][*cursor], list) {
             /* is all lower levels ticks empty ? */
-            left = timer->delay % get_level_ticks(level);
-            if (!left) {
+            if (timer->left == 0) {
                 timer_expire(sched, timer);
             } else {
                 /* drop to lower level wheel, note it may not drop to
                  * "next" lower level wheel. */
                 list_del(&timer->list);
 
-                lower = level;
-                while (--lower >= 0) {
-                    off = timer->delay / get_level_ticks(lower);
-                    if (!off)
-                        continue; /* next lower level */
-
-                    hash = (*cursor + off) % LEVEL_SIZE;
-                    list_add_tail(&timer->list, &sched->hashs[lower][hash]);
-                    break;
+                for (lower = level; lower >= 0; lower--) {
+                    off = timer->left / get_level_ticks(lower);
+                    if (off > 0) {
+                        hash = (sched->cursors[lower] + off) % LEVEL_SIZE;
+                        list_add_tail(&timer->list, &sched->hashs[lower][hash]);
+                        /*
+                         * store the remainder
+                         * all lower cursor must be 0
+                         * so it's not necessary to calculate the offset
+                         * see __dpvs_timer_sched for details
+                         */
+                        timer->left = timer->left % get_level_ticks(lower);
+                        break;
+                    }
                 }
-
-                assert(lower >= 0);
             }
         }
 

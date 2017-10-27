@@ -43,6 +43,7 @@ struct dpvs_timer {
      * 'interval' for periodic timer.
      */
     dpvs_tick_t         delay;
+    dpvs_tick_t         left;
 };
 
 int dpvs_timer_init(void);
