@@ -303,6 +303,7 @@ int msg_destroy(struct dpvs_msg **pmsg)
         return EDPVS_INVAL;
     msg = *pmsg;
 
+    assert(rte_atomic16_read(&msg->refcnt) != 0);
     if (!rte_atomic16_dec_and_test(&msg->refcnt)) {
         *pmsg = NULL;
         return EDPVS_OK;
@@ -351,7 +352,6 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
     if (unlikely(!msg || !((cid == master_lcore) || (slave_lcore_mask & (1L << cid))))) {
         RTE_LOG(WARNING, MSGMGR, "%s: invalid args\n", __func__);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        msg_destroy(&msg);
         return EDPVS_INVAL;
     }
 
@@ -359,7 +359,6 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
     if (unlikely(!mt)) {
         RTE_LOG(WARNING, MSGMGR, "%s: msg type %d not registered\n", __func__, msg->type);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        msg_destroy(&msg);
         return EDPVS_NOTEXIST;
     }
     msg_type_put(mt);
@@ -374,20 +373,16 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
         RTE_LOG(ERR, MSGMGR, "%s: msg ring of lcore %d is full\n", __func__, res);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
         rte_atomic16_dec(&msg->refcnt); /* not enqueued, free manually */
-        msg_destroy(&msg);
         return EDPVS_DPDKAPIFAIL;
     } else if (res) {
         RTE_LOG(ERR, MSGMGR, "%s: unkown error %d for rte_ring_enqueue\n", __func__, res);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
         rte_atomic16_dec(&msg->refcnt); /* not enqueued, free manually */
-        msg_destroy(&msg);
         return EDPVS_DPDKAPIFAIL;
     }
 
-    if (flags & DPVS_MSG_F_ASYNC) {
-        msg_destroy(&msg);
+    if (flags & DPVS_MSG_F_ASYNC)
         return EDPVS_OK;
-    }
 
     /* blockable msg, wait here until done or timeout */
     add_msg_flags(msg, DPVS_MSG_F_STATE_SEND);
@@ -403,14 +398,6 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
             RTE_LOG(WARNING, MSGMGR, "%s: uc_msg(type:%d, cid:%d->%d, flags=%d) timeout"
                     "(%d us), drop...\n", __func__,
                     msg->type, msg->cid, cid, get_msg_flags(msg), msg_timeout);
-#ifdef CONFIG_DPVS_CTRL
-            RTE_LOG(INFO, MSGMGR, "Ring[%d]: free=%d, used=%d, full=%d, empty=%d\n",
-                    cid, rte_ring_free_count(msg_ring[cid]),
-                    rte_ring_count(msg_ring[cid]),
-                    rte_ring_full(msg_ring[cid]),
-                    rte_ring_empty(msg_ring[cid]));
-            rte_ring_dump(stderr, msg_ring[cid]);
-#endif
             add_msg_flags(msg, DPVS_MSG_F_TIMEOUT);
             return EDPVS_MSG_DROP;
         }
@@ -431,7 +418,7 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
 int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multicast_queue **reply)
 {
     struct dpvs_msg *new_msg;
-    struct dpvs_multicast_queue *mc_msg, *eldest_mc_msg;
+    struct dpvs_multicast_queue *mc_msg;
     uint32_t tflags;
     uint64_t start, delay;
     int ii, ret;
@@ -442,7 +429,6 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
             || master_lcore != msg->cid) {
         RTE_LOG(WARNING, MSGMGR, "%s: invalid multicast msg\n", __func__);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        msg_destroy(&msg);
         return EDPVS_INVAL;
     }
 
@@ -451,7 +437,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
         RTE_LOG(WARNING, MSGMGR, "%s: repeated sequence number for multicast msg: "
                 "type %d, seq %d\n", __func__, msg->type, msg->seq);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        msg_destroy(&msg);
+        msg->mode = DPVS_MSG_UNICAST; /* do not free msg queue */
         return EDPVS_INVAL;
     }
 
@@ -464,19 +450,19 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
                 RTE_LOG(ERR, MSGMGR, "%s: msg make fail\n", __func__);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
                 rte_atomic16_dec(&msg->refcnt); /* decrease refcnt by 1 manually */
-                msg_destroy(&msg);
                 return EDPVS_NOMEM;
             }
 
             /* must send F_ASYNC msg as mc_msg has not allocated */
             ret = msg_send(new_msg, ii, DPVS_MSG_F_ASYNC, NULL);
-            if (ret < 0) {
+            if (ret < 0) { /* nonblock msg not equeued */
                 RTE_LOG(ERR, MSGMGR, "%s: msg send fail\n", __func__);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
                 rte_atomic16_dec(&msg->refcnt); /* decrease refcnt by 1 manually */
-                msg_destroy(&msg);
+                msg_destroy(&new_msg);
                 return ret;
             }
+            msg_destroy(&new_msg);
             rte_atomic16_inc(&msg->refcnt); /* refcnt increase by 1 for each slave */
         }
     }
@@ -485,7 +471,6 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     if (unlikely(!mc_msg)) {
         RTE_LOG(ERR, MSGMGR, "%s: no memory\n", __func__);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        msg_destroy(&msg);
         return EDPVS_NOMEM;
     }
 
@@ -498,20 +483,16 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     rte_rwlock_write_lock(&mc_wait_lock);
     if (mc_wait_list.free_cnt <= 0) {
         RTE_LOG(WARNING, MSGMGR, "%s: multicast msg wait queue full, "
-                "deleting eldest msg\n", __func__);
-        eldest_mc_msg = list_entry(mc_wait_list.list.next,
-                struct dpvs_multicast_queue, mq);
+                "msg dropped and try later...\n", __func__);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        msg_destroy(&eldest_mc_msg->org_msg);
+        return EDPVS_MSG_DROP;
     }
     list_add_tail(&mc_msg->list, &mc_wait_list.list);
     --mc_wait_list.free_cnt;
     rte_rwlock_write_unlock(&mc_wait_lock);
 
-    if (flags & DPVS_MSG_F_ASYNC) {
-        msg_destroy(&msg);
+    if (flags & DPVS_MSG_F_ASYNC)
         return EDPVS_OK;
-    }
 
     /* blockable msg wait here until done or timeout */
     add_msg_flags(msg, DPVS_MSG_F_STATE_SEND);
@@ -617,6 +598,7 @@ int msg_master_process(void)
             msg->mode = DPVS_MSG_UNICAST;
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg); /* sorry, you are late */
+            rte_atomic16_inc(&mcq->org_msg->refcnt); /* do not count refcnt for repeated msg */
         }
         msg_type_put(msg_type);
     }
@@ -675,8 +657,10 @@ int msg_slave_process(void)
             add_msg_flags(xmsg, DPVS_MSG_F_CALLBACK_FAIL & get_msg_flags(msg));
             if (msg_send(xmsg, master_lcore, DPVS_MSG_F_ASYNC, NULL)) {
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
+                msg_destroy(&xmsg);
                 goto cont;
             }
+            msg_destroy(&xmsg);
         }
 
         add_msg_flags(msg, DPVS_MSG_F_STATE_FIN);

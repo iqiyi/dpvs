@@ -1962,6 +1962,7 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
             RTE_LOG(WARNING, NETIF, "[%s] Send master_xmit_msg(%d) failed\n", __func__, cid);
             rte_pktmbuf_free(mbuf);
         }
+        msg_destroy(&msg);
         return ret;
     }
 
