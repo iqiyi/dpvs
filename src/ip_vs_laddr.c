@@ -101,6 +101,7 @@ struct dp_vs_laddr {
     struct list_head        list;       /* svc->laddr_list elem */
     union inet_addr         addr;
     rte_atomic32_t          refcnt;
+    rte_atomic32_t          conn_counts;
 
     struct netif_port       *iface;
 };
@@ -206,6 +207,8 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
         return EDPVS_RESOURCE;
     }
 
+    rte_atomic32_inc(&laddr->conn_counts);
+
     /* overwrite related fields in out-tuplehash and conn */
     conn->laddr = laddr->addr;
     conn->lport = ssin.sin_port;
@@ -237,6 +240,8 @@ int dp_vs_laddr_unbind(struct dp_vs_conn *conn)
     ssin.sin_port = conn->lport;
     sa_release(conn->local->iface, &dsin, &ssin);
 
+    rte_atomic32_dec(&conn->local->conn_counts);
+
     put_laddr(conn->local);
     conn->local = NULL;
     return EDPVS_OK;
@@ -257,6 +262,7 @@ int dp_vs_laddr_add(struct dp_vs_service *svc, const union inet_addr *addr,
 
     new->addr = *addr;
     rte_atomic32_init(&new->refcnt);
+    rte_atomic32_init(&new->conn_counts);
 
     /* is the laddr bind to local interface ? */
     new->iface = netif_port_get_by_name(ifname);
@@ -320,7 +326,7 @@ int dp_vs_laddr_del(struct dp_vs_service *svc, const union inet_addr *addr)
 
 /* if success, it depend on caller to free @addrs by rte_free() */
 static int dp_vs_laddr_getall(struct dp_vs_service *svc, 
-                              union inet_addr **addrs, size_t *naddr)
+                              struct dp_vs_laddr_entry **addrs, size_t *naddr)
 {
     struct dp_vs_laddr *laddr;
     int i;
@@ -332,7 +338,7 @@ static int dp_vs_laddr_getall(struct dp_vs_service *svc,
 
     if (svc->num_laddrs > 0) {
         *naddr = svc->num_laddrs;
-        *addrs = rte_malloc_socket(0, sizeof(union inet_addr) * svc->num_laddrs,
+        *addrs = rte_malloc_socket(0, sizeof(struct dp_vs_laddr_entry) * svc->num_laddrs,
                 RTE_CACHE_LINE_SIZE, rte_socket_id());
         if (!(*addrs)) {
             rte_rwlock_write_unlock(&svc->laddr_lock);
@@ -342,7 +348,9 @@ static int dp_vs_laddr_getall(struct dp_vs_service *svc,
         i = 0;
         list_for_each_entry(laddr, &svc->laddr_list, list) {
             assert(i < *naddr);
-            (*addrs)[i++] = laddr->addr;
+            (*addrs)[i].addr = laddr->addr;
+            (*addrs)[i].nconns = rte_atomic32_read(&laddr->conn_counts);
+            i++;
         }
     } else {
         *naddr = 0;
@@ -431,7 +439,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     const struct dp_vs_laddr_conf *laddr_conf = conf;
     struct dp_vs_laddr_conf *laddrs;
     struct dp_vs_service *svc;
-    union inet_addr *addrs;
+    struct dp_vs_laddr_entry *addrs;
     size_t naddr, i;
     int err;
     struct dp_vs_match match;
@@ -471,10 +479,10 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
         laddrs->nladdrs = naddr;
         for (i = 0; i < naddr; i++) {
-            laddrs->laddrs[i].addr = addrs[i];
+            laddrs->laddrs[i].addr = addrs[i].addr;
             /* TODO: nport_conflict & nconns */
             laddrs->laddrs[i].nport_conflict = 0;
-            laddrs->laddrs[i].nconns = 0;
+            laddrs->laddrs[i].nconns = addrs[i].nconns;
         }
 
         if (addrs)
