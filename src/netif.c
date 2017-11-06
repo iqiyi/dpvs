@@ -1410,7 +1410,6 @@ inline static void recv_on_isol_lcore(void)
                 mbufs, NETIF_MAX_PKT_BURST);
         /* It is safe to reuse lcore_stats for isolate recieving. Isolate recieving
          * always lays on different lcores from packet processing. */
-        lcore_stats[cid].pktburst++;
         lcore_stats_burst(&lcore_stats[cid], rx_len);
 
         res = rte_ring_enqueue_bulk(isol_rxq->rb, (void *const * )mbufs, rx_len);
