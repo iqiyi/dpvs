@@ -2595,6 +2595,8 @@ static struct netif_port* netif_port_alloc(portid_t id, int nrxq,
     port->nrxq = nrxq; // port_rx_queues_get();
     port->ntxq = ntxq; // port_tx_queues_get();
     port->socket = rte_eth_dev_socket_id(id);
+    if (port->socket == SOCKET_ID_ANY)
+        port->socket = rte_socket_id();
     port->mbuf_pool = pktmbuf_pool[port->socket]; 
     rte_eth_macaddr_get(id, &port->addr);
     rte_eth_dev_get_mtu(id, &port->mtu);
