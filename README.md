@@ -132,7 +132,7 @@ $ make # or "make -j40" to speed up.
 $ make install
 ```
 
-> may need install dependencies, like `openssl` and `popt`.
+> may need install dependencies, like `openssl` and `popt`, e.g., `yum install popt-devel` (CentOS).
 
 Output files are installed to `dpvs/bin`.
 
@@ -209,6 +209,18 @@ Access VIP from Client, it looks good!
 client $ curl 192.168.100.100
 Your ip:port : 192.168.100.3:56890
 ```
+
+## Configure Tutorial
+
+More configure examples can be found in the [Tutorial Document](./doc/tutorial.md). Including,
+
+* WAN-to-LAN `Full-NAT` reverse proxy.
+* Direct Route (`DR`) mode.
+* Master/Backup model (keepalived).
+* OSPF/ECMP cluster model.
+* `SNAT` mode for Internet access from internal network.
+* Virtual Devices (`Bonding`, `VLAN`, `kni`)
+* ... ...
 
 # Performance Test
 
