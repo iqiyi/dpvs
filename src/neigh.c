@@ -412,7 +412,8 @@ static void neigh_send_mbuf_cach(struct neighbour_entry *neighbour)
 
 int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
 {
-    
+    struct inet_ifaddr *ifa;
+    union inet_addr addr;
     struct arp_hdr *arp = rte_pktmbuf_mtod(m, struct arp_hdr *);
     struct ether_hdr *eth;
 
@@ -426,6 +427,14 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
         return EDPVS_KNICONTINUE;
     }
     route4_put(rt);
+
+    // Reply only if tip is configured on the incoming interface
+    memset((void *)&addr, 0, sizeof(addr));
+    addr.in.s_addr = arp->arp_data.arp_tip;
+    ifa = inet_addr_ifa_get(AF_INET, port, &addr);
+    if (!ifa)
+        return EDPVS_KNICONTINUE;
+    inet_addr_ifa_put(ifa);
 
     eth = (struct ether_hdr *)rte_pktmbuf_prepend(m,
                                      (uint16_t)sizeof(struct ether_hdr));
