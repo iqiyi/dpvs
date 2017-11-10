@@ -188,6 +188,8 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 * one more route to **kni-host** is needed to pass the packets received from `dpvs` device to Linux `kni` device.
 * VIP should not set to `dpvs` by `dpip addr`, need be set to `kni` instead, so that `ospfd` can be aware of it and then to publish.
 
+> the prefix length of `kni_host` must be 32.
+
 ```bash
 #!/bin/sh -
 
@@ -207,7 +209,7 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 ./ipvsadm --add-laddr -z 192.168.100.201 -t 123.1.2.3:80 -F dpdk0
 
 # add route to kni device.
-./dpip route add 172.10.0.2/30 dev dpdk1 scope kni_host
+./dpip route add 172.10.0.2/32 dev dpdk1 scope kni_host
 ```
 
 Then, the `zebra/ospfd` part. Firstly, run the OSPF protocol between `DPVS` server and wan-side L3-switch, with the "inter-connection network" (here is `172.10.0.2/30`). For `DPVS`, we set the inter-connection IP on `dpdk1.kni`.
