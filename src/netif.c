@@ -35,6 +35,12 @@
 #include "conf/netif.h"
 #include "timer.h"
 #include "parser/parser.h"
+#include "neigh.h"
+
+#include <rte_arp.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 
 #define NETIF_PKTPOOL_NB_MBUF_DEF   65535
 #define NETIF_PKTPOOL_NB_MBUF_MIN   1023
@@ -56,6 +62,8 @@ static int netif_pktpool_mbuf_cache = NETIF_PKTPOOL_MBUF_CACHE_DEF;
 
 #define NETIF_PKT_PREFETCH_OFFSET   3
 #define NETIF_ISOL_RXQ_RING_SZ_DEF  1048576 // 1M bytes
+
+#define ARP_RING_SIZE 2048
 
 /* physical nic id = phy_pid_base + index */
 static portid_t phy_pid_base = 0;
@@ -2006,11 +2014,17 @@ static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
     return ETH_PKT_OTHERHOST;
 }
 
+
+/*for arp process*/
+static struct rte_ring *arp_ring[NETIF_MAX_LCORES];
+
 static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
                                      uint16_t eth_type,
                                      struct netif_port *dev,
                                      struct netif_queue_conf *qconf,
-                                     bool forward2kni)
+                                     bool forward2kni,
+                                     lcoreid_t cid,
+                                     bool pkts_from_ring)
 {
     struct pkt_type *pt;
     int err;
@@ -2024,6 +2038,43 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
     if (!forward2kni && NULL == pt) {
         kni_ingress(mbuf, dev, qconf);
         return EDPVS_OK;
+    }
+
+    /*clone arp pkt to every queue*/
+    if (pt->type == rte_cpu_to_be_16(ETHER_TYPE_ARP) && !pkts_from_ring) {
+        struct rte_mempool *mbuf_pool;
+        struct rte_mbuf *mbuf_clone;
+        uint8_t i;
+        struct arp_hdr *arp;
+        unsigned socket_id;
+
+        socket_id = rte_socket_id();
+        mbuf_pool = pktmbuf_pool[socket_id]; 
+
+        rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr));
+        arp = rte_pktmbuf_mtod(mbuf, struct arp_hdr *);
+        rte_pktmbuf_prepend(mbuf,(uint16_t)sizeof(struct ether_hdr));
+        if (rte_be_to_cpu_16(arp->arp_op) == ARP_OP_REPLY) {
+            for (i = 0; i < NETIF_MAX_LCORES; i++) {
+                if ((i == cid) || (!is_lcore_id_valid(i))
+                     || (i == rte_get_master_lcore()))
+                    continue;
+                /*rte_pktmbuf_clone will not clone pkt.data, just copy pointer!*/
+                mbuf_clone = rte_pktmbuf_clone(mbuf, mbuf_pool);
+                if (mbuf_clone) {
+                    int ret = rte_ring_enqueue(arp_ring[i], mbuf_clone);
+                    if (unlikely(-EDQUOT == ret)) {
+                        RTE_LOG(WARNING, NETIF, "%s: arp ring of lcore %d quota exceeded\n",
+                                __func__, i);
+                    }
+                    else if (ret < 0) {
+                        RTE_LOG(WARNING, NETIF, "%s: arp ring of lcore %d enqueue failed\n",
+                                __func__, i);
+                        rte_pktmbuf_free(mbuf_clone);
+                    }
+                }
+            }
+        }
     }
 
     mbuf->l2_len = sizeof(struct ether_hdr);
@@ -2043,14 +2094,134 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
     return EDPVS_OK;
 }
 
+static int netif_arp_ring_init(void)
+{
+    char name_buf[RTE_RING_NAMESIZE];
+    int socket_id;
+    uint8_t cid;
+
+    socket_id = rte_socket_id();
+    for (cid = 0; cid < NETIF_MAX_LCORES; cid++) {
+        snprintf(name_buf, RTE_RING_NAMESIZE, "arp_ring_c%d", cid);
+        arp_ring[cid] = rte_ring_create(name_buf, ARP_RING_SIZE, socket_id, RING_F_SC_DEQ);
+
+        if (arp_ring[cid] == NULL)
+            rte_panic("create ring:%s failed!\n", name_buf);
+    }
+
+    return EDPVS_OK;
+}
+
+static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
+                      lcoreid_t cid, uint16_t count, bool pretetch)
+{
+    int i, t;
+    struct ether_hdr *eth_hdr;
+    bool pkts_from_ring = !pretetch;
+    struct rte_mbuf *mbuf_copied = NULL;
+
+    /* prefetch packets */
+    if (pretetch) {
+        for (t = 0; t < qconf->len && t < NETIF_PKT_PREFETCH_OFFSET; t++) 
+            rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *)); 
+    }
+
+    /* L2 filter */
+    for (i = 0; i < count; i++) {
+        struct rte_mbuf *mbuf = mbufs[i];
+        struct netif_port *dev = netif_port_get(mbuf->port);
+
+        if (unlikely(!dev)) {
+            rte_pktmbuf_free(mbuf);
+            lcore_stats[cid].dropped++;
+            continue;
+        }    
+        if (dev->type == PORT_TYPE_BOND_SLAVE) {
+            dev = dev->bond->slave.master;
+            mbuf->port = dev->id;
+        }    
+
+        if (pretetch && (t < qconf->len)) {
+            rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *)); 
+            t++; 
+        }    
+
+        eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+        /* reuse mbuf.packet_type, it was RTE_PTYPE_XXX */
+        mbuf->packet_type = eth_type_parse(eth_hdr, dev);
+
+        /*
+         * In NETIF_PORT_FLAG_FORWARD2KNI mode.
+         * All packets received are deep copied and sent to  KNI
+         * for the purpose of capturing forwarding packets.Since the
+         * rte_mbuf will be modified in the following procedure,
+         * we should use mbuf_copy instead of rte_pktmbuf_clone.
+         */
+        if (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) {
+            if (likely(NULL != (mbuf_copied = mbuf_copy(mbuf,
+                                pktmbuf_pool[dev->socket]))))
+                kni_ingress(mbuf_copied, dev, qconf);
+            else
+                RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n",
+                        __func__);
+        }
+
+        /*   
+         * do not drop pkt to other hosts (ETH_PKT_OTHERHOST)
+         * since virtual devices may have different MAC with
+         * underlying device.
+         */
+
+        /*   
+         * handle VLAN
+         * if HW offload vlan strip, it's still need vlan module
+         * to act as VLAN filter.
+         */
+        if (eth_hdr->ether_type == htons(ETH_P_8021Q) ||
+            mbuf->ol_flags & PKT_RX_VLAN_STRIPPED) {
+
+            if (vlan_rcv(mbuf, netif_port_get(mbuf->port)) != EDPVS_OK) {
+                rte_pktmbuf_free(mbuf);
+                lcore_stats[cid].dropped++;
+                continue;
+            }    
+
+            dev = netif_port_get(mbuf->port);
+            if (unlikely(!dev)) {
+                rte_pktmbuf_free(mbuf);
+                lcore_stats[cid].dropped++;
+                continue;
+            }    
+
+            eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+        }    
+        /* handler should free mbuf */
+        netif_deliver_mbuf(mbuf, eth_hdr->ether_type, dev, cid, qconf, pkts_from_ring);
+
+        lcore_stats[cid].ibytes += mbuf->pkt_len;
+        lcore_stats[cid].ipackets++;
+    }
+}
+
+
+static void lcore_process_arp_ring(struct netif_queue_conf *qconf, lcoreid_t cid)
+{
+    struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
+    uint16_t nb_rb;
+    
+    nb_rb = rte_ring_dequeue_burst(arp_ring[cid], (void**)mbufs, NETIF_MAX_PKT_BURST);
+
+    if (nb_rb > 0) { 
+        lcore_process_packets(qconf, mbufs, cid, nb_rb, 0);
+    }    
+}
+
 static void lcore_job_recv_fwd(void *arg)
 {
-    int i, j, k, t;
+    int i, j;
     portid_t pid;
     lcoreid_t cid;
     struct netif_queue_conf *qconf;
-    struct ether_hdr *eth_hdr;
-    struct rte_mbuf *mbuf_copied = NULL;
 
     cid = rte_lcore_id();
     assert(LCORE_ID_ANY != cid);
@@ -2062,90 +2233,12 @@ static void lcore_job_recv_fwd(void *arg)
         for (j = 0; j < lcore_conf[lcore2index[cid]].pqs[i].nrxq; j++) {
             qconf = &lcore_conf[lcore2index[cid]].pqs[i].rxqs[j];
 
+            lcore_process_arp_ring(qconf,cid);
             qconf->len = netif_rx_burst(pid, qconf);
+          
             lcore_stats_burst(&lcore_stats[cid], qconf->len);
 
-            /* prefetch packets */
-            for (t = 0; t < qconf->len && t < NETIF_PKT_PREFETCH_OFFSET; t++)
-                rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *));
-
-            /* L2 filter */
-            for (k = 0; k < qconf->len; k++) {
-                struct rte_mbuf *mbuf = qconf->mbufs[k];
-                struct netif_port *dev = netif_port_get(mbuf->port);
-
-                if (unlikely(!dev)) {
-                    rte_pktmbuf_free(mbuf);
-                    lcore_stats[cid].dropped++;
-                    continue;
-                }
-                if (dev->type == PORT_TYPE_BOND_SLAVE) {
-                    dev = dev->bond->slave.master;
-                    mbuf->port = dev->id;
-                }
-
-                if (t < qconf->len) {
-                    rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *));
-                    t++;
-                }
-
-                eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-                /* reuse mbuf.packet_type, it was RTE_PTYPE_XXX */
-                mbuf->packet_type = eth_type_parse(eth_hdr, dev);
-
-                /*
-                 * In NETIF_PORT_FLAG_FORWARD2KNI mode.
-                 * All packets received are deep copied and sent to  KNI
-                 * for the purpose of capturing forwarding packets.Since the
-                 * rte_mbuf will be modified in the following procedure,
-                 * we should use mbuf_copy instead of rte_pktmbuf_clone.
-                 */
-                if (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) {
-                    if (likely(NULL != (mbuf_copied = mbuf_copy(mbuf,
-                        pktmbuf_pool[dev->socket]))))
-                        kni_ingress(mbuf_copied, dev, qconf);
-                    else
-                        RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n",
-                        __func__);
-                }
-
-                /*
-                 * do not drop pkt to other hosts (ETH_PKT_OTHERHOST)
-                 * since virtual devices may have different MAC with
-                 * underlying device.
-                 */
-
-                /*
-                 * handle VLAN
-                 * if HW offload vlan strip, it's still need vlan module
-                 * to act as VLAN filter.
-                 */
-                if (eth_hdr->ether_type == htons(ETH_P_8021Q) ||
-                    mbuf->ol_flags & PKT_RX_VLAN_STRIPPED) {
-
-                    if (vlan_rcv(mbuf, netif_port_get(mbuf->port)) != EDPVS_OK) {
-                        rte_pktmbuf_free(mbuf);
-                        lcore_stats[cid].dropped++;
-                        continue;
-                    }
-
-                    dev = netif_port_get(mbuf->port);
-                    if (unlikely(!dev)) {
-                        rte_pktmbuf_free(mbuf);
-                        lcore_stats[cid].dropped++;
-                        continue;
-                    }
-
-                    eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-                }
-
-                /* handler should free mbuf */
-                netif_deliver_mbuf(mbuf, eth_hdr->ether_type, dev, qconf,
-                (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) ? true:false);
-
-                lcore_stats[cid].ibytes += mbuf->pkt_len;
-                lcore_stats[cid].ipackets++;
-            }
+            lcore_process_packets(qconf, qconf->mbufs, cid, qconf->len, 1);
             kni_send2kern_loop(pid, qconf);
         }
     }
@@ -3613,6 +3706,7 @@ int netif_init(const struct rte_eth_conf *conf)
 {
     cycles_per_sec = rte_get_timer_hz();
     netif_pktmbuf_pool_init();
+    netif_arp_ring_init();
     netif_pkt_type_tab_init();
     netif_lcore_jobs_init();
     // use default port conf if conf=NULL
@@ -3638,7 +3732,7 @@ static uint8_t g_isol_rx_lcore_num;
 static uint64_t g_slave_lcore_mask;
 static uint64_t g_isol_rx_lcore_mask;
 
-static inline bool is_lcore_id_valid(lcoreid_t cid)
+inline bool is_lcore_id_valid(lcoreid_t cid)
 {
     if (unlikely(cid >= 63 || cid >= NETIF_MAX_LCORES))
         return false;

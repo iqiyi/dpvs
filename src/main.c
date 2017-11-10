@@ -140,12 +140,16 @@ int main(int argc, char *argv[])
         sockopt_ctl(NULL);
         /* msg loop */
         msg_master_process();
+
         /* timer */
         loop_cnt++;
         if (loop_cnt % timer_sched_loop_interval == 0)
             rte_timer_manage();
         /* kni */
         kni_process_on_master();
+
+        /* process mac ring on master */
+        neigh_process_ring(NULL);
  
         /* increase loop counts */
         netif_update_master_loop_cnt();

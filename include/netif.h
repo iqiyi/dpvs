@@ -273,6 +273,7 @@ int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);
 int netif_lcore_loop_job_register(struct netif_lcore_loop_job *lcore_job);
 int netif_lcore_loop_job_unregister(struct netif_lcore_loop_job *lcore_job);
 int netif_lcore_start(void);
+inline bool is_lcore_id_valid(lcoreid_t cid);
 
 /************************** protocol API *****************************/
 int netif_register_pkt(struct pkt_type *pt);
