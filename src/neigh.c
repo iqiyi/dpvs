@@ -202,7 +202,7 @@ static struct list_head neigh_table[NETIF_MAX_LCORES][ARP_TAB_SIZE];
 
 struct rte_mempool *neigh_pktmbuf_pool[NETIF_MAX_SOCKETS];
 
-static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* neighbour);
+static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* neighbour, bool add);
 
 #ifdef CONFIG_DPVS_NEIGH_DEBUG
 
@@ -289,14 +289,13 @@ static void neigh_entry_expire(void *data)
     struct neighbour_entry *neighbour = data;
     struct timeval timeout;
     struct neighbour_mbuf_entry *mbuf, *mbuf_next;
+    struct raw_neigh *macparam;
+
     lcoreid_t cid = rte_lcore_id();    
 
     if (neighbour->used)
         goto used;
-    if (cid == master_cid)
-        dpvs_timer_cancel(&neighbour->timer, true);
-    else
-        dpvs_timer_cancel(&neighbour->timer, false);
+    dpvs_timer_cancel(&neighbour->timer, false);
     neigh_unhash(neighbour);
         //release pkts saved in neighbour entry
     list_for_each_entry_safe(mbuf,mbuf_next,
@@ -306,10 +305,22 @@ static void neigh_entry_expire(void *data)
         rte_free(mbuf);
     }
 
-    rte_free(neighbour);
-    if (cid == master_cid)
-        num_neighbours--;
+    if (cid  == g_cid) {
+        macparam = neigh_ring_clone_entry(neighbour, 0);
+        if (macparam) {
+            int ret = rte_ring_enqueue(neigh_ring[master_cid], macparam);
+            if (unlikely(-EDQUOT == ret))
+                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
+                        __func__);
+            else if (ret < 0)
+                RTE_LOG(WARNING, NETIF, "%s: neigh ring enqueue failed\n",
+                        __func__);
+        }
+        else
+            RTE_LOG(WARNING, NEIGHBOUR, "%s: clone ring param faild\n", __func__);
+    }
 
+    rte_free(neighbour);
 
     return;
 
@@ -318,10 +329,7 @@ used:
 //    RTE_LOG(INFO, NEIGHBOUR, "[%s] expire neighbour entry later\n", __func__);
     timeout.tv_sec = arp_timeout;
     timeout.tv_usec = 0;
-    if (cid == master_cid)
-        dpvs_timer_update(&neighbour->timer, &timeout, true);
-    else
-        dpvs_timer_update(&neighbour->timer, &timeout, false);
+    dpvs_timer_update(&neighbour->timer, &timeout, false);
     return;
 }
 
@@ -351,9 +359,16 @@ static int neigh_edit(struct neighbour_entry *neighbour, struct ether_addr* eth_
 
     if ((g_cid == cid) && !(neighbour->flag & NEIGHBOUR_STATIC)) {
         struct raw_neigh *macparam;
-        macparam = neigh_ring_clone_entry(neighbour);
-        if (macparam)
-            rte_ring_enqueue(neigh_ring[master_cid], macparam);
+        macparam = neigh_ring_clone_entry(neighbour, 1);
+        if (macparam) {
+            int ret = rte_ring_enqueue(neigh_ring[master_cid], macparam);
+            if (unlikely(-EDQUOT == ret))
+                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
+                        __func__);
+            else if (ret < 0)
+                RTE_LOG(WARNING, NETIF, "%s: neigh ring enqueue failed\n",
+                        __func__);
+        }
         else 
             RTE_LOG(WARNING, NEIGHBOUR, "%s: clone ring param faild\n", __func__);
     } 
@@ -403,15 +418,18 @@ neigh_add_table(uint32_t ipaddr, const struct ether_addr* eth_addr,
                 neigh_entry_expire, new_neighbour, false); 
     }
 
-    if (cid == master_cid)
-        dpvs_timer_sched(&new_neighbour->timer, &delay,
-                neigh_entry_expire, new_neighbour, true);
-
     if ((g_cid == cid) && !(new_neighbour->flag & NEIGHBOUR_STATIC)) {
         struct raw_neigh *macparam;
-        macparam = neigh_ring_clone_entry(new_neighbour);
-        if (macparam)
-            rte_ring_enqueue(neigh_ring[master_cid], macparam);
+        macparam = neigh_ring_clone_entry(new_neighbour, 1);
+        if (macparam) {
+            int ret = rte_ring_enqueue(neigh_ring[master_cid], macparam);
+            if (unlikely(-EDQUOT == ret))
+                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
+                        __func__);
+            else if (ret < 0)
+                RTE_LOG(WARNING, NETIF, "%s: neigh ring enqueue failed\n",
+                        __func__);
+        }
         else
             RTE_LOG(WARNING, NEIGHBOUR, "%s: clone ring param faild\n", __func__);
     }
@@ -690,16 +708,16 @@ static int neigh_ring_init(void)
     return EDPVS_OK;
 }
 
-static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* neighbour)
+static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* neighbour, bool add)
 {
     struct raw_neigh* macparam;
     macparam = rte_zmalloc("mac_entry", sizeof(struct raw_neigh), RTE_CACHE_LINE_SIZE);
     if (macparam == NULL)
         return NULL;
     rte_memcpy(&macparam->ip_addr, &neighbour->ip_addr, sizeof(struct in_addr));
-    macparam->flag = neighbour->flag;
+    macparam->flag = neighbour->flag & ~NEIGHBOUR_HASHED;
     macparam->port = neighbour->port;
-    macparam->add = 1;
+    macparam->add = add;
     /*just copy*/
     rte_memcpy(&macparam->eth_addr, &neighbour->eth_addr, 6);
     return macparam;
@@ -714,7 +732,7 @@ static struct raw_neigh* neigh_ring_clone_param(const struct dp_vs_neigh_conf *p
     if (macparam == NULL)
         return NULL;
     rte_memcpy(&macparam->ip_addr, &param->ip_addr, sizeof(struct in_addr));
-    macparam->flag = param->flag;
+    macparam->flag = param->flag | NEIGHBOUR_STATIC;
     macparam->port = port;
     macparam->add = add;
     rte_memcpy(&macparam->eth_addr, &param->eth_addr, 6);
@@ -750,7 +768,8 @@ void neigh_process_ring(void *arg)
            }
            else {
                if (neigh) {
-                   if (!(neigh->flag & NEIGHBOUR_STATIC))
+                   if (!(neigh->flag & NEIGHBOUR_STATIC) &&
+                       (cid != master_cid))
                        dpvs_timer_cancel(&neigh->timer, false);
 
                    neigh_unhash(neigh);
@@ -869,8 +888,15 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
             if ((i == cid) || (!is_lcore_id_valid(i)))
                 continue;
             mac_param = neigh_ring_clone_param(param, 1);
-            if (mac_param)
-                rte_ring_enqueue(neigh_ring[i], mac_param);
+            if (mac_param) {
+                int ret = rte_ring_enqueue(neigh_ring[i], mac_param);
+                if (unlikely(-EDQUOT == ret))
+                    RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
+                    __func__);
+                else if (ret < 0)
+                    RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring enqueue failed\n",
+                    __func__);
+            }
             else
                 RTE_LOG(WARNING, NEIGHBOUR, "%s: clone mac faild\n", __func__);
         }
@@ -886,10 +912,6 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
             return EDPVS_NOTEXIST;
         }
 
-
-        if (!(neigh->flag & NEIGHBOUR_STATIC))
-            dpvs_timer_cancel(&neigh->timer, false);
-
         neigh_unhash(neigh);
         list_for_each_entry_safe(mbuf, mbuf_next,
                                  &neigh->queue_list, neigh_mbuf_list) {
@@ -904,8 +926,15 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
             if ((i == cid) || (!is_lcore_id_valid(i)))
                 continue;
             mac_param = neigh_ring_clone_param(param, 0);
-            if (mac_param)
-                rte_ring_enqueue(neigh_ring[i], mac_param);
+            if (mac_param) {
+                int ret = rte_ring_enqueue(neigh_ring[i], mac_param);
+                if (unlikely(-EDQUOT == ret))
+                    RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
+                    __func__);
+                else if (ret < 0) 
+                    RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring enqueue failed\n",
+                    __func__);
+            }
             else
                 RTE_LOG(WARNING, NEIGHBOUR, "%s: clone mac faild\n", __func__);
         }   
