@@ -234,6 +234,8 @@ typedef struct netif_nic_set {
     uint16_t promisc_off:1;
     uint16_t link_status_up:1;
     uint16_t link_status_down:1;
+    uint16_t forward2kni_on:1;
+    uint16_t forward2kni_off:1;
 } netif_nic_set_t;
 
 typedef struct netif_nic_mbufpool {

@@ -86,3 +86,61 @@ int mbuf_may_pull(struct rte_mbuf *mbuf, unsigned int len)
 
 	return 0;
 }
+
+void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m)
+{
+    RTE_ASSERT(rte_mbuf_refcnt_read(mi) == 1);
+    mi->priv_size = m->priv_size;
+    mi->buf_len = m->buf_len;
+    mi->data_off = m->data_off;
+    mi->data_len = m->data_len;
+    mi->port = m->port;
+    mi->vlan_tci = m->vlan_tci;
+    mi->vlan_tci_outer = m->vlan_tci_outer;
+    mi->tx_offload = m->tx_offload;
+    mi->hash = m->hash;
+    mi->next = NULL;
+    mi->pkt_len = mi->data_len;
+    mi->nb_segs = 1;
+    mi->ol_flags = m->ol_flags;
+    mi->packet_type = m->packet_type;
+
+    __rte_mbuf_sanity_check(mi, 1);
+    __rte_mbuf_sanity_check(m,0);
+}
+
+struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp)
+{
+    struct rte_mbuf *mc, *mi, **prev;
+    uint32_t pktlen;
+    uint8_t nseg;
+
+    if (unlikely ((mc = rte_pktmbuf_alloc(mp)) == NULL))
+        return NULL;
+
+    mi = mc;
+    pktlen = md->pkt_len;
+    nseg = 0;
+    prev = &mi->next;
+
+    do {
+        nseg++;
+        mbuf_copy_metadata(mi, md);
+        *prev = mi;
+        prev = &mi->next;
+        rte_memcpy(rte_pktmbuf_mtod(mi, void *), rte_pktmbuf_mtod(md, void *)
+, md->data_len);
+    } while ((md = md->next) != NULL && (mi = rte_pktmbuf_alloc(mp)) != NULL);
+
+    *prev =  NULL;
+    mc->nb_segs = nseg;
+    mc->pkt_len = pktlen;
+
+    if (unlikely (mi == NULL)) {
+        rte_pktmbuf_free(mc);
+        return NULL;
+    }
+
+    __rte_mbuf_sanity_check(mc, 1); //check packet header segment
+    return mc;
+}
