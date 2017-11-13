@@ -2049,7 +2049,7 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
         unsigned socket_id;
 
         socket_id = rte_socket_id();
-        mbuf_pool = pktmbuf_pool[socket_id]; 
+        mbuf_pool = pktmbuf_pool[socket_id];
 
         rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr));
         arp = rte_pktmbuf_mtod(mbuf, struct arp_hdr *);
@@ -2122,8 +2122,8 @@ static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbu
 
     /* prefetch packets */
     if (pretetch) {
-        for (t = 0; t < qconf->len && t < NETIF_PKT_PREFETCH_OFFSET; t++) 
-            rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *)); 
+        for (t = 0; t < qconf->len && t < NETIF_PKT_PREFETCH_OFFSET; t++)
+            rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *));
     }
 
     /* L2 filter */
@@ -2135,16 +2135,16 @@ static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbu
             rte_pktmbuf_free(mbuf);
             lcore_stats[cid].dropped++;
             continue;
-        }    
+        }
         if (dev->type == PORT_TYPE_BOND_SLAVE) {
             dev = dev->bond->slave.master;
             mbuf->port = dev->id;
-        }    
+        }
 
         if (pretetch && (t < qconf->len)) {
-            rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *)); 
-            t++; 
-        }    
+            rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *));
+            t++;
+        }
 
         eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
         /* reuse mbuf.packet_type, it was RTE_PTYPE_XXX */
@@ -2166,13 +2166,13 @@ static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbu
                         __func__);
         }
 
-        /*   
+        /*
          * do not drop pkt to other hosts (ETH_PKT_OTHERHOST)
          * since virtual devices may have different MAC with
          * underlying device.
          */
 
-        /*   
+        /*
          * handle VLAN
          * if HW offload vlan strip, it's still need vlan module
          * to act as VLAN filter.
@@ -2184,17 +2184,17 @@ static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbu
                 rte_pktmbuf_free(mbuf);
                 lcore_stats[cid].dropped++;
                 continue;
-            }    
+            }
 
             dev = netif_port_get(mbuf->port);
             if (unlikely(!dev)) {
                 rte_pktmbuf_free(mbuf);
                 lcore_stats[cid].dropped++;
                 continue;
-            }    
+            }
 
             eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-        }    
+        }
         /* handler should free mbuf */
         netif_deliver_mbuf(mbuf, eth_hdr->ether_type, dev, cid, qconf, pkts_from_ring);
 
@@ -2208,12 +2208,12 @@ static void lcore_process_arp_ring(struct netif_queue_conf *qconf, lcoreid_t cid
 {
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     uint16_t nb_rb;
-    
+
     nb_rb = rte_ring_dequeue_burst(arp_ring[cid], (void**)mbufs, NETIF_MAX_PKT_BURST);
 
-    if (nb_rb > 0) { 
+    if (nb_rb > 0) {
         lcore_process_packets(qconf, mbufs, cid, nb_rb, 0);
-    }    
+    }
 }
 
 static void lcore_job_recv_fwd(void *arg)
@@ -2235,7 +2235,7 @@ static void lcore_job_recv_fwd(void *arg)
 
             lcore_process_arp_ring(qconf,cid);
             qconf->len = netif_rx_burst(pid, qconf);
-          
+
             lcore_stats_burst(&lcore_stats[cid], qconf->len);
 
             lcore_process_packets(qconf, qconf->mbufs, cid, qconf->len, 1);
