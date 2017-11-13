@@ -737,7 +737,7 @@ int dp_vs_init(void)
 
     err = dp_vs_synproxy_init();
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, IPVS, "fail to init conn: %s\n", dpvs_strerror(err));
+        RTE_LOG(ERR, IPVS, "fail to init synproxy: %s\n", dpvs_strerror(err));
         goto err_synproxy;
     }
 
