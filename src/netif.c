@@ -1789,10 +1789,27 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
 {
     int ntx, ii;
     struct netif_queue_conf *txq;
+    unsigned i = 0;
+    struct rte_mbuf *mbuf_cloned = NULL;
+    struct netif_port *dev = NULL;
+
     assert(LCORE_ID_ANY != cid);
     txq = &lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].txqs[qindex];
     if (0 == txq->len)
         return;
+
+    dev = netif_port_get(pid);
+    if (dev && (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI)) {
+        for (; i<txq->len; i++) {
+            /*The rte_mbuf pending to transmit won't be modified any more. So, rte_pktmbuf_clone is ok. */
+            if (NULL == (mbuf_cloned = rte_pktmbuf_clone(txq->mbufs[i], pktmbuf_pool[dev->socket])))
+                RTE_LOG(WARNING, NETIF, "%s: Failed to clone mbuf\n", __func__);
+            else
+                kni_ingress(mbuf_cloned, dev, txq);
+        }
+        kni_send2kern_loop(pid, txq);
+    }
+
     ntx = rte_eth_tx_burst(pid, txq->id, txq->mbufs, txq->len);
     lcore_stats[cid].opackets += ntx;
     /* do not calculate obytes here in consideration of efficency */
@@ -2000,7 +2017,8 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
     assert(dev != NULL);
 
     pt = pkt_type_get(eth_type, dev);
-    if (NULL == pt) {
+
+    if (!(dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) && NULL == pt) {
         kni_ingress(mbuf, dev, qconf);
         return EDPVS_OK;
     }
@@ -2028,6 +2046,7 @@ static void lcore_job_recv_fwd(void *arg)
     lcoreid_t cid;
     struct netif_queue_conf *qconf;
     struct ether_hdr *eth_hdr;
+    struct rte_mbuf *mbuf_copied = NULL;
 
     cid = rte_lcore_id();
     assert(LCORE_ID_ANY != cid);
@@ -2069,6 +2088,20 @@ static void lcore_job_recv_fwd(void *arg)
                 eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
                 /* reuse mbuf.packet_type, it was RTE_PTYPE_XXX */
                 mbuf->packet_type = eth_type_parse(eth_hdr, dev);
+
+                /*
+                   * In NETIF_PORT_FLAG_FORWARD2KNI mode.
+                   * All packets received are deep copied and sent to  KNI  for the purpose of capturing forwarding packets.
+                   * Since the rte_mbuf will be modified in the following procedure, we should use
+                   * mbuf_copy instead of rte_pktmbuf_clone.
+                   */
+                if (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) {
+                    if (likely(NULL != (mbuf_copied = mbuf_copy(mbuf, pktmbuf_pool[dev->socket]))))
+                        kni_ingress(mbuf_copied, dev, qconf);
+                    else
+                        RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n", __func__);
+                }
+
                 /*
                  * do not drop pkt to other hosts (ETH_PKT_OTHERHOST)
                  * since virtual devices may have different MAC with
@@ -4284,6 +4317,14 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
             RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s disabled\n",
                     __func__, port_cfg->pname);
         }
+    }
+
+    if (port_cfg->forward2kni_on) {
+        port->flag |= NETIF_PORT_FLAG_FORWARD2KNI;
+        RTE_LOG(INFO, NETIF, "[%s] forward2kni mode for %s enabled\n", __func__, port_cfg->pname);
+    } else if (port_cfg->forward2kni_off) {
+        port->flag &= ~(NETIF_PORT_FLAG_FORWARD2KNI);
+        RTE_LOG(INFO, NETIF, "[%s] forward2kni mode for %s disabled\n", __func__, port_cfg->pname);
     }
 
     if (port_cfg->link_status_up) {

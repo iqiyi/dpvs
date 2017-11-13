@@ -111,4 +111,12 @@ static inline void *mbuf_header_pointer(const struct rte_mbuf *mbuf,
  */
 int mbuf_may_pull(struct rte_mbuf *mbuf, unsigned int len);
 
+/**
+* Copy a rte_mbuf including the data area.
+*
+* return a new rte_mbuf if success and NULL on error.
+*/
+struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp);
+void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m);
+
 #endif /* __DP_VS_MBUF_H__ */
