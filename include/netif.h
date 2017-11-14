@@ -33,6 +33,7 @@
 #define NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD 0x1<<6
 #define NETIF_PORT_FLAG_TX_VLAN_INSERT_OFFLOAD  0x1<<7
 #define NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD   0x1<<8
+#define NETIF_PORT_FLAG_FORWARD2KNI   0x1<<9
 
 /* max tx/rx queue number for each nic */
 #define NETIF_MAX_QUEUES            16
@@ -234,7 +235,7 @@ struct netif_port {
     char                    name[DEVICE_NAME_MAX_LEN];  /* device name */
     portid_t                id;                         /* device id */
     port_type_t             type;                       /* device type */
-    uint8_t                 flag;                       /* device flag */
+    uint16_t                flag;                       /* device flag */
     int                     nrxq;                       /* rx queue number */
     int                     ntxq;                       /* tx queue numbe */
     uint16_t                rxq_desc_nb;                /* rx queue descriptor number */
