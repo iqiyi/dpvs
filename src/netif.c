@@ -2282,8 +2282,16 @@ struct netif_lcore_loop_job netif_jobs[NETIF_JOB_COUNT];
 static void netif_lcore_init(void)
 {
     int ii, res;
+    lcoreid_t cid;
 
     timer_sched_interval_us = dpvs_timer_sched_interval_get();
+
+    for (cid = 0; cid < NETIF_MAX_LCORES; cid++) {
+        if (rte_lcore_is_enabled(cid))
+            RTE_LOG(INFO, NETIF, "%s: lcore%d is enabled\n", __func__, cid);
+        else
+            RTE_LOG(INFO, NETIF, "%s: lcore%d is disabled\n", __func__, cid);
+    }
 
     /* build lcore fast searching table */
     lcore_index_init();

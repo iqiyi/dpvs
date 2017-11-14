@@ -15,6 +15,8 @@
  * GNU General Public License for more details.
  *
  */
+#define _GNU_SOURCE
+#include <pthread.h>
 #include <assert.h>
 #include "pidfile.h"
 #include "dpdk.h"
@@ -34,6 +36,41 @@
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
 
 #define LCORE_CONF_BUFFER_LEN 1024
+
+static int set_all_thread_affinity(void)
+{
+    int s;
+    lcoreid_t cid;
+    pthread_t tid;
+    cpu_set_t cpuset;
+    unsigned long long cpumask=0;
+
+    tid = pthread_self();
+    CPU_ZERO(&cpuset);
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++)
+        CPU_SET(cid, &cpuset);
+
+    s = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
+    if (s != 0) {
+        perror("fail to set thread affinty");
+        return -1;
+    }
+
+    CPU_ZERO(&cpuset);
+    s = pthread_getaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
+    if (s != 0) {
+        perror("fail to get thread affinity");
+        return -2;
+    }
+
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        if (CPU_ISSET(cid, &cpuset))
+            cpumask |= (1LL << cid);
+    }
+    printf("current thread affinity is set to %llX\n", cpumask);
+
+    return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -56,6 +93,11 @@ int main(int argc, char *argv[])
 
     gettimeofday(&tv, NULL);
     srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
+
+    if (set_all_thread_affinity() != 0) {
+        fprintf(stderr, "set_all_thread_affinity failed\n");
+        exit(EXIT_FAILURE);
+    }
 
     err = rte_eal_init(argc, argv);
     if (err < 0)
