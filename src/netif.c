@@ -1915,7 +1915,6 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     lcoreid_t cid;
     int pid, qindex;
-    uint16_t mbuf_refcnt;
     struct netif_queue_conf *txq;
     struct netif_ops *ops = dev->netif_ops;
     int ret = EDPVS_OK;
@@ -1925,10 +1924,6 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
             rte_pktmbuf_free(mbuf);
         return EDPVS_INVAL;
     }
-
-    /* assert mbuf not placed in a place which original mbuf freed*/
-    mbuf_refcnt = rte_mbuf_refcnt_read(mbuf);
-    assert((mbuf_refcnt >= 1) && (mbuf_refcnt <= 64));
 
     if (ops && ops->op_xmit)
         return ops->op_xmit(mbuf, dev);
@@ -1994,12 +1989,17 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     int ret = EDPVS_OK;
+    uint16_t mbuf_refcnt;
 
     if (unlikely(NULL == mbuf || NULL == dev)) {
         if (mbuf)
             rte_pktmbuf_free(mbuf);
         return EDPVS_INVAL;
     }
+
+    /* assert for possible double free */
+    mbuf_refcnt = rte_mbuf_refcnt_read(mbuf);
+    assert((mbuf_refcnt >= 1) && (mbuf_refcnt <= 64));
 
     mbuf = tc_handle_egress(netif_tc(dev), mbuf, &ret);
     if (!mbuf)
