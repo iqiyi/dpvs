@@ -2079,6 +2079,11 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
     err = pt->func(mbuf, dev);
 
     if (err == EDPVS_KNICONTINUE) {
+        if (pkts_from_ring) {
+            rte_pktmbuf_free(mbuf);
+            return EDPVS_OK;
+        }
+
         if (!forward2kni && likely(NULL != rte_pktmbuf_prepend(mbuf,
             (mbuf->data_off - data_off))))
             kni_ingress(mbuf, dev, qconf);

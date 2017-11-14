@@ -747,17 +747,17 @@ static struct raw_neigh* neigh_ring_clone_param(const struct dp_vs_neigh_conf *p
 
 void neigh_process_ring(void *arg)
 {
-    struct raw_neigh *params;
+    struct raw_neigh *params[NETIF_MAX_PKT_BURST];
     uint16_t nb_rb;
     unsigned int hash;
     struct neighbour_entry *neigh;
     struct raw_neigh *param;
     lcoreid_t cid = rte_lcore_id();
-    nb_rb = rte_ring_dequeue_burst(neigh_ring[cid], (void **)&params, NETIF_MAX_PKT_BURST, NULL);
+    nb_rb = rte_ring_dequeue_burst(neigh_ring[cid], (void **)params, NETIF_MAX_PKT_BURST, NULL);
     if (nb_rb > 0) {
        int i;
        for (i = 0; i < nb_rb; i++) {
-           param = (&params)[i];
+           param = params[i];
            hash = neigh_hashkey(param->ip_addr.s_addr, param->port);
            neigh = neigh_lookup_entry(&param->ip_addr.s_addr, param->port, hash);
            if (param->add) {
