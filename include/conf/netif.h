@@ -38,6 +38,7 @@ typedef uint16_t queueid_t;
 #define NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD  0x1<<4
 #define NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD 0x1<<5
 #define NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD 0x1<<6
+#define NETIF_PORT_FLAG_FORWARD2KNI   0x1<<9
 
 #define ETH_LINK_DOWN           0
 #define ETH_LINK_UP             1
@@ -124,7 +125,7 @@ typedef struct netif_nic_basic_get
 {
     portid_t port_id;
     char name[32];
-    uint8_t flags; /* NETIF_PORT_FLAG_ */
+    uint16_t flags; /* NETIF_PORT_FLAG_ */
     uint8_t nrxq;
     uint8_t ntxq;
     char addr[32];
@@ -234,6 +235,8 @@ typedef struct netif_nic_set {
     uint16_t promisc_off:1;
     uint16_t link_status_up:1;
     uint16_t link_status_down:1;
+    uint16_t forward2kni_on:1;
+    uint16_t forward2kni_off:1;
 } netif_nic_set_t;
 
 typedef struct netif_nic_mbufpool {

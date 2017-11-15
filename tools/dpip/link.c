@@ -130,7 +130,8 @@ static void link_help(void)
             "    dpip -s link show [ i INTERVAL ] [ c COUNT ]  CPU-NAME\n"
             "    dpip link set DEV-NAME ITEM VALUE\n"
             "    ---supported items---\n"
-            "    promisc [on|off], link [up|down], addr, \n"
+            "    promisc [on|off], forward2kni [on|off], link [up|down],"
+            " addr, \n"
             "    bond-[mode|slave|primary|ximit-policy|monitor-interval|link-up-prop|"
             "link-down-prop]\n"
             "Examples:\n"
@@ -141,6 +142,7 @@ static void link_help(void)
             "    dpip -s -v link show cpu3 i 2\n"
             "    dpip link show bond0 status\n"
             "    dpip link set dpdk0 promisc on/off\n"
+            "    dpip link set dpdk0 forward2kni on/off\n"
             "    dpip link set bond0 link up/down\n"
            );
 }
@@ -281,12 +283,17 @@ static int dump_nic_basic(portid_t pid)
 
     switch (get.promisc) {
         case 0:
-            printf("promisc-off");
+            printf("promisc-off ");
             break;
         case 1:
-            printf("promisc-on");
+            printf("promisc-on ");
             break;
     }
+
+    if (get.flags & NETIF_PORT_FLAG_FORWARD2KNI)
+        printf("foward2kni-on");
+    else
+        printf("forward2kni-off");
     printf("\n");
 
     printf("    addr %s ", get.addr);
@@ -870,6 +877,25 @@ static int link_nic_set_promisc(const char *name, const char *value)
     return dpvs_setsockopt(SOCKOPT_NETIF_SET_PORT, &cfg, sizeof(netif_nic_set_t));
 }
 
+static int link_nic_set_forward2kni(const char *name, const char *value)
+{
+    assert(value);
+
+    netif_nic_set_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    strncpy(cfg.pname, name, sizeof(cfg.pname) - 1);
+    if (strcmp(value, "on") == 0)
+        cfg.forward2kni_on = 1;
+    else if(strcmp(value, "off") == 0)
+        cfg.forward2kni_off = 1;
+    else {
+        fprintf(stderr, "invalid arguement value for 'forward2kni'\n");
+        return EDPVS_INVAL;
+    }
+
+    return dpvs_setsockopt(SOCKOPT_NETIF_SET_PORT, &cfg, sizeof(netif_nic_set_t));
+}
+
 static int link_nic_set_link_status(const char *name, const char *value)
 {
     assert(value);
@@ -1168,6 +1194,8 @@ static int link_set(struct link_param *param)
 
             if (strcmp(param->item, "promisc") == 0)
                 link_nic_set_promisc(param->dev_name, param->value);
+            else if (strcmp(param->item, "forward2kni") == 0)
+                link_nic_set_forward2kni(param->dev_name, param->value);
             else if (strcmp(param->item, "link") == 0)
                 link_nic_set_link_status(param->dev_name, param->value);
             else if (strcmp(param->item, "addr") == 0)
