@@ -33,10 +33,11 @@
 
 static void dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct inet_addr_param *param)
 {
-    param->af = AF_INET;
+    memset(param, 0, sizeof(*param));
+    param->af = ipaddress->ifa.ifa_family;
     param->addr.in = ipaddress->u.sin.sin_addr;
     strcpy(param->ifname, dpdk_port);
-    param->plen = 32;//hardcode here; not supported yes
+    param->plen = ipaddress->ifa.ifa_prefixlen;
 }
 
 static int
