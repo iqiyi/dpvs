@@ -35,7 +35,7 @@
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
 
-#define LCORE_CONF_BUFFER_LEN 1024
+#define LCORE_CONF_BUFFER_LEN 4096
 
 static int set_all_thread_affinity(void)
 {
