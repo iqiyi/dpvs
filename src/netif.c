@@ -1997,6 +1997,9 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
         return EDPVS_INVAL;
     }
 
+    if (mbuf->port != dev->id)
+        mbuf->port = dev->id;
+
     /* assert for possible double free */
     mbuf_refcnt = rte_mbuf_refcnt_read(mbuf);
     assert((mbuf_refcnt >= 1) && (mbuf_refcnt <= 64));
