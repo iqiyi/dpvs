@@ -59,6 +59,7 @@ static int dp_vs_fast_xmit_fnat(struct dp_vs_proto *proto,
     ether_addr_copy(&conn->in_dmac, &eth->d_addr);
     ether_addr_copy(&conn->in_smac, &eth->s_addr);
     eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
+    mbuf->packet_type = ETHER_TYPE_IPv4;
 
     err = netif_xmit(mbuf, conn->in_dev);
     if (err != EDPVS_OK)
@@ -101,6 +102,7 @@ static int dp_vs_fast_outxmit_fnat(struct dp_vs_proto *proto,
     ether_addr_copy(&conn->out_dmac, &eth->d_addr);
     ether_addr_copy(&conn->out_smac, &eth->s_addr);
     eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
+    mbuf->packet_type = ETHER_TYPE_IPv4;
     
     err = netif_xmit(mbuf, conn->out_dev);
     if (err != EDPVS_OK)
