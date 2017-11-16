@@ -46,11 +46,11 @@ static int netif_pktpool_nb_mbuf = NETIF_PKTPOOL_NB_MBUF_DEF;
 #define NETIF_PKTPOOL_MBUF_CACHE_MAX    8192
 static int netif_pktpool_mbuf_cache = NETIF_PKTPOOL_MBUF_CACHE_DEF;
 
-#define NETIF_NB_RX_DESC_DEF    64
+#define NETIF_NB_RX_DESC_DEF    256
 #define NETIF_NB_RX_DESC_MIN    16
 #define NETIF_NB_RX_DESC_MAX    8192
 
-#define NETIF_NB_TX_DESC_DEF    128
+#define NETIF_NB_TX_DESC_DEF    512
 #define NETIF_NB_TX_DESC_MIN    16
 #define NETIF_NB_TX_DESC_MAX    8192
 
@@ -324,13 +324,11 @@ static void tx_desc_nb_handler(vector_t tokens)
         RTE_LOG(WARNING, NETIF, "invalid nb_tx_desc %s, using default %d\n",
                 str, NETIF_NB_TX_DESC_DEF);
         current_device->tx_desc_nb = NETIF_NB_TX_DESC_DEF;
-        //netif_nb_tx_desc = NETIF_NB_TX_DESC_DEF;
     } else {
         is_power2(desc_nb, 0, &desc_nb);
         RTE_LOG(INFO, NETIF, "%s:nb_tx_desc = %d (round to 2^n)\n",
                 current_device->name, desc_nb);
-        current_device->tx_desc_nb = NETIF_NB_TX_DESC_DEF;
-        //netif_nb_tx_desc = desc_nb;
+        current_device->tx_desc_nb = desc_nb;
     }
 
     FREE_PTR(str);

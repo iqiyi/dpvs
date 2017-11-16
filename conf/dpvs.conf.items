@@ -25,12 +25,12 @@ netif_defs {
         rx {
             #max_burst_size     32
             queue_number        6           <16, 0-16>
-            descriptor_number   128         <64, 16-8192>
+            descriptor_number   256         <256, 16-8192>
             rss                 ip          <tcp, tcp|ip>
         }
         tx {
             queue_number        6           <16, 0-16>
-            descriptor_number   256         <128, 16-8192>
+            descriptor_number   512         <512, 16-8192>
         }
     !    promisc_mode                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
