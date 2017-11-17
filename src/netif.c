@@ -3363,6 +3363,10 @@ inline static void netif_port_init(const struct rte_eth_conf *conf)
     char *kni_name;
 
     nports = rte_eth_dev_count();
+    if (nports <= 0)
+        rte_exit(EXIT_FAILURE, "No dpdk ports found!\n"
+                "Possibly nic or driver is not dpdk-compatible.\n");
+
     nports_cfg = list_elems(&port_list) + list_elems(&bond_list);
     if (nports_cfg < nports)
         rte_exit(EXIT_FAILURE, "ports in DPDK RTE (%d) != ports in dpvs.conf(%d)\n",
