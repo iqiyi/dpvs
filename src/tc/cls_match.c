@@ -223,8 +223,10 @@ static int match_init(struct tc_cls *cls, const void *arg)
         priv->result.drop = copt->result.drop;
     } else {
         /* 0: (TC_H_UNSPEC) is valid handle but not valid target */
-        if (copt->result.sch_id != TC_H_UNSPEC)
+        if (copt->result.sch_id != TC_H_UNSPEC) {
             priv->result.sch_id = copt->result.sch_id;
+            priv->result.drop = false; /* exclusive with sch_id */
+        }
     }
 
     return EDPVS_OK;

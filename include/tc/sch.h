@@ -200,7 +200,7 @@ static inline void __qsch_reset_queue(struct Qsch *sch,
     struct tc_mbuf *tm, *n;
 
     list_for_each_entry_safe(tm, n, &qh->mbufs, list) {
-        rte_pktmbuf_free(tm->mbuf);
+        qsch_drop(sch, tm->mbuf);
         rte_mempool_put(sch->tc->tc_mbuf_pool, tm);
     }
     INIT_LIST_HEAD(&qh->mbufs);
