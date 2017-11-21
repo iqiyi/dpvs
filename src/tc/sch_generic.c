@@ -38,7 +38,7 @@ static inline int sch_hash(tc_handle_t handle, int hash_size)
 
 static inline int sch_qlen(struct Qsch *sch)
 {
-    return sch->q.qlen;
+    return sch->this_q.qlen;
 }
 
 /* return current queue length (num of packets in queue),
@@ -60,12 +60,14 @@ static inline struct Qsch *sch_alloc(struct netif_tc *tc, struct Qsch_ops *ops)
 {
     struct Qsch *sch;
     unsigned int size = TC_ALIGN(sizeof(*sch)) + ops->priv_size;
+    lcoreid_t cid;
 
     sch = rte_zmalloc(NULL, size, RTE_CACHE_LINE_SIZE);
     if (!sch)
         return NULL;
 
-    tc_mbuf_head_init(&sch->q);
+    for (cid = 0; cid < NELEMS(sch->q); cid++)
+        tc_mbuf_head_init(&sch->q[cid]);
 
     INIT_LIST_HEAD(&sch->cls_list);
     INIT_HLIST_NODE(&sch->hlist);
@@ -273,10 +275,13 @@ int qsch_change(struct Qsch *sch, const void *arg)
 
 void qsch_reset(struct Qsch *sch)
 {
+    lcoreid_t cid;
+
     if (sch->ops->reset)
         sch->ops->reset(sch);
 
-    sch->q.qlen = 0;
+    for (cid = 0; cid < NELEMS(sch->q); cid++)
+        sch->q[cid].qlen = 0;
 }
 
 void qsch_hash_add(struct Qsch *sch, bool invisible)

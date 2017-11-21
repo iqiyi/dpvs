@@ -30,7 +30,7 @@ extern struct Qsch_ops bfifo_sch_ops;
 
 static int pfifo_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 {
-    if (likely(sch->q.qlen < sch->limit))
+    if (likely(sch->this_q.qlen < sch->limit))
         return qsch_enqueue_tail(sch, mbuf);
 
 #if defined(CONFIG_TC_DEBUG)
@@ -41,7 +41,7 @@ static int pfifo_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 
 static int bfifo_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 {
-    if (likely(sch->qstats.backlog + mbuf->pkt_len <= sch->limit))
+    if (likely(sch->this_qstats.backlog + mbuf->pkt_len <= sch->limit))
         return qsch_enqueue_tail(sch, mbuf);
 
 #if defined(CONFIG_TC_DEBUG)

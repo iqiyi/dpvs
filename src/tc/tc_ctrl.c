@@ -31,6 +31,9 @@
 static int fill_qsch_param(struct Qsch *sch, struct tc_qsch_param *pr)
 {
     int err;
+    struct dpvs_msg *req, *reply;
+    struct dpvs_multicast_queue *replies = NULL;
+    struct tc_qsch_stats *st;
 
     memset(pr, 0, sizeof(*pr));
 
@@ -41,9 +44,38 @@ static int fill_qsch_param(struct Qsch *sch, struct tc_qsch_param *pr)
     if (sch->ops->dump && (err = sch->ops->dump(sch, &pr->qopt)) != EDPVS_OK)
         return err;
 
-    pr->qstats = sch->qstats;
-    pr->bstats = sch->bstats;
+    /* send msg to workers for per-cpu stats */
+    req = msg_make(MSG_TYPE_TC_STATS, 0, DPVS_MSG_MULTICAST,
+                   rte_lcore_id(), sizeof(struct Qsch *), &sch);
+    if (!req)
+        return EDPVS_NOMEM;
 
+    err = multicast_msg_send(req, 0, &replies);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, TC, "%s: send msg: %s\n", __func__, dpvs_strerror(err));
+        msg_destroy(&req);
+        return err;
+    }
+
+    /* handle replies */
+    list_for_each_entry(reply, &replies->mq, mq_node) {
+        st = (struct tc_qsch_stats *)reply->data;
+        assert(st && reply->cid < RTE_MAX_LCORE);
+
+        pr->qstats_cpus[reply->cid] = st->qstats;
+        pr->bstats_cpus[reply->cid] = st->bstats;
+
+        pr->qstats.qlen         += st->qstats.qlen;
+        pr->qstats.backlog      += st->qstats.backlog;
+        pr->qstats.drops        += st->qstats.drops;
+        pr->qstats.requeues     += st->qstats.requeues;
+        pr->qstats.overlimits   += st->qstats.overlimits;
+
+        pr->bstats.bytes        += st->bstats.bytes;
+        pr->bstats.packets      += st->bstats.packets;
+    }
+
+    msg_destroy(&req);
     return EDPVS_OK;
 }
 
@@ -371,6 +403,35 @@ static struct dpvs_sockopts tc_sockopts = {
     .get            = tc_sockopt_get,
 };
 
+static int tc_msg_get_stats(struct dpvs_msg *msg)
+{
+    void *ptr;
+    struct Qsch *qsch;
+    struct tc_qsch_stats *st;
+
+    assert(msg && msg->len == sizeof(struct Qsch *));
+
+    ptr = msg->data;
+    qsch = *(struct Qsch **)ptr;
+
+    st = rte_zmalloc(NULL, sizeof(*st), 0);
+    if (!st)
+        return EDPVS_NOMEM;
+
+    st->qstats = qsch->this_qstats;
+    st->bstats = qsch->this_bstats;
+
+    msg->reply.len = sizeof(*st);
+    msg->reply.data = st;
+
+    return EDPVS_OK;
+}
+
+static struct dpvs_msg_type tc_stats_msg = {
+    .type           = MSG_TYPE_TC_STATS,
+    .unicast_msg_cb = tc_msg_get_stats,
+};
+
 int tc_ctrl_init(void)
 {
     int err;
@@ -378,6 +439,12 @@ int tc_ctrl_init(void)
     err = sockopt_register(&tc_sockopts);
     if (err != EDPVS_OK)
         return err;
+
+    err = msg_type_mc_register(&tc_stats_msg);
+    if (err != EDPVS_OK) {
+        sockopt_unregister(&tc_sockopts);
+        return err;
+    }
 
     return EDPVS_OK;
 }

@@ -72,13 +72,13 @@ static int tbf_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
      */
     err = priv->qsch->ops->enqueue(priv->qsch, mbuf);
     if (err != EDPVS_OK) {
-        sch->qstats.drops++;
+        sch->this_qstats.drops++;
         return err;
     }
 
-    sch->qstats.backlog += mbuf->pkt_len;
-    sch->qstats.qlen++;
-    sch->q.qlen++;
+    sch->this_qstats.backlog += mbuf->pkt_len;
+    sch->this_qstats.qlen++;
+    sch->this_q.qlen++;
     return EDPVS_OK;
 }
 
@@ -133,17 +133,17 @@ static struct rte_mbuf *tbf_dequeue(struct Qsch *sch)
         priv->tokens = toks;
         priv->ptokens = ptoks;
 
-        sch->qstats.backlog -= pkt_len;
-        sch->qstats.qlen--;
-        sch->q.qlen--;
-        sch->bstats.bytes += pkt_len;
-        sch->bstats.packets++;
+        sch->this_qstats.backlog -= pkt_len;
+        sch->this_qstats.qlen--;
+        sch->this_q.qlen--;
+        sch->this_bstats.bytes += pkt_len;
+        sch->this_bstats.packets++;
 
         return mbuf;
     }
 
     /* token not enough */
-    sch->qstats.overlimits++;
+    sch->this_qstats.overlimits++;
     return NULL;
 }
 
@@ -249,12 +249,15 @@ static void tbf_destroy(struct Qsch *sch)
 
 static void tbf_reset(struct Qsch *sch)
 {
+    lcoreid_t cid;
     struct tbf_sch_priv *priv = qsch_priv(sch);
 
     qsch_reset(priv->qsch);
-    sch->qstats.backlog = 0;
-    sch->qstats.qlen = 0;
-    sch->q.qlen = 0;
+    for (cid = 0; cid < NELEMS(sch->q); cid++) {
+        sch->qstats[cid].backlog = 0;
+        sch->qstats[cid].qlen = 0;
+        sch->q[cid].qlen = 0;
+    }
 
     priv->t_c = tc_get_ns();
     priv->tokens = priv->buffer;

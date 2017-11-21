@@ -185,12 +185,12 @@ struct rte_mbuf *tc_handle_egress(struct netif_tc *tc,
 
     assert(tc && mbuf && ret);
 
-    rte_rwlock_write_lock(&tc->lock);
+    rte_rwlock_read_lock(&tc->lock);
 
     /* start from egress root qsch */
     sch = tc->qsch;
     if (unlikely(!sch)) {
-        rte_rwlock_write_unlock(&tc->lock);
+        rte_rwlock_read_unlock(&tc->lock);
         *ret = EDPVS_OK;
         return mbuf;
     }
@@ -264,13 +264,13 @@ again:
 
 out:
     qsch_put(sch);
-    rte_rwlock_write_unlock(&tc->lock);
+    rte_rwlock_read_unlock(&tc->lock);
     return mbuf;
 
 drop:
     *ret = qsch_drop(sch, mbuf);
     qsch_put(sch);
-    rte_rwlock_write_unlock(&tc->lock);
+    rte_rwlock_read_unlock(&tc->lock);
     return NULL;
 }
 

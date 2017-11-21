@@ -39,8 +39,11 @@ static const uint8_t prio2band[TC_PRIO_MAX + 1] = {
 static const int bitmap2band[] = {-1, 0, 1, 0, 2, 0, 1, 0};
 
 struct pfifo_fast_priv {
-    uint32_t bitmap;
-    struct tc_mbuf_head q[PFIFO_FAST_BANDS];
+    uint32_t bitmap[RTE_MAX_LCORE];
+    struct tc_mbuf_head q[RTE_MAX_LCORE][PFIFO_FAST_BANDS];
+
+#define this_bitmap bitmap[rte_lcore_id()]
+#define this_pff_q  q[rte_lcore_id()]
 };
 
 static inline struct tc_mbuf_head *band2list(struct pfifo_fast_priv *priv,
@@ -48,7 +51,15 @@ static inline struct tc_mbuf_head *band2list(struct pfifo_fast_priv *priv,
 {
     assert(band >= 0 && band < PFIFO_FAST_BANDS);
 
-    return priv->q + band;
+    return priv->this_pff_q + band;
+}
+
+static inline struct tc_mbuf_head *band2list_cpu(struct pfifo_fast_priv *priv,
+					                             int band, lcoreid_t cid)
+{
+    assert(band >= 0 && band < PFIFO_FAST_BANDS);
+
+    return priv->q[cid] + band;
 }
 
 static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
@@ -59,7 +70,7 @@ static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     struct tc_mbuf_head *qh;
 
     /* sch->limit is same as dev->txq_desc_nb */
-    if (sch->q.qlen >= sch->limit) {
+    if (sch->this_q.qlen >= sch->limit) {
 #if defined(CONFIG_TC_DEBUG)
         RTE_LOG(WARNING, TC, "%s: queue is full.\n", __func__);
 #endif
@@ -89,9 +100,9 @@ static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     
     err = __qsch_enqueue_tail(sch, mbuf, qh);
     if (err == EDPVS_OK) {
-        priv->bitmap |= (1 << band);
-        sch->q.qlen++;
-        sch->qstats.qlen++;
+        priv->this_bitmap |= (1 << band);
+        sch->this_q.qlen++;
+        sch->this_qstats.qlen++;
     }
 
     return err;
@@ -100,7 +111,7 @@ static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 static struct rte_mbuf *pfifo_fast_dequeue(struct Qsch *sch)
 {
     struct pfifo_fast_priv *priv = qsch_priv(sch);
-    int band = bitmap2band[priv->bitmap];
+    int band = bitmap2band[priv->this_bitmap];
     struct tc_mbuf_head *qh;
     struct rte_mbuf *mbuf;
 
@@ -111,12 +122,12 @@ static struct rte_mbuf *pfifo_fast_dequeue(struct Qsch *sch)
     mbuf = __qsch_dequeue_head(sch, qh);
 
     if (mbuf) {
-        sch->q.qlen--;
-        sch->qstats.qlen--;
+        sch->this_q.qlen--;
+        sch->this_qstats.qlen--;
     }
 
     if (qh->qlen == 0)
-        priv->bitmap &= ~(1 << band);
+        priv->this_bitmap &= ~(1 << band);
 
     return mbuf;
 }
@@ -124,7 +135,7 @@ static struct rte_mbuf *pfifo_fast_dequeue(struct Qsch *sch)
 static struct rte_mbuf *pfifo_fast_peek(struct Qsch *sch)
 {
     struct pfifo_fast_priv *priv = qsch_priv(sch);
-    int band = bitmap2band[priv->bitmap];
+    int band = bitmap2band[priv->this_bitmap];
     struct tc_mbuf_head *qh;
     struct tc_mbuf *tm;
 
@@ -142,10 +153,14 @@ static struct rte_mbuf *pfifo_fast_peek(struct Qsch *sch)
 static int pfifo_fast_init(struct Qsch *sch, const void *arg)
 {
     int band;
+    lcoreid_t cid;
     struct pfifo_fast_priv *priv = qsch_priv(sch);
 
-    for (band = 0; band < PFIFO_FAST_BANDS; band++)
-        tc_mbuf_head_init(band2list(priv, band));
+    for (cid = 0; cid < NELEMS(priv->q); cid++) {
+        for (band = 0; band < PFIFO_FAST_BANDS; band++) {
+            tc_mbuf_head_init(band2list_cpu(priv, band, cid));
+        }
+    }
 
     /* FIXME: txq_desc_nb is not set when alloc device.
      * we can move tc_init_dev to dev start phase but not
@@ -161,14 +176,17 @@ static int pfifo_fast_init(struct Qsch *sch, const void *arg)
 static void pfifo_fast_reset(struct Qsch *sch)
 {
     int band;
+    lcoreid_t cid;
     struct pfifo_fast_priv *priv = qsch_priv(sch);
 
-    for (band = 0; band < PFIFO_FAST_BANDS; band++)
-        __qsch_reset_queue(sch, band2list(priv, band));
+    for (cid = 0; cid < NELEMS(priv->q); cid++) {
+        for (band = 0; band < PFIFO_FAST_BANDS; band++)
+            __qsch_reset_queue(sch, band2list_cpu(priv, band, cid));
 
-    priv->bitmap = 0;
-    sch->q.qlen = 0;
-    sch->qstats.qlen = 0;
+        priv->bitmap[cid] = 0;
+        sch->q[cid].qlen = 0;
+        sch->qstats[cid].qlen = 0;
+    }
 }
 
 static int pfifo_fast_dump(struct Qsch *sch, void *arg)
