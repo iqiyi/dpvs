@@ -140,7 +140,7 @@ static inline int __qsch_enqueue_tail(struct Qsch *sch, struct rte_mbuf *mbuf,
     struct tc_mbuf *tm;
     assert(sch && sch->tc && sch->tc->tc_mbuf_pool && mbuf);
 
-    if (rte_mempool_get(sch->tc->tc_mbuf_pool, (void **)&tm) != 0) {
+    if (unlikely(rte_mempool_get(sch->tc->tc_mbuf_pool, (void **)&tm) != 0)) {
         RTE_LOG(WARNING, TC, "%s: no memory\n", __func__);
         qsch_drop(sch, mbuf);
         return EDPVS_NOMEM;
@@ -167,7 +167,7 @@ static inline struct rte_mbuf *__qsch_dequeue_head(struct Qsch *sch,
     struct rte_mbuf *mbuf;
 
     tm = list_first_entry(&qh->mbufs, struct tc_mbuf, list);
-    if (!tm)
+    if (unlikely(!tm))
         return NULL;
 
     list_del(&tm->list);
@@ -192,7 +192,7 @@ static inline struct rte_mbuf *qsch_peek_head(struct Qsch *sch)
     struct tc_mbuf *tm;
 
     tm = list_first_entry(&sch->this_q.mbufs, struct tc_mbuf, list);
-    if (!tm)
+    if (unlikely(!tm))
         return NULL;
 
     return tm->mbuf;

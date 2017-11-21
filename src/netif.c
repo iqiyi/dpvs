@@ -2005,7 +2005,7 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     assert((mbuf_refcnt >= 1) && (mbuf_refcnt <= 64));
 
     mbuf = tc_handle_egress(netif_tc(dev), mbuf, &ret);
-    if (!mbuf)
+    if (likely(!mbuf))
         return ret;
 
     return netif_hard_xmit(mbuf, dev);

@@ -65,34 +65,21 @@ static inline struct tc_mbuf_head *band2list_cpu(struct pfifo_fast_priv *priv,
 static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 {
     int band, err;
-    uint8_t prio;
+    uint8_t prio = 0;
     struct pfifo_fast_priv *priv;
     struct tc_mbuf_head *qh;
 
     /* sch->limit is same as dev->txq_desc_nb */
-    if (sch->this_q.qlen >= sch->limit) {
+    if (unlikely(sch->this_q.qlen >= sch->limit)) {
 #if defined(CONFIG_TC_DEBUG)
         RTE_LOG(WARNING, TC, "%s: queue is full.\n", __func__);
 #endif
         return qsch_drop(sch, mbuf);
     }
 
-    /*
-     * XXX:
-     * no way to store/retrieve priority (e.g., TOS) to/from mbuf struct,
-     * peek the IP header for tos fields. don't worry about
-     * vlan, here vlan tag is not inserted yet.
-     */
-    if (likely(mbuf->packet_type == ETH_P_IP)) {
-        struct iphdr *iph;
-
-        iph = rte_pktmbuf_mtod_offset(mbuf, struct iphdr *,
-                                      sizeof(struct ethhdr));
-
-        prio = (iph->tos >> 1) & TC_PRIO_MAX;
-    } else {
-        prio = 0;
-    }
+    if (unlikely(mbuf->udata64 > 0 && mbuf->udata64 <= TC_PRIO_MAX &&
+                 mbuf->packet_type == ETH_P_IP))
+        prio = (uint8_t)mbuf->udata64;
 
     band = prio2band[prio];
     priv = qsch_priv(sch);
@@ -126,7 +113,7 @@ static struct rte_mbuf *pfifo_fast_dequeue(struct Qsch *sch)
         sch->this_qstats.qlen--;
     }
 
-    if (qh->qlen == 0)
+    if (likely(qh->qlen == 0))
         priv->this_bitmap &= ~(1 << band);
 
     return mbuf;

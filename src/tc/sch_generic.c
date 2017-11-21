@@ -317,17 +317,17 @@ struct Qsch *qsch_lookup_noref(const struct netif_tc *tc, tc_handle_t handle)
     struct Qsch *sch;
     assert(tc->qsch_hash && tc->qsch_hash_size);
 
-    if (tc->qsch && tc->qsch->handle == handle)
+    if (likely(tc->qsch && tc->qsch->handle == handle))
         return tc->qsch;
-
-    if (tc->qsch_ingress && tc->qsch_ingress->handle == handle)
-        return tc->qsch_ingress;
 
     hash = sch_hash(handle, tc->qsch_hash_size);
     hlist_for_each_entry(sch, &tc->qsch_hash[hash], hlist) {
-        if (sch->handle == handle)
+        if (likely(sch->handle == handle))
             return sch;
     }
+
+    if (tc->qsch_ingress && tc->qsch_ingress->handle == handle)
+        return tc->qsch_ingress;
 
     return NULL;
 }
