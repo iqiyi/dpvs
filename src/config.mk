@@ -16,25 +16,16 @@
 #
 
 #
-# Makefile for DPVS
+# enable as needed.
 #
-MAKE	= make
-CC 		= gcc
-LD 		= ld
+# TODO: use standard way to define compile flags.
+#
 
-SUBDIRS = src tools
-
-INSDIR  = $(PWD)/bin
-export INSDIR
-
-export KERNEL   = $(shell /bin/uname -r)
-
-all:
-	for i in $(SUBDIRS); do $(MAKE) -C $$i || exit 1; done
-
-clean:
-	for i in $(SUBDIRS); do $(MAKE) -C $$i clean || exit 1; done
-
-install:all
-	-mkdir -p $(INSDIR)
-	for i in $(SUBDIRS); do $(MAKE) -C $$i install || exit 1; done
+#CFLAGS += -D CONFIG_RECORD_BIG_LOOP
+#CFLAGS += -D CONFIG_DPVS_SAPOOL_DEBUG
+#CFLAGS += -D CONFIG_DPVS_IPVS_DEBUG
+#CFLAGS += -D CONFIG_SYNPROXY_DEBUG
+#CFLAGS += -D CONFIG_TIMER_MEASURE
+#CFLAGS += -D DPVS_CFG_PARSER_DEBUG
+#CFLAGS += -D NETIF_BONDING_DEBUG
+#CFLAGS += -D CONFIG_TC_DEBUG

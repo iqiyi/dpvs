@@ -27,3 +27,4 @@ tools/keepalived/keepalived/libipvs-2.6/libipvs.a
 tools/keepalived/keepalived/vrrp/Makefile
 tools/keepalived/lib/Makefile
 tools/keepalived/lib/config.h
+src/dpvs
