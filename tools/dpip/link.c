@@ -130,8 +130,8 @@ static void link_help(void)
             "    dpip -s link show [ i INTERVAL ] [ c COUNT ]  CPU-NAME\n"
             "    dpip link set DEV-NAME ITEM VALUE\n"
             "    ---supported items---\n"
-            "    promisc [on|off], forward2kni [on|off], link [up|down],"
-            " addr, \n"
+            "    promisc [on|off], forward2kni [on|off], link [up|down],\n"
+            "    tc-egress [on|off], tc-ingress [on|off], addr, \n"
             "    bond-[mode|slave|primary|ximit-policy|monitor-interval|link-up-prop|"
             "link-down-prop]\n"
             "Examples:\n"
@@ -281,19 +281,18 @@ static int dump_nic_basic(portid_t pid)
             break;
     }
 
-    switch (get.promisc) {
-        case 0:
-            printf("promisc-off ");
-            break;
-        case 1:
-            printf("promisc-on ");
-            break;
-    }
+    if (get.promisc)
+        printf("promisc ");
 
     if (get.flags & NETIF_PORT_FLAG_FORWARD2KNI)
-        printf("foward2kni-on");
-    else
-        printf("forward2kni-off");
+        printf("foward2kni ");
+
+    if (get.tc_egress)
+        printf("tc-egress ");
+
+    if (get.tc_ingress)
+        printf("tc-ingress ");
+
     printf("\n");
 
     printf("    addr %s ", get.addr);
@@ -927,6 +926,44 @@ static int link_nic_set_addr(const char *name, const char *value)
     return dpvs_setsockopt(SOCKOPT_NETIF_SET_PORT, &cfg, sizeof(netif_nic_set_t));
 }
 
+static int link_nic_set_tc_egress(const char *name, const char *value)
+{
+    netif_nic_set_t cfg = {};
+    assert(value);
+
+    snprintf(cfg.pname, sizeof(cfg.pname), "%s", name);
+
+    if (strcmp(value, "on") == 0)
+        cfg.tc_egress_on = 1;
+    else if(strcmp(value, "off") == 0)
+        cfg.tc_egress_off = 1;
+    else {
+        fprintf(stderr, "invalid arguement value for 'tc-egress'\n");
+        return EDPVS_INVAL;
+    }
+
+    return dpvs_setsockopt(SOCKOPT_NETIF_SET_PORT, &cfg, sizeof(netif_nic_set_t));
+}
+
+static int link_nic_set_tc_ingress(const char *name, const char *value)
+{
+    netif_nic_set_t cfg = {};
+    assert(value);
+
+    snprintf(cfg.pname, sizeof(cfg.pname), "%s", name);
+
+    if (strcmp(value, "on") == 0)
+        cfg.tc_ingress_on = 1;
+    else if(strcmp(value, "off") == 0)
+        cfg.tc_ingress_off = 1;
+    else {
+        fprintf(stderr, "invalid arguement value for 'tc-ingress'\n");
+        return EDPVS_INVAL;
+    }
+
+    return dpvs_setsockopt(SOCKOPT_NETIF_SET_PORT, &cfg, sizeof(netif_nic_set_t));
+}
+
 static int link_bond_add_bond_slave(const char *name, const char *value)
 {
     unsigned dev_id;
@@ -1212,6 +1249,10 @@ static int link_set(struct link_param *param)
                 link_bond_set_link_down_prop(param->dev_name, param->value);
             else if (strcmp(param->item, "bond-link-up-prop") == 0)
                 link_bond_set_link_up_prop(param->dev_name, param->value);
+            else if (strcmp(param->item, "tc-egress") == 0)
+                link_nic_set_tc_egress(param->dev_name, param->value);
+            else if (strcmp(param->item, "tc-ingress") == 0)
+                link_nic_set_tc_ingress(param->dev_name, param->value);
             break;
         }
         case LINK_DEVICE_CPU:

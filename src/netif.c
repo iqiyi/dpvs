@@ -2004,9 +2004,11 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     mbuf_refcnt = rte_mbuf_refcnt_read(mbuf);
     assert((mbuf_refcnt >= 1) && (mbuf_refcnt <= 64));
 
-    mbuf = tc_handle_egress(netif_tc(dev), mbuf, &ret);
-    if (likely(!mbuf))
-        return ret;
+    if (dev->flag & NETIF_PORT_FLAG_TC_EGRESS) {
+        mbuf = tc_handle_egress(netif_tc(dev), mbuf, &ret);
+        if (likely(!mbuf))
+            return ret;
+    }
 
     return netif_hard_xmit(mbuf, dev);
 }
@@ -4050,6 +4052,8 @@ static int get_port_basic(portid_t pid, void **out, size_t *out_len)
         return err;
     }
     get->promisc = promisc ? 1 : 0;
+    get->tc_egress = (port->flag & NETIF_PORT_FLAG_TC_EGRESS) ? 1 : 0;
+    get->tc_ingress = (port->flag & NETIF_PORT_FLAG_TC_INGRESS) ? 1 : 0;
 
     *out = get;
     *out_len = sizeof(netif_nic_basic_get_t);
@@ -4531,6 +4535,16 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
             }
         }
     }
+
+    if (port_cfg->tc_egress_on)
+        port->flag |= NETIF_PORT_FLAG_TC_EGRESS;
+    else if (port_cfg->tc_egress_off)
+        port->flag &= (~NETIF_PORT_FLAG_TC_EGRESS);
+
+    if (port_cfg->tc_ingress_on)
+        port->flag |= NETIF_PORT_FLAG_TC_INGRESS;
+    else if (port_cfg->tc_ingress_off)
+        port->flag &= (~NETIF_PORT_FLAG_TC_INGRESS);
 
     return EDPVS_OK;
 }

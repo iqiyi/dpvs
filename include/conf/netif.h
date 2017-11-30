@@ -136,6 +136,8 @@ typedef struct netif_nic_basic_get
     uint16_t link_autoneg:1; /* ETH_LINK_SPEED_[AUTONEG/FIXED] */
     uint16_t link_status:1; /* ETH_LINK_[DOWN/UP] */
     uint16_t promisc:1; /* promiscuous mode */
+    uint16_t tc_egress:1;
+    uint16_t tc_ingress:1;
 } netif_nic_basic_get_t;
 
 /* dev info specified by port_id */
@@ -237,6 +239,10 @@ typedef struct netif_nic_set {
     uint16_t link_status_down:1;
     uint16_t forward2kni_on:1;
     uint16_t forward2kni_off:1;
+    uint16_t tc_egress_on:1;
+    uint16_t tc_egress_off:1;
+    uint16_t tc_ingress_on:1;
+    uint16_t tc_ingress_off:1;
 } netif_nic_set_t;
 
 typedef struct netif_nic_mbufpool {
