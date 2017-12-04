@@ -44,6 +44,7 @@ INIT		= $(RPM_BUILD_ROOT)/etc/rc.d/init.d
 MKDIR		= mkdir
 INSTALL		= install
 STATIC_LIBS	= ../keepalived/keepalived/libipvs-2.6/libipvs.a
+DPVSDEPS    = ../../src/common.o
 
 ifeq "${ARCH}" "sparc64"
     CFLAGS = -Wall -Wunused -Wstrict-prototypes -g -m64 -pipe -mcpu=ultrasparc -mcmodel=medlow
@@ -94,7 +95,7 @@ DEFINES		+= $(shell if [ ! -f ../ip_vs.h ]; then	\
 all:            ipvsadm
 
 ipvsadm:	$(OBJS) $(STATIC_LIBS)
-		$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+		$(CC) $(CFLAGS) -o $@ $^ $(LIBS) $(DPVSDEPS)
 
 install:        all
 		if [ ! -d $(SBIN) ]; then $(MKDIR) -p $(SBIN); fi

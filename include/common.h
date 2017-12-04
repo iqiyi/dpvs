@@ -19,6 +19,8 @@
 #define __DPVS_COMMON_H__
 #include <stdbool.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <sys/types.h>
 #include <linux/if_ether.h>
 
 #ifndef NELEMS
@@ -111,5 +113,14 @@ extern const char *dpvs_strerror(int err);
 int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN]);
 int linux_hw_mc_add(const char *ifname, const uint8_t hwma[ETH_ALEN]);
 int linux_hw_mc_del(const char *ifname, const uint8_t hwma[ETH_ALEN]);
+
+/* read "n" bytes from a descriptor */
+ssize_t readn(int fd, void *vptr, size_t n);
+
+/* write "n" bytes to a descriptor */
+ssize_t writen(int fd, const void *vptr, size_t n);
+
+/* send "n" bytes to a descriptor */
+ssize_t sendn(int fd, const void *vptr, size_t n, int flags);
 
 #endif /* __DPVS_COMMON_H__ */

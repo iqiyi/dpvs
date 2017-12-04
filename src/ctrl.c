@@ -1032,17 +1032,18 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg **pmsg)
 {
     struct dpvs_sock_msg msg_hdr;
     struct dpvs_sock_msg *msg;
-    int res;
+    int len, res;
 
     if (unlikely(!pmsg))
         return EDPVS_INVAL;
     *pmsg = NULL;
 
-    memset(&msg_hdr, 0, sizeof(msg_hdr));
-    res = read(clt_fd, &msg_hdr, sizeof(msg_hdr));
+    len = sizeof(msg_hdr);
+    memset(&msg_hdr, 0, len);
+    res = readn(clt_fd, &msg_hdr, len);
     if (sizeof(msg_hdr) != res) {
-        RTE_LOG(WARNING, MSGMGR, "%s: sockopt msg header recv fail: %s\n",
-                __func__, strerror(errno));
+        RTE_LOG(WARNING, MSGMGR, "%s: sockopt msg header recv fail -- %d/%d recieved\n",
+                __func__, res, len);
         return EDPVS_IO;
     }
 
@@ -1060,10 +1061,10 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg **pmsg)
     msg->len = msg_hdr.len;
 
     if (msg_hdr.len > 0) {
-        res = read(clt_fd, msg->data, msg->len);
+        res = readn(clt_fd, msg->data, msg->len);
         if (res != msg->len) {
-            RTE_LOG(WARNING, MSGMGR, "%s: sockopt msg body recv fail: %s\n",
-                    __func__, strerror(errno));
+            RTE_LOG(WARNING, MSGMGR, "%s: sockopt msg body recv fail -- "
+                    "%d/%d recieved\n", __func__, res, (int)msg->len);
             rte_free(msg);
             *pmsg = NULL;
             return EDPVS_IO;
@@ -1086,12 +1087,13 @@ static int sockopt_msg_send(int clt_fd,
         const struct dpvs_sock_msg_reply *hdr,
         const char *data, int data_len)
 {
-    int res;
+    int len, res;
 
-    res = send(clt_fd, hdr, sizeof(struct dpvs_sock_msg_reply), MSG_NOSIGNAL);
-    if (sizeof(struct dpvs_sock_msg_reply) != res) {
-        RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg header send error: %s\n",
-                __func__, hdr->id, strerror(errno));
+    len = sizeof(struct dpvs_sock_msg_reply);
+    res = sendn(clt_fd, hdr, len, MSG_NOSIGNAL);
+    if (len != res) {
+        RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg header send error"
+                " -- %d/%d sent\n", __func__, hdr->id, res, len);
         return EDPVS_IO;
     }
 
@@ -1102,10 +1104,10 @@ static int sockopt_msg_send(int clt_fd,
     }
 
     if (data_len) {
-        res = send(clt_fd, data, data_len, MSG_NOSIGNAL);
+        res = sendn(clt_fd, data, data_len, MSG_NOSIGNAL);
         if (data_len != res) {
-            RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg body send error: %s\n",
-                    __func__, hdr->id, strerror(errno));
+            RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg body send error"
+                    " -- %d/%d sent\n", __func__, hdr->id, res, data_len);
             return EDPVS_IO;
         }
     }

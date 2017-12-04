@@ -24,6 +24,7 @@ CC = @CC@
 STRIP = @STRIP@
 LDFLAGS = @LIBS@ @LDFLAGS@ -ldl
 SUBDIRS = core
+DPVSDEPS = ../../../src/common.o
 
 ifeq ($(IPVS_FLAG),_WITH_LVS_)
   SUBDIRS += check
@@ -46,7 +47,7 @@ all:
 	for i in $(SUBDIRS); do \
 	$(MAKE) -C $$i || exit 1; done && \
 	echo "Building $(BIN)/$(EXEC)" && \
-	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(LDFLAGS)
+	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(DPVSDEPS) $(LDFLAGS)
 	$(STRIP) $(BIN)/$(EXEC)
 	@echo ""
 	@echo "Make complete"
@@ -56,7 +57,7 @@ debug:
 	for i in $(SUBDIRS); do \
 	$(MAKE) -C $$i || exit 1; done && \
 	echo "Building $(BIN)/$(EXEC)" && \
-	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(LDFLAGS) -ggdb
+	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(DPVSDEPS) $(LDFLAGS) -ggdb
 	@echo ""
 	@echo "Make complete"
 
@@ -65,7 +66,7 @@ profile:
 	for i in $(SUBDIRS); do \
 	$(MAKE) -C $$i || exit 1; done && \
 	echo "Building $(BIN)/$(EXEC)" && \
-	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(LDFLAGS) -pg
+	$(CC) -o $(BIN)/$(EXEC) `find $(SUBDIRS) ../lib -name '*.[oa]'` $(LDFLAGS) $(DPVSDEPS) -pg
 	@echo ""
 	@echo "Make complete"
 
