@@ -137,6 +137,40 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
  *       unregistered on cleanup stage
  */
 
+#define NETIF_CTRL_BUFFER_LEN     4096
+
+lcoreid_t g_master_lcore_id;
+static uint8_t g_slave_lcore_num;
+static uint8_t g_isol_rx_lcore_num;
+static uint64_t g_slave_lcore_mask;
+static uint64_t g_isol_rx_lcore_mask;
+
+bool is_lcore_id_valid(lcoreid_t cid)
+{
+    if (unlikely(cid >= 63 || cid >= NETIF_MAX_LCORES))
+        return false;
+
+    return ((cid == rte_get_master_lcore()) ||
+            (g_slave_lcore_mask & (1L << cid)) ||
+            (g_isol_rx_lcore_mask & (1L << cid)));
+}
+
+static bool is_lcore_id_fwd(lcoreid_t cid) 
+{
+    if (unlikely(cid >= 63 || cid >= NETIF_MAX_LCORES))
+        return false;
+
+    return ((cid == rte_get_master_lcore()) ||
+            (g_slave_lcore_mask & (1L << cid)));
+}
+
+static inline bool is_port_id_valid(portid_t pid)
+{
+    if (unlikely(pid >= NETIF_MAX_PORTS))
+        return false;
+    return true;
+}
+
 static inline struct port_conf_stream *get_port_conf_stream(const char *name)
 {
     struct port_conf_stream *current_cfg;
@@ -2071,7 +2105,7 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
         rte_pktmbuf_prepend(mbuf,(uint16_t)sizeof(struct ether_hdr));
         if (rte_be_to_cpu_16(arp->arp_op) == ARP_OP_REPLY) {
             for (i = 0; i < NETIF_MAX_LCORES; i++) {
-                if ((i == cid) || (!is_lcore_id_valid(i))
+                if ((i == cid) || (!is_lcore_id_fwd(i))
                      || (i == rte_get_master_lcore()))
                     continue;
                 /*rte_pktmbuf_clone will not clone pkt.data, just copy pointer!*/
