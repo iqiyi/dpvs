@@ -145,7 +145,7 @@ static int qsch_parse(struct dpip_obj *obj, struct dpip_conf *cf)
                    strcmp(CURRARG(cf), "pfifo") == 0 ||
                    strcmp(CURRARG(cf), "tbf") == 0) {
             snprintf(param->kind, TCNAMESIZ, "%s", CURRARG(cf));
-        } else { /* kind must be set adead then QOPTIONS */
+        } else { /* kind must be set ahead then QOPTIONS */
             if (strcmp(&param->kind[1], "fifo") == 0) {
                 if (strcmp(CURRARG(cf), "limit") == 0) {
                     NEXTARG_CHECK(cf, CURRARG(cf));

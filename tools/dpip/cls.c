@@ -57,12 +57,13 @@ static void cls_help(void)
         "    OIF        := \"oif=IFNAME\"\n"
         "\n"
         "Examples:\n"
-        "    dpip cls show dev eth0\n"
-        "    dpip cls add dev eth0 qsch 1:0 prio 255 target 1:1 \\\n"
-        "         match 'tcp,from=192.168.0.1:1-1024,oif=eth1'\n"
-        "    dpip cls add dev eth0 qsch 1:0 pkttype vlan target 1:2 \\\n"
-        "         match 'udp,from=192.168.0.1-192.168.0.20'\n"
-        "    dpip cls del dev eth0 handle 10:1\n"
+        "    dpip cls show dev dpdk0 qsch 1:\n"
+        "    dpip cls add dev dpdk0 qsch 1: \\\n"
+        "         match pattern 'tcp,from=10.0.0.1' target drop\n"
+        "    dpip cls add dev dpdk0 qsch 1: handle 1:10 \\\n"
+        "         match pattern 'tcp,from=192.168.0.1:1-1024,oif=eth1'\\\n"
+        "         target 1:1\n"
+        "    dpip cls del dev dpdk0 qsch 1: handle 1:10\n"
         );
 }
 
