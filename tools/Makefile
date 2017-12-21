@@ -27,9 +27,9 @@ config: keepalived_conf
 
 keepalived_conf:
 	if [ ! -f keepalived/Makefile ]; then \
-		pushd keepalived && \
+		cd keepalived && \
 		./configure && \
-		popd; \
+		cd -; \
 	fi
 
 clean:
