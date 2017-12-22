@@ -188,6 +188,8 @@ int msg_type_table_print(char *buf, int len); /* debug */
 #define MSG_TYPE_STATS_GET                  11
 #define MSG_TYPE_SAPOOL_STATS               12
 #define MSG_TYPE_TC_STATS                   13
+#define MSG_TYPE_CONN_GET                   14
+#define MSG_TYPE_CONN_GET_ALL               15
 
 #define SOCKOPT_VERSION_MAJOR               1
 #define SOCKOPT_VERSION_MINOR               0

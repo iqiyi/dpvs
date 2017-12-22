@@ -165,35 +165,6 @@ static const char* cmdnames[] = {
 	"get-laddr" , 
 };
 
-#if 0
-#define OPT_NONE		0x000000
-#define OPT_NUMERIC		0x000001
-#define OPT_CONNECTION		0x000002
-#define OPT_SERVICE		0x000004
-#define OPT_SCHEDULER		0x000008
-#define OPT_PERSISTENT		0x000010
-#define OPT_NETMASK		0x000020
-#define OPT_SERVER		0x000040
-#define OPT_FORWARD		0x000080
-#define OPT_WEIGHT		0x000100
-#define OPT_UTHRESHOLD		0x000200
-#define OPT_LTHRESHOLD		0x000400
-#define OPT_MCAST		0x000800
-#define OPT_TIMEOUT		0x001000
-#define OPT_DAEMON		0x002000
-#define OPT_STATS		0x004000
-#define OPT_RATE		0x008000
-#define OPT_THRESHOLDS		0x010000
-#define OPT_PERSISTENTCONN	0x020000
-#define OPT_NOSORT		0x040000
-#define OPT_SYNCID		0x080000
-#define OPT_EXACT		0x100000
-#define OPT_ONEPACKET		0x200000
-#define OPT_PERSISTENCE_ENGINE  0x400000
-#define OPT_SCHED_FLAGS		0x800000
-#define NUMBER_OF_OPT		24
-#endif
-
 static const char* optnames[] = {
 	"numeric",
 	"connection",
@@ -221,6 +192,7 @@ static const char* optnames[] = {
 	"local-address" , 
 	"synproxy" , 
 	"ifname" , 
+	"sockpair" ,
 };
 
 /*
@@ -233,24 +205,24 @@ static const char* optnames[] = {
  */
 static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 {
-      /*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr syn ifname  */
-/*ADD*/     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', ' ', 'x'},
-/*EDIT*/    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', ' ', 'x'},
-/*DEL*/     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*FLUSH*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*LIST*/    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x'},
-/*ADDSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*DELSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*EDITSRV*/ {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*TIMEOUT*/ {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*STARTD*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*STOPD*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*RESTORE*/ {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*SAVE*/    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*ZERO*/    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*ADDLADDR*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', '+'},
-/*DELLADDR*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', '+'},
-/*GETLADDR*/{'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+      /*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr syn ifname sockpair */
+/*ADD*/     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', ' ', 'x' ,'x'},
+/*EDIT*/    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', ' ', 'x', 'x'},
+/*DEL*/     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*FLUSH*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*LIST*/    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', ' '},
+/*ADDSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*DELSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*EDITSRV*/ {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*TIMEOUT*/ {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*STARTD*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*STOPD*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*RESTORE*/ {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*SAVE*/    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*ZERO*/    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*ADDLADDR*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', '+', 'x'},
+/*DELLADDR*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', '+', 'x'},
+/*GETLADDR*/{'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
 };
 
 /* printing format flags */
@@ -272,9 +244,7 @@ static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 #define DEF_SCHED		"wlc"
 
 /* default multicast interface name */
-#define DEF_MCAST_IFN		"eth0"
-
-#define CONN_PROC_FILE		"/proc/net/ip_vs_conn"
+#define DEF_MCAST_IFN		"dpdk0"
 
 struct ipvs_command_entry {
 	int			cmd;
@@ -283,6 +253,7 @@ struct ipvs_command_entry {
 	ipvs_timeout_t		timeout;
 	ipvs_daemon_t		daemon;
 	ipvs_laddr_t		laddr;
+	ipvs_sockpair_t		sockpair;
 };
 
 /* Use values outside ASCII range so that if an option has
@@ -302,6 +273,7 @@ enum {
 	TAG_SORT,
 	TAG_NO_SORT,
 	TAG_PERSISTENCE_ENGINE,
+	TAG_SOCKPAIR,
 };
 
 /* various parsing helpers & parsing functions */
@@ -319,6 +291,7 @@ static int parse_service(char *buf, ipvs_service_t *svc);
 static int parse_netmask(char *buf, u_int32_t *addr);
 static int parse_timeout(char *buf, int min, int max);
 static unsigned int parse_fwmark(char *buf);
+static int parse_sockpair(char *buf, ipvs_sockpair_t *sockpair);
 static int parse_match(const char *buf, ipvs_service_t *svc);
 
 /* check the options based on the commands_v_options table */
@@ -333,7 +306,9 @@ static void version(FILE *stream);
 static void fail(int err, char *msg, ...);
 
 /* various listing functions */
-static void list_conn(unsigned int format);
+static void list_conn(int is_template, unsigned int format);
+static void list_conn_sockpair(int is_template,
+		ipvs_sockpair_t *sockpair, unsigned int format);
 static void list_service(ipvs_service_t *svc, unsigned int format);
 static void list_all(unsigned int format);
 static void list_timeout(void);
@@ -447,6 +422,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		   TAG_THRESHOLDS, NULL, NULL },
 		{ "persistent-conn", '\0', POPT_ARG_NONE, NULL,
 		  TAG_PERSISTENTCONN, NULL, NULL },
+		{ "sockpair", '\0', POPT_ARG_STRING, &optarg,
+		  TAG_SOCKPAIR, NULL, NULL },
 		{ "nosort", '\0', POPT_ARG_NONE, NULL,
 		   TAG_NO_SORT, NULL, NULL },
 		{ "sort", '\0', POPT_ARG_NONE, NULL, TAG_SORT, NULL, NULL },
@@ -693,8 +670,14 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			set_option(options, OPT_PERSISTENTCONN);
 			*format |= FMT_PERSISTENTCONN;
 			break;
+		case TAG_SOCKPAIR:
+			set_option(options, OPT_SOCKPAIR);
+			parse = parse_sockpair(optarg, &ce->sockpair);
+			if (parse != 1)
+				fail(2, "illegal sockpair<af:sip:sport:tip:tport> specified");
+			break;
 		case TAG_NO_SORT:
-			set_option(options, OPT_NOSORT	);
+			set_option(options, OPT_NOSORT);
 			*format |= FMT_NOSORT;
 			break;
 		case TAG_SORT:
@@ -876,7 +859,11 @@ static int process_options(int argc, char **argv, int reading_stdin)
 			fail(2, "options conflicts in the list command");
 
 		if (options & OPT_CONNECTION)
-			list_conn(format);
+            if (options & OPT_SOCKPAIR)
+                list_conn_sockpair(options & OPT_PERSISTENTCONN,
+						&ce.sockpair, format);
+            else
+                list_conn(options & OPT_PERSISTENTCONN, format);
 		else if (options & OPT_SERVICE)
 			list_service(&ce.svc, format);
 		else if (options & OPT_TIMEOUT)
@@ -1104,7 +1091,74 @@ parse_service(char *buf, ipvs_service_t *svc)
 
 	return result;
 }
+/*
+ * Get sockpair from the arguments.
+ * sockpair := PROTO:SIP:SPORT:TIP:TPORT
+ * PROTO := [tcp|udp]
+ * SIP,TIP := dotted-decimal ip address
+ * SPORT,TPORT := range(0, 65535)
+ */
+static int
+parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
+{
+    char *pos = buf, *end;
+    int af = AF_INET;
+    struct in_addr sip, tip;
+    unsigned short proto, sport, tport;
+    long portn;
 
+    memset(sockpair, 0, sizeof(ipvs_sockpair_t));
+
+	end = strchr(pos,':');
+	if (!end)
+		return 0;
+	*end++ = '\0';
+	if (strncmp(pos, "tcp", 3) == 0)
+		proto = IPPROTO_TCP;
+	else if (strncmp(pos, "udp", 3) == 0)
+		proto = IPPROTO_UDP;
+	else
+		return 0;
+
+	pos = end;
+    end = strchr(pos, ':');
+    if (!end)
+        return 0;
+    *end++ = '\0';
+    if (inet_pton(af, pos, &sip) != 1)
+        return 0;
+
+    pos = end;
+    end = strchr(pos, ':');
+    if (!end)
+        return 0;
+    *end++ = '\0';
+    if ((portn = string_to_number(pos, 0, 65535)) == -1)
+        return 0;
+    sport = portn;
+
+    pos = end;
+    end = strchr(pos, ':');
+    if (!end)
+        return 0;
+    *end++ = '\0';
+    if (inet_pton(af, pos, &tip) != 1)
+        return 0;
+
+    pos = end;
+    if ((portn = string_to_number(pos, 0, 65535)) == -1)
+        return 0;
+    tport = portn;
+
+    sockpair->af = af;
+	sockpair->proto = proto;
+    sockpair->sip = sip.s_addr;
+    sockpair->sport = ntohs(sport);
+    sockpair->tip = tip.s_addr;
+    sockpair->tport = ntohs(tport);
+
+    return 1;
+}
 /*
  * comma separated parameters list, all fields is used to match packets.
  *
@@ -1319,6 +1373,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --exact                             expand numbers (display exact values)\n"
 		"  --thresholds                        output of thresholds information\n"
 		"  --persistent-conn                   output of persistent connection info\n"
+		"  --sockpair                          output connection info of specified socket pair (proto:sip:sport:tip:tport)"
 		"  --nosort                            disable sorting output of service/server entries\n"
 		"  --sort                              does nothing, for backwards compatibility\n"
 		"  --ops          -o                   one-packet scheduling\n"
@@ -1409,116 +1464,98 @@ static void check_ipvs_version(void)
 }
 #endif
 
-static void print_conn(char *buf, unsigned int format)
+static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
+		unsigned int format)
 {
-	char            protocol[8];
-	unsigned short  proto;
-	union nf_inet_addr  caddr;
-	unsigned short  cport;
-	union nf_inet_addr  vaddr;
-	unsigned short  vport;
-	union nf_inet_addr  daddr;
-	unsigned short  dport;
-	char            state[16];
-	unsigned int    expires;
-	unsigned short  af = AF_INET;
-	char		pe_name[IP_VS_PENAME_MAXLEN];
-	char		pe_data[IP_VS_PEDATA_MAXLEN];
+	char *cname, *vname, *lname, *dname;
+	char proto_str[8], time_str[8];
+	union inet_addr addr;
 
-	int n;
-	char temp1[INET6_ADDRSTRLEN], temp2[INET6_ADDRSTRLEN], temp3[INET6_ADDRSTRLEN];
-	char *cname, *vname, *dname;
-	unsigned int	minutes, seconds;
-	char		expire_str[12];
-
-	if ((n = sscanf(buf, "%s %s %hX %s %hX %s %hX %s %d %s %s",
-			protocol, temp1, &cport, temp2, &vport,
-			temp3, &dport, state, &expires,
-			pe_name, pe_data)) == -1)
-		exit(1);
-
-	if (strcmp(protocol, "TCP") == 0)
-		proto = IPPROTO_TCP;
-	else if (strcmp(protocol, "UDP") == 0)
-		proto = IPPROTO_UDP;
-	else if (strcmp(protocol, "ICMP") == 0)
-		proto = IPPROTO_ICMP;
+	if (conn_entry->proto == IPPROTO_TCP)
+		snprintf(proto_str, sizeof(proto_str), "%s", "tcp");
+	else if (conn_entry->proto == IPPROTO_UDP)
+		snprintf(proto_str, sizeof(proto_str), "%s", "udp");
 	else
-		proto = 0;
+		snprintf(proto_str, sizeof(proto_str), "%s", "--");
 
-	if (inet_pton(AF_INET6, temp1, &caddr.in6) > 0) {
-		inet_pton(AF_INET6, temp2, &vaddr.in6);
-		inet_pton(AF_INET6, temp3, &daddr.in6);
-		af = AF_INET6;
-	} else if (inet_pton(AF_INET, temp1, &caddr.ip) > 0) {
-		inet_pton(AF_INET, temp2, &vaddr.ip);
-		inet_pton(AF_INET, temp3, &daddr.ip);
-	} else {
-		caddr.ip = (__u32) htonl(strtoul(temp1, NULL, 16));
-		vaddr.ip = (__u32) htonl(strtoul(temp2, NULL, 16));
-		daddr.ip = (__u32) htonl(strtoul(temp3, NULL, 16));
-	}
+	snprintf(time_str, sizeof(time_str), "%ds", conn_entry->timeout);
 
-	if (!(cname = addrport_to_anyname(af, &caddr, cport, proto, format)))
-		exit(1);
-	if (!(vname = addrport_to_anyname(af, &vaddr, vport, proto, format)))
-		exit(1);
-	if (!(dname = addrport_to_anyname(af, &daddr, dport, proto, format)))
-		exit(1);
+	addr.in.s_addr = conn_entry->caddr;
+	if (!(cname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->cport),
+					conn_entry->proto, format)))
+		goto exit;
+	addr.in.s_addr = conn_entry->vaddr;
+	if (!(vname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->vport),
+					conn_entry->proto, format)))
+		goto exit;
+	addr.in.s_addr = conn_entry->laddr;
+	if (!(lname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->lport),
+					conn_entry->proto, format)))
+		goto exit;
+	addr.in.s_addr = conn_entry->daddr;
+	if (!(dname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->dport),
+					conn_entry->proto, format)))
+		goto exit;
 
-	seconds = expires % 60;
-	minutes = expires / 60;
-	sprintf(expire_str, "%02d:%02d", minutes, seconds);
-
-	if (format & FMT_PERSISTENTCONN && n == 11)
-		printf("%-3s %-6s %-11s %-18s %-18s %-16s %-18s %s\n",
-		       protocol, expire_str, state, cname, vname, dname,
-		       pe_name, pe_data);
-	else
-		printf("%-3s %-6s %-11s %-18s %-18s %s\n",
-		       protocol, expire_str, state, cname, vname, dname);
-
-	free(cname);
-	free(vname);
-	free(dname);
+	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
+			conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
+			cname, vname, lname, dname);
+exit:
+	if (cname)
+		free(cname);
+	if (vname)
+		free(vname);
+	if (lname)
+		free(lname);
+	if (dname)
+		free(dname);
 }
 
-
-void list_conn(unsigned int format)
+static void list_conn(int is_template, unsigned int format)
 {
-	static char buffer[256];
-	FILE *handle;
+    struct ip_vs_conn_array *conn_array;
+    struct ip_vs_conn_req req;
+    int i, more = 0;
 
-	handle = fopen(CONN_PROC_FILE, "r");
-	if (!handle) {
-		fprintf(stderr, "cannot open file %s\n", CONN_PROC_FILE);
-		exit(1);
-	}
+    memset(&req, 0, sizeof(struct ip_vs_conn_req));
+    if (is_template)
+        req.flag |= GET_IPVS_CONN_FLAG_TEMPLATE;
+    req.flag |= GET_IPVS_CONN_FLAG_ALL;
 
-	/* read the first line */
-	if (fgets(buffer, sizeof(buffer), handle) == NULL) {
-		fprintf(stderr, "unexpected input from %s\n",
-			CONN_PROC_FILE);
-		exit(1);
-	}
-	printf("IPVS connection entries\n");
-	if (format & FMT_PERSISTENTCONN)
-		printf("pro expire %-11s %-18s %-18s %-18s %-16s %s\n",
-		       "state", "source", "virtual", "destination",
-		       "pe name", "pe_data");
-	else
-		printf("pro expire %-11s %-18s %-18s %s\n",
-		       "state", "source", "virtual", "destination");
+    while((conn_array = ip_vs_get_conns(&req)) != NULL) {
+		for (i = 0; i < conn_array->nconns; i++)
+			print_conn_entry(&conn_array->array[i], format);
+        req.whence = conn_array->curcid;
+        more = conn_array->resl & GET_IPVS_CONN_FLAG_MORE;
+        free(conn_array);
+        if (!more)
+            break;
+        req.flag |= GET_IPVS_CONN_FLAG_MORE;
+    }
 
-	/*
-	 * Print the VS information according to the format
-	 */
-	while (!feof(handle)) {
-		if (fgets(buffer, sizeof(buffer), handle))
-			print_conn(buffer, format);
-	}
+    if (more)
+        fprintf(stderr, "Fail to fetch all connection entries!\n");
+}
 
-	fclose(handle);
+static void list_conn_sockpair(int is_template,
+		ipvs_sockpair_t *sockpair, unsigned int format)
+{
+    struct ip_vs_conn_array *conn_array;
+    struct ip_vs_conn_req req;
+
+    memset(&req, 0, sizeof(struct ip_vs_conn_req));
+    req.flag = GET_IPVS_CONN_FLAG_SPECIFIED;
+    if (is_template)
+        req.flag |= GET_IPVS_CONN_FLAG_TEMPLATE;
+    memcpy(&req.sockpair, sockpair, sizeof(ipvs_sockpair_t));
+
+    conn_array = ip_vs_get_conns(&req);
+    if (conn_array == NULL) {
+        fprintf(stderr, "connection specified not found\n");
+        return;
+    }
+	print_conn_entry(&conn_array->array[0], format);
+    free(conn_array);
 }
 
 
