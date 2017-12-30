@@ -11,7 +11,6 @@ cscope*
 filenametags
 build/
 bin/
-dpdk-*
 tools/ipvsadm/ipvsadm
 tools/keepalived/Makefile
 tools/keepalived/bin/genhash
