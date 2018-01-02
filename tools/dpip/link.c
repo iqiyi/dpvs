@@ -324,13 +324,13 @@ static int dump_nic_stats(portid_t pid)
 
     assert(len == sizeof(netif_nic_stats_get_t));
 
-    printf("    %-16s%-16s%-16s%-16s\n",
+    printf("    %-20s%-20s%-20s%-20s\n",
             "ipackets", "opackets", "ibytes", "obytes");
-    printf("    %-16lu%-16lu%-16lu%-16lu\n",
+    printf("    %-20lu%-20lu%-20lu%-20lu\n",
             get.ipackets, get.opackets, get.ibytes, get.obytes);
-    printf("    %-16s%-16s%-16s%-16s\n",
+    printf("    %-20s%-20s%-20s%-20s\n",
             "ierrors", "oerrors", "imissed", "rx_nombuf");
-    printf("    %-16lu%-16lu%-16lu%-16lu\n",
+    printf("    %-20lu%-20lu%-20lu%-20lu\n",
             get.ierrors, get.oerrors, get.imissed, get.rx_nombuf);
 
     /* Is necessary to display per-queue statistics? */
@@ -341,8 +341,8 @@ static int dump_nic_stats(portid_t pid)
     if (err != EDPVS_OK || !p_mbufpool_get || !len)
         return err;
     assert(len == sizeof(netif_nic_mbufpool_t));
-    printf("    %-16s%-16s\n", "mbuf-avail", "mbuf-inuse");
-    printf("    %-16u%-16u\n", p_mbufpool_get->available, p_mbufpool_get->inuse);
+    printf("    %-20s%-20s\n", "mbuf-avail", "mbuf-inuse");
+    printf("    %-20u%-20u\n", p_mbufpool_get->available, p_mbufpool_get->inuse);
     dpvs_sockopt_msg_free(p_mbufpool_get);
 
     return EDPVS_OK;
@@ -578,19 +578,19 @@ static int dump_cpu_stats(lcoreid_t cid)
     get = *p_get;
     dpvs_sockopt_msg_free(p_get);
 
-    printf("    %-16s%-16s%-16s%-16s\n",
+    printf("    %-20s%-20s%-20s%-20s\n",
             "lcore_loop", "pktburst", "zpktburst", "fpktburst");
-    printf("    %-16lu%-16lu%-16lu%-16lu\n",
+    printf("    %-20lu%-20lu%-20lu%-20lu\n",
             get.lcore_loop, get.pktburst, get.zpktburst, get.fpktburst);
 
-    printf("    %-16s%-16s%-16s\n",
+    printf("    %-20s%-20s%-20s\n",
             "z2hpktburst", "h2fpktburst", "dropped");
-    printf("    %-16lu%-16lu%-16lu\n",
+    printf("    %-20lu%-20lu%-20lu\n",
             get.z2hpktburst, get.h2fpktburst, get.dropped);
 
-    printf("    %-16s%-16s%-16s%-16s\n",
+    printf("    %-20s%-20s%-20s%-20s\n",
             "ipackets", "ibytes", "opackets", "obytes");
-    printf("    %-16lu%-16lu%-16lu%-16lu\n",
+    printf("    %-20lu%-20lu%-20lu%-20lu\n",
             get.ipackets, get.ibytes, get.opackets, get.obytes);
 
     return EDPVS_OK;
