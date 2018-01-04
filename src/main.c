@@ -31,6 +31,7 @@
 #include "sa_pool.h"
 #include "ipvs/ipvs.h"
 #include "cfgfile.h"
+#include "ip_tunnel.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
@@ -145,6 +146,9 @@ int main(int argc, char *argv[])
     if ((err = sa_pool_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init sa_pool: %s\n", dpvs_strerror(err));
 
+    if ((err = ip_tunnel_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init tunnel: %s\n", dpvs_strerror(err));
+
     if ((err = dp_vs_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init ipvs: %s\n", dpvs_strerror(err));
 
@@ -214,6 +218,8 @@ end:
                  dpvs_strerror(err));
     if ((err = dp_vs_term()) != EDPVS_OK)
         RTE_LOG(ERR, DPVS, "Fail to term ipvs: %s\n", dpvs_strerror(err));
+    if ((err = ip_tunnel_term()) != EDPVS_OK)
+        RTE_LOG(ERR, DPVS, "Fail to term tunnel: %s\n", dpvs_strerror(err));
     if ((err = sa_pool_term()) != EDPVS_OK)
         RTE_LOG(ERR, DPVS, "Fail to term sa_pool: %s\n", dpvs_strerror(err));
     if ((err = inet_term()) != EDPVS_OK)

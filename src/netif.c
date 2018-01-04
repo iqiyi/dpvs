@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <sys/ioctl.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
@@ -2059,6 +2060,19 @@ static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
     return ETH_PKT_OTHERHOST;
 }
 
+int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf)
+{
+    struct pkt_type *pt;
+    assert(dev && mbuf && mbuf->port <= NETIF_MAX_PORTS);
+
+    pt = pkt_type_get(eth_type, dev);
+    if (!pt)
+        return EDPVS_KNICONTINUE;
+
+    mbuf->l2_len = sizeof(struct iphdr); /* make sense ? */
+
+    return pt->func(mbuf, dev);
+}
 
 /*for arp process*/
 static struct rte_ring *arp_ring[NETIF_MAX_LCORES];
@@ -2626,6 +2640,7 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
         snprintf(dev->name, sizeof(dev->name), "%s", namefmt);
 
     dev->socket = SOCKET_ID_ANY;
+    dev->hw_header_len = sizeof(struct ether_hdr);
 
     if (setup)
         setup(dev);
@@ -2799,6 +2814,7 @@ static struct netif_port* netif_port_alloc(portid_t id, int nrxq,
     port->nrxq = nrxq; // port_rx_queues_get();
     port->ntxq = ntxq; // port_tx_queues_get();
     port->socket = rte_eth_dev_socket_id(id);
+    port->hw_header_len = sizeof(struct ether_hdr);
     if (port->socket == SOCKET_ID_ANY)
         port->socket = rte_socket_id();
     port->mbuf_pool = pktmbuf_pool[port->socket]; 
@@ -3304,6 +3320,8 @@ int netif_port_register(struct netif_port *port)
 {
     struct netif_port *cur;
     int hash, nhash;
+    int err = EDPVS_OK;
+
     if (unlikely(NULL == port))
         return EDPVS_INVAL;
 
@@ -3325,7 +3343,10 @@ int netif_port_register(struct netif_port *port)
     list_add_tail(&port->nlist, &port_ntab[nhash]);
     g_nports++;
 
-    return EDPVS_OK;
+    if (port->netif_ops->op_init)
+        err = port->netif_ops->op_init(port);
+
+    return err;
 }
 
 int netif_port_unregister(struct netif_port *port)

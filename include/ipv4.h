@@ -22,7 +22,10 @@
 #include "netif.h"
 #include "route.h"
 
-#define IPPROTO_OSPF    89 /* OSPF protocol */
+#define IPPROTO_OSPF        89 /* OSPF protocol */
+
+#define INET_DEF_TTL        64
+
 int ipv4_init(void);
 int ipv4_term(void);
 
@@ -190,6 +193,9 @@ struct ip4_stats {
 
 int ipv4_get_stats(struct ip4_stats *stats);
 int ip4_defrag(struct rte_mbuf *mbuf, int user);
+
+uint32_t ip4_select_id(struct ipv4_hdr *iph);
+int ipv4_local_out(struct rte_mbuf *mbuf);
 
 /* helper functions */
 static inline struct ipv4_hdr *ip4_hdr(const struct rte_mbuf *mbuf)

@@ -186,7 +186,7 @@ int ipv4_reassamble(struct rte_mbuf *mbuf)
 	if (!asm_mbuf) /* no way to distinguish error and in-progress */
 		return EDPVS_INPROGRESS;
 
-	rte_pktmbuf_adj(asm_mbuf, sizeof(struct ether_hdr));
+	rte_pktmbuf_adj(asm_mbuf, mbuf->l2_len);
 
 	/* as kernel, make this frag as heading mbuf.
 	 * the latest fragment (mbuf) should be linear. */

@@ -173,6 +173,7 @@ typedef enum {
     PORT_TYPE_BOND_MASTER,
     PORT_TYPE_BOND_SLAVE,
     PORT_TYPE_VLAN,
+    PORT_TYPE_TUNNEL,
     PORT_TYPE_INVAL,
 } port_type_t;
 
@@ -248,6 +249,7 @@ struct netif_port {
     struct ether_addr       addr;                       /* MAC address */
     struct netif_hw_addr_list mc;                       /* HW multicast list */
     int                     socket;                     /* socket id */
+    int                     hw_header_len;              /* HW header length */
     uint16_t                mtu;                        /* device mtu */
     struct rte_mempool      *mbuf_pool;                 /* packet mempool */
     struct rte_eth_dev_info dev_info;                   /* PCI Info + driver name */
@@ -268,6 +270,7 @@ struct netif_port {
 /**************************** lcore API *******************************/
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
+int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf);
 int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
 void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask);
@@ -319,7 +322,7 @@ void install_netif_keywords(void);
 /*************************** kni api *******************************/
 void kni_process_on_master(void);
 
-static inline void *netif_get_priv(struct netif_port *dev)
+static inline void *netif_priv(struct netif_port *dev)
 {
     return (char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
 }

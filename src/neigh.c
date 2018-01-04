@@ -449,6 +449,8 @@ static void neigh_fill_mac(struct neighbour_entry *neighbour, struct rte_mbuf *m
 {
     struct ether_hdr *eth;
     uint16_t pkt_type;
+
+    m->l2_len = sizeof(struct ether_hdr);
     eth = (struct ether_hdr *)rte_pktmbuf_prepend(m, (uint16_t)sizeof(struct ether_hdr));
     ether_addr_copy(&neighbour->eth_addr,&eth->d_addr);
     ether_addr_copy(&neighbour->port->addr,&eth->s_addr);
@@ -504,6 +506,8 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
         ipaddr = arp->arp_data.arp_sip;
         arp->arp_data.arp_sip = arp->arp_data.arp_tip;
         arp->arp_data.arp_tip = ipaddr;
+        m->l2_len = sizeof(struct ether_hdr);
+        m->l3_len = sizeof(struct arp_hdr);
  
         netif_xmit(m, port);
         return EDPVS_OK;
@@ -566,6 +570,8 @@ static int neigh_send_arp(struct netif_port *port, uint32_t src_ip, uint32_t dst
     arp->arp_op  = htons(ARP_OP_REQUEST);
     m->pkt_len   = 60;
     m->data_len  = 60;
+    m->l2_len    = sizeof(struct ether_hdr);
+    m->l3_len    = sizeof(struct arp_hdr);
 
     memset(&arp[1], 0, 18);
 
