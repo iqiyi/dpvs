@@ -41,7 +41,7 @@ To make things easier, we do not consider virtual devices for now. Thus, *two-ar
 * `/etc/dpvs.conf` should also be configured with two interfaces. Pls refer the file `conf/dpvs.conf.sample`.
 
 ```
-$ dpdk-devbind --st
+$ dpdk-devbind --status
 
 Network devices using DPDK-compatible driver
 ============================================
