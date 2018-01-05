@@ -2250,7 +2250,9 @@ static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbu
             eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
         }
         /* handler should free mbuf */
-        netif_deliver_mbuf(mbuf, eth_hdr->ether_type, dev, cid, qconf, pkts_from_ring);
+        netif_deliver_mbuf(mbuf, eth_hdr->ether_type, dev, qconf,
+                           (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) ? true:false,
+                           cid, pkts_from_ring);
 
         lcore_stats[cid].ibytes += mbuf->pkt_len;
         lcore_stats[cid].ipackets++;
@@ -3805,23 +3807,6 @@ static uint8_t g_slave_lcore_num;
 static uint8_t g_isol_rx_lcore_num;
 static uint64_t g_slave_lcore_mask;
 static uint64_t g_isol_rx_lcore_mask;
-
-inline bool is_lcore_id_valid(lcoreid_t cid)
-{
-    if (unlikely(cid >= 63 || cid >= NETIF_MAX_LCORES))
-        return false;
-
-    return ((cid == rte_get_master_lcore()) ||
-            (g_slave_lcore_mask & (1L << cid)) ||
-            (g_isol_rx_lcore_mask & (1L << cid)));
-}
-
-static inline bool is_port_id_valid(portid_t pid)
-{
-    if (unlikely(pid >= NETIF_MAX_PORTS))
-        return false;
-    return true;
-}
 
 static int get_lcore_mask(void **out, size_t *out_len)
 {
