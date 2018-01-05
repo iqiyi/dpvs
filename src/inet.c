@@ -77,17 +77,6 @@ bool inet_addr_equal(int af, const union inet_addr *a1,
     }
 }
 
-const char *inet_proto_name(uint8_t proto)
-{
-    const static char *proto_names[256] = {
-        [IPPROTO_TCP]   = "TCP",
-        [IPPROTO_UDP]   = "UDP",
-        [IPPROTO_ICMP]  = "ICMP",
-    };
-
-    return proto_names[proto] ? proto_names[proto] : "<unknow>";
-}
-
 bool inet_is_addr_any(int af, const union inet_addr *addr)
 {
     switch (af) {
@@ -144,75 +133,4 @@ bool inet_addr_same_net(int af, uint8_t plen,
     default:
         return false;
     }
-}
-
-/* ip1[-ip2][:port1[-port2]] */
-int inet_addr_range_parse(int af, const char *param,
-                          struct inet_addr_range *range)
-{
-    char _param[256], *ips, *ports;
-    char *ip1, *ip2, *port1, *port2;
-
-    if (af != AF_INET)
-        return EDPVS_NOTSUPP;
-
-    if (strlen(param) == 0)
-        return EDPVS_OK; /* return asap */
-
-    snprintf(_param, sizeof(_param), "%s", param);
-    ports = strrchr(_param, ':');
-    if (ports)
-        *ports++ = '\0';
-    ips = _param;
-
-    ip1 = ips;
-    ip2 = strrchr(ips, '-');
-    if (ip2)
-        *ip2++ = '\0';
-
-    if (ports) {
-        port1 = ports;
-        port2 = strrchr(ports, '-');
-        if (port2)
-            *port2++ = '\0';
-    } else {
-        port1 = port2 = NULL;
-    }
-
-    memset(range, 0, sizeof(*range));
-
-    if (strlen(ip1) && inet_pton(AF_INET, ip1, &range->min_addr.in) <= 0)
-        return EDPVS_INVAL;
-
-    if (ip2 && strlen(ip2)) {
-       if  (inet_pton(AF_INET, ip2, &range->max_addr.in) <= 0)
-           return EDPVS_INVAL;
-    } else {
-        range->max_addr = range->min_addr;
-    }
-
-    if (port1 && strlen(port1))
-        range->min_port = htons(atoi(port1));
-
-    if (port2 && strlen(port2))
-        range->max_port = htons(atoi(port2));
-    else
-        range->max_port = range->min_port;
-
-    return EDPVS_OK;
-}
-
-void inet_addr_range_dump(int af, const struct inet_addr_range *range,
-                          char *buf, size_t size)
-{
-    char min_ip[64], max_ip[64];
-    char min_port[16], max_port[16];
-
-    inet_ntop(af, &range->min_addr, min_ip, sizeof(min_ip));
-    inet_ntop(af, &range->max_addr, max_ip, sizeof(max_ip));
-    snprintf(min_port, sizeof(min_port), "%u",  ntohs(range->min_port));
-    snprintf(max_port, sizeof(max_port), "%u",  ntohs(range->max_port));
-
-    snprintf(buf, size, "%s-%s:%s-%s", min_ip, max_ip, min_port, max_port);
-    return;
 }

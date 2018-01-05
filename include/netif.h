@@ -21,19 +21,24 @@
 #include "dpdk.h"
 #include "inetaddr.h"
 #include "timer.h"
+#include "tc/tc.h"
 
 #define RTE_LOGTYPE_NETIF RTE_LOGTYPE_USER1
 
-#define NETIF_PORT_FLAG_ENABLED             0x1<<0
-#define NETIF_PORT_FLAG_RUNNING             0x1<<1
-#define NETIF_PORT_FLAG_STOPPED             0x1<<2
-#define NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD  0x1<<3
-#define NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD  0x1<<4
-#define NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD 0x1<<5
-#define NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD 0x1<<6
-#define NETIF_PORT_FLAG_TX_VLAN_INSERT_OFFLOAD  0x1<<7
-#define NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD   0x1<<8
-#define NETIF_PORT_FLAG_FORWARD2KNI   0x1<<9
+enum {
+    NETIF_PORT_FLAG_ENABLED                 = 0x1<<0,
+    NETIF_PORT_FLAG_RUNNING                 = 0x1<<1,
+    NETIF_PORT_FLAG_STOPPED                 = 0x1<<2,
+    NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD      = 0x1<<3,
+    NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD      = 0x1<<4,
+    NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD     = 0x1<<5,
+    NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD     = 0x1<<6,
+    NETIF_PORT_FLAG_TX_VLAN_INSERT_OFFLOAD  = 0x1<<7,
+    NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD   = 0x1<<8,
+    NETIF_PORT_FLAG_FORWARD2KNI             = 0x1<<9,
+    NETIF_PORT_FLAG_TC_EGRESS               = 0x1<<10,
+    NETIF_PORT_FLAG_TC_INGRESS              = 0x1<<11,
+};
 
 /* max tx/rx queue number for each nic */
 #define NETIF_MAX_QUEUES            16
@@ -255,14 +260,14 @@ struct netif_port {
     struct inet_device      *in6_ptr;
     struct netif_kni        kni;                        /* kni device */
     union netif_bond        *bond;                      /* bonding conf */
-
     struct vlan_info        *vlan_info;                 /* VLANs info for real device */
-
+    struct netif_tc         tc;                         /* traffic control */
     struct netif_ops        *netif_ops;
 } __rte_cache_aligned;
 
 /**************************** lcore API *******************************/
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
 int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
 void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask);
@@ -273,6 +278,7 @@ int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);
 int netif_lcore_loop_job_register(struct netif_lcore_loop_job *lcore_job);
 int netif_lcore_loop_job_unregister(struct netif_lcore_loop_job *lcore_job);
 int netif_lcore_start(void);
+bool is_lcore_id_valid(lcoreid_t cid);
 
 /************************** protocol API *****************************/
 int netif_register_pkt(struct pkt_type *pt);
@@ -316,6 +322,11 @@ void kni_process_on_master(void);
 static inline void *netif_get_priv(struct netif_port *dev)
 {
     return (char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
+}
+
+static inline struct netif_tc *netif_tc(struct netif_port *dev)
+{
+    return &dev->tc;
 }
 
 struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,

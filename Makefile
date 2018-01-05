@@ -16,7 +16,7 @@
 #
 
 #
-# Makefile for DPDK-VS (dpvs)
+# Makefile for DPVS
 #
 MAKE	= make
 CC 		= gcc
@@ -38,4 +38,3 @@ clean:
 install:all
 	-mkdir -p $(INSDIR)
 	for i in $(SUBDIRS); do $(MAKE) -C $$i install || exit 1; done
-	install -m 744 src/build/dpvs $(INSDIR)/dpvs

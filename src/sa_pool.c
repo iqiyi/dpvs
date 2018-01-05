@@ -585,7 +585,7 @@ int sa_release(const struct netif_port *dev, const struct sockaddr_in *daddr,
 int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats)
 {
     struct dpvs_msg *req, *reply;
-    struct dpvs_multicast_queue *replys = NULL;
+    struct dpvs_multicast_queue *replies = NULL;
     int err;
 
     memset(stats, 0, sizeof(*stats));
@@ -600,7 +600,7 @@ int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats)
     if (!req)
         return EDPVS_NOMEM;
 
-    err = multicast_msg_send(req, 0, &replys);
+    err = multicast_msg_send(req, 0, &replies);
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, SAPOOL, "%s: mc msg send fail: %s\n", __func__,
                 dpvs_strerror(err));
@@ -608,7 +608,7 @@ int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats)
         return err;
     }
 
-    list_for_each_entry(reply, &replys->mq, mq_node) {
+    list_for_each_entry(reply, &replies->mq, mq_node) {
         struct sa_pool_stats *st = (struct sa_pool_stats *)reply->data;
         assert(st);
 

@@ -108,7 +108,7 @@ static struct route_entry *route_new_entry(struct in_addr* dest,
     else
         new_route->mtu = port->mtu;
     new_route->metric = metric;
-    rte_atomic32_set(&new_route->refcnt, 1);
+    rte_atomic32_set(&new_route->refcnt, 0);
     return new_route;
     
 }
@@ -150,13 +150,10 @@ static int route_net_add(struct in_addr *dest, uint8_t netmask, uint32_t flag,
 static int route_net_del(struct route_entry *route)
 {
     if (route){
-        if (rte_atomic32_read(&route->refcnt) == 2){
-            list_del(&route->list);
-            rte_free(route);
-            rte_atomic32_dec(&this_num_routes);
-        }
-        else
-            RTE_LOG(INFO, ROUTE, "[%s] using route, delete entry later\n", __func__);
+        DPVS_WAIT_WHILE(rte_atomic32_read(&route->refcnt) > 2);
+        list_del(&route->list);
+        rte_free(route);
+        rte_atomic32_dec(&this_num_routes);
         return EDPVS_OK;
     }
     return EDPVS_NOTEXIST;
@@ -256,13 +253,10 @@ static int route_local_add(struct in_addr* dest, uint8_t netmask, uint32_t flag,
 static int route_local_del(struct route_entry *route)
 {
     if(route){
-        if (rte_atomic32_read(&route->refcnt) == 2){
-            route_local_unhash(route);
-            rte_free(route);
-            rte_atomic32_dec(&this_num_routes);
-        }
-        else
-            RTE_LOG(INFO, ROUTE, "[%s] using route, delete entry later\n", __func__);
+        DPVS_WAIT_WHILE(rte_atomic32_read(&route->refcnt) > 2);
+        route_local_unhash(route);
+        rte_free(route);
+        rte_atomic32_dec(&this_num_routes);
         return EDPVS_OK;
     }
     return EDPVS_NOTEXIST;
@@ -290,15 +284,11 @@ static int route_del_lcore(struct in_addr* dest,uint8_t netmask, uint32_t flag,
     int error;
     if(flag & RTF_LOCALIN || (flag & RTF_KNI)){
         route = route_local_lookup(dest->s_addr, port);
-        if(route)
-            rte_atomic32_dec(&route->refcnt);
         error = route_local_del(route);
         return error;
     }
     if(flag & RTF_FORWARD || (flag & RTF_DEFAULT)){
         route = route_net_lookup(port, dest, netmask);
-        if(route)
-            rte_atomic32_dec(&route->refcnt);
         error = route_net_del(route);
         return error;
     }

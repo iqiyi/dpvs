@@ -15,6 +15,8 @@
  * GNU General Public License for more details.
  *
  */
+#define _GNU_SOURCE
+#include <pthread.h>
 #include <assert.h>
 #include "pidfile.h"
 #include "dpdk.h"
@@ -33,7 +35,42 @@
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
 
-#define LCORE_CONF_BUFFER_LEN 1024
+#define LCORE_CONF_BUFFER_LEN 4096
+
+static int set_all_thread_affinity(void)
+{
+    int s;
+    lcoreid_t cid;
+    pthread_t tid;
+    cpu_set_t cpuset;
+    unsigned long long cpumask=0;
+
+    tid = pthread_self();
+    CPU_ZERO(&cpuset);
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++)
+        CPU_SET(cid, &cpuset);
+
+    s = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
+    if (s != 0) {
+        perror("fail to set thread affinty");
+        return -1;
+    }
+
+    CPU_ZERO(&cpuset);
+    s = pthread_getaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
+    if (s != 0) {
+        perror("fail to get thread affinity");
+        return -2;
+    }
+
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        if (CPU_ISSET(cid, &cpuset))
+            cpumask |= (1LL << cid);
+    }
+    printf("current thread affinity is set to %llX\n", cpumask);
+
+    return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -57,6 +94,11 @@ int main(int argc, char *argv[])
     gettimeofday(&tv, NULL);
     srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
 
+    if (set_all_thread_affinity() != 0) {
+        fprintf(stderr, "set_all_thread_affinity failed\n");
+        exit(EXIT_FAILURE);
+    }
+
     err = rte_eal_init(argc, argv);
     if (err < 0)
         rte_exit(EXIT_FAILURE, "Invalid EAL parameters\n");
@@ -75,28 +117,36 @@ int main(int argc, char *argv[])
     if ((err = dpvs_timer_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail init timer on %s\n", dpvs_strerror(err));
 
-    if ((err = netif_init(NULL)) != 0)
+    if ((err = tc_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init traffic control: %s\n",
+                 dpvs_strerror(err));
+
+    if ((err = netif_init(NULL)) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init netif: %s\n", dpvs_strerror(err));
     /* Default lcore conf and port conf are used and may be changed here 
      * with "netif_port_conf_update" and "netif_lcore_conf_set" */
 
-    if ((err = ctrl_init()) != 0 )
+    if ((err = ctrl_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init ctrl plane: %s\n",
+                 dpvs_strerror(err));
+
+    if ((err = tc_ctrl_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init tc control plane: %s\n",
                  dpvs_strerror(err));
 
     if ((err = vlan_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init vlan: %s\n", dpvs_strerror(err));
 
-    if ((err = inet_init()) != 0)
+    if ((err = inet_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init inet: %s\n", dpvs_strerror(err));
 
-    if ((err = sa_pool_init()) != 0)
+    if ((err = sa_pool_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init sa_pool: %s\n", dpvs_strerror(err));
 
     if ((err = dp_vs_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init ipvs: %s\n", dpvs_strerror(err));
 
-    if ((err = netif_ctrl_init()) !=0 )
+    if ((err = netif_ctrl_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init netif_ctrl: %s\n",
                  dpvs_strerror(err));
 
@@ -140,12 +190,16 @@ int main(int argc, char *argv[])
         sockopt_ctl(NULL);
         /* msg loop */
         msg_master_process();
+
         /* timer */
         loop_cnt++;
         if (loop_cnt % timer_sched_loop_interval == 0)
             rte_timer_manage();
         /* kni */
         kni_process_on_master();
+
+        /* process mac ring on master */
+        neigh_process_ring(NULL);
  
         /* increase loop counts */
         netif_update_master_loop_cnt();

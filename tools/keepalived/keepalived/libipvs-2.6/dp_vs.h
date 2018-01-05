@@ -6,6 +6,7 @@
 #include "conf/inetaddr.h"
 #include "conf/laddr.h"
 #include "conf/blklst.h"
+#include "conf/conn.h"
 
 enum{
     DPVS_SO_SET_FLUSH = 200,

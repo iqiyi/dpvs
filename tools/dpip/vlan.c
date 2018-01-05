@@ -167,7 +167,7 @@ static int vlan_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
     size_t size;
     int err, i;
 
-    switch (conf->cmd) {
+    switch (cmd) {
     case DPIP_CMD_ADD:
         return dpvs_setsockopt(SOCKOPT_SET_VLAN_ADD, param, sizeof(*param));
     case DPIP_CMD_DEL:

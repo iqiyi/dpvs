@@ -37,9 +37,11 @@
 #define OPT_ONEPACKET		0x200000
 #define OPT_PERSISTENCE_ENGINE  0x400000
 #define OPT_LOCAL_ADDRESS	0x800000
-#define OPT_SYNPROXY		0x1000000
-#define OPT_IFNAME		0x2000000
-#define NUMBER_OF_OPT		26
+#define OPT_BLKLST_ADDRESS      0x1000000
+#define OPT_SYNPROXY		0x2000000
+#define OPT_IFNAME		0x4000000
+#define OPT_SOCKPAIR            0x8000000
+#define NUMBER_OF_OPT		28
 
 #define MINIMUM_IPVS_VERSION_MAJOR      1
 #define MINIMUM_IPVS_VERSION_MINOR      1
@@ -114,6 +116,8 @@ extern int ipvs_update_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
 
 /* remove a destination server from a service */
 extern int ipvs_del_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
+
+extern struct ip_vs_conn_array* ip_vs_get_conns(const struct ip_vs_conn_req *req);
 
 extern int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
 extern int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);

@@ -436,6 +436,48 @@ ipvs_cmp_services(ipvs_service_entry_t *s1, ipvs_service_entry_t *s2)
 	return ntohs(s1->port) - ntohs(s2->port);
 }
 
+struct ip_vs_conn_array* ip_vs_get_conns(const struct ip_vs_conn_req *req) {
+    int res;
+    size_t arrlen, rcvlen;
+    struct ip_vs_conn_array *conn_arr, *arr_rcv;
+
+    if (req->flag & GET_IPVS_CONN_FLAG_SPECIFIED)
+        res = dpvs_getsockopt(SOCKOPT_GET_CONN_SPECIFIED, req,
+                sizeof(struct ip_vs_conn_req),
+                (void **)&arr_rcv, &rcvlen);
+    else
+        res = dpvs_getsockopt(SOCKOPT_GET_CONN_ALL, req,
+                sizeof(struct ip_vs_conn_req),
+                (void **)&arr_rcv, &rcvlen);
+
+    if (res != ESOCKOPT_OK) {
+        fprintf(stderr, "%s: got errcode %d from dpvs_getsockopt\n", __func__, res);
+        return NULL;
+    }
+
+    if (req->flag & GET_IPVS_CONN_FLAG_SPECIFIED)
+        arrlen = sizeof(struct ip_vs_conn_array) + sizeof(ipvs_conn_entry_t);
+    else
+        arrlen = sizeof(struct ip_vs_conn_array) + MAX_CTRL_CONN_GET_ENTRIES *
+            sizeof(ipvs_conn_entry_t);
+
+    if (!arr_rcv || rcvlen > arrlen) {
+		fprintf(stderr, "%s: bad sockopt connection repsonse\n", __func__);
+		return NULL;
+    }
+
+    conn_arr = calloc(1, arrlen);
+    if (!conn_arr) {
+        dpvs_sockopt_msg_free(arr_rcv);
+        fprintf(stderr, "%s: out of memory\n", __func__);
+        return NULL;
+    }
+
+    memcpy(conn_arr, arr_rcv, rcvlen);
+    dpvs_sockopt_msg_free(arr_rcv);
+
+    return conn_arr;
+}
 
 void
 ipvs_sort_services(struct ip_vs_get_services *s, ipvs_service_cmp_t f)

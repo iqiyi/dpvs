@@ -267,9 +267,12 @@ static int ipv4_output_fin2(struct rte_mbuf *mbuf)
      * really confusing.
      */
     mbuf->packet_type = ETHER_TYPE_IPv4;
+
+    /* reuse @userdata/@udata64 for prio (used by tc:pfifo_fast) */
+    mbuf->udata64 = ((ip4_hdr(mbuf)->type_of_service >> 1) & 15);
+
     err = neigh_resolve_output(&nexthop, mbuf, rt->port);
     route4_put(rt);
-    mbuf->userdata = NULL;
     return err;
 }
 

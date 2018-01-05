@@ -4,6 +4,7 @@
 #include <malloc.h>
 #include <pthread.h>
 #include <unistd.h>
+#include "common.h"
 
 #define UNIX_DOMAIN "/var/run/dpvs_ctrl"
 
@@ -11,24 +12,26 @@ static inline int sockopt_msg_send(int clt_fd,
         const struct dpvs_sock_msg *hdr,
         const char *data, int data_len)
 {
-    int res;
+    int len, res;
 
     if (!hdr) {
-        printf("[%s] empty socket msg header\n", __func__);
+        fprintf(stderr, "[%s] empty socket msg header\n", __func__);
         return -ESOCKOPT_INVAL;
     }
-    //res = write(clt_fd, hdr, sizeof(struct dpvs_sock_msg));
-    res = send(clt_fd, hdr, sizeof(struct dpvs_sock_msg), MSG_NOSIGNAL);
-    if (sizeof(struct dpvs_sock_msg) != res) {
-        printf("[%s] socket msg header send error: %s\n", __func__, strerror(errno));
+
+    len = sizeof(struct dpvs_sock_msg);
+    res = sendn(clt_fd, hdr, len, MSG_NOSIGNAL);
+    if (len != res) {
+        fprintf(stderr, "[%s] socket msg header send error -- %d/%d sent\n",
+                __func__, res, len);
         return -ESOCKOPT_IO;
     }
 
     if (data && data_len) {
-        //res = write(clt_fd, data, data_len);
-        res = send(clt_fd, data, data_len, MSG_NOSIGNAL);
+        res = sendn(clt_fd, data, data_len, MSG_NOSIGNAL);
         if (data_len != res) {
-            printf("[%s] scoket msg body send error: %s\n", __func__, strerror(errno));
+            fprintf(stderr, "[%s] scoket msg body send error -- %d/%d sent\n",
+                    __func__, res, data_len);
             return -ESOCKOPT_IO;
         }
     }
@@ -40,10 +43,10 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg_reply *reply
         void **out, size_t *out_len)
 {
     void *msg = NULL;
-    int res;
+    int len, res;
 
     if (!reply_hdr) {
-        printf("[%s] empty reply msg pointer\n", __func__);
+        fprintf(stderr, "[%s] empty reply msg pointer\n", __func__);
         return -ESOCKOPT_INVAL;
     }
 
@@ -52,15 +55,17 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg_reply *reply
     if (out_len)
         *out_len = 0;
 
-    memset(reply_hdr, 0, sizeof(struct dpvs_sock_msg_reply));
-    res = read(clt_fd, reply_hdr, sizeof(struct dpvs_sock_msg_reply));
-    if (sizeof(struct dpvs_sock_msg_reply) != res) {
-        printf("[%s] socket msg header recv error: %s\n", __func__, strerror(errno));
+    len = sizeof(struct dpvs_sock_msg_reply);
+    memset(reply_hdr, 0, len);
+    res = readn(clt_fd, reply_hdr, len);
+    if (len != res) {
+        fprintf(stderr, "[%s] socket msg header recv error -- %d/%d recieved\n",
+                __func__, res, len);
         return -ESOCKOPT_IO;
     }
 
     if (reply_hdr->errcode) {
-        printf("[%s] errcode set in socket msg#%d header: %s(%d)\n", __func__,
+        fprintf(stderr, "[%s] errcode set in socket msg#%d header: %s(%d)\n", __func__,
                 reply_hdr->id, reply_hdr->errstr, reply_hdr->errcode);
         return reply_hdr->errcode;
     }
@@ -68,20 +73,21 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg_reply *reply
     if (reply_hdr->len > 0) {
         msg = malloc(reply_hdr->len);
         if (NULL == msg) {
-            printf("[%s] no memory\n", __func__);
+            fprintf(stderr, "[%s] no memory\n", __func__);
             return -ESOCKOPT_NOMEM;
         }
 
-        res = read(clt_fd, msg, reply_hdr->len);
+        res = readn(clt_fd, msg, reply_hdr->len);
         if (res != reply_hdr->len) {
-            printf("[%s] socket msg body recv error: %s\n", __func__, strerror(errno));
+            fprintf(stderr, "[%s] socket msg body recv error -- %d/%d recieved\n",
+                    __func__, res, (int)reply_hdr->len);
             free(msg);
             return -ESOCKOPT_IO;
         }
     }
 
     if (SOCKOPT_VERSION != reply_hdr->version) {
-        printf("[%s] socket msg version not match\n", __func__);
+        fprintf(stderr, "[%s] socket msg version not match\n", __func__);
         if (reply_hdr->len > 0)
             free(msg);
         return -ESOCKOPT_VERSION;
@@ -117,14 +123,15 @@ int dpvs_setsockopt(sockoptid_t cmd, const void *in, size_t in_len)
     msg_len = sizeof(struct dpvs_sock_msg);
     msg = malloc(msg_len);
     if (NULL == msg) {
-        printf("[%s] no memory\n", __func__);
+        fprintf(stderr, "[%s] no memory\n", __func__);
         return -ESOCKOPT_INVAL;
     }
 
     clt_fd = socket(PF_UNIX, SOCK_STREAM, 0);
     res = connect(clt_fd, (struct sockaddr *)&clt_addr, sizeof(clt_addr));
     if (-1 == res) {
-        printf("[%s] scoket msg connection error: %s\n", __func__, strerror(errno));
+        fprintf(stderr, "[%s] scoket msg connection error: %s\n",
+                __func__, strerror(errno));
         free(msg);
         return -ESOCKOPT_IO;
     }
@@ -151,7 +158,7 @@ int dpvs_setsockopt(sockoptid_t cmd, const void *in, size_t in_len)
     }
 
     if (reply_hdr.errcode) {
-        printf("[%s] Server error: %s\n", __func__, reply_hdr.errstr);
+        fprintf(stderr, "[%s] Server error: %s\n", __func__, reply_hdr.errstr);
         close(clt_fd);
         return reply_hdr.errcode;
     }
@@ -171,7 +178,7 @@ int dpvs_getsockopt(sockoptid_t cmd, const void *in, size_t in_len,
     size_t msg_len;
 
     if (NULL == out || NULL == out_len) {
-        printf("[%s] no pointer for info return\n", __func__);
+        fprintf(stderr, "[%s] no pointer for info return\n", __func__);
         return -1;
     }
     *out = NULL;
@@ -184,14 +191,15 @@ int dpvs_getsockopt(sockoptid_t cmd, const void *in, size_t in_len,
     msg_len = sizeof(struct dpvs_sock_msg);
     msg = malloc(msg_len);
     if (NULL == msg) {
-        printf("[%s] no memory\n", __func__);
+        fprintf(stderr, "[%s] no memory\n", __func__);
         return -ESOCKOPT_NOMEM;
     }
 
     clt_fd = socket(PF_UNIX, SOCK_STREAM, 0);
     res = connect(clt_fd, (struct sockaddr*)&clt_addr, sizeof(clt_addr));
     if (-1 == res) {
-        printf("[%s] scoket msg connection error: %s\n", __func__, strerror(errno));
+        fprintf(stderr, "[%s] scoket msg connection error: %s\n",
+                __func__, strerror(errno));
         free(msg);
         return -ESOCKOPT_IO;
     }
@@ -218,7 +226,7 @@ int dpvs_getsockopt(sockoptid_t cmd, const void *in, size_t in_len,
     }
 
     if (reply_hdr.errcode) {
-        printf("[%s] Server error: %s\n", __func__, reply_hdr.errstr);
+        fprintf(stderr, "[%s] Server error: %s\n", __func__, reply_hdr.errstr);
         close(clt_fd);
         return reply_hdr.errcode;
     }

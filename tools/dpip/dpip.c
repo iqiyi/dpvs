@@ -29,12 +29,12 @@ static struct list_head dpip_objs = LIST_HEAD_INIT(dpip_objs);
 
 static void usage(void)
 {
-    fprintf(stderr, 
+    fprintf(stderr,
         "Usage:\n"
         "    "DPIP_NAME" [OPTIONS] OBJECT { COMMAND | help }\n"
         "Parameters:\n"
-        "    OBJECT  := { link | addr | route | neigh | vlan }\n"
-        "    COMMAND := { add | del | set | show | flush }\n"
+        "    OBJECT  := { link | addr | route | neigh | vlan | qsch | cls }\n"
+        "    COMMAND := { add | del | change | replace | show | flush }\n"
         "Options:\n"
         "    -v, --verbose\n"
         "    -h, --help\n"
@@ -144,11 +144,14 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         conf->cmd = DPIP_CMD_ADD;
     else if (strcmp(argv[1], "del") == 0)
         conf->cmd = DPIP_CMD_DEL;
-    else if (strcmp(argv[1], "set") == 0)
+    else if (strcmp(argv[1], "set") == 0 ||
+             strcmp(argv[1], "change") == 0)
         conf->cmd = DPIP_CMD_SET;
-    else if (strcmp(argv[1], "show") == 0
-            || strcmp(argv[1], "list") == 0)
+    else if (strcmp(argv[1], "show") == 0 ||
+             strcmp(argv[1], "list") == 0)
         conf->cmd = DPIP_CMD_SHOW;
+    else if (strcmp(argv[1], "replace") == 0)
+        conf->cmd = DPIP_CMD_REPLACE;
     else if (strcmp(argv[1], "flush") == 0)
         conf->cmd = DPIP_CMD_FLUSH;
     else if (strcmp(argv[1], "help") == 0)

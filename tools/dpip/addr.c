@@ -250,7 +250,7 @@ static int addr_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
 }
 
 struct dpip_obj dpip_addr = {
-    .name    = "addr",
+    .name   = "addr",
     .help   = addr_help,
     .do_cmd = addr_do_cmd,
 };

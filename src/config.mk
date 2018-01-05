@@ -16,26 +16,16 @@
 #
 
 #
-# Makefile for dpip
+# enable as needed.
+#
+# TODO: use standard way to define compile flags.
 #
 
-TARGET = build/dpip
-
-CFLAGS = -g -O0
-CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes
-
-CFLAGS += -I ../../include
-CFLAGS += -I ../keepalived/keepalived/libipvs-2.6
-
-OBJS = dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
-	   qsch.o cls.o ../../src/common.o \
-	   ../keepalived/keepalived/libipvs-2.6/sockopt.o
-
-all: $(TARGET)
-
-$(TARGET): $(OBJS)
-	-mkdir -p ./build/
-	gcc $(CFLAGS) -o $@ $^
-
-clean:
-	rm -rf ./build/ *.o
+#CFLAGS += -D CONFIG_RECORD_BIG_LOOP
+#CFLAGS += -D CONFIG_DPVS_SAPOOL_DEBUG
+#CFLAGS += -D CONFIG_DPVS_IPVS_DEBUG
+#CFLAGS += -D CONFIG_SYNPROXY_DEBUG
+#CFLAGS += -D CONFIG_TIMER_MEASURE
+#CFLAGS += -D DPVS_CFG_PARSER_DEBUG
+#CFLAGS += -D NETIF_BONDING_DEBUG
+#CFLAGS += -D CONFIG_TC_DEBUG
