@@ -4,12 +4,13 @@ DPVS TODO list
 Short-term
 ----------
 
-* merge DPDK-17.05.2 [done, release soon]
-* basic traffic control [done, release soon]
-* neighbour (ARP) refactor [done, release soon]
+* merge DPDK-17.05.2 [done]
+* basic traffic control [done]
+* neighbour (ARP) refactor [done]
 * Tunnel Interface (gre/ipip) [on-going]
 * NAT/Tunnel forwarding mode [on-going]
-* performance optimization.
+* Get real client IP for UDP, like TCP TOA. [on-going]
+* performance optimization for 25G/40G NIC.
 * documents update.
 
 Long-term
@@ -20,5 +21,6 @@ Long-term
 * ALG (ftp, sip, ...)
 * VxLAN Support
 * NIC without Flow-Director (fdir)
-  - packet redirect for cpus
+  - packet redirect for cpus.
+  - rss pre-calcuate.
 * IPv6 Support
