@@ -5,11 +5,11 @@ DPVS
 
 # Introduction
 
-`DPVS` is a high performance **Layer-4 load balancer** based on [DPDK](http://dpdk.org). It's derived from Linux [LVS](http://www.linuxvirtualserver.org/) and its modification [alibaba/LVS](https://github.com/alibaba/LVS).
+`DPVS` is a high performance **Layer-4 load balancer** based on [DPDK](http://dpdk.org). It's derived from Linux Virtual Server [LVS](http://www.linuxvirtualserver.org/) and its modification [alibaba/LVS](https://github.com/alibaba/LVS).
 
 >  the name `DPVS` comes from "DPDK-LVS".
 
-Different techniques are applied for high performance:
+Several techniques are applied for high performance:
 
 * *Kernel by-pass* (user space implementation)
 * *Share-nothing*, per-CPU for key data (Lockless)
@@ -18,7 +18,7 @@ Different techniques are applied for high performance:
 * *Zero Copy* (avoid packet copy and syscalls).
 * *Polling* instead of interrupt.
 * *lockless message* for high performance ICP.
-* other techs enhanced by *DPDK*
+* other techs enhanced by *DPDK*.
 
 Major features of `DPVS` including:
 
@@ -27,8 +27,8 @@ Major features of `DPVS` including:
 * User-space *Lite IP stack* (IPv4, Routing, ARP, ICMP ...).
 * *SNAT* mode for Internet access from internal network.
 * Support *KNI*, *VLAN*, *Bonding* for different IDC environment.
-* Security aspect, support *TCP syn-proxy*, *Conn-Limit*, *black-list*
-* QoS: *Traffic Control* (Ongoing)
+* Security aspect, support *TCP syn-proxy*, *Conn-Limit*, *black-list*.
+* QoS: *Traffic Control*.
 
 `DPVS` feature modules are illustrated as following picture.
 
@@ -43,11 +43,14 @@ This *quick start* is tested with the environment below.
 * Linux Distribution: CentOS 7.2
 * Kernel: 3.10.0-327.el7.x86_64
 * CPU: Intel(R) Xeon(R) CPU E5-2650 v3 @ 2.30GHz
-* NIC: Intel X540
-* Memory: 64G and NUMA system.
+* NIC: Intel Corporation Ethernet Controller 10-Gigabit X540-AT2 (rev 03)
+* Memory: 64G with two NUMA node.
 * GCC: gcc version 4.8.5 20150623 (Red Hat 4.8.5-4)
 
 Other environment should also OK if DPDK works, pls check [dpdk.org](http://www.dpdk.org) for more info.
+
+* Pls check this link for NICs supported by DPDK: http://dpdk.org/doc/nics.
+* Note `flow-director` (fdir) is needed for `Full-NAT` and `SNAT` mode. http://dpdk.org/doc/guides/nics/overview.html#id1
 
 ## Clone DPVS
 
@@ -60,44 +63,44 @@ Well, let's start from DPDK then.
 
 ## DPDK setup.
 
-Currently, `DPDK-16.07` is used for `DPVS` and latest `DPDK` stable version will be integrated soon.
+Currently, `dpdk-stable-17.05.2` is used for `DPVS`.
 
 > You can skip this section if experienced with DPDK, and refer the [link](http://dpdk.org/doc/guides/linux_gsg/index.html) for details.
 
 ```bash
-$ wget http://fast.dpdk.org/rel/dpdk-16.07.2.tar.xz   # download from dpdk.org if link failed.
-$ tar vxf dpdk-16.07.2.tar.xz
+$ wget https://fast.dpdk.org/rel/dpdk-17.05.2.tar.xz   # download from dpdk.org if link failed.
+$ tar vxf dpdk-17.05.2.tar.xz
 ```
 
 There's a patch for DPDK `kni` driver for hardware multicast, apply it if needed (for example, launch `ospfd` on `kni` device).
 
-> assuming we are in DPVS root dir and dpdk-stable-16.07.2 is under it, pls note it's not mandatory, just for convenience.
+> assuming we are in DPVS root dir and dpdk-stable-17.05.2 is under it, pls note it's not mandatory, just for convenience.
 
 ```
 $ cd <path-of-dpvs>
-$ cp patch/dpdk-16.07/0001-kni-use-netlink-event-for-multicast-driver-part.patch dpdk-stable-16.07.2/
-$ cd dpdk-stable-16.07.2/
-$ patch -p 1 < 0001-kni-use-netlink-event-for-multicast-driver-part.patch
+$ cp patch/dpdk-stable-17.05.2/0001-PATCH-kni-use-netlink-event-for-multicast-driver-par.patch dpdk-stable-17.05.2/
+$ cd dpdk-stable-17.05.2/
+$ patch -p 1 < 0001-PATCH-kni-use-netlink-event-for-multicast-driver-par.patch
 ```
 
 Now build DPDK and export `RTE_SDK` env variable for DPDK app (DPVS).
 
 ```bash
-$ cd dpdk-stable-16.07.2/
+$ cd dpdk-stable-17.05.2/
 $ make config T=x86_64-native-linuxapp-gcc
 Configuration done
 $ make # or make -j40 to save time, where 40 is the cpu core number.
 $ export RTE_SDK=$PWD
 ```
 
-In our tutorial, `RTE_TARGET` is not set, the value is "build" by default, thus DPDK libs and header files can be found in `dpdk-stable-16.07.2/build`. It could be other values.
+In our tutorial, `RTE_TARGET` is not set, the value is "build" by default, thus DPDK libs and header files can be found in `dpdk-stable-17.05.2/build`.
 
 Now to set up DPDK hugepage, our test environment is NUMA system. For single-node system pls refer the [link](http://dpdk.org/doc/guides/linux_gsg/sys_reqs.html).
 
 ```bash
 $ # for NUMA machine
-$ echo 4096 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
-$ echo 4096 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages
+$ echo 8192 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
+$ echo 8192 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages
 
 $ mkdir /mnt/huge
 $ mount -t hugetlbfs nodev /mnt/huge
@@ -107,14 +110,14 @@ Install Kernel modules and bind NIC with `igb_uio` driver. Quick start uses only
 
 ```bash
 $ modprobe uio
-$ cd dpdk-stable-16.07.2/
+$ cd dpdk-stable-17.05.2
 
 $ insmod build/kmod/igb_uio.ko
 $ insmod build/kmod/rte_kni.ko
 
-$ ./tools/dpdk-devbind.py --st
+$ ./usertools/dpdk-devbind.py --status
 $ ifconfig eth0 down  # assuming eth0 is 0000:06:00.0
-$ ./tools/dpdk-devbind.py -b igb_uio 0000:06:00.0
+$ ./usertools/dpdk-devbind.py -b igb_uio 0000:06:00.0
 ```
 
 `dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver like `ixgbe`. You can also use `lspci` or `ethtool -i eth0` to check the NIC PCI bus-id. Pls see [DPDK site](http://www.dpdk.org) for details.
@@ -124,7 +127,7 @@ $ ./tools/dpdk-devbind.py -b igb_uio 0000:06:00.0
 It's simple, just set `RTE_SDK` and build it.
 
 ```bash
-$ cd dpdk-stable-16.07.2/
+$ cd dpdk-stable-17.05.2/
 $ export RTE_SDK=$PWD
 $ cd <path-of-dpvs>
 
