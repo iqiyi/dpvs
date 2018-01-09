@@ -428,7 +428,7 @@ void __dp_vs_del_dest(struct dp_vs_dest *dest)
            and only one user context can update virtual service at a
            time, so the operation here is OK */
         rte_atomic32_dec(&dest->svc->refcnt);
-
+        dest->svc = NULL;
         dp_vs_del_stats(dest->stats);
         rte_free(dest);
     } else {
