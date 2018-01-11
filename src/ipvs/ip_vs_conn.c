@@ -529,14 +529,17 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     if ((flags & DPVS_CONN_F_TEMPLATE) || param->ct_dport != 0)
         rport = param->ct_dport;
     else if (dest->fwdmode == DPVS_FWD_MODE_SNAT) {
-        ports = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf),
-                                    sizeof(_ports), _ports);
-        if (unlikely(!ports)) {
-            RTE_LOG(WARNING, IPVS, "%s: no memory\n", __func__);
-            return NULL;
+        if (unlikely(param->proto == IPPROTO_ICMP)) {
+            rport = param->vport;
+        } else {
+            ports = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf),
+                                        sizeof(_ports), _ports);
+            if (unlikely(!ports)) {
+                RTE_LOG(WARNING, IPVS, "%s: no memory\n", __func__);
+                return NULL;
+            }
+            rport = ports[0];
         }
-
-        rport = ports[0];
     } else
         rport = dest->port;
 
