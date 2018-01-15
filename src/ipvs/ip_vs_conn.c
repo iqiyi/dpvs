@@ -29,6 +29,7 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
+#include "ipvs/proto_icmp.h"
 #include "parser/parser.h"
 #include "ctrl.h"
 #include "conf/conn.h"
@@ -953,7 +954,7 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
                     return "SYNACK";
                     break;
                 default:
-                    return "UNKOWN";
+                    return "TCP_UNKOWN";
                     break;
             }
             break;
@@ -966,7 +967,20 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
                     return "UDP_LAST";
                     break;
                 default:
-                    return "UNKOWN";
+                    return "UDP_UNKOWN";
+                    break;
+            }
+            break;
+        case IPPROTO_ICMP:
+            switch (state) {
+                case DPVS_ICMP_S_NORMAL:
+                    return "ICMP_NORMAL";
+                    break;
+                case DPVS_ICMP_S_LAST:
+                    return "ICMP_LAST";
+                    break;
+                default:
+                    return "ICMP_UNKOWN";
                     break;
             }
             break;
