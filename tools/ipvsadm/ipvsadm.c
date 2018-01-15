@@ -327,8 +327,10 @@ static int list_laddrs(ipvs_service_t *svc, int with_title);
 static int list_all_laddrs(void);
 static int list_all_blklsts(void);
 
+#if 0
 static int modprobe_ipvs(void);
-//static void check_ipvs_version(void);
+static void check_ipvs_version(void);
+#endif
 static int process_options(int argc, char **argv, int reading_stdin);
 
 
@@ -337,12 +339,9 @@ int main(int argc, char **argv)
 	int result;
 
 	if (ipvs_init()) {
-		/* try to insmod the ip_vs module if ipvs_init failed */
-		if (modprobe_ipvs() || ipvs_init())
-			fail(2, "Can't initialize ipvs: %s\n"
-				"Are you sure that IP Virtual Server is "
-				"built in the kernel or as module?",
-			     ipvs_strerror(errno));
+		fail(2, "Can't initialize ipvs: %s\n"
+			"Are you sure that dpvs is running?",
+			ipvs_strerror(errno));
 	}
 
 	/* warn the user if the IPVS version is out of date */
@@ -1466,6 +1465,7 @@ static void fail(int err, char *msg, ...)
 }
 
 
+#if 0
 static int modprobe_ipvs(void)
 {
 	char *argv[] = { "/sbin/modprobe", "--", "ip_vs", NULL };
@@ -1486,7 +1486,6 @@ static int modprobe_ipvs(void)
 	return 0;
 }
 
-#if 0
 static void check_ipvs_version(void)
 {
 	/* verify the IPVS version */
