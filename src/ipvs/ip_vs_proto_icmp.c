@@ -28,6 +28,7 @@
 #include "ipv4.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/proto.h"
+#include "ipvs/proto_icmp.h"
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
 
@@ -59,11 +60,6 @@
  *   + For ICMP-Error, which includes original IP packet as payload:
  *     Those embedded IPs are not be handled here IPVS core.
  */
-
-enum {
-    DPVS_ICMP_S_NORMAL      = 0,
-    DPVS_ICMP_S_LAST
-};
 
 static int icmp_timeouts[DPVS_ICMP_S_LAST + 1] = {
     [DPVS_ICMP_S_NORMAL]    = 300,
