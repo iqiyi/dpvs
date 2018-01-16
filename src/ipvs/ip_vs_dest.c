@@ -137,6 +137,9 @@ struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
             (svc->fwmark ||
              (inet_addr_equal(svc->af, &dest->vaddr, &svc->addr) &&
               dest->vport == svc->port))) {
+             /*since svc may be edit, variables should be coverd*/
+             dest->conn_timeout = svc->conn_timeout;
+             dest->limit_proportion = svc->limit_proportion;
              return dest;
             }
         if (rte_atomic32_read(&dest->refcnt) == 1) {
@@ -223,6 +226,8 @@ int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
     dest->proto = svc->proto;
     dest->vaddr = svc->addr;
     dest->vport = svc->port;
+    dest->conn_timeout = svc->conn_timeout;
+    dest->limit_proportion = svc->limit_proportion;
     dest->vfwmark = svc->fwmark;
     dest->addr = udest->addr;
     dest->port = udest->port;

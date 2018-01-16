@@ -207,17 +207,14 @@ int dp_vs_stats_in(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 
     if (dest && (dest->flags & DPVS_DEST_F_AVAILABLE)) {
         /*limit rate*/
-        assert(dest->svc);
-        if ((dest->svc->limit_proportion < 100) &&
-            (dest->svc->limit_proportion > 0)) {
-            return (rand()%100) > dest->svc->limit_proportion 
+        if ((dest->limit_proportion < 100) &&
+            (dest->limit_proportion > 0)) {
+            return (rand()%100) > dest->limit_proportion 
                         ? EDPVS_OVERLOAD : EDPVS_OK;
         }
 
         dest->stats[cid].inpkts++;
         dest->stats[cid].inbytes += mbuf->pkt_len;
-        dest->svc->stats[cid].inpkts++;  
-        dest->svc->stats[cid].inbytes += mbuf->pkt_len;
     }
 
     this_dpvs_stats.inpkts++;
@@ -234,17 +231,14 @@ int dp_vs_stats_out(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 
     if (dest && (dest->flags & DPVS_DEST_F_AVAILABLE)) {
         /*limit rate*/
-        assert(dest->svc);
-        if ((dest->svc->limit_proportion < 100) && 
-            (dest->svc->limit_proportion > 0)) {
-            return (rand()%100) > dest->svc->limit_proportion 
+        if ((dest->limit_proportion < 100) && 
+            (dest->limit_proportion > 0)) {
+            return (rand()%100) > dest->limit_proportion 
 			? EDPVS_OVERLOAD : EDPVS_OK; 
         }
 
         dest->stats[cid].outpkts++;
         dest->stats[cid].outbytes += mbuf->pkt_len;
-        dest->svc->stats[cid].outpkts++;
-        dest->svc->stats[cid].outbytes += mbuf->pkt_len;
     }
 
     this_dpvs_stats.outpkts++;
@@ -254,12 +248,11 @@ int dp_vs_stats_out(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 
 void dp_vs_stats_conn(struct dp_vs_conn *conn)
 {
-    assert(conn && conn->dest && conn->dest->svc);
+    assert(conn && conn->dest);
     lcoreid_t cid;
 
     cid = rte_lcore_id();   
     conn->dest->stats[cid].conns++;
-    conn->dest->svc->stats[cid].conns++;
     this_dpvs_stats.conns++;
 }
 

@@ -1644,6 +1644,19 @@ static inline char *fwd_switch(unsigned flags)
 	return swt;
 }
 
+/*notice when rs is deleted svc stats count will be less than before*/
+static void copy_stats_from_dest(ipvs_service_entry_t *se, struct ip_vs_get_dests *d)
+{
+	int i = 0;
+	for (i = 0; i < d->num_dests; i++) {
+		ipvs_dest_entry_t *e = &d->entrytable[i];
+		se->stats.conns += e->stats.conns;
+		se->stats.inpkts += e->stats.inpkts;
+		se->stats.outpkts += e->stats.outpkts;
+		se->stats.inbytes += e->stats.inbytes;
+		se->stats.outbytes += e->stats.outbytes;
+	}
+}
 
 static void print_largenum(unsigned long long i, unsigned int format)
 {
@@ -1787,6 +1800,9 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
                                  ",oif=%s", se->oifname);
         }
     }
+
+	/* copy svc's stats from dest */
+	copy_stats_from_dest(se, d);
 
 	/* print virtual service info */
 	if (format & FMT_RULE) {
