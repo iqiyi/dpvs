@@ -33,6 +33,9 @@
 #define INET_MAX_PROTS      256     /* cannot change */
 #define INET_DEF_TTL        64
 
+#define IPV4_FORWARD_DEF  false
+static bool ipv4_forward_switch = IPV4_FORWARD_DEF;
+
 static uint32_t inet_def_ttl = INET_DEF_TTL;
 
 static void ipv4_default_ttl_handler(vector_t tokens)
@@ -54,6 +57,17 @@ static void ipv4_default_ttl_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
+static void ipv4_forward_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    assert(str);
+    if (strcasecmp(str, "on") == 0)
+        ipv4_forward_switch = true;
+    else if (strcasecmp(str, "off") == 0)
+        ipv4_forward_switch = false;
+    FREE_PTR(str);
+}
+
 void ipv4_keyword_value_init(void)
 {
     if (dpvs_state_get() == DPVS_STATE_INIT) {
@@ -67,6 +81,7 @@ void install_ipv4_keywords(void)
 {
     install_keyword_root("ipv4_defs", NULL);
     install_keyword("default_ttl", ipv4_default_ttl_handler, KW_TYPE_INIT);
+    install_keyword("ipv4_forward", ipv4_forward_handler, KW_TYPE_INIT);
 }
 
 static struct list_head inet_hooks[INET_HOOK_NUMHOOKS];
@@ -324,6 +339,11 @@ static int ipv4_forward(struct rte_mbuf *mbuf)
             && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
         IP4_INC_STATS(fragfails);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
+        goto drop;
+    }
+
+    /* Drop packet if the switch is off */
+    if (!ipv4_forward_switch) {
         goto drop;
     }
 
