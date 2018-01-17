@@ -33,11 +33,11 @@
 
 static void dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct inet_addr_param *param)
 {
-    memset(param, 0, sizeof(*param));
     param->af = ipaddress->ifa.ifa_family;
     param->addr.in = ipaddress->u.sin.sin_addr;
     strcpy(param->ifname, dpdk_port);
     param->plen = ipaddress->ifa.ifa_prefixlen;
+    param->flags &= ~IFA_F_SAPOOL;
 }
 
 static int
@@ -48,9 +48,9 @@ netlink_ipaddress(ip_address_t *ipaddress, char *dpdk_port, int cmd)
     tmp_ip = ipaddresstos(ipaddress);
     if (dpdk_port == NULL)//ingore static route or sth. othes
         return 1;
+    memset(&param, 0, sizeof(param));
     dpvs_fill_addrconf(ipaddress, dpdk_port, &param);
     ipvs_set_ipaddr(&param, cmd);
-    log_message(LOG_INFO, "add vip %s to dpdk port %s", tmp_ip, dpdk_port);
     FREE(tmp_ip);
     return 1;
 }

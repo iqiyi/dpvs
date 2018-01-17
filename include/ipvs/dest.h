@@ -75,6 +75,8 @@ struct dp_vs_dest {
     uint32_t            vfwmark;    /* firewall mark of service */
     struct dp_vs_service *svc;      /* service it belongs to */
     union inet_addr     vaddr;      /* virtual IP address */
+    unsigned            conn_timeout; /* conn timeout copied from svc*/
+    unsigned            limit_proportion; /* limit copied from svc*/ 
 } __rte_cache_aligned;
 
 struct dp_vs_dest_conf {

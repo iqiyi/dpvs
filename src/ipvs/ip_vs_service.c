@@ -664,10 +664,8 @@ out:
 unsigned dp_vs_get_conn_timeout(struct dp_vs_conn *conn)
 {
     unsigned conn_timeout;
-    if (conn->dest->svc) {
-        rte_atomic32_inc(&(conn->dest->svc->usecnt));
-        conn_timeout = conn->dest->svc->conn_timeout;
-        rte_atomic32_dec(&(conn->dest->svc->usecnt));
+    if (conn->dest) {
+        conn_timeout = conn->dest->conn_timeout;
         return conn_timeout;
     }
     return 90;

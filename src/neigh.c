@@ -579,10 +579,9 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
 {
     struct neighbour_entry *neighbour;
     struct neighbour_mbuf_entry *m_buf;
-    struct ipv4_hdr *iphdr;
     uint32_t src_ip;
     unsigned int hashkey;
-    struct route_entry *rt=NULL;
+    union inet_addr saddr, daddr;
 
     uint32_t nexhop_addr = nexhop->s_addr;
     hashkey = neigh_hashkey(nexhop_addr, port);
@@ -603,24 +602,16 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
             m_buf->m = m;
             list_add_tail(&m_buf->neigh_mbuf_list, &neighbour->queue_list);
             neighbour->que_num++;
-            iphdr = rte_pktmbuf_mtod(m, struct ipv4_hdr *);
-            rt = route4_local(iphdr->src_addr, port);
-            if(rt){
-                src_ip = iphdr->src_addr;
-                route4_put(rt);
-            }
-            else{
-                union inet_addr saddr, daddr;
-                memset(&saddr, 0, sizeof(saddr));
-                daddr.in.s_addr = nexhop_addr;
-                inet_addr_select(AF_INET, port, &daddr, 0, &saddr);
-                src_ip = saddr.in.s_addr;
 
-                if(!src_ip){
-                    /* may have source address later,
-                     * if not let timer to free neigh and it's mbuf queue. */
-                    return EDPVS_PKTSTOLEN;
-                }
+            memset(&saddr, 0, sizeof(saddr));
+            daddr.in.s_addr = nexhop_addr;
+            inet_addr_select(AF_INET, port, &daddr, 0, &saddr);
+            src_ip = saddr.in.s_addr;
+
+            if(!src_ip){
+                /* may have source address later,
+                 * if not let timer to free neigh and it's mbuf queue. */
+                return EDPVS_PKTSTOLEN;
             }
             if(neigh_send_arp(port, src_ip, nexhop_addr)){
                 RTE_LOG(INFO, NEIGHBOUR, "[%s] send arp failed\n", __func__);
@@ -654,24 +645,16 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
         m_buf->m = m;
         list_add_tail(&m_buf->neigh_mbuf_list, &neighbour->queue_list);
         neighbour->que_num++;
-        iphdr = rte_pktmbuf_mtod(m, struct ipv4_hdr *);
-        rt = route4_local(iphdr->src_addr, port);
-        if(rt){
-            src_ip = iphdr->src_addr;
-            route4_put(rt);
-        }
-        else{
-            union inet_addr saddr, daddr;
-            memset(&saddr, 0, sizeof(saddr));
-            daddr.in.s_addr = nexhop_addr;
-            inet_addr_select(AF_INET, port, &daddr, 0, &saddr);
-            src_ip = saddr.in.s_addr;
 
-            if(!src_ip){
-                /* may have source address later,
-                 * if not let timer to free neigh and it's mbuf queue. */
-                return EDPVS_PKTSTOLEN;
-            }
+        memset(&saddr, 0, sizeof(saddr));
+        daddr.in.s_addr = nexhop_addr;
+        inet_addr_select(AF_INET, port, &daddr, 0, &saddr);
+        src_ip = saddr.in.s_addr;
+
+        if(!src_ip){
+            /* may have source address later,
+             * if not let timer to free neigh and it's mbuf queue. */
+            return EDPVS_PKTSTOLEN;
         }
 
         if(neigh_send_arp(port, src_ip, nexhop_addr)){

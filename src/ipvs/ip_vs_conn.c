@@ -1183,8 +1183,16 @@ again:
 
     /* get conns table from cid and saved into dump list */
     msg = msg_make(MSG_TYPE_CONN_GET_ALL, 0, DPVS_MSG_UNICAST, rte_lcore_id(), 0, NULL);
-    res = msg_send(msg, cid, 0, NULL);
-    if (res != EDPVS_OK) {
+    /* FIXME: When conns in session table are not many enough, blockable msg would get
+     * timeout probably due to the traverse of the whole huge session table.  So non-
+     * blockable msg is used. A more elegant solution is to use an upper time limit for
+     * the session table access in this case, which is much more complicated. */
+    res = msg_send(msg, cid, DPVS_MSG_F_ASYNC, NULL);
+    while (!test_msg_flags(msg, DPVS_MSG_F_STATE_FIN|DPVS_MSG_F_STATE_DROP))
+        ; /* wait until msg processed */
+
+    if (res != EDPVS_OK || test_msg_flags(msg, DPVS_MSG_F_STATE_DROP|
+                DPVS_MSG_F_CALLBACK_FAIL)) {
         RTE_LOG(WARNING, IPVS, "%s: fail to get lcore%d's connection table -- %s\n",
                 __func__, (int)cid, dpvs_strerror(res));
         conn_arr->nconns = got;
