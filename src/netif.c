@@ -2633,7 +2633,7 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
     /* flag may set by setup() routine */
     dev->flag |= NETIF_PORT_FLAG_ENABLED;
     dev->nrxq = nrxq;
-    dev->nrxq = ntxq;
+    dev->ntxq = ntxq;
 
     /* virtual dev has no NUMA-node */
     if (dev->socket == SOCKET_ID_ANY)
