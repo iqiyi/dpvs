@@ -206,6 +206,7 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
     const struct inet_protocol *prot;
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt = mbuf->userdata;
+    int (*handler)(struct rte_mbuf *mbuf) = NULL;
 
     /* remove network header */
     hlen = ip4_hdrlen(mbuf);
@@ -233,14 +234,17 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
     /* deliver to upper layer */
     rte_spinlock_lock(&inet_prot_lock);
     prot = inet_prots[iph->next_proto_id];
-    if (prot) {
-        err = prot->handler(mbuf);
+    if (prot)
+        handler = prot->handler;
+    rte_spinlock_unlock(&inet_prot_lock);
+
+    if (handler) {
+        err = handler(mbuf);
         IP4_INC_STATS(indelivers);
     } else {
         err = EDPVS_KNICONTINUE; /* KNI may like it, don't drop */
         IP4_INC_STATS(inunknownprotos);
     }
-    rte_spinlock_unlock(&inet_prot_lock);
 
     return err;
 }
