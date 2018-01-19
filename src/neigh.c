@@ -588,8 +588,11 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
     uint32_t src_ip;
     unsigned int hashkey;
     union inet_addr saddr, daddr;
-
     uint32_t nexhop_addr = nexhop->s_addr;
+
+    if (port->flag & NETIF_PORT_FLAG_NO_ARP)
+        return netif_xmit(m, port);
+
     hashkey = neigh_hashkey(nexhop_addr, port);
     neighbour = neigh_lookup_entry(&nexhop_addr, port, hashkey);
 

@@ -38,6 +38,7 @@ enum {
     NETIF_PORT_FLAG_FORWARD2KNI             = 0x1<<9,
     NETIF_PORT_FLAG_TC_EGRESS               = 0x1<<10,
     NETIF_PORT_FLAG_TC_INGRESS              = 0x1<<11,
+    NETIF_PORT_FLAG_NO_ARP                  = 0x1<<12,
 };
 
 /* max tx/rx queue number for each nic */

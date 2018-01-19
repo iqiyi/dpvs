@@ -2069,7 +2069,7 @@ int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf)
     if (!pt)
         return EDPVS_KNICONTINUE;
 
-    mbuf->l2_len = sizeof(struct iphdr); /* make sense ? */
+    mbuf->l2_len = 0; /* make sense ? */
 
     return pt->func(mbuf, dev);
 }

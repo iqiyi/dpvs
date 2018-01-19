@@ -182,6 +182,7 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     dev->type = PORT_TYPE_TUNNEL;
     dev->mtu = tunnel_bind_dev(dev);
     dev->flag |= NETIF_PORT_FLAG_RUNNING; /* XXX */
+    dev->flag |= NETIF_PORT_FLAG_NO_ARP;
     dev->flag &= ~NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
@@ -757,14 +758,6 @@ int ip_tunnel_xmit(struct rte_mbuf *mbuf, struct netif_port *dev,
     __be32              dip;
 
     assert(mbuf && dev && tiph);
-
-    /* strip original l2 header.
-     * XXX: how to support gretap ? */
-    if (mbuf->l2_len) {
-        if (rte_pktmbuf_adj(mbuf, mbuf->l2_len) == NULL)
-            goto errout;
-        mbuf->l2_len = 0;
-    }
 
     if (mbuf->packet_type == ETHER_TYPE_IPv4)
         iiph = rte_pktmbuf_mtod(mbuf, struct iphdr *);
