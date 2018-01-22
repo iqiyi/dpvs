@@ -1253,6 +1253,10 @@ static int link_set(struct link_param *param)
                 link_nic_set_tc_egress(param->dev_name, param->value);
             else if (strcmp(param->item, "tc-ingress") == 0)
                 link_nic_set_tc_ingress(param->dev_name, param->value);
+            else {
+                fprintf(stderr, "invalid parameter name '%s'\n", param->item);
+                return EDPVS_INVAL;
+            }
             break;
         }
         case LINK_DEVICE_CPU:
