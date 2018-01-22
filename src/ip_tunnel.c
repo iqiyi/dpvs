@@ -523,6 +523,7 @@ int ip_tunnel_init_tab(struct ip_tunnel_tab *tab, struct ip_tunnel_ops *ops,
         snprintf(params.ifname, IFNAMSIZ, "%s", fbname);
     snprintf(params.kind, IFNAMSIZ, "%s", ops->kind);
 
+#if 0 /* need it ? */
     rte_rwlock_write_lock(&ip_tunnel_lock);
     tab->fb_tunnel_dev = tunnel_create(tab, ops, &params);
     if (!tab->fb_tunnel_dev) {
@@ -530,6 +531,7 @@ int ip_tunnel_init_tab(struct ip_tunnel_tab *tab, struct ip_tunnel_ops *ops,
                 __func__, ops->kind);
     }
     rte_rwlock_write_unlock(&ip_tunnel_lock);
+#endif
 
     tab->ops = ops;
     ops->tab = tab;
