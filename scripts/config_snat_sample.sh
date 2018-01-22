@@ -89,9 +89,10 @@ add_default_gw() {
 }
 
 check_default_gw() {
+    echo "====Check default gateway to devices===="
     echo -n "Check default gateway $GATEWAY on $WAN_DEV..."
-    GW_INFO=$($DPIP_CMD route show | grep 0.0.0.0/0 | awk '{print ","$4","$8","}')
-    grep ",$GATEWAY,$WAN_DEV," $GW_INFO 2>1 > /dev/null
+    $DPIP_CMD route show | grep 0.0.0.0/0 | awk '{print ","$4","$8","}' | \
+        grep ",$GATEWAY,$WAN_DEV,"  > /dev/null 2>&1
     check_result $?
 }
 
@@ -117,6 +118,7 @@ while getopts "hcs:" arg; do
     case $arg in
     c )
         check_addrs_on_dev
+        check_default_gw
         exit $?
         ;;
     h )
