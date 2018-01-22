@@ -140,6 +140,8 @@ int ip_tunnel_xmit(struct rte_mbuf *mbuf, struct netif_port *dev,
 int ip_tunnel_pull_header(struct rte_mbuf *mbuf, int hlen, __be16 in_proto);
 
 int ip_tunnel_get_link(struct netif_port *dev, struct rte_eth_link *link);
+int ip_tunnel_get_stats(struct netif_port *dev, struct rte_eth_stats *stats);
+int ip_tunnel_get_promisc(struct netif_port *dev, bool *promisc);
 
 int ipip_init(void);
 int ipip_term(void);

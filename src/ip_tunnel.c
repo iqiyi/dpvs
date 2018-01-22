@@ -860,3 +860,28 @@ int ip_tunnel_get_link(struct netif_port *dev, struct rte_eth_link *link)
         return EDPVS_OK;
     }
 }
+
+int ip_tunnel_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
+{
+    struct ip_tunnel *tnl = netif_priv(dev);
+
+    if (tnl->link) {
+        return netif_get_stats(tnl->link, stats);
+    } else {
+        /* TODO: support per-lcore stats */
+        memset(stats, 0, sizeof(*stats));
+        return EDPVS_OK;
+    }
+}
+
+int ip_tunnel_get_promisc(struct netif_port *dev, bool *promisc)
+{
+    struct ip_tunnel *tnl = netif_priv(dev);
+
+    if (tnl->link) {
+        return netif_get_promisc(tnl->link, promisc);
+    } else {
+        *promisc = false;
+        return EDPVS_OK;
+    }
+}

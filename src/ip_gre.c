@@ -240,6 +240,8 @@ static struct netif_ops gre_dev_ops = {
     .op_init        = gre_dev_init,
     .op_xmit        = gre_xmit,
     .op_get_link    = ip_tunnel_get_link,
+    .op_get_stats   = ip_tunnel_get_stats,
+    .op_get_promisc = ip_tunnel_get_promisc,
 };
 
 static void gre_setup(struct netif_port *dev)
