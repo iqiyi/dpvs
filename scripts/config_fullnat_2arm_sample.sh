@@ -16,6 +16,9 @@ LAN_NET="172.16.10.0/$LAN_PREF"
 TCP_REAL_SERVER_LIST=('172.16.10.3:8080' '172.16.10.3:8081' '172.16.10.3:8082' '172.16.10.4:8080' '172.16.10.4:8081' '172.16.10.4:8082')
 UDP_REAL_SERVER_LIST=('172.16.10.3:53' '172.16.10.4:53')
 
+# Enable or Disable SYN PROXY
+SYN_PROXY='Disable'
+
 WAN_DEV=dpdk1 # device for WAN IP list to bind on
 LAN_DEV=dpdk0 # device for LAN IP to bind on
 
@@ -125,9 +128,14 @@ check_gw() {
 }
 
 config_dpvs_rules() {
+    if [ "x$SYN_PROXY" == "xEnable" ]; then
+        SYN_PROXY='-j enable'
+    elif [ "x$SYN_PROXY" == "xDisable" ]; then
+        SYN_PROXY='-j disable'
+    fi
     if [ "x$WAN_TCP_PORT" != "x" ]; then
         for vip in ${WAN_IP_LIST[@]}; do
-            run_cmd "$IPVSADM_CMD  -A -t $vip:$WAN_TCP_PORT -s rr"
+            run_cmd "$IPVSADM_CMD  -A -t $vip:$WAN_TCP_PORT -s rr $SYN_PROXY"
             for rs in ${TCP_REAL_SERVER_LIST[@]}; do
                 run_cmd "$IPVSADM_CMD -a -t $vip:$WAN_TCP_PORT -r $rs -b"
             done
