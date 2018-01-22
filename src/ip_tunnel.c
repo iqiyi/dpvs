@@ -113,6 +113,7 @@ static int tunnel_bind_dev(struct netif_port *dev)
     const struct iphdr *tiph = &tnl->params.iph;
     struct netif_port *linkdev = NULL;
     int mtu = ETH_DATA_LEN; /* 1500 */
+    int t_hlen = tnl->hlen + sizeof(struct iphdr);
 
     /* guess output device to choose mtu and headroom */
     if (tiph->daddr) {
@@ -140,7 +141,7 @@ static int tunnel_bind_dev(struct netif_port *dev)
     if (linkdev)
         mtu = linkdev->mtu;
 
-    mtu -= dev->hw_header_len + tnl->hlen + sizeof(struct iphdr);
+    mtu -= dev->hw_header_len + t_hlen;
 
     if (mtu < IPV4_MIN_MTU)
         mtu = IPV4_MIN_MTU;
@@ -180,22 +181,26 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     tnl->link = netif_port_get_by_name(params.link);
 
     dev->type = PORT_TYPE_TUNNEL;
-    dev->mtu = tunnel_bind_dev(dev);
+    dev->hw_header_len = 0; /* no l2 header or tunnel,
+                               set before tunnel_bind_dev */
+    if (tnl->link) {
+        dev->flag |= tnl->link->flag;
+        ether_addr_copy(&tnl->link->addr, &dev->addr);
+    }
     dev->flag |= NETIF_PORT_FLAG_RUNNING; /* XXX */
     dev->flag |= NETIF_PORT_FLAG_NO_ARP;
     dev->flag &= ~NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
-    if (tnl->link) {
-        dev->flag |= tnl->link->flag;
-        ether_addr_copy(&tnl->link->addr, &dev->addr);
-    }
 
     err = netif_port_register(dev);
     if (err != EDPVS_OK) {
         netif_free(dev);
         return NULL;
     }
+
+    /* set MTU after op_init, need calc tnl->hlen first */
+    dev->mtu = tunnel_bind_dev(dev);
 
     /* insert to table */
     hlist_add_head(&tnl->hlist, tunnel_hash_head(tab, params.i_key,
@@ -268,7 +273,7 @@ static int tunnel_dump_table(struct ip_tunnel_tab *tab,
     int h, cnt = 0;
     struct ip_tunnel *tnl;
 
-    assert(tab && pars && npar);
+    assert(tab && pars);
 
     for (h = 0; h < IP_TNL_HASH_SIZE; h++) {
         hlist_for_each_entry(tnl, &tab->tunnels[h], hlist) {
@@ -277,7 +282,8 @@ static int tunnel_dump_table(struct ip_tunnel_tab *tab,
 
             assert(tnl->dev && tnl->dev->type == PORT_TYPE_TUNNEL);
 
-            if (!tunnel_link_match(tnl, link))
+            if (link != NETIF_PORT_ID_INVALID &&
+                !tunnel_link_match(tnl, link))
                 continue;
 
             memcpy(pars + cnt, &tnl->params, sizeof(*pars));
@@ -468,6 +474,11 @@ static int tunnel_so_get(sockoptid_t opt, const void *arg, size_t inlen,
         tab = ops->tab;
         assert(tab);
 
+        /* rte_malloc() do not support 0 size allocate,
+         * we cannot return EDPVS_NOMEM for that case. */
+        if (!tab->nb_tnl)
+            goto done;
+
         tp_arr = rte_malloc(NULL, sizeof(*tp_arr) * tab->nb_tnl, 0);
         if (!tp_arr) {
             err = EDPVS_NOMEM;
@@ -482,12 +493,18 @@ static int tunnel_so_get(sockoptid_t opt, const void *arg, size_t inlen,
     /* for each table */
     list_for_each_entry(ops, &ip_tunnel_ops_list, list) {
         void *new_ptr;
+        size_t size;
 
         tab = ops->tab;
 
+        /* rte_realloc() do not support 0 size,
+         * we cannot return EDPVS_NOMEM. */
+        size = sizeof(*tp_arr) * (tab->nb_tnl + tp_cnt);
+        if (!size)
+            continue;
+
         /* realloc could be slow, but need optimize ? */
-        new_ptr = rte_realloc(tp_arr,
-                              sizeof(*tp_arr) * (tab->nb_tnl + tp_cnt), 0);
+        new_ptr = rte_realloc(tp_arr, size, 0);
         if (!new_ptr) {
             rte_free(tp_arr);
             err = EDPVS_NOMEM;
@@ -841,6 +858,9 @@ int ip_tunnel_pull_header(struct rte_mbuf *mbuf, int hlen, __be16 in_proto)
     /* pull inner header */
     if (mbuf_may_pull(mbuf, hlen) != 0)
         return EDPVS_NOROOM;
+
+    if (rte_pktmbuf_adj(mbuf, hlen) == NULL)
+        return EDPVS_INVPKT;
 
     /* clean up vlan info, it should be cleared by vlan module. */
     if (unlikely(mbuf->ol_flags & PKT_RX_VLAN_STRIPPED)) {

@@ -2640,7 +2640,7 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
         snprintf(dev->name, sizeof(dev->name), "%s", namefmt);
 
     dev->socket = SOCKET_ID_ANY;
-    dev->hw_header_len = sizeof(struct ether_hdr);
+    dev->hw_header_len = sizeof(struct ether_hdr); /* default */
 
     if (setup)
         setup(dev);

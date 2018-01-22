@@ -217,14 +217,14 @@ static int gre_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
         tnl->o_seqno++;
 
     err = gre_build_header(mbuf, tnl->hlen, tnl->params.o_flags,
-                           mbuf->packet_type, tnl->params.o_key,
+                           htons(mbuf->packet_type), tnl->params.o_key,
                            htonl(tnl->o_seqno));
     if (err != EDPVS_OK) {
         rte_pktmbuf_free(mbuf);
         return err;
     }
 
-    return ip_tunnel_xmit(mbuf, dev, tiph, tiph->protocol);
+    return ip_tunnel_xmit(mbuf, dev, tiph, IPPROTO_GRE);
 }
 
 static int gre_dev_init(struct netif_port *dev)

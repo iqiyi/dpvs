@@ -84,7 +84,7 @@ static int ipip_rcv(struct rte_mbuf *mbuf)
         tnl->params.iph.protocol != 0)
         goto drop;
 
-    if (ip_tunnel_pull_header(mbuf, sizeof(*iph), ETH_P_IP) != EDPVS_OK)
+    if (ip_tunnel_pull_header(mbuf, 0, ipip_tpi.proto) != EDPVS_OK)
         goto drop;
 
     return ip_tunnel_rcv(tnl, &ipip_tpi, mbuf);
