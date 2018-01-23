@@ -1822,7 +1822,7 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
     int ntx, ii;
     struct netif_queue_conf *txq;
     unsigned i = 0;
-    struct rte_mbuf *mbuf_cloned = NULL;
+    struct rte_mbuf *mbuf_copied = NULL;
     struct netif_port *dev = NULL;
 
     assert(LCORE_ID_ANY != cid);
@@ -1833,15 +1833,11 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
     dev = netif_port_get(pid);
     if (dev && (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI)) {
         for (; i<txq->len; i++) {
-            /*
-            * The rte_mbuf pending to transmit won't be modified any more.
-            * So, rte_pktmbuf_clone is ok.
-            */
-            if (NULL == (mbuf_cloned = rte_pktmbuf_clone(txq->mbufs[i],
+            if (NULL == (mbuf_copied = mbuf_copy(txq->mbufs[i],
                 pktmbuf_pool[dev->socket])))
-                RTE_LOG(WARNING, NETIF, "%s: Failed to clone mbuf\n", __func__);
+                RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n", __func__);
             else
-                kni_ingress(mbuf_cloned, dev, txq);
+                kni_ingress(mbuf_copied, dev, txq);
         }
         kni_send2kern_loop(pid, txq);
     }
@@ -2084,8 +2080,11 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
 
     pt = pkt_type_get(eth_type, dev);
 
-    if (!forward2kni && NULL == pt) {
-        kni_ingress(mbuf, dev, qconf);
+    if (NULL == pt) {
+        if (!forward2kni)
+            kni_ingress(mbuf, dev, qconf);
+        else
+            rte_pktmbuf_free(mbuf);
         return EDPVS_OK;
     }
 
@@ -2135,14 +2134,15 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
     err = pt->func(mbuf, dev);
 
     if (err == EDPVS_KNICONTINUE) {
-        if (pkts_from_ring) {
+        if (pkts_from_ring || forward2kni) {
             rte_pktmbuf_free(mbuf);
             return EDPVS_OK;
         }
 
-        if (!forward2kni && likely(NULL != rte_pktmbuf_prepend(mbuf,
-            (mbuf->data_off - data_off))))
-            kni_ingress(mbuf, dev, qconf);
+        if (likely(NULL != rte_pktmbuf_prepend(mbuf,
+            (mbuf->data_off - data_off)))) {
+                kni_ingress(mbuf, dev, qconf);
+        }
     }
 
     return EDPVS_OK;
