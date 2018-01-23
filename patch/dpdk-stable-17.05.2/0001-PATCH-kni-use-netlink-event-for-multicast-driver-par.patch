@@ -1,7 +1,7 @@
-From 3e0e8d998f7169e01b9d9115b15715ab8888da76 Mon Sep 17 00:00:00 2001
-From: yuwenchao <yuwenchao@qiyi.com>
-Date: Wed, 13 Sep 2017 12:01:00 +0800
-Subject: [PATCH] [PATCH] kni: use netlink event for multicast (driver part).
+From b5843bda351920c27be5e8211ef6fa5d548fa03e Mon Sep 17 00:00:00 2001
+From: Lei Chen <raychen@qiyi.com>
+Date: Tue, 23 Jan 2018 12:39:56 +0800
+Subject: [PATCH] kni: use netlink event for multicast (driver part).
 
 kni driver send netlink event every time hw-multicast list updated by
 kernel, the user kni app should capture the event and update multicast
@@ -15,7 +15,7 @@ not easy to address.
  1 file changed, 68 insertions(+)
 
 diff --git a/lib/librte_eal/linuxapp/kni/kni_net.c b/lib/librte_eal/linuxapp/kni/kni_net.c
-index db9f489..c7cd57a 100644
+index db9f489..fab94d1 100644
 --- a/lib/librte_eal/linuxapp/kni/kni_net.c
 +++ b/lib/librte_eal/linuxapp/kni/kni_net.c
 @@ -35,6 +35,8 @@
@@ -74,7 +74,7 @@ index db9f489..c7cd57a 100644
 +	struct nlmsghdr *nlh;
 +	struct ifaddrmsg *ifm;
 +
-+	skb = nlmsg_new(kni_nlmsg_size(), GFP_KERNEL);
++	skb = nlmsg_new(kni_nlmsg_size(), GFP_ATOMIC);
 +	if (!skb)
 +		return;
 +
@@ -98,11 +98,11 @@ index db9f489..c7cd57a 100644
 +
 +	/* other group ? */
 +	pr_debug("%s: rx-mode/multicast-list changed\n", __func__);
-+	rtnl_notify(skb, net, 0, RTNLGRP_NOTIFY, NULL, GFP_KERNEL);
++	rtnl_notify(skb, net, 0, RTNLGRP_NOTIFY, NULL, GFP_ATOMIC);
 +	return;
  }
  
  static int
 -- 
-1.8.3.1
+2.7.4
 
