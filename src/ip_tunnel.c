@@ -215,7 +215,7 @@ static int tunnel_change(struct netif_port *dev,
 {
     struct ip_tunnel *tnl = netif_priv(dev);
     struct netif_port *link;
-    assert(dev && dev->type == PORT_TYPE_TUNNEL && params);
+    assert(dev && dev->type == PORT_TYPE_TUNNEL && params && tnl->tab);
 
     tunnel_clear_rt_cache(tnl);
 
@@ -223,7 +223,15 @@ static int tunnel_change(struct netif_port *dev,
     if (link)
         tnl->link = link;
 
-    tnl->params = *params;
+    hlist_del(&tnl->hlist);
+    tnl->params = *params; /* FIXME: all params changes ! */
+    hlist_add_head(&tnl->hlist, tunnel_hash_head(tnl->tab, params->i_key,
+                                                 params->iph.daddr));
+
+    dev->mtu = tunnel_bind_dev(dev);
+
+    if (tnl->tab->ops->change)
+        return tnl->tab->ops->change(dev, params);
 
     return EDPVS_OK;
 }

@@ -249,6 +249,16 @@ static void gre_setup(struct netif_port *dev)
     dev->netif_ops = &gre_dev_ops;
 }
 
+static int gre_change(struct netif_port *dev,
+                      const struct ip_tunnel_param *param)
+{
+    struct ip_tunnel *tnl = netif_priv(dev);
+
+    tnl->hlen = gre_calc_hlen(param->o_flags);
+
+    return EDPVS_OK;
+}
+
 static int gre_rcv(struct rte_mbuf *mbuf)
 {
     int hlen;
@@ -285,6 +295,7 @@ static struct ip_tunnel_ops gre_tnl_ops = {
     .kind       = "gre",
     .priv_size  = sizeof(struct ip_tunnel),
     .setup      = gre_setup,
+    .change     = gre_change,
 };
 
 static struct inet_protocol gre_proto = {

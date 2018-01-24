@@ -83,6 +83,8 @@ struct ip_tunnel_ops {
     struct list_head        list;
     struct ip_tunnel_tab    *tab;
     void                    (*setup)(struct netif_port *dev);
+    int                     (*change)(struct netif_port *dev,
+                                      const struct ip_tunnel_param *params);
 };
 
 #define IP_TNL_HASH_BITS    7
