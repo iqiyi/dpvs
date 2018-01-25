@@ -60,7 +60,7 @@ static void tnl_dump_param(const struct ip_tunnel_param *param)
     inet_ntop(AF_INET, &param->iph.daddr, dip, sizeof(dip));
 
     printf("%s: %4s remote %s local %s ",
-           param->ifname, param->kind, sip, dip);
+           param->ifname, param->kind, dip, sip);
 
     if (strlen(param->link))
         printf("dev %s ", param->link);
@@ -71,16 +71,16 @@ static void tnl_dump_param(const struct ip_tunnel_param *param)
         printf("ttl inherit ");
 
     if (param->iph.tos)
-        printf("tos %x ", param->iph.tos);
+        printf("tos 0x%x ", param->iph.tos);
 
     if (param->i_flags)
-        printf("i_flags %x ", param->i_flags);
+        printf("i_flags 0x%x ", ntohs(param->i_flags));
     if (param->o_flags)
-        printf("o_flags %x ", param->o_flags);
+        printf("o_flags 0x%x ", ntohs(param->o_flags));
     if (param->i_key)
-        printf("i_key %x ", param->i_key);
+        printf("i_key 0x%x ", ntohl(param->i_key));
     if (param->o_key)
-        printf("o_key %x ", param->o_key);
+        printf("o_key 0x%x ", ntohl(param->o_key));
 
     printf("\n");
 }
@@ -157,7 +157,14 @@ static int tnl_parse(struct dpip_obj *obj, struct dpip_conf *cf)
             NEXTARG_CHECK(cf, CURRARG(cf));
             snprintf(param->link, sizeof(param->link), "%s", CURRARG(cf));
         } else {
-            snprintf(param->ifname, sizeof(param->ifname), "%s", CURRARG(cf));
+            if (!strlen(param->ifname))
+                snprintf(param->ifname, sizeof(param->ifname), "%s", CURRARG(cf));
+            else { /* cannot be set more than once */
+                fprintf(stderr, "Is `%s' or `%s' garbage ?\n",
+                        CURRARG(cf), param->ifname);
+                return EDPVS_INVAL;
+            }
+
         }
 
         NEXTARG(cf);
