@@ -178,7 +178,13 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     tnl->dev = dev;
     tnl->tab = tab;
     tnl->params = params;
-    tnl->link = netif_port_get_by_name(params.link);
+    if (strlen(params.link)) {
+        tnl->link = netif_port_get_by_name(params.link);
+        if (!tnl->link) {
+            RTE_LOG(WARNING, TUNNEL, "%s: invalid link device\n", __func__);
+            tnl->params.link[0] = '\0';
+        }
+    }
 
     dev->type = PORT_TYPE_TUNNEL;
     dev->hw_header_len = 0; /* no l2 header or tunnel,
@@ -217,11 +223,15 @@ static int tunnel_change(struct netif_port *dev,
     struct netif_port *link;
     assert(dev && dev->type == PORT_TYPE_TUNNEL && params && tnl->tab);
 
-    tunnel_clear_rt_cache(tnl);
+    if (strlen(params->link)) {
+        link = netif_port_get_by_name(params->link);
+        if (!link)
+            return EDPVS_NODEV;
 
-    link = netif_port_get_by_name(params->link);
-    if (link)
         tnl->link = link;
+    }
+
+    tunnel_clear_rt_cache(tnl);
 
     hlist_del(&tnl->hlist);
     tnl->params = *params; /* FIXME: all params changes ! */
@@ -247,6 +257,7 @@ static int tunnel_destroy(struct ip_tunnel_tab *tab, struct netif_port *dev)
     if (tab->fb_tunnel_dev == dev)
         tab->fb_tunnel_dev = NULL;
 
+    netif_port_unregister(dev);
     return netif_free(dev);
 }
 
@@ -787,7 +798,7 @@ int ip_tunnel_xmit(struct rte_mbuf *mbuf, struct netif_port *dev,
     assert(mbuf && dev && tiph);
 
     if (mbuf->packet_type == ETHER_TYPE_IPv4)
-        iiph = rte_pktmbuf_mtod(mbuf, struct iphdr *);
+        iiph = rte_pktmbuf_mtod_offset(mbuf, struct iphdr *, tnl->hlen);
 
     connected = tiph->daddr != 0;
 

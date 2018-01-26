@@ -116,7 +116,7 @@ struct ip_tunnel {
 struct ip_tunnel_pktinfo {
     __be16  flags;
     __be16  proto;
-    __be16  key;
+    __be32  key;
     __be32  seq;
     int     hdr_len;
 };
