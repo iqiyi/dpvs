@@ -9,7 +9,7 @@ WAN_TCP_PORT=80
 WAN_UDP_PORT=53
 WAN_NET='192.168.10.0/24'
 
-LAN_IP='172.16.10.2' #defined but not used
+LAN_IP_LIST=('172.16.10.2' '172.16.10.10' '172.16.10.11' '172.16.10.12' '172.16.10.13') 
 LAN_PREF=24
 LAN_NET="172.16.10.0/$LAN_PREF"
 
@@ -139,7 +139,9 @@ config_dpvs_rules() {
             for rs in ${TCP_REAL_SERVER_LIST[@]}; do
                 run_cmd "$IPVSADM_CMD -a -t $vip:$WAN_TCP_PORT -r $rs -b"
             done
-            run_cmd "$IPVSADM_CMD --add-laddr -z $LAN_IP -t $vip:$WAN_TCP_PORT -F $LAN_DEV"
+            for lip in ${LAN_IP_LIST[@]}; do
+                run_cmd "$IPVSADM_CMD --add-laddr -z $lip -t $vip:$WAN_TCP_PORT -F $LAN_DEV"
+            done
         done
     fi
     if [ "x$WAN_UDP_PORT" != "x" ]; then
@@ -148,7 +150,9 @@ config_dpvs_rules() {
             for rs in ${UDP_REAL_SERVER_LIST[@]}; do
                 run_cmd "$IPVSADM_CMD -a -u $vip:$WAN_UDP_PORT -r $rs -b"
             done
-            run_cmd "$IPVSADM_CMD --add-laddr -z $LAN_IP -u $vip:$WAN_UDP_PORT -F $LAN_DEV"
+            for lip in ${LAN_IP_LIST[@]}; do
+                run_cmd "$IPVSADM_CMD --add-laddr -z $lip -u $vip:$WAN_UDP_PORT -F $LAN_DEV"
+            done
         done
     fi
 }
