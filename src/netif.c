@@ -3351,25 +3351,25 @@ int netif_port_register(struct netif_port *port)
 
 int netif_port_unregister(struct netif_port *port)
 {
-    struct netif_port *cur;
+    struct netif_port *cur, *next;
     int ret1, ret2, hash, nhash;
     if (unlikely(NULL == port))
         return EDPVS_INVAL;
     ret1 = ret2 = EDPVS_NOTEXIST;
 
     hash = port_tab_hashkey(port->id);
-    list_for_each_entry(cur, &port_tab[hash], list) {
+    list_for_each_entry_safe(cur, next, &port_tab[hash], list) {
         if (cur->id == port->id || strcmp(cur->name, port->name) == 0) {
-            list_del_init(&port->list);
+            list_del_init(&cur->list);
             ret1 = EDPVS_OK;
             break;
         }
     }
 
     nhash = port_ntab_hashkey(port->name, sizeof(port->name));
-    list_for_each_entry(cur, &port_tab[nhash], nlist) {
+    list_for_each_entry_safe(cur, next, &port_ntab[nhash], nlist) {
         if (cur->id == port->id || strcmp(cur->name, port->name) == 0) {
-            list_del_init(&port->nlist);
+            list_del_init(&cur->nlist);
             ret2 = EDPVS_OK;
             break;
         }
