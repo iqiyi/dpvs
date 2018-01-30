@@ -136,6 +136,9 @@ clear_service_vs(list vs_group, virtual_server_t * vs)
 int
 clear_services(void)
 {
+	if (!check_data)
+		return 0;
+
 	element e;
 	list l = check_data->vs;
 	virtual_server_t *vs;

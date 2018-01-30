@@ -31,7 +31,6 @@
 /* local helpers functions */
 static int parse_timeout(char *, unsigned *);
 static int string_to_number(const char *, int, int);
-static int modprobe_ipvs(void);
 static int parse_bps(char *, unsigned *);
 static int parse_limit_proportion(char *, unsigned *);
 
@@ -91,11 +90,9 @@ ipvs_start(void)
 	log_message(LOG_DEBUG, "Initializing ipvs 2.4");
 	/* Init IPVS kernel channel */
 	if (ipvs_init()) {
-		/* try to insmod the ip_vs module if ipvs_init failed */
-		if (modprobe_ipvs() || ipvs_init()) {
-			log_message(LOG_INFO,
-			       "IPVS : Can't initialize ipvs: %s",
-		 	       ipvs_strerror(errno));
+		log_message(LOG_INFO,
+				"IPVS : Can't initialize ipvs: %s",
+				ipvs_strerror(errno));
 			return IPVS_ERROR;
 		}
 	}
@@ -109,7 +106,8 @@ void
 ipvs_stop(void)
 {
 	/* Clean up the room */
-	FREE(urule);
+	if (urule)
+		FREE(urule);
 	ipvs_close();
 }
 
@@ -377,11 +375,9 @@ ipvs_start(void)
 	log_message(LOG_DEBUG, "Initializing ipvs 2.6");
 	/* Initialize IPVS module */
 	if (ipvs_init()) {
-		if (modprobe_ipvs() || ipvs_init()) {
-			log_message(LOG_INFO, "IPVS: Can't initialize ipvs: %s",
-			       ipvs_strerror(errno));
-			return IPVS_ERROR;
-		}
+		log_message(LOG_INFO, "IPVS: Can't initialize ipvs: %s",
+				ipvs_strerror(errno));
+		return IPVS_ERROR;
 	}
 
 	/* Allocate global user rules */
@@ -1604,30 +1600,4 @@ string_to_number(const char *s, int min, int max)
 			return -1;
 	} else
 		return -1;
-}
-
-static int
-modprobe_ipvs(void)
-{
-	char *argv[] = { "/sbin/modprobe", "-s", "--", "ip_vs", NULL };
-	int child;
-	int status;
-	int rc;
-
-	if (!(child = fork())) {
-		execv(argv[0], argv);
-		exit(1);
-	}
-
-	rc = waitpid(child, &status, 0);
-	if (rc < 0) {
-		log_message(LOG_INFO, "IPVS: waitpid error (%s)"
-				    , strerror(errno));
-	}
-
-	if (!WIFEXITED(status) || WEXITSTATUS(status)) {
-		return 1;
-	}
-
-	return 0;
 }

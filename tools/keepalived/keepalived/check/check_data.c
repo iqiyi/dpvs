@@ -42,6 +42,9 @@ alloc_ssl(void)
 void
 free_ssl(void)
 {
+	if (!check_data)
+		return;
+
 	ssl_data_t *ssl = check_data->ssl;
 
 	if (!ssl)
@@ -55,6 +58,9 @@ free_ssl(void)
 static void
 dump_ssl(void)
 {
+	if (!check_data)
+      return;
+
 	ssl_data_t *ssl = check_data->ssl;
 
 	if (ssl->password)
@@ -507,6 +513,8 @@ alloc_check_data(void)
 void
 free_check_data(check_data_t *data)
 {
+	if (!check_data)
+		return;
 	free_list(data->vs);
 	free_list(data->vs_group);
 	free_list(data->laddr_group);
