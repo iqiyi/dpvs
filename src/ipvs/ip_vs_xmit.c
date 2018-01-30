@@ -26,6 +26,7 @@
 #include "parser/parser.h"
 
 static bool fast_xmit_close = false;
+static bool xmit_ttl = false;
 
 static int dp_vs_fast_xmit_fnat(struct dp_vs_proto *proto,
                     struct dp_vs_conn *conn,
@@ -215,6 +216,17 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
 
     mbuf->userdata = rt;
 
+    /* after route lookup and before translation */
+    if (xmit_ttl) {
+        if (unlikely(iph->time_to_live <= 1)) {
+            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+            err = EDPVS_DROP;
+            goto errout;
+        }
+
+        iph->time_to_live--;
+    }
+
     /* L3 translation before l4 re-csum */
     iph->hdr_checksum = 0;
     iph->src_addr = conn->laddr.in.s_addr;
@@ -282,6 +294,17 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
     }
 
     mbuf->userdata = rt;
+
+    /* after route lookup and before translation */
+    if (xmit_ttl) {
+        if (unlikely(iph->time_to_live <= 1)) {
+            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+            err = EDPVS_DROP;
+            goto errout;
+        }
+
+        iph->time_to_live--;
+    }
 
     /* L3 translation before l4 re-csum */
     iph->hdr_checksum = 0;
@@ -480,6 +503,17 @@ int dp_vs_xmit_snat(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
 
     mbuf->userdata = rt;
 
+    /* after route lookup and before translation */
+    if (xmit_ttl) {
+        if (unlikely(iph->time_to_live <= 1)) {
+            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+            err = EDPVS_DROP;
+            goto errout;
+        }
+
+        iph->time_to_live--;
+    }
+
     /* L3 translation before l4 re-csum */
     iph->hdr_checksum = 0;
     iph->dst_addr = conn->daddr.in.s_addr;
@@ -537,6 +571,17 @@ int dp_vs_out_xmit_snat(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
         goto errout;
     }
 
+    /* after route lookup and before translation */
+    if (xmit_ttl) {
+        if (unlikely(iph->time_to_live <= 1)) {
+            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+            err = EDPVS_DROP;
+            goto errout;
+        }
+
+        iph->time_to_live--;
+    }
+
     /* L3 translation before L4 re-csum */
     iph->hdr_checksum = 0;
     iph->src_addr = conn->vaddr.in.s_addr;
@@ -569,8 +614,14 @@ static void conn_fast_xmit_handler(vector_t tockens)
     fast_xmit_close = true;
 }
 
+static void xmit_ttl_handler(vector_t tockens)
+{
+    RTE_LOG(INFO, IPVS, "enable xmit ttl\n");
+    xmit_ttl = true;
+}
+
 void install_xmit_keywords(void)
 {
-    install_keyword("fast_xmit_close", conn_fast_xmit_handler, 
-            KW_TYPE_INIT);
+    install_keyword("fast_xmit_close", conn_fast_xmit_handler, KW_TYPE_INIT);
+    install_keyword("xmit_ttl", xmit_ttl_handler, KW_TYPE_NORMAL);
 }

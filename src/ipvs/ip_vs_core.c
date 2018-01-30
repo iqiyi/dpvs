@@ -284,12 +284,8 @@ static int xmit_outbound(struct rte_mbuf *mbuf,
     }
 
     err = conn->packet_out_xmit(prot, conn, mbuf);
-    if (err != EDPVS_OK) {
-        if (EDPVS_NOROUTE != err)
-            RTE_LOG(WARNING, IPVS, "%s: fail to out xmit: %d\n", __func__, err);
-        else
-            RTE_LOG(DEBUG, IPVS, "%s: fail to out xmit: %d\n", __func__, err);
-    }
+    if (err != EDPVS_OK)
+        RTE_LOG(DEBUG, IPVS, "%s: fail to out xmit: %d\n", __func__, err);
 
     dp_vs_conn_put(conn);
     /* always stolen the packet */

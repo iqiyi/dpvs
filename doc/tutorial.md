@@ -167,7 +167,7 @@ Optionally, if `RS` need to obtain client's real *IP:port* by socket API, e.g., 
 
 ## Full-NAT with OSPF/ECMP (two-arm)
 
-To work with *OSPF*, the patch in `patch/dpdk-16.07/` must be applied to *DPDK-16.07* and the correct `rte_kni.ko` should be installed.
+To work with *OSPF*, the patch in `patch/dpdk-stable-17.05.2/` must be applied to *dpdk-stable-17.05.2* and the correct `rte_kni.ko` should be installed.
 
 `DPVS` OSPF-cluster model looks like this, it leverage `OSPF/ECMP` for HA and high-scalability. This model is widely used in practice.
 
