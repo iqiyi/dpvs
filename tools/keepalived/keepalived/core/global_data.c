@@ -147,6 +147,8 @@ init_global_data(data_t * data)
 void
 free_global_data(data_t * data)
 {
+	if (!data)
+		return;
 	free_list(data->email);
 	FREE_PTR(data->router_id);
 	FREE_PTR(data->plugin_dir);
