@@ -36,6 +36,8 @@ int tcp_connect_thread(thread_t *);
 void
 free_tcp_check(void *data)
 {
+	if (!data)
+		return;
 	FREE(CHECKER_CO(data));
 	FREE(data);
 }
@@ -44,6 +46,8 @@ void
 dump_tcp_check(void *data)
 {
 	log_message(LOG_INFO, "   Keepalive method = TCP_CHECK");
+	if (!data)
+		return;
 	dump_conn_opts (CHECKER_GET_CO());
 }
 
