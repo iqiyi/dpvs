@@ -199,6 +199,8 @@ thread_cleanup_master(thread_master_t * m)
 void
 thread_destroy_master(thread_master_t * m)
 {
+	if (!m)
+		return;
 	thread_cleanup_master(m);
 	FREE(m);
 }
