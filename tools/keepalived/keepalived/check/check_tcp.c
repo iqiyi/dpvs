@@ -38,6 +38,8 @@ free_tcp_check(void *data)
 {
 	if (!data)
 		return;
+	if (!CHECKER_CO(data))
+		return;
 	FREE(CHECKER_CO(data));
 	FREE(data);
 }
