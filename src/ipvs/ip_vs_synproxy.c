@@ -524,11 +524,6 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
     if (unlikely(NULL == th))
         goto syn_rcv_out;
 
-    /* mbuf will be reused and ether header will be set.
-     * FIXME: to support non-ether packets. */
-    if (mbuf->l2_len != sizeof(struct ether_hdr))
-        goto syn_rcv_out;
-
     if (th->syn && !th->ack && !th->rst && !th->fin &&
             (svc = dp_vs_service_lookup(af, iph->proto, 
                                         &iph->daddr, th->dest, 0, NULL, NULL)) &&
@@ -546,6 +541,11 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
             dp_vs_service_put(svc);
         return 1;
     }
+
+    /* mbuf will be reused and ether header will be set.
+     * FIXME: to support non-ether packets. */
+    if (mbuf->l2_len != sizeof(struct ether_hdr))
+        goto syn_rcv_out;
 
     /* update statistics */
     dp_vs_estats_inc(SYNPROXY_SYN_CNT);

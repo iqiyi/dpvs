@@ -1098,7 +1098,7 @@ static int sockopt_msg_send(int clt_fd,
     }
 
     if (hdr->errcode) {
-        RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] errcode set in sockopt msg reply: %s\n",
+        RTE_LOG(DEBUG, MSGMGR, "[%s:msg#%d] errcode set in sockopt msg reply: %s\n",
                 __func__, hdr->id, dpvs_strerror(hdr->errcode));
         return hdr->errcode;
     }
