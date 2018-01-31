@@ -96,6 +96,9 @@ ipaddresstos(ip_address_t *ipaddress)
 {
 	char *addr_str = (char *) MALLOC(INET6_ADDRSTRLEN);
 
+    if (!ipaddress)
+        return addr_str;
+
 	if (IP_IS6(ipaddress)) {
 		inet_ntop(AF_INET6, &ipaddress->u.sin6_addr, addr_str, INET6_ADDRSTRLEN);
 	} else {
