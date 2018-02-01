@@ -83,6 +83,8 @@ int main(int argc, char *argv[])
     uint32_t loop_cnt = 0;
     int timer_sched_loop_interval;
 
+    fprintf(stderr, "dpvs version: %s build on %s\n", DPVS_VERSION, DPVS_BUILD_DATE);
+
     /* check if dpvs is running and remove zombie pidfile */
     if (dpvs_running(DPVS_PIDFILE)) {
         fprintf(stderr, "dpvs is already running\n");
