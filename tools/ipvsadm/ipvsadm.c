@@ -325,6 +325,8 @@ static void list_timeout(void);
 static void list_daemon(void);
 static int list_laddrs(ipvs_service_t *svc, int with_title);
 static int list_all_laddrs(void);
+static void list_blklsts_print_title(void);
+static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
 static int list_all_blklsts(void);
 
 #if 0
@@ -981,7 +983,12 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		break;
 
 	case CMD_GETBLKLST:
-		result = list_all_blklsts();
+		if(options & OPT_SERVICE) {
+			list_blklsts_print_title();
+			result = list_blklst(ce.svc.addr.ip, ce.svc.port, ce.svc.protocol);
+		}
+		else
+			result = list_all_blklsts();
 		break;
 	}
 	if (result)
@@ -1464,47 +1471,6 @@ static void fail(int err, char *msg, ...)
 	exit(err);
 }
 
-
-#if 0
-static int modprobe_ipvs(void)
-{
-	char *argv[] = { "/sbin/modprobe", "--", "ip_vs", NULL };
-	int child;
-	int status;
-
-	if (!(child = fork())) {
-		execv(argv[0], argv);
-		exit(1);
-	}
-
-    waitpid(child, &status, 0);
-
-	if (!WIFEXITED(status) || WEXITSTATUS(status)) {
-		return 1;
-	}
-
-	return 0;
-}
-
-static void check_ipvs_version(void)
-{
-	/* verify the IPVS version */
-	if (ipvs_info.version <
-	    IPVS_VERSION(MINIMUM_IPVS_VERSION_MAJOR,
-			 MINIMUM_IPVS_VERSION_MINOR,
-			 MINIMUM_IPVS_VERSION_PATCH)) {
-		fprintf(stderr,
-			"Warning: IPVS version mismatch: \n"
-			"  Kernel compiled with IPVS version %d.%d.%d\n"
-			"  ipvsadm " IPVSADM_VERSION_NO
-			"  requires minimum IPVS version %d.%d.%d\n\n",
-			NVERSION(ipvs_info.version),
-			MINIMUM_IPVS_VERSION_MAJOR,
-			MINIMUM_IPVS_VERSION_MINOR,
-			MINIMUM_IPVS_VERSION_PATCH);
-	}
-}
-#endif
 
 static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 		unsigned int format)
@@ -2032,28 +1998,63 @@ static int list_all_laddrs(void)
 
 }
 
-static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
+static void list_blklsts_print_title(void)
 {
-	char pbuf_v[32], pbuf_d[32];
-	sprintf(pbuf_v , "%u.%u.%u.%u" , PRINT_NIP(blklst->vaddr.in.s_addr));
-	sprintf(pbuf_d , "%u.%u.%u.%u" , PRINT_NIP(blklst->blklst.in.s_addr));
-
-	printf("%-20s %-20s\n" , "VIP", "DENY_IP");
-	printf("%-20s %-20s\n" , pbuf_v, pbuf_d);
+	printf("%-20s %-8s %-20s\n" ,
+		"VIP:VPORT" ,
+		"PROTO" ,
+		"BLACKLIST");
 }
 
-static int list_all_blklsts(void)
+static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
+{
+	char pbuf_v[32], pbuf_d[32], port[6];
+	sprintf(pbuf_v , "%u.%u.%u.%u" , PRINT_NIP(blklst->vaddr.in.s_addr));
+	sprintf(pbuf_d , "%u.%u.%u.%u" , PRINT_NIP(blklst->blklst.in.s_addr));
+	sprintf(port, "%d", ntohs(blklst->vport));
+	if (blklst->proto ==IPPROTO_TCP)
+		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "TCP", pbuf_d);
+	else if(blklst->proto ==IPPROTO_UDP)
+		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "UDP", pbuf_d);
+	else
+		printf("proto not support!");
+}
+
+static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol)
 {
 	struct dp_vs_blklst_conf_array *get;
 	int i;
-	if(!(get = ipvs_get_blklsts())) {
+	if (!(get = ipvs_get_blklsts())) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		return -1;
 	}
 
 	for (i = 0; i < get->naddr; i++) {
-		print_service_and_blklsts(&get->blklsts[i]);
+		if ( addr_v4== get->blklsts[i].vaddr.in.s_addr && 
+		     port == get->blklsts[i].vport&& 
+		     protocol == get->blklsts[i].proto) {
+			print_service_and_blklsts(&get->blklsts[i]);
+		}
 	}
+	free(get);
+	return 0;
+}
+
+static int list_all_blklsts(void)
+{
+	struct ip_vs_get_services *get;
+	int i;
+
+	if (!(get = ipvs_get_services())) {
+		fprintf(stderr, "%s\n", ipvs_strerror(errno));
+		exit(1);
+	}
+
+	list_blklsts_print_title();
+	for (i = 0; i < get->num_services; i++)
+		list_blklst(get->entrytable[i].__addr_v4, get->entrytable[i].port, 
+				get->entrytable[i].protocol);
+	
 	free(get);
 	return 0;
 }

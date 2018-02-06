@@ -24,6 +24,7 @@
 #include "ipvs/proto_udp.h"
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
+#include "ipvs/blklst.h"
 #include "parser/parser.h"
 
 int g_defence_udp_drop = 0;
@@ -72,8 +73,8 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
 static struct dp_vs_conn *
 udp_conn_lookup(struct dp_vs_proto *proto,
                 const struct dp_vs_iphdr *iph,
-                struct rte_mbuf *mbuf, 
-                int *direct, bool reverse)
+                struct rte_mbuf *mbuf, int *direct, 
+                bool reverse, bool *drop)
 {
     struct udp_hdr *uh, _udph;
     assert(proto && iph && mbuf);
@@ -81,6 +82,11 @@ udp_conn_lookup(struct dp_vs_proto *proto,
     uh = mbuf_header_pointer(mbuf, iph->len, sizeof(_udph), &_udph);
     if (unlikely(!uh))
         return NULL;
+
+    if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, uh->dst_port, &iph->saddr)) {
+        *drop = true;
+        return NULL;
+    }  
 
     return dp_vs_conn_get(iph->af, iph->proto, 
                           &iph->saddr, &iph->daddr, 

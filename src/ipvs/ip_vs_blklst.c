@@ -46,7 +46,6 @@ static RTE_DEFINE_PER_LCORE(struct list_head *, dp_vs_blklst_tab);
 static RTE_DEFINE_PER_LCORE(rte_atomic32_t, num_blklsts);
 
 static uint32_t dp_vs_blklst_rnd;
-static struct timeval timeout;
 
 static inline uint32_t blklst_hashkey(const union inet_addr *vaddr,
                                      const union inet_addr *blklst)
@@ -57,8 +56,8 @@ static inline uint32_t blklst_hashkey(const union inet_addr *vaddr,
 }
 
 
-struct blklst_entry *dp_vs_blklst_lookup(const union inet_addr *vaddr,
-                                       const union inet_addr *blklst)
+struct blklst_entry *dp_vs_blklst_lookup(uint8_t proto, const union inet_addr *vaddr,
+                                         uint16_t vport, const union inet_addr *blklst)
 {
     unsigned hashkey;
     struct blklst_entry *blklst_node;
@@ -66,20 +65,21 @@ struct blklst_entry *dp_vs_blklst_lookup(const union inet_addr *vaddr,
     hashkey = blklst_hashkey(vaddr, blklst);
     list_for_each_entry(blklst_node, &this_blklst_tab[hashkey], list){
         if (blklst_node->vaddr.in.s_addr == vaddr->in.s_addr &&
-            blklst_node->blklst.in.s_addr == blklst->in.s_addr)
-            rte_atomic32_inc(&blklst_node->refcnt);
+            blklst_node->blklst.in.s_addr == blklst->in.s_addr &&
+            blklst_node->proto == proto &&
+            blklst_node->vport == vport)
             return blklst_node;
     }
     return NULL;
 }
 
-static int dp_vs_blklst_add_lcore(const union inet_addr *vaddr, const union inet_addr *blklst)
+static int dp_vs_blklst_add_lcore(uint8_t proto, const union inet_addr *vaddr,
+                                  uint16_t vport, const union inet_addr *blklst)
 {
     unsigned hashkey;
     struct blklst_entry *new, *blklst_node;
-    blklst_node = dp_vs_blklst_lookup(vaddr, blklst);
+    blklst_node = dp_vs_blklst_lookup(proto, vaddr, vport, blklst);
     if (blklst_node) {
-        blklst_put(blklst_node);
         return EDPVS_EXIST;
     }
 
@@ -89,60 +89,33 @@ static int dp_vs_blklst_add_lcore(const union inet_addr *vaddr, const union inet
     if (new == NULL)
         return EDPVS_NOMEM;
     
-    new->vaddr = *vaddr;
-    new->blklst = *blklst;
+    memcpy(&new->vaddr, vaddr,sizeof(union inet_addr));
+    new->vport   = vport;
+    new->proto  = proto;
+    memcpy(&new->blklst, blklst,sizeof(union inet_addr));
     list_add(&new->list, &this_blklst_tab[hashkey]);
     rte_atomic32_inc(&this_num_blklsts);
-    rte_atomic32_set(&new->refcnt, 1);
 
     return EDPVS_OK;
 }
 
-static void blklst_expire(void *priv)
-{
-    struct blklst_entry *blklst = priv;
-    if (blklst) {
-        if (rte_atomic32_read(&blklst->refcnt) == 1){
-            list_del(&blklst->list);
-            rte_free(blklst);
-            rte_atomic32_dec(&this_num_blklsts);
-        }
-        else{
-            dpvs_timer_update(&blklst->timer, &timeout, false);
-            RTE_LOG(INFO, SERVICE, "[%s] blklst ip is visiting on core %d, delete entry later\n",
-                     __func__, rte_lcore_id());
-        }
-    }
-}
-
-static inline void dp_vs_del_blklst_later(struct blklst_entry *blklst)
-{
-    dpvs_timer_sched(&blklst->timer, &timeout, blklst_expire, blklst, false);
-}
-
-static int dp_vs_blklst_del_lcore(const union inet_addr *vaddr, const union inet_addr *blklst)
+static int dp_vs_blklst_del_lcore(uint8_t proto, const union inet_addr *vaddr,
+                                  uint16_t vport, const union inet_addr *blklst)
 {
     struct blklst_entry *blklst_node;
    
-    blklst_node = dp_vs_blklst_lookup(vaddr, blklst);
+    blklst_node = dp_vs_blklst_lookup(proto, vaddr, vport, blklst);
     if (blklst_node != NULL) {
-        if (rte_atomic32_read(&blklst_node->refcnt) == 2){
-            list_del(&blklst_node->list);
-            rte_free(blklst_node);
-            rte_atomic32_dec(&this_num_blklsts);
-        }  
-        else {
-            blklst_put(blklst_node);
-            dp_vs_del_blklst_later(blklst_node);
-            RTE_LOG(INFO, SERVICE, "[%s] blklst ip is visiting on core %d, delete entry later\n",
-                     __func__, rte_lcore_id());
-        }
+        list_del(&blklst_node->list);
+        rte_free(blklst_node);
+        rte_atomic32_dec(&this_num_blklsts);
         return EDPVS_OK; 
     }
     return EDPVS_NOTEXIST;
 }
 
-static int dp_vs_blklst_add(const union inet_addr *vaddr, const union inet_addr *blklst)
+static int dp_vs_blklst_add(uint8_t proto, const union inet_addr *vaddr,
+                            uint16_t vport, const union inet_addr *blklst)
 {
     lcoreid_t cid = rte_lcore_id();
     int err;
@@ -154,18 +127,20 @@ static int dp_vs_blklst_add(const union inet_addr *vaddr, const union inet_addr 
         return EDPVS_NOTSUPP;
     }
 
+    memset(&cf, 0, sizeof(struct dp_vs_blklst_conf));
+    memcpy(&(cf.vaddr), vaddr,sizeof(union inet_addr));
+    memcpy(&(cf.blklst), blklst, sizeof(union inet_addr));
+    cf.vport = vport;
+    cf.proto = proto; 
+
     /*set blklst ip on master lcore*/
-    err = dp_vs_blklst_add_lcore(vaddr, blklst);
+    err = dp_vs_blklst_add_lcore(proto, vaddr, vport, blklst);
     if (err) {
         RTE_LOG(INFO, SERVICE, "[%s] fail to set blklst ip\n", __func__);
         return err;
     }
 
     /*set blklst ip on all slave lcores*/
-    memset(&cf, 0, sizeof(struct dp_vs_blklst_conf));
-    cf.vaddr = *vaddr;
-    cf.blklst = *blklst;
-
     msg = msg_make(MSG_TYPE_BLKLST_ADD, 0, DPVS_MSG_MULTICAST,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
     if (!msg)
@@ -181,7 +156,8 @@ static int dp_vs_blklst_add(const union inet_addr *vaddr, const union inet_addr 
     return EDPVS_OK;
 }
 
-static int dp_vs_blklst_del(const union inet_addr *vaddr, const union inet_addr *blklst)
+static int dp_vs_blklst_del(uint8_t proto, const union inet_addr *vaddr,
+                            uint16_t vport, const union inet_addr *blklst)
 {
     lcoreid_t cid = rte_lcore_id();
     int err;
@@ -194,11 +170,13 @@ static int dp_vs_blklst_del(const union inet_addr *vaddr, const union inet_addr 
     }
 
     memset(&cf, 0, sizeof(struct dp_vs_blklst_conf));
-    cf.vaddr = *vaddr;
-    cf.blklst = *blklst;
+    memcpy(&(cf.vaddr), vaddr,sizeof(union inet_addr));
+    memcpy(&(cf.blklst), blklst, sizeof(union inet_addr));
+    cf.vport = vport;
+    cf.proto = proto;
 
     /*del blklst ip on master lcores*/
-    err = dp_vs_blklst_del_lcore(vaddr, blklst);
+    err = dp_vs_blklst_del_lcore(proto, vaddr, vport, blklst);
     if (err) {
         RTE_LOG(INFO, SERVICE, "[%s] fail to del blklst ip\n", __func__);
         return err;
@@ -207,6 +185,8 @@ static int dp_vs_blklst_del(const union inet_addr *vaddr, const union inet_addr 
     /*del blklst ip on all slave lcores*/
     msg = msg_make(MSG_TYPE_BLKLST_DEL, 0, DPVS_MSG_MULTICAST,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
+    if (!msg)
+        return EDPVS_NOMEM;
     err = multicast_msg_send(msg, 0, NULL);
     if (err != EDPVS_OK) {
         RTE_LOG(INFO, SERVICE, "[%s] fail to send multicast message\n", __func__);
@@ -217,9 +197,6 @@ static int dp_vs_blklst_del(const union inet_addr *vaddr, const union inet_addr 
     return EDPVS_OK;
 }
 
-/* though not effective ,try to fix me later*/
-/* since  flush and delete would not at the same time , use no refcnt here*/
-
 void  dp_vs_blklst_flush(struct dp_vs_service *svc)
 {
     struct blklst_entry *entry, *next;
@@ -228,7 +205,8 @@ void  dp_vs_blklst_flush(struct dp_vs_service *svc)
     for (hash = 0; hash < DPVS_BLKLST_TAB_SIZE; hash++) {
         list_for_each_entry_safe(entry, next, &this_blklst_tab[hash], list) {
             if (entry->vaddr.in.s_addr == svc->addr.in.s_addr)
-                dp_vs_blklst_del(&entry->vaddr, &entry->blklst);
+                dp_vs_blklst_del(entry->proto, &entry->vaddr,
+                                 entry->vport, &entry->blklst);
         }
     }
     return; 
@@ -241,7 +219,8 @@ static void dp_vs_blklst_flush_all(void)
 
     for (hash = 0; hash < DPVS_BLKLST_TAB_SIZE; hash++) {
         list_for_each_entry_safe(entry, next, &this_blklst_tab[hash], list) {
-            dp_vs_blklst_del(&entry->vaddr, &entry->blklst);
+            dp_vs_blklst_del(entry->proto, &entry->vaddr, 
+                             entry->vport, &entry->blklst);
         }
     }
     return;
@@ -260,10 +239,12 @@ static int blklst_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     switch (opt) {
     case SOCKOPT_SET_BLKLST_ADD:
-        err = dp_vs_blklst_add(&blklst_conf->vaddr, &blklst_conf->blklst);
+        err = dp_vs_blklst_add(blklst_conf->proto, &blklst_conf->vaddr, 
+                               blklst_conf->vport, &blklst_conf->blklst);
         break;
     case SOCKOPT_SET_BLKLST_DEL:
-        err = dp_vs_blklst_del(&blklst_conf->vaddr, &blklst_conf->blklst);
+        err = dp_vs_blklst_del(blklst_conf->proto, &blklst_conf->vaddr,
+                               blklst_conf->vport, &blklst_conf->blklst);
         break;
     default:
         err = EDPVS_NOTSUPP;
@@ -280,7 +261,8 @@ static void blklst_fill_conf(int af, struct dp_vs_blklst_conf *cf,
     cf->af = af;
     cf->vaddr = entry->vaddr;
     cf->blklst = entry->blklst;
-    return;
+    cf->proto = entry->proto;
+    cf->vport = entry->vport;
 }
 
 static int blklst_sockopt_get(sockoptid_t opt, const void *conf, size_t size, 
@@ -325,9 +307,9 @@ static int blklst_msg_process(bool add, struct dpvs_msg *msg)
 
     cf = (struct dp_vs_blklst_conf *)msg->data;
     if (add)
-        err = dp_vs_blklst_add_lcore(&cf->vaddr, &cf->blklst);
+        err = dp_vs_blklst_add_lcore(cf->proto, &cf->vaddr, cf->vport, &cf->blklst);
     else
-        err = dp_vs_blklst_del_lcore(&cf->vaddr, &cf->blklst);
+        err = dp_vs_blklst_del_lcore(cf->proto, &cf->vaddr, cf->vport, &cf->blklst);
     if (err != EDPVS_OK)
         RTE_LOG(ERR, SERVICE, "%s: fail to %s blklst: %s.\n",
                 __func__, add ? "add" : "del", dpvs_strerror(err));
@@ -428,8 +410,6 @@ int dp_vs_blklst_init(void)
     if ((err = sockopt_register(&blklst_sockopts)) != EDPVS_OK)
         return err;
     dp_vs_blklst_rnd = (uint32_t)random();
-    timeout.tv_sec = 3;
-    timeout.tv_usec = 0;
    
     return EDPVS_OK;
 }

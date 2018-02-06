@@ -39,6 +39,10 @@ Alibaba/LVS is based on LVS kernel components and related programs.
 
 Quagga Routing Software Suite, GPL licensed.
 
+* [Consistent hashing](http://www.codeproject.com/Articles/56138/Consistent-hashing)
+
+Consistent hashing library is BSD licensed.
+
 How this work (DPVS) uses those dependencies
 --------------------------------------------
 

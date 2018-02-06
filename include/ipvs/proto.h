@@ -45,8 +45,8 @@ struct dp_vs_proto {
     struct dp_vs_conn *
         (*conn_lookup)(struct dp_vs_proto *proto, 
                        const struct dp_vs_iphdr *iph,
-                       struct rte_mbuf *mbuf, 
-                       int *direct, bool reverse);
+                       struct rte_mbuf *mbuf, int *direct, 
+                       bool reverse, bool *drop);
 
     int (*conn_expire)(struct dp_vs_proto *proto, 
                        struct dp_vs_conn *conn);

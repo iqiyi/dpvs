@@ -563,12 +563,12 @@ clear_diff_vsg(virtual_server_t * old_vs)
 
 /* Check if a vs exist in new data and returns pointer to it */
 static virtual_server_t*
-vs_exist(virtual_server_t * old_vs)
+vs_exist(virtual_server_t * old_vs, bool* empty_vsg)
 {
 	element e;
 	list l = check_data->vs;
 	virtual_server_t *vs;
-	virtual_server_group_t *vsg;
+	virtual_server_group_t *vsg, *old_vsg;
 
 	if (LIST_ISEMPTY(l))
 		return NULL;
@@ -580,8 +580,15 @@ vs_exist(virtual_server_t * old_vs)
 			if (vs->vsgname) {
 				vsg = ipvs_get_group_by_name(old_vs->vsgname,
 							    check_data->vs_group);
+				old_vsg = ipvs_get_group_by_name(old_vs->vsgname,
+								old_check_data->vs_group);
 				if (!vsg)
 					return NULL;
+				if (!old_vsg){
+					*empty_vsg = true;
+					return NULL;
+				}
+					
 				else
 					if (!clear_diff_vsg(old_vs))
 						return NULL;
@@ -821,6 +828,7 @@ clear_diff_services(void)
 	element e;
 	list l = old_check_data->vs;
 	virtual_server_t *vs;
+	bool empty_vsg = false;
 
 	/* If old config didn't own vs then nothing return */
 	if (LIST_ISEMPTY(l))
@@ -834,10 +842,13 @@ clear_diff_services(void)
 		 * Try to find this vs into the new conf data
 		 * reloaded.
 		 */
-		if (!vs_exist(vs)) {
-			if (vs->vsgname)
+		if (!vs_exist(vs, &empty_vsg)) {
+			if (vs->vsgname) {
+				if (empty_vsg)
+					continue;
 				log_message(LOG_INFO, "Removing Virtual Server Group [%s]"
 						    , vs->vsgname);
+			}
 			else
 				log_message(LOG_INFO, "Removing Virtual Server %s"
 						    , FMT_VS(vs));
@@ -878,6 +889,7 @@ copy_srv_states (void)
 	element e;
 	list l = old_check_data->vs;
 	virtual_server_t *old_vs, *new_vs;
+	bool empty_vsg = false;
 
 	/* If old config didn't own vs then nothing return */
 	if (LIST_ISEMPTY(l))
@@ -885,7 +897,7 @@ copy_srv_states (void)
 
 	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
 		old_vs = ELEMENT_DATA(e);
-		new_vs = vs_exist (old_vs);
+		new_vs = vs_exist (old_vs, &empty_vsg);
 		if (new_vs) {
 			/* copy quorum_state field of VS */
 			new_vs->quorum_state = old_vs->quorum_state;

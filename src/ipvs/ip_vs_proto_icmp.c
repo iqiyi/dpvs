@@ -134,8 +134,8 @@ static bool is_icmp_reply(uint8_t type)
 
 static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
                                            const struct dp_vs_iphdr *iph,
-                                           struct rte_mbuf *mbuf,
-                                           int *direct, bool reverse)
+                                           struct rte_mbuf *mbuf, int *direct, 
+                                           bool reverse, bool *drop)
 {
     struct icmphdr *ich, _icmph;
     __be16 sport, dport; /* dummy ports */

@@ -27,6 +27,7 @@
 #include "ipvs/service.h"
 #include "ipvs/dest.h"
 #include "ipvs/synproxy.h"
+#include "ipvs/blklst.h"
 #include "parser/parser.h"
 /* we need more detailed fields than dpdk tcp_hdr{},
  * like tcphdr.syn, so use standard definition. */
@@ -502,7 +503,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 
 static struct dp_vs_conn *
 tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
-                struct rte_mbuf *mbuf, int *direct, bool reverse)
+                struct rte_mbuf *mbuf, int *direct, bool reverse, bool *drop)
 {
     struct tcphdr *th, _tcph;
     assert(proto && iph && mbuf);
@@ -510,6 +511,11 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
     if (unlikely(!th))
         return NULL;
+    
+    if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+        *drop = true;
+        return NULL;
+    }
 
     return dp_vs_conn_get(iph->af, iph->proto, 
             &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);

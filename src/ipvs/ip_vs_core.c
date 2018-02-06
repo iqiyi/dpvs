@@ -439,6 +439,7 @@ static int dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
     struct dp_vs_proto *prot;
     struct dp_vs_conn *conn;
     int off, dir, err;
+    bool drop = false;
 
     *related = 0; /* not related until found matching conn */
 
@@ -491,7 +492,7 @@ static int dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
     dp_vs_fill_iphdr(AF_INET, mbuf, &dciph);
 
-    conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true);
+    conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true, &drop);
     if (!conn)
         return INET_ACCEPT;
 
@@ -541,6 +542,7 @@ static int dp_vs_in(void *priv, struct rte_mbuf *mbuf,
     struct dp_vs_proto *prot;
     struct dp_vs_conn *conn;
     int dir, af, verdict, err, related;
+    bool drop = false;
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
     assert(mbuf && state);
 
@@ -586,7 +588,12 @@ static int dp_vs_in(void *priv, struct rte_mbuf *mbuf,
     }
 
     /* packet belongs to existing connection ? */
-    conn = prot->conn_lookup(prot, &iph, mbuf, &dir, false);
+    conn = prot->conn_lookup(prot, &iph, mbuf, &dir, false, &drop);
+
+    if (unlikely(drop)) {
+        RTE_LOG(DEBUG, IPVS, "%s: deny ip try to visit.\n", __func__);
+        return INET_DROP;
+    }
 
     if (unlikely(!conn)) {
         /* try schedule RS and create new connection */
@@ -655,7 +662,6 @@ static int dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
     struct dp_vs_iphdr iph;
     int af;
     struct dp_vs_service *svc;
-    struct blklst_entry *blklst;
 
     af = AF_INET;
     if (EDPVS_OK != dp_vs_fill_iphdr(af, mbuf, &iph))
@@ -677,14 +683,6 @@ static int dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
             }
         }
     }
-
-    /* Drop packet from black list ip*/
-    blklst = dp_vs_blklst_lookup(&iph.daddr, &iph.saddr);
-    if (unlikely(blklst != NULL)) {
-        blklst_put(blklst);
-        RTE_LOG(DEBUG, IPVS, "%s: deny ip try to visit.\n", __func__);
-        return INET_DROP; 
-    }   
 
     /* Synproxy: defence synflood */
     if (IPPROTO_TCP == iph.proto) {
