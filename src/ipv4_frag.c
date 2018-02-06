@@ -173,9 +173,10 @@ int ipv4_reassamble(struct rte_mbuf *mbuf)
 	struct rte_mbuf *asm_mbuf, *next, *seg, *prev;
 	struct ipv4_hdr *iph = ip4_hdr(mbuf);
 
+	assert(mbuf->l3_len > 0);
+
 	/* dpdk frag lib need mbuf->data_off of fragments
-	 * start with l2 header. */
-	assert(mbuf->l2_len > 0 && mbuf->l3_len > 0);
+	 * start with l2 header if exist. */
 	rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
 
 	asm_mbuf = rte_ipv4_frag_reassemble_packet(
