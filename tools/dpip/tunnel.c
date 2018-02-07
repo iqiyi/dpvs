@@ -21,6 +21,7 @@
  *
  * raychen@qiyi.com, Jan 2018, initial.
  */
+#include <arpa/inet.h>
 #include "common.h"
 #include "dpip.h"
 #include "sockopt.h"
@@ -50,6 +51,19 @@ static uint8_t tos_atoi(const char *tos)
         return 0x1;
     else
         return (uint8_t)atoi(tos);
+}
+
+static __be32 key_atoi(const char *key)
+{
+    __be32 k;
+
+    /* DOTTED_QUAD */
+    if (inet_pton(AF_INET, key, &k) > 0)
+        return k;
+
+    /* NUMBER */
+    k = htonl(atoi(key));
+    return k;
 }
 
 static void tnl_dump_param(const struct ip_tunnel_param *param)
@@ -134,12 +148,18 @@ static int tnl_parse(struct dpip_obj *obj, struct dpip_conf *cf)
             param->i_flags |= TUNNEL_F_SEQ;
             param->o_flags |= TUNNEL_F_SEQ;
         } else if (strcmp(CURRARG(cf), "ikey") == 0) {
+            NEXTARG_CHECK(cf, CURRARG(cf));
             param->i_flags |= TUNNEL_F_KEY;
+            param->i_key = key_atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "okey") == 0) {
+            NEXTARG_CHECK(cf, CURRARG(cf));
             param->o_flags |= TUNNEL_F_KEY;
+            param->o_key = key_atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "key") == 0) {
+            NEXTARG_CHECK(cf, CURRARG(cf));
             param->i_flags |= TUNNEL_F_KEY;
             param->o_flags |= TUNNEL_F_KEY;
+            param->i_key = param->o_key = key_atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "icsum") == 0) {
             param->i_flags |= TUNNEL_F_CSUM;
         } else if (strcmp(CURRARG(cf), "ocsum") == 0) {
