@@ -82,6 +82,7 @@ struct dp_vs_conn {
     uint16_t                lport;
     uint16_t                dport;
 
+    struct rte_mempool      *connpool;
     struct conn_tuple_hash  tuplehash[DPVS_CONN_DIR_MAX];
     rte_atomic32_t          refcnt;
     struct dpvs_timer       timer;
