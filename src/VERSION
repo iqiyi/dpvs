@@ -1,4 +1,4 @@
-#!/usr/bin/sh
+#!/bin/sh -
 # program: dpvs
 # commit: 91f2ea3c8c4c7efdbb5f8dc6d27795d8c1c6bf99
 # Feb 5, 2018

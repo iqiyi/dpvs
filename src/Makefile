@@ -37,7 +37,7 @@ INCDIRS += -I $(SRCDIR)/../include
 # for dpvs main program.
 CFLAGS += -D __DPVS__ -DDPVS_VERSION=\"$(VERSION_STRING)\" -DDPVS_BUILD_DATE=\"$(DATE_STRING)\" 
 
-CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes
+CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes -mcmodel=medium
 
 ifeq ($(DEBUG),)
 	CFLAGS += -O3

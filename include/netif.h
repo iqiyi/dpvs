@@ -44,7 +44,7 @@ enum {
 /* max tx/rx queue number for each nic */
 #define NETIF_MAX_QUEUES            16
 /* max nic number used in the program */
-#define NETIF_MAX_PORTS             64
+#define NETIF_MAX_PORTS             4096
 /* max lcore number used in the program */
 #define NETIF_MAX_LCORES            64
 /* max socket number used in the program */
@@ -55,6 +55,8 @@ enum {
 #define NETIF_MAX_BOND_SLAVES       32
 /* maximum number of hw addr */
 #define NETIF_MAX_HWADDR            64
+/* maximum number of kni device */
+#define NETIF_MAX_KNI               64
 
 #define NETIF_ALIGN                 32
 
