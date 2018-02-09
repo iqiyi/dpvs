@@ -26,7 +26,7 @@
  * the way we use is based on Flow-Director (fdir), allocate
  * local source (e.g., <ip, port>) for each CPU core in advance.
  * and redirect the back traffic to that CPU by fdir. it does not
- * need two many fdir rules, the number of rules can be equal to
+ * need too many fdir rules, the number of rules can be equal to
  * the number of CPU core.
  *
  * LVS use laddr and try <laddr,lport> to see if is used when
@@ -517,7 +517,7 @@ int sa_fetch(struct netif_port *dev, const struct sockaddr_in *daddr,
         return err;
     }
 
-    /* try to found source ifa by @dev and @daddr */
+    /* try to find source ifa by @dev and @daddr */
     memset(&fl, 0, sizeof(struct flow4));
     fl.oif = dev;
     fl.daddr.s_addr = daddr ? daddr->sin_addr.s_addr : htonl(INADDR_ANY);
@@ -592,7 +592,7 @@ int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats)
 
     /*
      * worker need know which ifa's stats to get.
-     * but passing @ifa pointer to worker lcores is not make sence,
+     * but passing @ifa pointer to worker lcores doesn't not make sense,
      * note the worker must only access per-lcore data ifa->sa_pools[cid].
      */
     req = msg_make(MSG_TYPE_SAPOOL_STATS, 0, DPVS_MSG_MULTICAST,
