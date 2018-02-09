@@ -25,7 +25,7 @@
 #define NEXTARG(c)          ((c)->argc--, (c)->argv++)
 
 #define NEXTARG_CHECK(c, m) do { \
-    /* expand the mabefore NEXTARG */ \
+    /* expand the macro before NEXTARG */ \
     const char *__arg_str = (m); \
     NEXTARG((c)); \
     if ((c)->argc <= 0) { \
