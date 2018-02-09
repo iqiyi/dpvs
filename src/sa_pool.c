@@ -592,7 +592,7 @@ int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats)
 
     /*
      * worker need know which ifa's stats to get.
-     * but passing @ifa pointer to worker lcores doesn't not make sense,
+     * but passing @ifa pointer to worker lcores doesn't make sense,
      * note the worker must only access per-lcore data ifa->sa_pools[cid].
      */
     req = msg_make(MSG_TYPE_SAPOOL_STATS, 0, DPVS_MSG_MULTICAST,
