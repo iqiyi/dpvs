@@ -335,7 +335,8 @@ errout:
 }
 
 /* mbuf's data should pointer to outer IP packet. */
-void dp_vs_xmit_icmp(struct rte_mbuf *mbuf, struct dp_vs_proto *prot,
+void dp_vs_xmit_icmp(struct rte_mbuf *mbuf,
+                     struct dp_vs_proto *prot,
                      struct dp_vs_conn *conn, int dir)
 {
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
@@ -463,7 +464,8 @@ errout:
     return err;        
 }
 
-int dp_vs_xmit_snat(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
+int dp_vs_xmit_snat(struct dp_vs_proto *proto,
+                    struct dp_vs_conn *conn,
                     struct rte_mbuf *mbuf)
 {
     struct flow4 fl4;
@@ -540,7 +542,8 @@ errout:
     return err;
 }
 
-int dp_vs_out_xmit_snat(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
+int dp_vs_out_xmit_snat(struct dp_vs_proto *proto,
+                        struct dp_vs_conn *conn,
                         struct rte_mbuf *mbuf)
 {
     int err;
@@ -598,6 +601,226 @@ int dp_vs_out_xmit_snat(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
         iph->hdr_checksum = 0;
     else
         ip4_send_csum(iph);
+
+    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+
+errout:
+    if (rt)
+        route4_put(rt);
+    rte_pktmbuf_free(mbuf);
+    return err;
+}
+
+int dp_vs_xmit_nat(struct dp_vs_proto *proto,
+                   struct dp_vs_conn *conn,
+                   struct rte_mbuf *mbuf)
+{
+    struct flow4 fl4;
+    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct route_entry *rt;
+    int err, mtu;
+
+    /* drop old route. just for safe, because
+     * NAT is PREROUTING, should not have route.*/
+    if (unlikely(mbuf->userdata != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n",
+                __func__, mbuf->userdata);
+        route4_put((struct route_entry*)mbuf->userdata);
+    }
+
+    memset(&fl4, 0, sizeof(struct flow4));
+    fl4.daddr = conn->daddr.in;
+    fl4.saddr = conn->caddr.in;
+    fl4.tos = iph->type_of_service;
+    rt = route4_output(&fl4);
+    if (!rt) {
+        err = EDPVS_NOROUTE;
+        goto errout;
+    }
+
+    mtu = rt->mtu;
+    if (mbuf->pkt_len > mtu
+            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
+        err = EDPVS_FRAG;
+        goto errout;
+    }
+
+    mbuf->userdata = rt;
+
+    /* after route lookup and before translation */
+    if (xmit_ttl) {
+        if (unlikely(iph->time_to_live <= 1)) {
+            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+            err = EDPVS_DROP;
+            goto errout;
+        }
+
+        iph->time_to_live--;
+    }
+
+    /* L3 translation before l4 re-csum */
+    iph->hdr_checksum = 0;
+    iph->dst_addr = conn->daddr.in.s_addr;
+
+    /* L4 NAT translation */
+    if (proto->fnat_in_handler) {
+        err = proto->nat_in_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            goto errout;
+    }
+
+    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+        iph->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(iph);
+    }
+
+    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+
+errout:
+    if (rt)
+        route4_put(rt);
+    rte_pktmbuf_free(mbuf);
+    return err;
+}
+
+int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
+                   struct dp_vs_conn *conn,
+                   struct rte_mbuf *mbuf)
+{
+    struct flow4 fl4;
+    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct route_entry *rt;
+    int err, mtu;
+
+    /* drop old route. just for safe, because
+     * NAT is PREROUTING, should not have route.*/
+    if (unlikely(mbuf->userdata != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n",
+                __func__, mbuf->userdata);
+        route4_put((struct route_entry*)mbuf->userdata);
+    }
+
+    memset(&fl4, 0, sizeof(struct flow4));
+    fl4.daddr = conn->caddr.in;
+    fl4.saddr = conn->vaddr.in;
+    fl4.tos = iph->type_of_service;
+    rt = route4_output(&fl4);
+    if (!rt) {
+        err = EDPVS_NOROUTE;
+        goto errout;
+    }
+
+    mtu = rt->mtu;
+    if (mbuf->pkt_len > mtu
+            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
+        err = EDPVS_FRAG;
+        goto errout;
+    }
+
+    mbuf->userdata = rt;
+
+    /* after route lookup and before translation */
+    if (xmit_ttl) {
+        if (unlikely(iph->time_to_live <= 1)) {
+            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+            err = EDPVS_DROP;
+            goto errout;
+        }
+
+        iph->time_to_live--;
+    }
+
+    /* L3 translation before l4 re-csum */
+    iph->hdr_checksum = 0;
+    iph->src_addr = conn->vaddr.in.s_addr;
+
+    /* L4 NAT translation */
+    if (proto->fnat_in_handler) {
+        err = proto->nat_out_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            goto errout;
+    }
+
+    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+        iph->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(iph);
+    }
+
+    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+
+errout:
+    if (rt)
+        route4_put(rt);
+    rte_pktmbuf_free(mbuf);
+    return err;
+}
+
+int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
+                   struct dp_vs_conn *conn,
+                   struct rte_mbuf *mbuf)
+{
+    struct flow4 fl4;
+    struct ipv4_hdr *new_iph, *old_iph = ip4_hdr(mbuf);
+    struct route_entry *rt;
+    uint8_t tos = old_iph->type_of_service;
+    uint16_t df = old_iph->fragment_offset & htons(IPV4_HDR_DF_FLAG);
+    int err, mtu;
+
+    /* drop old route. just for safe, because
+     * TUNNEL is PREROUTING, should not have route. */
+    if (unlikely(mbuf->userdata != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n",
+                __func__, mbuf->userdata);
+        route4_put((struct route_entry*)mbuf->userdata);
+    }
+
+    memset(&fl4, 0, sizeof(struct flow4));
+    fl4.daddr = conn->daddr.in;
+    fl4.tos = tos;
+    rt = route4_output(&fl4);
+    if (!rt) {
+        err = EDPVS_NOROUTE;
+        goto errout;
+    }
+
+    mtu = rt->mtu;
+    mbuf->userdata = rt;
+
+    new_iph = (struct ipv4_hdr*)rte_pktmbuf_prepend(mbuf, sizeof(struct ipv4_hdr));
+    if (!new_iph) {
+        RTE_LOG(WARNING, IPVS, "%s: mbuf has not enough headroom"
+                " space for ipvs tunnel\n", __func__);
+        err = EDPVS_NOROOM;
+        goto errout;
+    }
+
+    if (mbuf->pkt_len > mtu && df) {
+        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
+        err = EDPVS_FRAG;
+        goto errout;
+    }
+
+    memset(new_iph, 0, sizeof(struct ipv4_hdr));
+    new_iph->version_ihl = 0x45;
+    new_iph->type_of_service = tos;
+    new_iph->total_length = htons(mbuf->pkt_len);
+    new_iph->packet_id = old_iph->packet_id;
+    new_iph->fragment_offset = df;
+    new_iph->time_to_live = old_iph->time_to_live;
+    new_iph->next_proto_id = IPPROTO_IPIP;
+    new_iph->src_addr = rt->src.s_addr;
+    new_iph->dst_addr=conn->daddr.in.s_addr;
+
+    if (rt->port && rt->port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD) {
+        mbuf->ol_flags |= PKT_TX_IP_CKSUM;
+        new_iph->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(new_iph);
+    }
 
     return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
 

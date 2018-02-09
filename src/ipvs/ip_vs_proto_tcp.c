@@ -757,7 +757,7 @@ static int tcp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
     th = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf), sizeof(_tcph), &_tcph);
     if (unlikely(!th))
         return EDPVS_INVPKT;
-    if (dest->fwdmode == DPVS_FWD_MODE_DR)
+    if (dest->fwdmode == DPVS_FWD_MODE_DR || dest->fwdmode == DPVS_FWD_MODE_TUNNEL)
         off = 8;
     else if (dir == DPVS_CONN_DIR_INBOUND)
         off = 0;
@@ -1112,6 +1112,8 @@ struct dp_vs_proto dp_vs_proto_tcp = {
     .conn_sched         = tcp_conn_sched,
     .conn_lookup        = tcp_conn_lookup,
     .conn_expire        = tcp_conn_expire,
+    .nat_in_handler     = tcp_snat_in_handler,
+    .nat_out_handler    = tcp_snat_out_handler,
     .fnat_in_handler    = tcp_fnat_in_handler,
     .fnat_out_handler   = tcp_fnat_out_handler,
     .snat_in_handler    = tcp_snat_in_handler,

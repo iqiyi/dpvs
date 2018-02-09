@@ -210,6 +210,13 @@ static int conn_bind_dest(struct dp_vs_conn *conn, struct dp_vs_dest *dest)
         rte_atomic32_inc(&dest->inactconns);
 
     switch (dest->fwdmode) {
+    case DPVS_FWD_MODE_NAT:
+        conn->packet_xmit = dp_vs_xmit_nat;
+        conn->packet_out_xmit = dp_vs_out_xmit_nat;
+        break;
+    case DPVS_FWD_MODE_TUNNEL:
+        conn->packet_xmit = dp_vs_xmit_tunnel;
+        break;
     case DPVS_FWD_MODE_DR:
         conn->packet_xmit = dp_vs_xmit_dr;
         break;
