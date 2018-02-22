@@ -808,12 +808,12 @@ int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
     new_iph->version_ihl = 0x45;
     new_iph->type_of_service = tos;
     new_iph->total_length = htons(mbuf->pkt_len);
-    new_iph->packet_id = old_iph->packet_id;
     new_iph->fragment_offset = df;
     new_iph->time_to_live = old_iph->time_to_live;
     new_iph->next_proto_id = IPPROTO_IPIP;
     new_iph->src_addr = rt->src.s_addr;
     new_iph->dst_addr=conn->daddr.in.s_addr;
+    new_iph->packet_id = ip4_select_id(new_iph);
 
     if (rt->port && rt->port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD) {
         mbuf->ol_flags |= PKT_TX_IP_CKSUM;
