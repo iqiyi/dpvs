@@ -57,6 +57,8 @@ enum {
 #define NETIF_MAX_HWADDR            64
 /* maximum number of kni device */
 #define NETIF_MAX_KNI               64
+/* maximum number of DPDK rte device */
+#define NETIF_MAX_RTE_PORTS         64
 
 #define NETIF_ALIGN                 32
 
@@ -104,7 +106,7 @@ struct netif_lcore_conf
     /* nic number of this lcore to process */
     int nports;
     /* port list of this lcore to process */
-    struct netif_port_conf pqs[NETIF_MAX_PORTS];
+    struct netif_port_conf pqs[NETIF_MAX_RTE_PORTS];
 } __rte_cache_aligned;
 
 /* isolate RX lcore */
