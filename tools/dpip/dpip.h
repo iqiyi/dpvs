@@ -37,6 +37,8 @@ struct dpip_conf {
     int         af;
     int         verbose;
     int         stats;
+    int         interval;
+    int         count;
     bool        color;
     char        *obj;
     dpip_cmd_t  cmd;

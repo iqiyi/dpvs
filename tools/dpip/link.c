@@ -124,22 +124,24 @@ static void link_help(void)
             "    dpip link show [ NIC-NAME ]\n"
             "    dpip link show BOND-NAME status\n"
             "    dpip -v link show [ NIC-NAME ]\n"
-            "    dpip -s link show [ i INTERVAL ] [ c COUNT ] [ NIC-NAME ]\n"
+            "    dpip -s link show [ -i INTERVAL ] [ -c COUNT ] [ NIC-NAME ]\n"
             "    dpip link show CPU-NAME\n"
             "    dpip -v link show CPU-NAME\n"
-            "    dpip -s link show [ i INTERVAL ] [ c COUNT ]  CPU-NAME\n"
+            "    dpip -s link show [ -i INTERVAL ] [ -c COUNT ]  CPU-NAME\n"
+
             "    dpip link set DEV-NAME ITEM VALUE\n"
             "    ---supported items---\n"
             "    promisc [on|off], forward2kni [on|off], link [up|down],\n"
             "    tc-egress [on|off], tc-ingress [on|off], addr, \n"
             "    bond-[mode|slave|primary|ximit-policy|monitor-interval|link-up-prop|"
             "link-down-prop]\n"
+
             "Examples:\n"
             "    dpip link show\n"
             "    dpip -s -v link show dpdk0\n"
             "    dpip link show cpu\n"
-            "    dpip -s link show cpu2 i 3 c 5\n"
-            "    dpip -s -v link show cpu3 i 2\n"
+            "    dpip -s link show cpu2 -i 3 -c 5\n"
+            "    dpip -s -v link show cpu3 -i 2\n"
             "    dpip link show bond0 status\n"
             "    dpip link set dpdk0 promisc on/off\n"
             "    dpip link set dpdk0 forward2kni on/off\n"
@@ -187,6 +189,8 @@ static int link_parse_args(struct dpip_conf *conf,
     memset(param, 0, sizeof(*param));
     param->verbose = conf->verbose;
     param->stats.enabled = conf->stats;
+    param->stats.interval = conf->interval;
+    param->stats.count = conf->count;
     param->dev_type = LINK_DEVICE_NIC; /* default show NIC */
 
     while (conf->argc > 0) {
@@ -204,12 +208,6 @@ static int link_parse_args(struct dpip_conf *conf,
             param->dev_type = LINK_DEVICE_CPU;
             if (strcmp(conf->argv[0], "cpu") != 0)
                 snprintf(param->dev_name, sizeof(param->dev_name), "%s", conf->argv[0]);
-        } else if (strcmp(conf->argv[0], "i") == 0) {
-            NEXTARG_CHECK(conf, "i");
-            param->stats.interval = atoi(conf->argv[0]);
-        } else if (strcmp(conf->argv[0], "c") == 0) {
-            NEXTARG_CHECK(conf, "c");
-            param->stats.count = atoi(conf->argv[0]);
         } else if (conf->cmd == DPIP_CMD_SET ||
                 conf->cmd == DPIP_CMD_ADD ||
                 conf->cmd == DPIP_CMD_DEL) {
@@ -559,6 +557,7 @@ static int dump_cpu_basic(lcoreid_t cid)
         printf("    queues %s\n", p_get->queue_data);
     else
         printf("    queues none\n");
+
     dpvs_sockopt_msg_free(p_get);
 
     return EDPVS_OK;
