@@ -23,7 +23,7 @@
 
 TARGET := dpvs
 
-VERSION_STRING := $(shell cat VERSION)
+VERSION_STRING := $(shell ./VERSION)
 DATE_STRING := $(shell date +%Y.%m.%d.%H:%M:%S)
 
 # same path of THIS Makefile
