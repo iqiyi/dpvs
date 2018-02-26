@@ -19,7 +19,7 @@
 #define __NETIF_CONF_H__
 #include <linux/if_ether.h>
 
-#define NETIF_MAX_PORTS     64
+#define NETIF_MAX_PORTS     4096
 #define NETIF_MAX_LCORES    64
 
 /*** type from dpdk.h ***
@@ -31,7 +31,7 @@
 #define NETIF_MAX_BOND_SLAVES           32
 
 typedef uint8_t lcoreid_t;
-typedef uint8_t portid_t;
+typedef uint16_t portid_t;
 typedef uint16_t queueid_t;
 
 #define NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD  0x1<<3
@@ -112,7 +112,7 @@ typedef struct netif_lcore_stats_get
 /* nic number in use */
 typedef struct netif_nic_num_get
 {
-    uint8_t nic_num;
+    uint16_t nic_num;
     uint8_t phy_pid_base;
     uint8_t phy_pid_end;
     uint8_t bond_pid_base;

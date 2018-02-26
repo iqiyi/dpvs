@@ -31,7 +31,6 @@
 #define RTE_LOGTYPE_IPV4    RTE_LOGTYPE_USER1
 
 #define INET_MAX_PROTS      256     /* cannot change */
-#define INET_DEF_TTL        64
 
 #define IPV4_FORWARD_DEF  false
 static bool ipv4_forward_switch = IPV4_FORWARD_DEF;
@@ -206,6 +205,7 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
     const struct inet_protocol *prot;
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt = mbuf->userdata;
+    int (*handler)(struct rte_mbuf *mbuf) = NULL;
 
     /* remove network header */
     hlen = ip4_hdrlen(mbuf);
@@ -233,14 +233,17 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
     /* deliver to upper layer */
     rte_spinlock_lock(&inet_prot_lock);
     prot = inet_prots[iph->next_proto_id];
-    if (prot) {
-        err = prot->handler(mbuf);
+    if (prot)
+        handler = prot->handler;
+    rte_spinlock_unlock(&inet_prot_lock);
+
+    if (handler) {
+        err = handler(mbuf);
         IP4_INC_STATS(indelivers);
     } else {
         err = EDPVS_KNICONTINUE; /* KNI may like it, don't drop */
         IP4_INC_STATS(inunknownprotos);
     }
-    rte_spinlock_unlock(&inet_prot_lock);
 
     return err;
 }
@@ -282,6 +285,7 @@ static int ipv4_output_fin2(struct rte_mbuf *mbuf)
      * really confusing.
      */
     mbuf->packet_type = ETHER_TYPE_IPv4;
+    mbuf->l3_len = ip4_hdrlen(mbuf);
 
     /* reuse @userdata/@udata64 for prio (used by tc:pfifo_fast) */
     mbuf->udata64 = ((ip4_hdr(mbuf)->type_of_service >> 1) & 15);
@@ -545,7 +549,7 @@ int ipv4_term(void)
     return EDPVS_OK;
 }
 
-static inline uint32_t ip4_select_id(struct ipv4_hdr *iph)
+uint32_t ip4_select_id(struct ipv4_hdr *iph)
 {
     uint32_t hash, id;
     rte_atomic32_t *p_id;
@@ -560,7 +564,7 @@ static inline uint32_t ip4_select_id(struct ipv4_hdr *iph)
     return id;
 }
 
-static int ipv4_local_out(struct rte_mbuf *mbuf)
+int ipv4_local_out(struct rte_mbuf *mbuf)
 {
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt = mbuf->userdata;

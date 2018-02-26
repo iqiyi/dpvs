@@ -364,14 +364,14 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
 
     sched = dp_vs_scheduler_get(u->sched_name);
     if(sched == NULL) {
-        RTE_LOG(DEBUG, SERVICE, "%s: scheduler not found.\n", __func__);
+        RTE_LOG(ERR, SERVICE, "%s: scheduler not found.\n", __func__);
         return EDPVS_NOTEXIST;
     }
 
     size = RTE_CACHE_LINE_ROUNDUP(sizeof(struct dp_vs_service));
     svc = rte_zmalloc("dp_vs_service", size, RTE_CACHE_LINE_SIZE);
     if(svc == NULL){
-        RTE_LOG(DEBUG, SERVICE, "%s: no memory.\n", __func__);
+        RTE_LOG(ERR, SERVICE, "%s: no memory.\n", __func__);
         return EDPVS_NOMEM;
     }
     rte_atomic32_set(&svc->usecnt, 1);
@@ -448,7 +448,7 @@ dp_vs_edit_service(struct dp_vs_service *svc, struct dp_vs_service_conf *u)
      */
     sched = dp_vs_scheduler_get(u->sched_name);
     if (sched == NULL) {
-        RTE_LOG(DEBUG, SERVICE, "Scheduler dp_vs_%s not found\n", u->sched_name);
+        RTE_LOG(ERR, SERVICE, "Scheduler dp_vs_%s not found\n", u->sched_name);
         return EDPVS_NOTEXIST;
     }
     old_sched = sched;

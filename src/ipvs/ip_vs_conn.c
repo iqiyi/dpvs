@@ -155,8 +155,15 @@ static inline int conn_unhash(struct dp_vs_conn *conn)
         if (rte_atomic32_read(&conn->refcnt) != 2) {
             err = EDPVS_BUSY;
         } else {
-            list_del(&tuplehash_in(conn).list);
-            list_del(&tuplehash_out(conn).list);
+            if (conn->flags & DPVS_CONN_F_TEMPLATE) {
+                rte_spinlock_lock(&dp_vs_ct_lock);
+                list_del(&tuplehash_in(conn).list);
+                list_del(&tuplehash_out(conn).list);
+                rte_spinlock_unlock(&dp_vs_ct_lock);
+            } else {
+                list_del(&tuplehash_in(conn).list);
+                list_del(&tuplehash_out(conn).list);
+            }
             conn->flags &= ~DPVS_CONN_F_HASHED;
             rte_atomic32_dec(&conn->refcnt);
             err = EDPVS_OK;
@@ -203,6 +210,13 @@ static int conn_bind_dest(struct dp_vs_conn *conn, struct dp_vs_dest *dest)
         rte_atomic32_inc(&dest->inactconns);
 
     switch (dest->fwdmode) {
+    case DPVS_FWD_MODE_NAT:
+        conn->packet_xmit = dp_vs_xmit_nat;
+        conn->packet_out_xmit = dp_vs_out_xmit_nat;
+        break;
+    case DPVS_FWD_MODE_TUNNEL:
+        conn->packet_xmit = dp_vs_xmit_tunnel;
+        break;
     case DPVS_FWD_MODE_DR:
         conn->packet_xmit = dp_vs_xmit_dr;
         break;
@@ -435,7 +449,7 @@ static void conn_expire(void *priv)
 
         rte_atomic32_dec(&conn->refcnt);
 
-        rte_mempool_put(this_conn_cache, conn);
+        rte_mempool_put(conn->connpool, conn);
         this_conn_count--;
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
@@ -448,7 +462,10 @@ static void conn_expire(void *priv)
 
     /* some one is using it when expire,
      * try del it again later */
-    dpvs_timer_update(&conn->timer, &conn->timeout, false);
+    if (conn->flags & DPVS_CONN_F_TEMPLATE)
+        dpvs_timer_update(&conn->timer, &conn->timeout, true);
+    else
+        dpvs_timer_update(&conn->timer, &conn->timeout, false);
 
     rte_atomic32_dec(&conn->refcnt);
     return;
@@ -496,7 +513,7 @@ static void conn_flush(void)
                 dp_vs_laddr_unbind(conn);
                 rte_atomic32_dec(&conn->refcnt);
 
-                rte_mempool_put(this_conn_cache, conn);
+                rte_mempool_put(conn->connpool, conn);
                 this_conn_count--;
                 return;
             }
@@ -525,6 +542,7 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
         return NULL;
     }
     memset(new, 0, sizeof(struct dp_vs_conn));
+    new->connpool = this_conn_cache;
 
     /* set proper RS port */
     if ((flags & DPVS_CONN_F_TEMPLATE) || param->ct_dport != 0)
@@ -537,7 +555,7 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
                                         sizeof(_ports), _ports);
             if (unlikely(!ports)) {
                 RTE_LOG(WARNING, IPVS, "%s: no memory\n", __func__);
-                return NULL;
+                goto errout;
             }
             rport = ports[0];
         }

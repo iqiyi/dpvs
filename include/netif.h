@@ -38,12 +38,13 @@ enum {
     NETIF_PORT_FLAG_FORWARD2KNI             = 0x1<<9,
     NETIF_PORT_FLAG_TC_EGRESS               = 0x1<<10,
     NETIF_PORT_FLAG_TC_INGRESS              = 0x1<<11,
+    NETIF_PORT_FLAG_NO_ARP                  = 0x1<<12,
 };
 
 /* max tx/rx queue number for each nic */
 #define NETIF_MAX_QUEUES            16
 /* max nic number used in the program */
-#define NETIF_MAX_PORTS             64
+#define NETIF_MAX_PORTS             4096
 /* max lcore number used in the program */
 #define NETIF_MAX_LCORES            64
 /* max socket number used in the program */
@@ -54,6 +55,10 @@ enum {
 #define NETIF_MAX_BOND_SLAVES       32
 /* maximum number of hw addr */
 #define NETIF_MAX_HWADDR            64
+/* maximum number of kni device */
+#define NETIF_MAX_KNI               64
+/* maximum number of DPDK rte device */
+#define NETIF_MAX_RTE_PORTS         64
 
 #define NETIF_ALIGN                 32
 
@@ -101,7 +106,7 @@ struct netif_lcore_conf
     /* nic number of this lcore to process */
     int nports;
     /* port list of this lcore to process */
-    struct netif_port_conf pqs[NETIF_MAX_PORTS];
+    struct netif_port_conf pqs[NETIF_MAX_RTE_PORTS];
 } __rte_cache_aligned;
 
 /* isolate RX lcore */
@@ -173,6 +178,7 @@ typedef enum {
     PORT_TYPE_BOND_MASTER,
     PORT_TYPE_BOND_SLAVE,
     PORT_TYPE_VLAN,
+    PORT_TYPE_TUNNEL,
     PORT_TYPE_INVAL,
 } port_type_t;
 
@@ -248,6 +254,7 @@ struct netif_port {
     struct ether_addr       addr;                       /* MAC address */
     struct netif_hw_addr_list mc;                       /* HW multicast list */
     int                     socket;                     /* socket id */
+    int                     hw_header_len;              /* HW header length */
     uint16_t                mtu;                        /* device mtu */
     struct rte_mempool      *mbuf_pool;                 /* packet mempool */
     struct rte_eth_dev_info dev_info;                   /* PCI Info + driver name */
@@ -268,6 +275,7 @@ struct netif_port {
 /**************************** lcore API *******************************/
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
+int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf);
 int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
 void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask);
@@ -319,7 +327,7 @@ void install_netif_keywords(void);
 /*************************** kni api *******************************/
 void kni_process_on_master(void);
 
-static inline void *netif_get_priv(struct netif_port *dev)
+static inline void *netif_priv(struct netif_port *dev)
 {
     return (char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
 }

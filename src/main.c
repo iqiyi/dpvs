@@ -31,6 +31,7 @@
 #include "sa_pool.h"
 #include "ipvs/ipvs.h"
 #include "cfgfile.h"
+#include "ip_tunnel.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
@@ -83,8 +84,6 @@ int main(int argc, char *argv[])
     uint32_t loop_cnt = 0;
     int timer_sched_loop_interval;
 
-    fprintf(stderr, "dpvs version: %s build on %s\n", DPVS_VERSION, DPVS_BUILD_DATE);
-
     /* check if dpvs is running and remove zombie pidfile */
     if (dpvs_running(DPVS_PIDFILE)) {
         fprintf(stderr, "dpvs is already running\n");
@@ -105,6 +104,8 @@ int main(int argc, char *argv[])
     if (err < 0)
         rte_exit(EXIT_FAILURE, "Invalid EAL parameters\n");
     argc -= err, argv += err;
+
+    RTE_LOG(INFO, DPVS, "dpvs version: %s, build on %s\n", DPVS_VERSION, DPVS_BUILD_DATE);
 
     rte_timer_subsystem_init();
 
@@ -144,6 +145,9 @@ int main(int argc, char *argv[])
 
     if ((err = sa_pool_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init sa_pool: %s\n", dpvs_strerror(err));
+
+    if ((err = ip_tunnel_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init tunnel: %s\n", dpvs_strerror(err));
 
     if ((err = dp_vs_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init ipvs: %s\n", dpvs_strerror(err));
@@ -214,6 +218,8 @@ end:
                  dpvs_strerror(err));
     if ((err = dp_vs_term()) != EDPVS_OK)
         RTE_LOG(ERR, DPVS, "Fail to term ipvs: %s\n", dpvs_strerror(err));
+    if ((err = ip_tunnel_term()) != EDPVS_OK)
+        RTE_LOG(ERR, DPVS, "Fail to term tunnel: %s\n", dpvs_strerror(err));
     if ((err = sa_pool_term()) != EDPVS_OK)
         RTE_LOG(ERR, DPVS, "Fail to term sa_pool: %s\n", dpvs_strerror(err));
     if ((err = inet_term()) != EDPVS_OK)

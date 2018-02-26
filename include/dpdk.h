@@ -57,7 +57,7 @@
 #include "mbuf.h"
 
 typedef uint8_t lcoreid_t;
-typedef uint8_t portid_t;
+typedef uint16_t portid_t;
 typedef uint16_t queueid_t;
 
 #endif /* __DPVS_DPDK_H__ */

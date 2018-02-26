@@ -77,7 +77,7 @@ static int alloc_vlan_info(struct netif_port *dev)
 
 static int vlan_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
-    struct vlan_dev_priv *vlan = netif_get_priv(dev);
+    struct vlan_dev_priv *vlan = netif_priv(dev);
     struct ether_hdr *ethhdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
     unsigned int len;
     int err;
@@ -118,7 +118,7 @@ static int vlan_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 static int vlan_set_mc_list(struct netif_port *dev)
 {
     int err;
-    struct vlan_dev_priv *vlan = netif_get_priv(dev);
+    struct vlan_dev_priv *vlan = netif_priv(dev);
     assert(vlan && vlan->real_dev);
 
     /* we're hoding lock of our dev */
@@ -133,7 +133,7 @@ static int vlan_set_mc_list(struct netif_port *dev)
 static int vlan_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
                               const struct rte_eth_fdir_filter *filt)
 {
-    struct vlan_dev_priv *vlan = netif_get_priv(dev);
+    struct vlan_dev_priv *vlan = netif_priv(dev);
     assert(vlan && vlan->real_dev);
 
     return netif_fdir_filter_set(vlan->real_dev, op, filt);
@@ -141,7 +141,7 @@ static int vlan_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
 
 static int vlan_get_queue(struct netif_port *dev, lcoreid_t cid, queueid_t *qid)
 {
-    struct vlan_dev_priv *vlan = netif_get_priv(dev);
+    struct vlan_dev_priv *vlan = netif_priv(dev);
     assert(vlan && vlan->real_dev);
 
     return netif_get_queue(vlan->real_dev, cid, qid);
@@ -149,7 +149,7 @@ static int vlan_get_queue(struct netif_port *dev, lcoreid_t cid, queueid_t *qid)
 
 static int vlan_get_link(struct netif_port *dev, struct rte_eth_link *link)
 {
-    struct vlan_dev_priv *vlan = netif_get_priv(dev);
+    struct vlan_dev_priv *vlan = netif_priv(dev);
     assert(vlan && vlan->real_dev);
 
     return netif_get_link(vlan->real_dev, link);
@@ -157,7 +157,7 @@ static int vlan_get_link(struct netif_port *dev, struct rte_eth_link *link)
 
 static int vlan_get_promisc(struct netif_port *dev, bool *promisc)
 {
-    struct vlan_dev_priv *vlan = netif_get_priv(dev);
+    struct vlan_dev_priv *vlan = netif_priv(dev);
     assert(vlan && vlan->real_dev);
 
     return netif_get_promisc(vlan->real_dev, promisc);
@@ -165,7 +165,7 @@ static int vlan_get_promisc(struct netif_port *dev, bool *promisc)
 
 static int vlan_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
 {
-    struct vlan_dev_priv *vlan = netif_get_priv(dev);
+    struct vlan_dev_priv *vlan = netif_priv(dev);
     assert(vlan && vlan->real_dev);
 
     return netif_get_stats(vlan->real_dev, stats);
@@ -185,6 +185,7 @@ static void vlan_setup(struct netif_port *dev)
 {
     dev->netif_ops = &vlan_netif_ops;
     dev->mtu = VLAN_ETH_DATA_LEN;
+    dev->hw_header_len = sizeof(struct ether_hdr) + VLAN_HLEN;
 }
 
 /* @ifname is optional or vlan dev name will be auto generated. */
@@ -243,7 +244,7 @@ int vlan_add_dev(struct netif_port *real_dev, const char *ifname,
     dev->type = PORT_TYPE_VLAN;
     ether_addr_copy(&real_dev->addr, &dev->addr);
 
-    vlan = netif_get_priv(dev);
+    vlan = netif_priv(dev);
     memset(vlan, 0, sizeof(*vlan));
     vlan->vlan_proto = vlan_proto;
     vlan->vlan_id = vlan_id;
@@ -418,7 +419,7 @@ int vlan_rcv(struct rte_mbuf *mbuf, struct netif_port *real_dev)
     mbuf->vlan_tci = 0;
 
     /* statistics */
-    vlan = netif_get_priv(dev);
+    vlan = netif_priv(dev);
     this_vlan_stats(vlan).rx_packets++;
     this_vlan_stats(vlan).rx_bytes += mbuf->pkt_len;
     if (mbuf->packet_type == ETH_PKT_MULTICAST)
@@ -478,7 +479,7 @@ static int vlan_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
             if (!dev || dev->netif_ops != &vlan_netif_ops)
                 return EDPVS_NOTEXIST;
 
-            vlan = netif_get_priv(dev);
+            vlan = netif_priv(dev);
 
             return vlan_del_dev(vlan->real_dev,
                                 vlan->vlan_proto, vlan->vlan_id);
@@ -522,7 +523,7 @@ static int vlan_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             return EDPVS_INVAL;
         }
 
-        vlan = netif_get_priv(dev);
+        vlan = netif_priv(dev);
 
         *outsize = sizeof(struct vlan_param_array) + sizeof(struct vlan_param);
         array = *out = rte_calloc(NULL, 1, *outsize, 0);

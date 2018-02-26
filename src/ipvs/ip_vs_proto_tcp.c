@@ -27,6 +27,7 @@
 #include "ipvs/service.h"
 #include "ipvs/dest.h"
 #include "ipvs/synproxy.h"
+#include "ipvs/blklst.h"
 #include "parser/parser.h"
 /* we need more detailed fields than dpdk tcp_hdr{},
  * like tcphdr.syn, so use standard definition. */
@@ -502,7 +503,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 
 static struct dp_vs_conn *
 tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
-                struct rte_mbuf *mbuf, int *direct, bool reverse)
+                struct rte_mbuf *mbuf, int *direct, bool reverse, bool *drop)
 {
     struct tcphdr *th, _tcph;
     assert(proto && iph && mbuf);
@@ -510,6 +511,11 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
     if (unlikely(!th))
         return NULL;
+    
+    if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+        *drop = true;
+        return NULL;
+    }
 
     return dp_vs_conn_get(iph->af, iph->proto, 
             &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);
@@ -751,7 +757,7 @@ static int tcp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
     th = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf), sizeof(_tcph), &_tcph);
     if (unlikely(!th))
         return EDPVS_INVPKT;
-    if (dest->fwdmode == DPVS_FWD_MODE_DR)
+    if (dest->fwdmode == DPVS_FWD_MODE_DR || dest->fwdmode == DPVS_FWD_MODE_TUNNEL)
         off = 8;
     else if (dir == DPVS_CONN_DIR_INBOUND)
         off = 0;
@@ -1106,6 +1112,8 @@ struct dp_vs_proto dp_vs_proto_tcp = {
     .conn_sched         = tcp_conn_sched,
     .conn_lookup        = tcp_conn_lookup,
     .conn_expire        = tcp_conn_expire,
+    .nat_in_handler     = tcp_snat_in_handler,
+    .nat_out_handler    = tcp_snat_out_handler,
     .fnat_in_handler    = tcp_fnat_in_handler,
     .fnat_out_handler   = tcp_fnat_out_handler,
     .snat_in_handler    = tcp_snat_in_handler,

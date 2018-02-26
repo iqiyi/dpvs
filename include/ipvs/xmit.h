@@ -46,6 +46,18 @@ int dp_vs_out_xmit_snat(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn,
                         struct rte_mbuf *mbuf);
 
+int dp_vs_xmit_nat(struct dp_vs_proto *proto,
+                        struct dp_vs_conn *conn,
+                        struct rte_mbuf *mbuf);
+
+int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
+                        struct dp_vs_conn *conn,
+                        struct rte_mbuf *mbuf);
+
+int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
+                        struct dp_vs_conn *conn,
+                        struct rte_mbuf *mbuf);
+
 void install_xmit_keywords(void);
 
 #endif /* __DPVS_XMIT_H__ */

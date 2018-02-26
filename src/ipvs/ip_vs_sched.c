@@ -22,6 +22,7 @@
 #include "ipvs/rr.h"
 #include "ipvs/wrr.h"
 #include "ipvs/wlc.h"
+#include "ipvs/conhash.h"
 
 /*
  *  IPVS scheduler list
@@ -181,6 +182,7 @@ int dp_vs_sched_init(void)
     dp_vs_rr_init();
     dp_vs_wrr_init();
     dp_vs_wlc_init();
+    dp_vs_conhash_init();
 
     return EDPVS_OK;
 }
@@ -190,5 +192,7 @@ int dp_vs_sched_term(void)
     dp_vs_rr_term();
     dp_vs_wrr_term();
     dp_vs_wlc_term();
+    dp_vs_conhash_term();    
+
     return EDPVS_OK;
 }

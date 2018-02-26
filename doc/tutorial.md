@@ -10,6 +10,8 @@ DPVS Tutorial
   - [Full-NAT with OSPF/ECMP (two-arm)](#fnat-ospf)
   - [Full-NAT with Keepalived (one-arm)](#fnat-keepalive)
 * [DR Mode (one-arm)](#dr)
+* [Tunnel Mode(one-arm)](#tunnel)
+* [NAT Mode(one-arm)] (#nat)
 * [SNAT Mode (two-arm)](#snat)
 * [Bonding and VLAN devices](#bond-vlan)
 
@@ -19,9 +21,9 @@ DPVS Tutorial
 
 # Terminology
 
-For the meanings of *Full-NAT* (`FNAT`), `DR`, `toa`, `OSPF`/`ECMP` and `keepalived`, pls refer [LVS](www.linuxvirtualserver.org) and [Alibaba/LVS](https://github.com/alibaba/LVS/tree/master/docs).
+For the meanings of *Full-NAT* (`FNAT`), `DR`, `Tunnel`, `toa`, `OSPF`/`ECMP` and `keepalived`, pls refer [LVS](www.linuxvirtualserver.org) and [Alibaba/LVS](https://github.com/alibaba/LVS/tree/master/docs).
 
-Note `DPVS` support `FNAT`, `DR`, `SNAT` forwarding modes, and each mode can be configured as `one-arm` or `two-arm` topology, with or without `ospfd`/`keepalived`. There're too many combinations, I cannot list all the examples here. Let's just give some popular working models used in our daily work.
+Note `DPVS` support `FNAT`, `DR`, `Tunnel`, `SNAT` forwarding modes, and each mode can be configured as `one-arm` or `two-arm` topology, with or without `ospfd`/`keepalived`. There're too many combinations, I cannot list all the examples here. Let's just give some popular working models used in our daily work.
 
 > `Tunneling` and `NAT` is not supported because we didn't see strong demand yet, at least from *iQiYi*. May add them in the future. :)
 
@@ -502,6 +504,96 @@ Your ip:port : 192.168.100.46:13862
 
 > DR mode for two-arm is similar with [two-arm FNAT](#simple-fnat), pls change the forwarding mode by `ipvsadm -g`, and you need NOT config `LIP`. Configuration of `RS`es are the same with one-arm.
 
+<a id=`tunnel`/>
+
+# Tunnel Mode (one-arm)
+
+Traffic flow of tunnel mode is the same as DR mode. It forwards packets to RSs, and then RSs send replies to clients directly. Different with DR mode, tunnel mode can forward packets across L2 network through ipip tunnels between DPVS and RSs.
+
+![tunnel-one-arm](./pics/tunnel-one-arm.png)
+
+`DPVS` configs of the above diagram as follows.
+``` bash
+## DPVS configs ##
+# config LAN network on dpdk0
+./dpip addr add 10.140.16.48/20 dev dpdk0
+# config default route, `src` must be set for tunnel mode
+./dpip route add default via 10.140.31.254 src 10.140.16.48 dev dpdk0
+# add service <VIP:vport> to forwarding, scheduling mode is RR
+./ipvsadm -A -t 10.140.31.48:80 -s rr
+# add RS in the same subnet with DPVS, forwarding mode is tunnel
+./ipvsadm -a -t 10.140.31.48:80 -r 10.140.18.33 -i
+# add another RS in different subnet with DPVS, forwarding mode is tunnel
+./ipvsadm -a -t 10.140.31.48:80 -r 10.40.84.170 -i
+# add VIP and the route will generate automatically
+./dpip addr add 10.140.31.48/32 dev dpdk0
+
+```
+DPVS tunnel requires RS supports ip tunnel. VIP should be configured and arp_ignore should be set on RS.
+```bash
+## for each Real Server ##
+rs$ ifconfig tunl0 10.140.31.48 netmask 255.255.255.255 broadcast 10.140.31.48 up
+rs$ sysctl -w net.ipv4.conf.tunl0.arp_ignore=1  # ignore ARP on tunl0
+rs$ sysctl -w net.ipv4.conf.tunl0.rp_filter=2 # use loose source validation
+```
+You should note that default rp_filter uses strict source validation, but source route for incoming packets on tunl0 is not configured on tunl0. So we change rp_filter behavior of tunl0 to loose source validation mode to avoid packet drop on RSs.
+
+You can test the dpvs tunnel service now.
+
+```bash
+client$ curl 10.140.31.48:80
+Hi, I am 10.140.18.33.
+client$ curl 10.140.31.48:80
+Hi, I am 10.40.84.170.
+
+```
+
+<a id=`nat`/>
+
+# NAT mode (one-arm)
+
+A strict limitation exists for DPVS NAT mode: **DPVS `NAT` mode can only work in single lcore**. It is hard for DPVS to support multi-lcore NAT forwarding mode due to the following facts.
+
+* DPVS session entries are splited and distributed on lcores by RSS.
+* NAT forwarding requires both inbound and outbound traffic go through DPVS.
+* Only dest IP/port is translated in NAT forwarding, source IP/port is not changed.
+* Very limited maximum flow director rules can be set for a NIC.
+
+So, if no other control of the traffic flow, outbound packets may arrive at different lcore from inbound packets. If so, outbound packets would be dropped because session lookup miss. Full-NAT fixes the problem by using Flow Director(FDIR). However, there are very limited rules can be added for a NIC, i.e. 8K for XT-540. Unlike Full-NAT, NAT does not have local IP/port, so FDIR rules can only be set on source IP/port, which means only thousands concurrency is supported. Therefore, FDIR is not feasible for NAT.
+
+Whatever, we give a simple example for NAT mode. Remind it only works single lcore.
+
+![nat-one-arm](./pics/nat-one-arm.png)
+
+```bash
+## DPVS configs ##
+# config LAN network on bond0, routes will generate automatically
+./dpip addr add 192.168.0.66/24 dev bond0
+./dpip addr add 10.140.31.48/20 dev bond0
+# add service <VIP:vport> to forwarding, scheduling mode is RR
+./ipvsadm -A -t 192.168.0.89:80 -s -rr
+# add two RSs, forwarding mode is NAT
+./ipvsadm -A -t 192.168.0.89:80 -r 10.140.18.33 -m
+./ipvsadm -A -t 192.168.0.89:80 -r 10.140.18.34 -m
+# add VIP and the route will generate automatically
+./dpip addr add 192.168.0.89/32 dev bond0
+```
+
+On RSs, back routes should be pointed to DPVS.
+```bash
+## for each real server ##
+ip route add 192.168.0.0/24 via 10.140.31.48 dev eth0
+
+```
+
+Now you can test DPVS NAT mode.
+```bash
+client$ curl 192.168.0.89:80
+Hi, I am 10.140.18.33.
+client$ curl 192.168.0.89:80
+Hi, I am 10.140.18.34.
+```
+
 <a id='snat'/>
 
 # SNAT Mode (two-arm)
@@ -588,4 +680,4 @@ This is the VLAN example, pls check `dpip vlan help` for more info.
 
 Like DPDK Physical device, the *Bonding* and *VLAN* Virtual devices (e.g., `bond0` and `dpdk0.100`) have their own related `KNI` devices on Linux environment (e.g., `bond0.kni`, `dpdk0.100.kni`).
 
-To configure `DPVS` (`FNAT`/`DR`/`SNAT`, `one-arm`/`two-arm`, `keepalived`/`ospfd`) for Virtual device is nothing special. Just "replace" the logical interfaces on sections above (like `dpdk0`, `dpdk1`, `dpdk1.kni`) with corresponding virtual devices.
+To configure `DPVS` (`FNAT`/`DR`/`Tunnel`/`SNAT`, `one-arm`/`two-arm`, `keepalived`/`ospfd`) for Virtual device is nothing special. Just "replace" the logical interfaces on sections above (like `dpdk0`, `dpdk1`, `dpdk1.kni`) with corresponding virtual devices.

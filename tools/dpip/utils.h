@@ -25,9 +25,11 @@
 #define NEXTARG(c)          ((c)->argc--, (c)->argv++)
 
 #define NEXTARG_CHECK(c, m) do { \
+    /* expand the macro before NEXTARG */ \
+    const char *__arg_str = (m); \
     NEXTARG((c)); \
     if ((c)->argc <= 0) { \
-        fprintf(stderr, "missing argument for `%s'\n", (m)); \
+        fprintf(stderr, "missing argument for `%s'\n", (__arg_str)); \
         return -1; \
     } \
 } while (0)

@@ -27,6 +27,7 @@
 #include "ipv4.h"
 #include "ipvs/proto.h"
 #include "ipvs/proto_tcp.h"
+#include "ipvs/blklst.h"
 #include "parser/parser.h"
 
 /* synproxy controll variables */
@@ -535,12 +536,24 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
             dp_vs_service_put(svc);
             goto syn_rcv_out;
         }
+
         dp_vs_service_put(svc);
+
+        /* drop packet from blacklist */
+        if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+            goto syn_rcv_out;
+        }
+
     } else {
         if (svc)
             dp_vs_service_put(svc);
         return 1;
     }
+
+    /* mbuf will be reused and ether header will be set.
+     * FIXME: to support non-ether packets. */
+    if (mbuf->l2_len != sizeof(struct ether_hdr))
+        goto syn_rcv_out;
 
     /* update statistics */
     dp_vs_estats_inc(SYNPROXY_SYN_CNT);

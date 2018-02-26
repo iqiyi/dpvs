@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <sys/ioctl.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
@@ -74,7 +75,7 @@ static portid_t bond_pid_end = -1; // not inclusive
 
 static portid_t port_id_end = 0;
 
-static uint8_t g_nports;
+static uint16_t g_nports;
 
 static uint64_t cycles_per_sec;
 
@@ -1143,7 +1144,7 @@ static void lcore_index_init(void)
 
 static void port_index_init(void)
 {
-    uint8_t ii, jj, tk;
+    int ii, jj, tk;
     lcoreid_t cid;
     portid_t pid;
     for (ii = 0; ii < NETIF_MAX_LCORES; ii++)
@@ -1448,7 +1449,7 @@ inline static void recv_on_isol_lcore(void)
 
     list_for_each_entry(isol_rxq, &isol_rxq_tab[cid], lnode) {
         assert(isol_rxq->cid == cid);
-        rx_len = rte_eth_rx_burst(isol_rxq->pid, isol_rxq->qid,
+        rx_len = rte_eth_rx_burst((uint8_t)isol_rxq->pid, isol_rxq->qid,
                 mbufs, NETIF_MAX_PKT_BURST);
         /* It is safe to reuse lcore_stats for isolate recieving. Isolate recieving
          * always lays on different lcores from packet processing. */
@@ -1503,7 +1504,7 @@ static inline uint16_t netif_rx_burst(portid_t pid, struct netif_queue_conf *qco
         /* Shoul we integrate statistics of isolated recieve lcore into packet
          * processing lcore ? No! we just leave the work to tools */
     } else {
-        nrx = rte_eth_rx_burst(pid, qconf->id, qconf->mbufs, NETIF_MAX_PKT_BURST);
+        nrx = rte_eth_rx_burst((uint8_t)pid, qconf->id, qconf->mbufs, NETIF_MAX_PKT_BURST);
     }
 
     qconf->len = nrx;
@@ -1842,7 +1843,7 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
         kni_send2kern_loop(pid, txq);
     }
 
-    ntx = rte_eth_tx_burst(pid, txq->id, txq->mbufs, txq->len);
+    ntx = rte_eth_tx_burst((uint8_t)pid, txq->id, txq->mbufs, txq->len);
     lcore_stats[cid].opackets += ntx;
     /* do not calculate obytes here in consideration of efficency */
     if (unlikely(ntx < txq->len)) {
@@ -2059,6 +2060,19 @@ static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
     return ETH_PKT_OTHERHOST;
 }
 
+int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf)
+{
+    struct pkt_type *pt;
+    assert(dev && mbuf && mbuf->port <= NETIF_MAX_PORTS);
+
+    pt = pkt_type_get(eth_type, dev);
+    if (!pt)
+        return EDPVS_KNICONTINUE;
+
+    mbuf->l2_len = 0; /* make sense ? */
+
+    return pt->func(mbuf, dev);
+}
 
 /*for arp process*/
 static struct rte_ring *arp_ring[NETIF_MAX_LCORES];
@@ -2414,7 +2428,7 @@ static int update_bond_macaddr(struct netif_port *port)
     assert(port->type == PORT_TYPE_BOND_MASTER);
 
     int ret = EDPVS_OK;
-    rte_eth_macaddr_get(port->id, &port->addr);
+    rte_eth_macaddr_get((uint8_t)port->id, &port->addr);
     if (kni_dev_exist(port)) {
         ret = linux_set_if_mac(port->kni.name, (unsigned char *)&port->addr);
         if (ret == EDPVS_OK)
@@ -2626,6 +2640,7 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
         snprintf(dev->name, sizeof(dev->name), "%s", namefmt);
 
     dev->socket = SOCKET_ID_ANY;
+    dev->hw_header_len = sizeof(struct ether_hdr); /* default */
 
     if (setup)
         setup(dev);
@@ -2633,7 +2648,7 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
     /* flag may set by setup() routine */
     dev->flag |= NETIF_PORT_FLAG_ENABLED;
     dev->nrxq = nrxq;
-    dev->nrxq = ntxq;
+    dev->ntxq = ntxq;
 
     /* virtual dev has no NUMA-node */
     if (dev->socket == SOCKET_ID_ANY)
@@ -2732,13 +2747,13 @@ static int dpdk_set_mc_list(struct netif_port *dev)
     if (err != EDPVS_OK)
         return err;
 
-    return rte_eth_dev_set_mc_addr_list(dev->id, addrs, naddr);
+    return rte_eth_dev_set_mc_addr_list((uint8_t)dev->id, addrs, naddr);
 }
 
 static int dpdk_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
                               const struct rte_eth_fdir_filter *filt)
 {
-    if (rte_eth_dev_filter_ctrl(dev->id, RTE_ETH_FILTER_FDIR,
+    if (rte_eth_dev_filter_ctrl((uint8_t)dev->id, RTE_ETH_FILTER_FDIR,
                                 op, (void *)filt) < 0)
         return EDPVS_DPDKAPIFAIL;
 
@@ -2799,12 +2814,13 @@ static struct netif_port* netif_port_alloc(portid_t id, int nrxq,
     port->nrxq = nrxq; // port_rx_queues_get();
     port->ntxq = ntxq; // port_tx_queues_get();
     port->socket = rte_eth_dev_socket_id(id);
+    port->hw_header_len = sizeof(struct ether_hdr);
     if (port->socket == SOCKET_ID_ANY)
         port->socket = rte_socket_id();
     port->mbuf_pool = pktmbuf_pool[port->socket]; 
-    rte_eth_macaddr_get(id, &port->addr);
-    rte_eth_dev_get_mtu(id, &port->mtu);
-    rte_eth_dev_info_get(id, &port->dev_info);
+    rte_eth_macaddr_get((uint8_t)id, &port->addr);
+    rte_eth_dev_get_mtu((uint8_t)id, &port->mtu);
+    rte_eth_dev_info_get((uint8_t)id, &port->dev_info);
     port->dev_conf = *conf;
     rte_rwlock_init(&port->dev_lock);
     netif_mc_init(port);
@@ -2914,7 +2930,7 @@ int netif_get_link(struct netif_port *dev, struct rte_eth_link *link)
     if (dev->netif_ops->op_get_link)
         return dev->netif_ops->op_get_link(dev, link);
 
-    rte_eth_link_get_nowait(dev->id, link);
+    rte_eth_link_get_nowait((uint8_t)dev->id, link);
     return EDPVS_OK;
 }
 
@@ -2925,7 +2941,7 @@ int netif_get_promisc(struct netif_port *dev, bool *promisc)
     if (dev->netif_ops->op_get_promisc)
         return dev->netif_ops->op_get_promisc(dev, promisc);
 
-    *promisc = rte_eth_promiscuous_get(dev->id) ? true : false;
+    *promisc = rte_eth_promiscuous_get((uint8_t)dev->id) ? true : false;
     return EDPVS_OK;
 }
 
@@ -2937,7 +2953,7 @@ int netif_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
     if (dev->netif_ops->op_get_stats)
         return dev->netif_ops->op_get_stats(dev, stats);
 
-    err = rte_eth_stats_get(dev->id, stats);
+    err = rte_eth_stats_get((uint8_t)dev->id, stats);
     if (err)
         return EDPVS_DPDKAPIFAIL;
 
@@ -2985,7 +3001,7 @@ static inline void port_mtu_set(struct netif_port *port)
     int ii;
     uint16_t mtu, t_mtu;
 
-    rte_eth_dev_get_mtu(port->id, &mtu);
+    rte_eth_dev_get_mtu((uint8_t)port->id, &mtu);
 
     if (port->type != PORT_TYPE_BOND_MASTER) {
         port->mtu = mtu;
@@ -2994,7 +3010,7 @@ static inline void port_mtu_set(struct netif_port *port)
 
     for (ii = 0; ii < port->bond->master.slave_nb; ii++) {
         t_mtu = 65535;
-        rte_eth_dev_get_mtu(port->bond->master.slaves[ii]->id, &t_mtu);
+        rte_eth_dev_get_mtu((uint8_t)port->bond->master.slaves[ii]->id, &t_mtu);
         if (!mtu || t_mtu < mtu)
             mtu = t_mtu;
     }
@@ -3105,14 +3121,14 @@ static int add_bond_slaves(struct netif_port *port)
 
     for (ii = 0; ii < port->bond->master.slave_nb; ii++) {
         slave = port->bond->master.slaves[ii];
-        if (rte_eth_bond_slave_add(port->id, slave->id) < 0) {
+        if (rte_eth_bond_slave_add((uint8_t)port->id, slave->id) < 0) {
             RTE_LOG(ERR, NETIF, "%s: fail to add slave %s to %s\n", __func__,
                     slave->name, port->name);
             return EDPVS_DPDKAPIFAIL;
         }
     }
 
-    if (rte_eth_bond_primary_set(port->id, port->bond->master.primary->id) < 0) {
+    if (rte_eth_bond_primary_set((uint8_t)port->id, port->bond->master.primary->id) < 0) {
         RTE_LOG(ERR, NETIF, "%s: fail to set slave %s as primary device of %s\n",
                 __func__, port->bond->master.primary->name, port->name);
         return EDPVS_DPDKAPIFAIL;
@@ -3129,15 +3145,15 @@ static int add_bond_slaves(struct netif_port *port)
      * * filtering to accept packets only if the destination MAC address matches */
     for (ii = 0; ii < port->bond->master.slave_nb; ii++) {
         slave = port->bond->master.slaves[ii];
-        if (rte_eth_dev_mac_addr_add(slave->id, &port->addr, 0) < 0)
+        if (rte_eth_dev_mac_addr_add((uint8_t)slave->id, &port->addr, 0) < 0)
             RTE_LOG(ERR, NETIF, "%s: fail to add bonding device %s's mac to %s\n",
                     __func__, port->name, slave->name);
     }
 
-    port->socket = rte_eth_dev_socket_id(port->id);
+    port->socket = rte_eth_dev_socket_id((uint8_t)port->id);
     port->mbuf_pool = pktmbuf_pool[port->socket];
     port_mtu_set(port);
-    rte_eth_dev_info_get(port->id, &port->dev_info);
+    rte_eth_dev_info_get((uint8_t)port->id, &port->dev_info);
 
     return EDPVS_OK;
 }
@@ -3168,7 +3184,7 @@ int netif_port_start(struct netif_port *port)
     // device configure
     if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
-    ret = rte_eth_dev_configure(port->id, port->nrxq, port->ntxq, &port->dev_conf);
+    ret = rte_eth_dev_configure((uint8_t)port->id, port->nrxq, port->ntxq, &port->dev_conf);
     if (ret < 0 ) {
         RTE_LOG(ERR, NETIF, "%s: fail to config %s\n", __func__, port->name);
         return EDPVS_DPDKAPIFAIL;
@@ -3177,7 +3193,7 @@ int netif_port_start(struct netif_port *port)
     // setup rx queues
     if (port->nrxq > 0) {
         for (qid = 0; qid < port->nrxq; qid++) {
-            ret = rte_eth_rx_queue_setup(port->id, qid, port->rxq_desc_nb,
+            ret = rte_eth_rx_queue_setup((uint8_t)port->id, qid, port->rxq_desc_nb,
                     port->socket, NULL, pktmbuf_pool[port->socket]);
             if (ret < 0) {
                 RTE_LOG(ERR, NETIF, "%s: fail to config %s:rx-queue-%d\n",
@@ -3196,7 +3212,7 @@ int netif_port_start(struct netif_port *port)
                     || (port->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD)
                     || (port->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))
                 txconf.txq_flags = 0;
-            ret = rte_eth_tx_queue_setup(port->id, qid, port->txq_desc_nb,
+            ret = rte_eth_tx_queue_setup((uint8_t)port->id, qid, port->txq_desc_nb,
                     port->socket, &txconf);
             if (ret < 0) {
                 RTE_LOG(ERR, NETIF, "%s: fail to config %s:tx-queue-%d\n",
@@ -3220,7 +3236,7 @@ int netif_port_start(struct netif_port *port)
     build_port_queue_lcore_map();
 
     // start the device 
-    ret = rte_eth_dev_start(port->id);
+    ret = rte_eth_dev_start((uint8_t)port->id);
     if (ret < 0) {
         RTE_LOG(ERR, NETIF, "%s: fail to start %s\n", __func__, port->name);
         return EDPVS_DPDKAPIFAIL;
@@ -3229,7 +3245,7 @@ int netif_port_start(struct netif_port *port)
     // wait the device link up 
     RTE_LOG(INFO, NETIF, "Waiting for %s link up, be patient ...\n", port->name);
     for (ii = 0; ii < wait_link_up_msecs; ii++) {
-        rte_eth_link_get_nowait(port->id, &link);
+        rte_eth_link_get_nowait((uint8_t)port->id, &link);
         if (link.link_status) {
             RTE_LOG(INFO, NETIF, ">> %s: link up - speed %u Mbps - %s\n",
                     port->name, (unsigned)link.link_speed, 
@@ -3249,7 +3265,7 @@ int netif_port_start(struct netif_port *port)
     // enable promicuous mode if configured
     if (promisc_on) {
         RTE_LOG(INFO, NETIF, "promiscous mode enabled for device %s\n", port->name);
-        rte_eth_promiscuous_enable(port->id);
+        rte_eth_promiscuous_enable((uint8_t)port->id);
     }
 
     /* bonding device's macaddr is updated by its primary device when start,
@@ -3270,8 +3286,8 @@ int netif_port_stop(struct netif_port *port)
     if (kni_dev_exist(port))
         kni_del_dev(port);
 
-    rte_eth_dev_stop(port->id);
-    ret = rte_eth_dev_set_link_down(port->id);
+    rte_eth_dev_stop((uint8_t)port->id);
+    ret = rte_eth_dev_set_link_down((uint8_t)port->id);
     if (ret < 0) {
         RTE_LOG(WARNING, NETIF, "%s: fail to set %s link down\n", __func__, port->name);
         return EDPVS_DPDKAPIFAIL;
@@ -3304,6 +3320,8 @@ int netif_port_register(struct netif_port *port)
 {
     struct netif_port *cur;
     int hash, nhash;
+    int err = EDPVS_OK;
+
     if (unlikely(NULL == port))
         return EDPVS_INVAL;
 
@@ -3325,30 +3343,33 @@ int netif_port_register(struct netif_port *port)
     list_add_tail(&port->nlist, &port_ntab[nhash]);
     g_nports++;
 
-    return EDPVS_OK;
+    if (port->netif_ops->op_init)
+        err = port->netif_ops->op_init(port);
+
+    return err;
 }
 
 int netif_port_unregister(struct netif_port *port)
 {
-    struct netif_port *cur;
+    struct netif_port *cur, *next;
     int ret1, ret2, hash, nhash;
     if (unlikely(NULL == port))
         return EDPVS_INVAL;
     ret1 = ret2 = EDPVS_NOTEXIST;
 
     hash = port_tab_hashkey(port->id);
-    list_for_each_entry(cur, &port_tab[hash], list) {
+    list_for_each_entry_safe(cur, next, &port_tab[hash], list) {
         if (cur->id == port->id || strcmp(cur->name, port->name) == 0) {
-            list_del_init(&port->list);
+            list_del_init(&cur->list);
             ret1 = EDPVS_OK;
             break;
         }
     }
 
     nhash = port_ntab_hashkey(port->name, sizeof(port->name));
-    list_for_each_entry(cur, &port_tab[nhash], nlist) {
+    list_for_each_entry_safe(cur, next, &port_ntab[nhash], nlist) {
         if (cur->id == port->id || strcmp(cur->name, port->name) == 0) {
-            list_del_init(&port->nlist);
+            list_del_init(&cur->nlist);
             ret2 = EDPVS_OK;
             break;
         }
@@ -3548,7 +3569,7 @@ inline static void netif_port_init(const struct rte_eth_conf *conf)
         conf = &default_port_conf;
     this_eth_conf = *conf;
 
-    rte_kni_init(NETIF_MAX_PORTS);
+    rte_kni_init(NETIF_MAX_KNI);
     kni_init();
 
     for (pid = 0; pid < nports; pid++) {
@@ -4137,7 +4158,7 @@ static int get_port_dev_info(portid_t pid, void **out, size_t *out_len)
     get->port_id = pid;
     if (dev->type == PORT_TYPE_GENERAL ||
         dev->type == PORT_TYPE_BOND_MASTER) {
-        rte_eth_dev_info_get(pid, &dev_info);
+        rte_eth_dev_info_get((uint8_t)pid, &dev_info);
         copy_dev_info(get, &dev_info);
     }
 
@@ -4261,7 +4282,8 @@ static int get_bond_status(portid_t pid, void **out, size_t *out_len)
 {
     bool is_active;
     int i, j, xmit_policy;
-    portid_t primary, slaves[NETIF_MAX_BOND_SLAVES], actives[NETIF_MAX_BOND_SLAVES];
+    portid_t primary;
+    uint8_t slaves[NETIF_MAX_BOND_SLAVES], actives[NETIF_MAX_BOND_SLAVES];
     struct netif_port *sport, *mport = netif_port_get(pid);
     netif_bond_status_get_t *get;
     assert(out && out_len);
@@ -4275,12 +4297,12 @@ static int get_bond_status(portid_t pid, void **out, size_t *out_len)
             RTE_CACHE_LINE_SIZE, rte_socket_id());
     if (unlikely(!get))
         return EDPVS_NOMEM;
-    get->mode = rte_eth_bond_mode_get(pid);
+    get->mode = rte_eth_bond_mode_get((uint8_t)pid);
 
-    primary = rte_eth_bond_primary_get(pid);
-    get->slave_nb = rte_eth_bond_slaves_get(pid,
+    primary = rte_eth_bond_primary_get((uint8_t)pid);
+    get->slave_nb = rte_eth_bond_slaves_get((uint8_t)pid,
             slaves, NETIF_MAX_BOND_SLAVES);
-    get->active_nb = rte_eth_bond_active_slaves_get(pid,
+    get->active_nb = rte_eth_bond_active_slaves_get((uint8_t)pid,
             actives, NETIF_MAX_BOND_SLAVES);
     for (i = 0; i < get->slave_nb; i++) {
         is_active = false;
@@ -4302,7 +4324,7 @@ static int get_bond_status(portid_t pid, void **out, size_t *out_len)
 
     ether_format_addr(get->macaddr, sizeof(get->macaddr), &mport->addr);
 
-    xmit_policy = rte_eth_bond_xmit_policy_get(pid);
+    xmit_policy = rte_eth_bond_xmit_policy_get((uint8_t)pid);
     switch (xmit_policy) {
     case BALANCE_XMIT_POLICY_LAYER2:
         snprintf(get->xmit_policy, sizeof(get->xmit_policy), "LAYER2");
@@ -4317,9 +4339,9 @@ static int get_bond_status(portid_t pid, void **out, size_t *out_len)
         snprintf(get->xmit_policy, sizeof(get->xmit_policy), "UNKOWN");
     }
 
-    get->link_monitor_interval = rte_eth_bond_link_monitoring_get(pid);
-    get->link_down_prop_delay = rte_eth_bond_link_down_prop_delay_get(pid);
-    get->link_up_prop_delay = rte_eth_bond_link_up_prop_delay_get(pid);
+    get->link_monitor_interval = rte_eth_bond_link_monitoring_get((uint8_t)pid);
+    get->link_down_prop_delay = rte_eth_bond_link_down_prop_delay_get((uint8_t)pid);
+    get->link_up_prop_delay = rte_eth_bond_link_up_prop_delay_get((uint8_t)pid);
 
     *out = get;
     *out_len = sizeof(netif_bond_status_get_t);
@@ -4473,14 +4495,14 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
     assert(port_cfg);
 
     if (port_cfg->promisc_on) {
-        if (!rte_eth_promiscuous_get(port->id)) {
-            rte_eth_promiscuous_enable(port->id);
+        if (!rte_eth_promiscuous_get((uint8_t)port->id)) {
+            rte_eth_promiscuous_enable((uint8_t)port->id);
             RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s enabled\n",
                     __func__, port_cfg->pname);
         }
     } else if (port_cfg->promisc_off) {
-        if (rte_eth_promiscuous_get(port->id)) {
-            rte_eth_promiscuous_disable(port->id);
+        if (rte_eth_promiscuous_get((uint8_t)port->id)) {
+            rte_eth_promiscuous_disable((uint8_t)port->id);
             RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s disabled\n",
                     __func__, port_cfg->pname);
         }
@@ -4499,8 +4521,8 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
     if (port_cfg->link_status_up) {
         int err;
         struct rte_eth_link link;
-        err = rte_eth_dev_set_link_up(port->id);
-        rte_eth_link_get(port->id, &link);
+        err = rte_eth_dev_set_link_up((uint8_t)port->id);
+        rte_eth_link_get((uint8_t)port->id, &link);
         if (link.link_status == ETH_LINK_DOWN) {
             RTE_LOG(WARNING, NETIF, "set %s link up [ FAIL ] -- %d\n",
                     port_cfg->pname, err);
@@ -4514,8 +4536,8 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
     } else if (port_cfg->link_status_down) {
         int err;
         struct rte_eth_link link;
-        err = rte_eth_dev_set_link_down(port->id);
-        rte_eth_link_get(port->id, &link);
+        err = rte_eth_dev_set_link_down((uint8_t)port->id);
+        rte_eth_link_get((uint8_t)port->id, &link);
         if (link.link_status == ETH_LINK_UP) {
             RTE_LOG(WARNING, NETIF, "set %s link down [ FAIL ] -- %d\n",
                     port_cfg->pname, err);
@@ -4534,7 +4556,7 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
             (unsigned *)&ea.addr_bytes[5]);
     if (is_valid_assigned_ether_addr(&ea)) {
         if (port->type == PORT_TYPE_BOND_MASTER) {
-            if (rte_eth_bond_mac_address_set(port->id, &ea) < 0) {
+            if (rte_eth_bond_mac_address_set((uint8_t)port->id, &ea) < 0) {
                 RTE_LOG(WARNING, NETIF, "fail to set %s's macaddr to be %s\n",
                         port->name, port_cfg->macaddr);
             } else {
@@ -4543,8 +4565,8 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
                 port->addr = ea;
             }
         } else {
-            if (!rte_eth_dev_mac_addr_add(port->id, &ea, 0) &&
-                    !rte_eth_dev_default_mac_addr_set(port->id, &ea)) {
+            if (!rte_eth_dev_mac_addr_add((uint8_t)port->id, &ea, 0) &&
+                    !rte_eth_dev_default_mac_addr_set((uint8_t)port->id, &ea)) {
                 RTE_LOG(INFO, NETIF, "set %s's macaddr to be %s\n",
                         port->name, port_cfg->macaddr);
                 port->addr = ea;
@@ -4575,7 +4597,7 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
     switch (bond_cfg->opt) {
     case OPT_MODE:
     {
-        if (!rte_eth_bond_mode_set(port->id, bond_cfg->param.mode)) {
+        if (!rte_eth_bond_mode_set((uint8_t)port->id, bond_cfg->param.mode)) {
             RTE_LOG(INFO, NETIF, "%s's mode changed: %d -> %d\n",
                     port->name, port->bond->master.mode, bond_cfg->param.mode);
             port->bond->master.mode = bond_cfg->param.mode;
@@ -4589,13 +4611,13 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
         if (!slave)
             return EDPVS_NOTEXIST;
         if (bond_cfg->act == ACT_ADD) {
-            if (!rte_eth_bond_slave_add(port->id, slave->id)) {
+            if (!rte_eth_bond_slave_add((uint8_t)port->id, slave->id)) {
                 RTE_LOG(INFO, NETIF, "slave %s is added to %s\n",
                         slave->name, port->name);
                 port->bond->master.slaves[port->bond->master.slave_nb++] = slave;
             }
         } else if (bond_cfg->act == ACT_DEL) {
-            if (!rte_eth_bond_slave_remove(port->id, slave->id)) {
+            if (!rte_eth_bond_slave_remove((uint8_t)port->id, slave->id)) {
                 RTE_LOG(INFO, NETIF, "slave %s is removed from %s\n",
                         slave->name, port->name);
                 for (i = 0, j = 0; i < port->bond->master.slave_nb; i++) {
@@ -4617,7 +4639,7 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
         primary = netif_port_get_by_name(bond_cfg->param.primary);
         if (!primary)
             return EDPVS_NOTEXIST;
-        if (!rte_eth_bond_primary_set(port->id, primary->id)) {
+        if (!rte_eth_bond_primary_set((uint8_t)port->id, primary->id)) {
             RTE_LOG(INFO, NETIF, "%s's primary slave changed: %s -> %s\n",
                     port->name, port->bond->master.primary->name, primary->name);
             port->bond->master.primary = primary;
@@ -4640,7 +4662,7 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
                 !strcmp(bond_cfg->param.xmit_policy, "layer34"))
             xp = BALANCE_XMIT_POLICY_LAYER34;
 
-        if (xp >=0 && !rte_eth_bond_xmit_policy_set(port->id, xp)) {
+        if (xp >=0 && !rte_eth_bond_xmit_policy_set((uint8_t)port->id, xp)) {
             RTE_LOG(INFO, NETIF, "set %s's xmit-policy to be %s\n",
                     port->name, bond_cfg->param.xmit_policy);
         }
@@ -4648,7 +4670,7 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
     }
     case OPT_LINK_MONITOR_INTERVAL:
     {
-        if (!rte_eth_bond_link_monitoring_set(port->id,
+        if (!rte_eth_bond_link_monitoring_set((uint8_t)port->id,
                     bond_cfg->param.link_monitor_interval)) {
             RTE_LOG(INFO, NETIF, "set %s's link-monitor-interval to be %d ms\n",
                     port->name, bond_cfg->param.link_monitor_interval);
@@ -4657,7 +4679,7 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
     }
     case OPT_LINK_DOWN_PROP:
     {
-        if (!rte_eth_bond_link_down_prop_delay_set(port->id,
+        if (!rte_eth_bond_link_down_prop_delay_set((uint8_t)port->id,
                     bond_cfg->param.link_down_prop)) {
             RTE_LOG(INFO, NETIF, "set %s's link-down-prop to be %d ms\n",
                     port->name, bond_cfg->param.link_down_prop);
@@ -4666,7 +4688,7 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
     }
     case OPT_LINK_UP_PROP:
     {
-        if (!rte_eth_bond_link_up_prop_delay_set(port->id,
+        if (!rte_eth_bond_link_up_prop_delay_set((uint8_t)port->id,
                     bond_cfg->param.link_up_prop)) {
             RTE_LOG(INFO, NETIF, "set %s's link-up-prop to be %d ms\n",
                     port->name, bond_cfg->param.link_up_prop);
