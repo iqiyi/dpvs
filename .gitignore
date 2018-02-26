@@ -27,3 +27,9 @@ tools/keepalived/keepalived/vrrp/Makefile
 tools/keepalived/lib/Makefile
 tools/keepalived/lib/config.h
 src/dpvs
+.cache.mk
+.tmp_versions/
+Module.symvers
+modules.order
+*.ko
+*.mod.c
