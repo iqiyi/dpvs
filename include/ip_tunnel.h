@@ -16,7 +16,7 @@
  *
  */
 /*
- * dpvs IPv4 tunnel commom codes.
+ * dpvs IPv4 tunnel common codes.
  * refer linux:include/net/ip_tunnels.h
  *       linux:include/uapi/linux/if_tunnel.h
  *
