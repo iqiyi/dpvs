@@ -312,7 +312,6 @@ static int dump_nic_stats(portid_t pid)
     int err;
     size_t len = 0;
     netif_nic_stats_get_t get, *p_get = NULL;
-    netif_nic_mbufpool_t *p_mbufpool_get = NULL;
 
     err = dpvs_getsockopt(SOCKOPT_NETIF_GET_PORT_STATS, &pid, sizeof(pid), (void **)&p_get, &len);
     if (err != EDPVS_OK || !p_get || !len)
@@ -331,88 +330,74 @@ static int dump_nic_stats(portid_t pid)
     printf("    %-20lu%-20lu%-20lu%-20lu\n",
             get.ierrors, get.oerrors, get.imissed, get.rx_nombuf);
 
-    /* Is necessary to display per-queue statistics? */
-    /* Do not support display per-queue statistics now */
-
-    err = dpvs_getsockopt(SOCKOPT_NETIF_GET_PORT_MBUFPOOL, &pid, sizeof(pid),
-            (void **)&p_mbufpool_get, &len);
-    if (err != EDPVS_OK || !p_mbufpool_get || !len)
-        return err;
-    assert(len == sizeof(netif_nic_mbufpool_t));
     printf("    %-20s%-20s\n", "mbuf-avail", "mbuf-inuse");
-    printf("    %-20u%-20u\n", p_mbufpool_get->available, p_mbufpool_get->inuse);
-    dpvs_sockopt_msg_free(p_mbufpool_get);
+    printf("    %-20u%-20u\n", get.mbuf_avail, get.mbuf_inuse);
 
     return EDPVS_OK;
 }
 
 static int dump_nic_verbose(portid_t pid)
 {
-    int err, i;
+    int err;
     size_t len = 0;
-    netif_nic_dev_get_t dev_get, *p_dev_get = NULL;
-    netif_nic_conf_queues_t *p_que_get = NULL;
-    struct netif_mc_list_conf *mc_list;
+    netif_nic_ext_get_t *ext_get = NULL;
 
-    err = dpvs_getsockopt(SOCKOPT_NETIF_GET_PORT_DEV_INFO, &pid, sizeof(pid),
-        (void **)&p_dev_get, &len);
-    if (err != EDPVS_OK || !p_dev_get || !len)
+    err = dpvs_getsockopt(SOCKOPT_NETIF_GET_PORT_EXT_INFO, &pid, sizeof(pid),
+        (void **)&ext_get, &len);
+    if (err != EDPVS_OK || !ext_get || !len)
         return err;
-    assert(len == sizeof(netif_nic_dev_get_t));
-    dev_get = *p_dev_get;
-    dpvs_sockopt_msg_free(p_dev_get);
+    assert(len == sizeof(netif_nic_ext_get_t) + ext_get->datalen);
 
     printf("    %-32s%-32s\n", "pci_addr", "driver_name");
-    printf("    %-32s%-32s\n", dev_get.pci_addr, dev_get.driver_name);
-    printf("    %-16s%-16s%-16s%-16s\n",
-            "if_index", "min_rx_bufsize", "max_rx_pktlen", "max_mac_addrs");
-    printf("    %-16u%-16u%-16u%-16u\n", dev_get.if_index, dev_get.min_rx_bufsize,
-            dev_get.max_rx_pktlen, dev_get.max_mac_addrs);
+    printf("    %-32s%-32s\n", ext_get->dev_info.pci_addr,
+            ext_get->dev_info.driver_name);
+    printf("    %-16s%-16s%-16s%-16s\n", "if_index", "min_rx_bufsize",
+            "max_rx_pktlen", "max_mac_addrs");
+    printf("    %-16u%-16u%-16u%-16u\n", ext_get->dev_info.if_index,
+            ext_get->dev_info.min_rx_bufsize, ext_get->dev_info.max_rx_pktlen,
+            ext_get->dev_info.max_mac_addrs);
     printf("    %-16s%-16s%-16s%-16s\n", "max_rx_queues", "max_tx_queues",
             "max_hash_addrs", "max_vfs");
-    printf("    %-16u%-16u%-16u%-16u\n", dev_get.max_rx_queues, dev_get.max_tx_queues,
-            dev_get.max_hash_mac_addrs, dev_get.max_vfs);
+    printf("    %-16u%-16u%-16u%-16u\n", ext_get->dev_info.max_rx_queues,
+            ext_get->dev_info.max_tx_queues, ext_get->dev_info.max_hash_mac_addrs,
+            ext_get->dev_info.max_vfs);
     printf("    %-16s%-16s%-16s%-16s\n", "max_vmdq_pools", "rx_ol_capa",
             "tx_ol_capa", "reta_size");
-    printf("    %-16u%-16u%-16u%-16u\n", dev_get.max_vmdq_pools, dev_get.rx_offload_capa,
-            dev_get.tx_offload_capa, dev_get.reta_size);
+    printf("    %-16u%-16u%-16u%-16u\n", ext_get->dev_info.max_vmdq_pools,
+            ext_get->dev_info.rx_offload_capa, ext_get->dev_info.tx_offload_capa,
+            ext_get->dev_info.reta_size);
     printf("    %-16s%-16s%-16s%-16s\n", "hash_key_size", "flowtype_rss_ol",
             "vmdq_que_base", "vmdq_que_num");
-    printf("    %-16u%-16lu%-16u%-16u\n", dev_get.hash_key_size, dev_get.flow_type_rss_offloads,
-            dev_get.vmdq_queue_base, dev_get.vmdq_queue_num);
+    printf("    %-16u%-16lu%-16u%-16u\n", ext_get->dev_info.hash_key_size,
+            ext_get->dev_info.flow_type_rss_offloads,
+            ext_get->dev_info.vmdq_queue_base, ext_get->dev_info.vmdq_queue_num);
     printf("    %-16s%-16s%-16s%-16s\n", "rx_desc_max", "rx_desc_min",
             "rx_desc_align", "vmdq_pool_base");
-    printf("    %-16u%-16u%-16u%-16u\n", dev_get.rx_desc_lim_nb_max, dev_get.rx_desc_lim_nb_min,
-            dev_get.rx_desc_lim_nb_align, dev_get.vmdq_pool_base);
+    printf("    %-16u%-16u%-16u%-16u\n", ext_get->dev_info.rx_desc_lim_nb_max,
+            ext_get->dev_info.rx_desc_lim_nb_min,
+            ext_get->dev_info.rx_desc_lim_nb_align,
+            ext_get->dev_info.vmdq_pool_base);
     printf("    %-16s%-16s%-16s%-16s\n", "tx_desc_max", "tx_desc_min",
             "tx_desc_align", "speed_capa");
-    printf("    %-16u%-16u%-16u%-16u\n", dev_get.tx_desc_lim_nb_max, dev_get.tx_desc_lim_nb_min,
-            dev_get.tx_desc_lim_nb_align, dev_get.speed_capa);
+    printf("    %-16u%-16u%-16u%-16u\n", ext_get->dev_info.tx_desc_lim_nb_max,
+            ext_get->dev_info.tx_desc_lim_nb_min,
+            ext_get->dev_info.tx_desc_lim_nb_align,
+            ext_get->dev_info.speed_capa);
 
-    err = dpvs_getsockopt(SOCKOPT_NETIF_GET_PORT_QUEUE, &pid, sizeof(pid),
-            (void **)&p_que_get, &len);
-    if (err != EDPVS_OK || !p_que_get || !len)
-        return err;
-    assert(len >= sizeof(netif_nic_conf_queues_t));
-    printf("    Queue Configuration:\n%s", p_que_get->cf_queue);
-    dpvs_sockopt_msg_free(p_que_get);
-
-    err = dpvs_getsockopt(SOCKOPT_NETIF_GET_MC_ADDRS, &pid, sizeof(pid),
-                          (void **)&mc_list, &len);
-    if (err != EDPVS_OK)
-        return err;
-    assert(len >= sizeof(*mc_list));
-    for (i = 0; i < mc_list->naddr; i++) {
-        if (i == 0)
-            printf("    HW mcast list:\n");
-
-        printf("        link %02x:%02x:%02x:%02x:%02x:%02x\n",
-               mc_list->addrs[i][0], mc_list->addrs[i][1],
-               mc_list->addrs[i][2], mc_list->addrs[i][3],
-               mc_list->addrs[i][4], mc_list->addrs[i][5]);
+    if (ext_get->cfg_queues.data_len) {
+        assert(ext_get->cfg_queues.data_len == strlen(ext_get->data +
+                    ext_get->cfg_queues.data_offset));
+        printf("    Queue Configuration:\n%s", ext_get->data +
+                ext_get->cfg_queues.data_offset);
     }
-    dpvs_sockopt_msg_free(mc_list);
 
+    if (ext_get->mc_list.data_len) {
+        assert(ext_get->mc_list.data_len == strlen(ext_get->data +
+                    ext_get->mc_list.data_offset));
+        printf("    HW mcast list:\n%s", ext_get->data + ext_get->mc_list.data_offset);
+    }
+
+    dpvs_sockopt_msg_free(ext_get);
     return EDPVS_OK;
 }
 

@@ -59,12 +59,9 @@ enum {
     SOCKOPT_NETIF_GET_LCORE_STATS,
     SOCKOPT_NETIF_GET_PORT_NUM,
     SOCKOPT_NETIF_GET_PORT_BASIC,
-    SOCKOPT_NETIF_GET_PORT_DEV_INFO,
     SOCKOPT_NETIF_GET_PORT_STATS,
-    SOCKOPT_NETIF_GET_PORT_QUEUE,
-    SOCKOPT_NETIF_GET_PORT_MBUFPOOL,
+    SOCKOPT_NETIF_GET_PORT_EXT_INFO,
     SOCKOPT_NETIF_GET_BOND_STATUS,
-    SOCKOPT_NETIF_GET_MC_ADDRS,
     SOCKOPT_NETIF_GET_MAX,
     /* set */
     SOCKOPT_NETIF_SET_LCORE = 500,
@@ -140,10 +137,36 @@ typedef struct netif_nic_basic_get
     uint16_t tc_ingress:1;
 } netif_nic_basic_get_t;
 
-/* dev info specified by port_id */
-typedef struct netif_nic_dev_get
-{
+/* nic statistics specified by port_id */
+typedef struct netif_nic_stats_get {
     portid_t port_id;
+	uint32_t mbuf_avail;/* Number of available mbuf in pktmempool */
+	uint32_t mbuf_inuse;/* Number of used mbuf in pktmempool */
+	uint64_t ipackets;  /* Total number of successfully received packets. */
+	uint64_t opackets;  /* Total number of successfully transmitted packets.*/
+	uint64_t ibytes;    /* Total number of successfully received bytes. */
+	uint64_t obytes;    /* Total number of successfully transmitted bytes. */
+	uint64_t imissed;
+	/* Total of RX packets dropped by the HW,
+	 * because there are no available mbufs (i.e. RX queues are full). */
+	uint64_t ierrors;   /* Total number of erroneous received packets. */
+	uint64_t oerrors;   /* Total number of failed transmitted packets. */
+	uint64_t rx_nombuf; /* Total number of RX mbuf allocation failures. */
+	uint64_t q_ipackets[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+	/* Total number of queue RX packets. */
+	uint64_t q_opackets[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+	/* Total number of queue TX packets. */
+	uint64_t q_ibytes[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+	/* Total number of successfully received queue bytes. */
+	uint64_t q_obytes[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+	/* Total number of successfully transmitted queue bytes. */
+	uint64_t q_errors[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+	/* Total number of queue packets received that are dropped. */
+} netif_nic_stats_get_t;
+
+/* dev info specified by port_id */
+struct netif_nic_dev_get
+{
     char pci_addr[32]; /* pci address */
     char driver_name[32]; /* device driver name */
     uint32_t if_index; /* index to bound host interface, or 0 if none */
@@ -171,32 +194,29 @@ typedef struct netif_nic_dev_get
     uint16_t tx_desc_lim_nb_min; /* min allowed number of tx descriptors */
     uint16_t tx_desc_lim_nb_align; /* number of tx desciptors should be aligned to */
     uint32_t speed_capa; /* supported speed bitmap (ETH_LINK_SPEED_) */
-} netif_nic_dev_get_t;
+} __attribute__((__packed__));
 
-/* nic statistics specified by port_id */
-typedef struct netif_nic_stats_get {
+struct netif_nic_conf_queues
+{
+    size_t data_offset;
+    size_t data_len;
+} __attribute__((__packed__));
+
+struct netif_mc_list_conf {
+    size_t              data_offset;
+    size_t              data_len;
+    int                 naddr;
+} __attribute__((__packed__));
+
+typedef struct netif_nic_ext_get
+{
     portid_t port_id;
-	uint64_t ipackets;  /* Total number of successfully received packets. */
-	uint64_t opackets;  /* Total number of successfully transmitted packets.*/
-	uint64_t ibytes;    /* Total number of successfully received bytes. */
-	uint64_t obytes;    /* Total number of successfully transmitted bytes. */
-	uint64_t imissed;
-	/* Total of RX packets dropped by the HW,
-     * because there are no available mbufs (i.e. RX queues are full). */
-	uint64_t ierrors;   /* Total number of erroneous received packets. */
-	uint64_t oerrors;   /* Total number of failed transmitted packets. */
-	uint64_t rx_nombuf; /* Total number of RX mbuf allocation failures. */
-	uint64_t q_ipackets[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of queue RX packets. */
-	uint64_t q_opackets[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of queue TX packets. */
-	uint64_t q_ibytes[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of successfully received queue bytes. */
-	uint64_t q_obytes[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of successfully transmitted queue bytes. */
-	uint64_t q_errors[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of queue packets received that are dropped. */
-} netif_nic_stats_get_t;
+    struct netif_nic_dev_get dev_info;
+    struct netif_nic_conf_queues cfg_queues;
+    struct netif_mc_list_conf mc_list;
+    size_t datalen;
+    char data[0]; /* data string format: cfg_queues\0mc_list\0 */
+} netif_nic_ext_get_t;
 
 struct bond_slave_node {
     char name[32];
@@ -216,13 +236,6 @@ typedef struct netif_bond_status_get {
     int link_down_prop_delay;
     int link_up_prop_delay;
 } netif_bond_status_get_t;
-
-/* configured queues for all enabled ports */
-typedef struct netif_nic_conf_queues
-{
-    uint32_t cf_queue_len;
-    char cf_queue[0];
-} netif_nic_conf_queues_t;
 
 /* lcore configure struct */
 typedef struct netif_lcore_set {
@@ -244,11 +257,6 @@ typedef struct netif_nic_set {
     uint16_t tc_ingress_on:1;
     uint16_t tc_ingress_off:1;
 } netif_nic_set_t;
-
-typedef struct netif_nic_mbufpool {
-    uint32_t available;
-    uint32_t inuse;
-} netif_nic_mbufpool_t;
 
 typedef struct netif_bond_set {
     char name[32];
@@ -276,10 +284,5 @@ typedef struct netif_bond_set {
         OPT_LINK_UP_PROP,
     } opt;
 } netif_bond_set_t;
-
-struct netif_mc_list_conf {
-    int                 naddr;
-    uint8_t             addrs[0][ETH_ALEN];
-} __attribute__((__packed__));
 
 #endif
