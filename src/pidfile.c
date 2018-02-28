@@ -53,8 +53,10 @@ bool dpvs_running(const char *pid_file)
     if (!pidfile)
         return false;
 
-    if (fscanf(pidfile, "%d", &pid) != 1)
+    if (fscanf(pidfile, "%d", &pid) != 1) {
+        fclose(pidfile);
         return false;
+    }
     fclose(pidfile);
 
     /* remove pidfile if no process attached to it */
