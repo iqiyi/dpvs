@@ -1594,51 +1594,51 @@ int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid)
     /* format map in string */
     memset(buf, 0, *len);
     if (is_all) {
-        snprintf(line, sizeof(line), "    %-12s", "");
+        snprintf(line, sizeof(line) - 1, "    %-12s", "");
         for (i = 0; i <= netif_max_pid; i++) {
             port = netif_port_get(i);
             assert(port);
-            snprintf(tbuf2, sizeof(tbuf2), "%s: %s ", port->name, pql_map[i].mac_addr);
-            snprintf(tbuf, sizeof(tbuf), "%-25s", tbuf2);
-            strncat(line, tbuf, sizeof(line) - strlen(line));
+            snprintf(tbuf2, sizeof(tbuf2) - 1, "%s: %s ", port->name, pql_map[i].mac_addr);
+            snprintf(tbuf, sizeof(tbuf) - 1, "%-25s", tbuf2);
+            strncat(line, tbuf, sizeof(line) - strlen(line) - 1);
         }
-        strncat(line, "\n", sizeof(line) - strlen(line));
+        strncat(line, "\n", sizeof(line) - strlen(line) - 1);
         left_len = *len - strlen(buf);
         if (unlikely(left_len < 0)) {
             RTE_LOG(WARNING, NETIF, "buffer not enough for '%s'\n", __func__);
             *len = strlen(buf);
             return EDPVS_INVAL;
         }
-        strncat(buf, line, left_len);
+        strncat(buf, line, left_len - 1);
     }
 
     for (i = 0; i <= netif_max_qid; i++) {
-        snprintf(tbuf2, sizeof(tbuf2), "rx%d-tx%d", i, i);
-        snprintf(line, sizeof(line), "    %-12s", tbuf2);
+        snprintf(tbuf2, sizeof(tbuf2) - 1, "rx%d-tx%d", i, i);
+        snprintf(line, sizeof(line) - 1, "    %-12s", tbuf2);
         for (j = 0; j <= netif_max_pid; j++) {
             if (!is_all && pid != j)
                 continue;
             if (NETIF_PORT_ID_INVALID == pql_map[j].rx_qid[i])
-                snprintf(rxbuf, sizeof(rxbuf), "xx");
+                snprintf(rxbuf, sizeof(rxbuf) - 1, "xx");
             else
-                snprintf(rxbuf, sizeof(rxbuf), "cpu%d", pql_map[j].rx_qid[i]);
+                snprintf(rxbuf, sizeof(rxbuf) - 1, "cpu%d", pql_map[j].rx_qid[i]);
             if (NETIF_PORT_ID_INVALID == pql_map[j].tx_qid[i])
-                snprintf(txbuf, sizeof(txbuf), "xx");
+                snprintf(txbuf, sizeof(txbuf) - 1, "xx");
             else
-                snprintf(txbuf, sizeof(txbuf), "cpu%d", pql_map[j].tx_qid[i]);
+                snprintf(txbuf, sizeof(txbuf) - 1, "cpu%d", pql_map[j].tx_qid[i]);
 
-            snprintf(tbuf2, sizeof(tbuf2), "%s-%s", rxbuf, txbuf);
-            snprintf(tbuf, sizeof(tbuf), "%-25s", tbuf2);
-            strncat(line, tbuf, sizeof(line) - strlen(line));
+            snprintf(tbuf2, sizeof(tbuf2) - 1, "%s-%s", rxbuf, txbuf);
+            snprintf(tbuf, sizeof(tbuf) - 1, "%-25s", tbuf2);
+            strncat(line, tbuf, sizeof(line) - strlen(line) - 1);
         }
-        strncat(line, "\n", sizeof(line) - strlen(line));
+        strncat(line, "\n", sizeof(line) - strlen(line) - 1);
         left_len = *len - strlen(buf);
         if (unlikely(left_len <= 0)) {
             RTE_LOG(WARNING, NETIF, "buffer not enough for '%s'\n", __func__);
             *len = strlen(buf);
             return EDPVS_INVAL;
         }
-        strncat(buf, line, left_len);
+        strncat(buf, line, left_len - 1);
     }
 
     *len = strlen(buf);
@@ -4020,13 +4020,15 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
 
 static int get_port_num(void **out, size_t *out_len)
 {
-    int pid;
+    int i, cnt = 0;
+    size_t len;
     struct netif_port *port;
+    netif_nic_list_get_t *get;
+
     assert(out && out_len);
 
-    netif_nic_num_get_t *get;
-    get = rte_zmalloc_socket(NULL, sizeof(netif_nic_num_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    len = sizeof(netif_nic_list_get_t) + g_nports * sizeof(struct port_id_name);
+    get = rte_zmalloc(NULL, len, RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
@@ -4036,11 +4038,18 @@ static int get_port_num(void **out, size_t *out_len)
     get->bond_pid_base = bond_pid_base;
     get->bond_pid_end = bond_pid_end;
 
-    for (pid = 0; pid < g_nports; pid++) {
-        port = netif_port_get(pid);
-        if (!port)
-            continue;
-        snprintf(get->pid_name_map[pid], sizeof(get->pid_name_map[pid]), "%s", port->name);
+    for (i = 0; i < NETIF_PORT_TABLE_BUCKETS; i++) {
+        list_for_each_entry(port, &port_tab[i], list) {
+            get->idname[cnt].id = port->id;
+            snprintf(get->idname[cnt].name, sizeof(get->idname[cnt].name),
+                    "%s", port->name);
+            cnt++;
+            if (cnt > g_nports) {
+                RTE_LOG(ERR, NETIF, "%s: Too many ports in port_tab than expected!\n",
+                        __func__);
+                break;
+            }
+        }
     }
 
     *out = get;
@@ -4094,8 +4103,21 @@ static int get_port_basic(portid_t pid, void **out, size_t *out_len)
         return err;
     }
     get->promisc = promisc ? 1 : 0;
-    get->tc_egress = (port->flag & NETIF_PORT_FLAG_TC_EGRESS) ? 1 : 0;
-    get->tc_ingress = (port->flag & NETIF_PORT_FLAG_TC_INGRESS) ? 1 : 0;
+
+    if (port->flag & NETIF_PORT_FLAG_FORWARD2KNI)
+        get->fwd2kni = 1;
+    if (port->flag & NETIF_PORT_FLAG_TC_EGRESS)
+        get->tc_egress= 1;
+    if (port->flag & NETIF_PORT_FLAG_TC_INGRESS)
+        get->tc_ingress = 1;
+    if (port->flag & NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD)
+        get->ol_rx_ip_csum = 1;
+    if (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
+        get->ol_tx_ip_csum = 1;
+    if (port->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD)
+        get->ol_tx_tcp_csum = 1;
+    if (port->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD)
+        get->ol_tx_udp_csum = 1;
 
     *out = get;
     *out_len = sizeof(netif_nic_basic_get_t);
@@ -4190,7 +4212,7 @@ static int get_port_ext_info(portid_t pid, void **out, size_t *out_len)
     if (!dev)
         return EDPVS_NOTEXIST;
 
-    get = rte_zmalloc(NULL, sizeof(netif_nic_ext_get_t), RTE_CACHE_LINE_SIZE);
+    get = rte_zmalloc(NULL, sizeof(netif_nic_ext_get_t), 0);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
@@ -4208,7 +4230,7 @@ static int get_port_ext_info(portid_t pid, void **out, size_t *out_len)
         if (unlikely(EDPVS_OK != err))
             goto errout;
 
-        new = rte_realloc(get, sizeof(netif_nic_ext_get_t) + len + 1, RTE_CACHE_LINE_SIZE);
+        new = rte_realloc(get, sizeof(netif_nic_ext_get_t) + len + 1, 0);
         if (unlikely(!new)) {
             err = EDPVS_NOMEM;
             goto errout;
@@ -4229,7 +4251,7 @@ static int get_port_ext_info(portid_t pid, void **out, size_t *out_len)
     if (unlikely(EDPVS_OK != err))
         goto errout;
 
-    new = rte_realloc(get, sizeof(netif_nic_ext_get_t) + offset + len + 1, RTE_CACHE_LINE_SIZE);
+    new = rte_realloc(get, sizeof(netif_nic_ext_get_t) + offset + len + 1, 0);
     if (unlikely(!new)) {
         err = EDPVS_NOMEM;
         goto errout;

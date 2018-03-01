@@ -117,6 +117,24 @@ typedef struct netif_nic_num_get
     char pid_name_map[NETIF_MAX_PORTS][DEVICE_NAME_MAX_LEN];
 } netif_nic_num_get_t;
 
+struct port_id_name
+{
+    portid_t id;
+    char name[DEVICE_NAME_MAX_LEN];
+} __attribute__((__packed__));
+
+typedef struct netif_nic_list_get
+{
+    uint16_t nic_num;
+    portid_t phy_pid_base;
+    portid_t phy_pid_end;
+    portid_t bond_pid_base;
+    portid_t bond_pid_end;
+    struct port_id_name idname[0];
+} netif_nic_list_get_t;
+
+
+
 /* basic nic info specified by port_id */
 typedef struct netif_nic_basic_get
 {
@@ -133,8 +151,13 @@ typedef struct netif_nic_basic_get
     uint16_t link_autoneg:1; /* ETH_LINK_SPEED_[AUTONEG/FIXED] */
     uint16_t link_status:1; /* ETH_LINK_[DOWN/UP] */
     uint16_t promisc:1; /* promiscuous mode */
+    uint16_t fwd2kni:1;
     uint16_t tc_egress:1;
     uint16_t tc_ingress:1;
+    uint16_t ol_rx_ip_csum:1;
+    uint16_t ol_tx_ip_csum:1;
+    uint16_t ol_tx_tcp_csum:1;
+    uint16_t ol_tx_udp_csum:1;
 } netif_nic_basic_get_t;
 
 /* nic statistics specified by port_id */

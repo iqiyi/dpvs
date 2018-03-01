@@ -294,13 +294,13 @@ static int dump_nic_basic(portid_t pid)
     printf("\n");
 
     printf("    addr %s ", get.addr);
-    if (get.flags & NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD)
+    if (get.ol_rx_ip_csum)
         printf("OF_RX_IP_CSUM ");
-    if (get.flags & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
+    if (get.ol_tx_ip_csum)
         printf("OF_TX_IP_CSUM ");
-    if (get.flags & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD)
+    if (get.ol_tx_tcp_csum)
         printf("OF_TX_TCP_CSUM ");
-    if (get.flags & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD)
+    if (get.ol_tx_udp_csum)
         printf("OF_TX_UDP_CSUM ");
     printf("\n");
 
