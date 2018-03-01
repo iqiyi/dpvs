@@ -49,9 +49,12 @@ struct uoa_cpu_stats {
 	__u64   invalid;	/* getname find invalid UOA option. */
 	__u64   empty;		/* getname not returns peer addr. */
 
+#ifdef __KERNEL__
 	struct u64_stats_sync syncp;
+#endif
 } __attribute__((__packed__));
 
+/* normal kernel statistics (global) */
 struct uoa_kstats {
 	__u64   uoa_got;	/* UDP packet got UOA. */
 	__u64   uoa_none;	/* UDP packet has no UOA. */

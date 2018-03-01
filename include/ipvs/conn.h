@@ -89,6 +89,7 @@ struct dp_vs_conn {
     struct timeval          timeout;
     lcoreid_t               lcore;
     struct dp_vs_dest       *dest;  /* real server */
+    void                    *prot_data;  /* protocol specific data */
 
     /* for FNAT */
     struct dp_vs_laddr      *local; /* local address */
