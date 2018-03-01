@@ -405,6 +405,8 @@ alloc_vs(char *ip, char *port)
 		memcpy(new->vsgname, port, size);
 	} else if (!strcmp(ip, "fwmark")) {
 		new->vfwmark = atoi(port);
+	} else if (!strcmp(ip, "match")) {
+		new->loadbalancing_kind = IP_VS_CONN_F_SNAT;
 	} else {
 		inet_stosockaddr(ip, port, &new->addr);
 	}
@@ -426,6 +428,10 @@ alloc_vs(char *ip, char *port)
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;
+	memset(new->srange, 0, 256);
+	memset(new->drange, 0, 256);
+	memset(new->iifname, 0, IFNAMSIZ);
+	memset(new->oifname, 0, IFNAMSIZ);
 
 	list_add(check_data->vs, new);
 }

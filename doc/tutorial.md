@@ -644,6 +644,37 @@ MATCH1='proto=icmp,src-range=192.168.100.0-192.168.100.254,oif=dpdk1'
 ./ipvsadm -a -H $MATCH1 -r $WAN_IP:0 -w 100 -J
 ```
 
+You can alse use keepalived to configure SNAT instead of using ipvsadm. Every SNAT serivce should has parameter 'match':
+```
+virtual_server match SNAT1{
+    protocol UDP 
+    lb_algo rr
+    lb_kind SNAT
+    src-range 192.168.100.0-192.168.100.254
+    oif dpdk1
+    
+    real_server 123.1.2.1  0 {
+        weight 4
+    }   
+
+}
+
+virtual_server match SNAT2{
+    protocol ICMP
+    lb_algo wrr 
+    lb_kind SNAT
+    src-range 192.168.100.1-192.168.100.254
+    dst-range 123.1.2.0-123.1.2.254
+    oif dpdk1
+    iif dpdk0
+    
+    real_server 123.1.2.1  0 {  
+        weight 4
+    }   
+
+}
+```
+
 For hosts in "LAN", the default route should be set to `DPVS` server's LAN IP.
 
 ```bash

@@ -158,7 +158,7 @@ typedef struct _virtual_server {
 	int				alive;
 	unsigned			alpha;		/* Alpha mode enabled. */
 	unsigned			omega;		/* Omega mode enabled. */
-	unsigned syn_proxy;		/* Syn_proxy mode enabled. */
+	unsigned			syn_proxy;		/* Syn_proxy mode enabled. */
 	char				*quorum_up;	/* A hook to call when the VS gains quorum. */
 	char				*quorum_down;	/* A hook to call when the VS loses quorum. */
 	long unsigned			quorum;		/* Minimum live RSs to consider VS up. */
@@ -166,9 +166,14 @@ typedef struct _virtual_server {
 	long unsigned			hysteresis;	/* up/down events "lag" WRT quorum. */
 	unsigned			quorum_state;	/* Reflects result of the last transition done. */
 	int					reloaded;   /* quorum_state was copied from old config while reloading */
-	char *local_addr_gname;		/* local ip address group name */
-	char *vip_bind_dev;		/* the interface name,vip bindto */
-	char *blklst_addr_gname;	/* black list ip group name */
+	char				*local_addr_gname;		/* local ip address group name */
+	char				*vip_bind_dev;		/* the interface name,vip bindto */
+	char				*blklst_addr_gname;	/* black list ip group name */
+
+	char				srange[256];
+	char				drange[256];
+	char				iifname[IFNAMSIZ];
+	char				oifname[IFNAMSIZ];
 #if defined(_WITH_SNMP_) && defined(_KRNL_2_6_) && defined(_WITH_LVS_)
 	/* Statistics */
 	time_t				lastupdated;
@@ -263,16 +268,20 @@ static inline int inaddr_equal(sa_family_t family, void *addr1, void *addr2)
 			 !strcmp((X)->timeout_persistence, (Y)->timeout_persistence)	&&\
 			 (X)->conn_timeout == (Y)->conn_timeout  &&\
 			 !strcmp((X)->bps, (Y)->bps)					&&\
- 			 !strcmp((X)->limit_proportion, (Y)->limit_proportion)          &&\
+			 !strcmp((X)->limit_proportion, (Y)->limit_proportion)          &&\
 			 (((X)->vsgname && (Y)->vsgname &&				\
 			   !strcmp((X)->vsgname, (Y)->vsgname)) || 			\
 			  (!(X)->vsgname && !(Y)->vsgname))				&&\
 			 (((X)->local_addr_gname && (Y)->local_addr_gname &&		\
 			   !strcmp((X)->local_addr_gname, (Y)->local_addr_gname)) ||	\
-			  (!(X)->local_addr_gname && !(Y)->local_addr_gname))           &&\
-                         (((X)->blklst_addr_gname && (Y)->blklst_addr_gname &&            \
-                           !strcmp((X)->blklst_addr_gname, (Y)->blklst_addr_gname)) ||    \
-                          (!(X)->blklst_addr_gname && !(Y)->blklst_addr_gname)))                          
+			  (!(X)->local_addr_gname && !(Y)->local_addr_gname))		&&\
+			 (((X)->blklst_addr_gname && (Y)->blklst_addr_gname &&		\
+			   !strcmp((X)->blklst_addr_gname, (Y)->blklst_addr_gname)) ||	\
+			 (!(X)->blklst_addr_gname && !(Y)->blklst_addr_gname))		&&\
+			 !strcmp((X)->srange, (Y)->srange)				&&\
+			 !strcmp((X)->drange, (Y)->drange)				&&\
+			 !strcmp((X)->iifname, (Y)->iifname)				&&\
+			 !strcmp((X)->oifname, (Y)->oifname))
 
 #define VSGE_ISEQ(X,Y)	(sockstorage_equal(&(X)->addr,&(Y)->addr) &&	\
 			 (X)->range     == (Y)->range &&		\
