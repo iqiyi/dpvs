@@ -20,7 +20,6 @@
 #include <linux/if_ether.h>
 
 #define NETIF_MAX_PORTS     4096
-#define NETIF_MAX_LCORES    64
 
 /*** type from dpdk.h ***
  * All types defined here must be the same as in dpdk.h,

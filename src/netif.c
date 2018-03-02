@@ -148,7 +148,7 @@ static uint64_t g_isol_rx_lcore_mask;
 
 bool is_lcore_id_valid(lcoreid_t cid)
 {
-    if (unlikely(cid >= 63 || cid >= NETIF_MAX_LCORES))
+    if (unlikely(cid >= 63 || cid >= DPVS_MAX_LCORE))
         return false;
 
     return ((cid == rte_get_master_lcore()) ||
@@ -158,7 +158,7 @@ bool is_lcore_id_valid(lcoreid_t cid)
 
 static bool is_lcore_id_fwd(lcoreid_t cid) 
 {
-    if (unlikely(cid >= 63 || cid >= NETIF_MAX_LCORES))
+    if (unlikely(cid >= 63 || cid >= DPVS_MAX_LCORE))
         return false;
 
     return ((cid == rte_get_master_lcore()) ||
@@ -677,7 +677,7 @@ static void isol_rx_cpu_ids_handler(vector_t tokens)
     for (ii = 0; ii < VECTOR_SIZE(tokens) - 1; ii++) {
         str = VECTOR_SLOT(tokens, ii + 1);
         cid = atoi(str);
-        if (cid <= 0 || cid >= NETIF_MAX_LCORES) {
+        if (cid <= 0 || cid >= DPVS_MAX_LCORE) {
             RTE_LOG(WARNING, NETIF, "invalid worker %s:%s:isol_rx_cpu_ids[%d] %s\n",
                     current_worker->name, current_port->port_name, ii, str);
             current_port->isol_rxq_lcore_ids[ii] = NETIF_LCORE_ID_INVALID;
@@ -873,13 +873,13 @@ __rte_unused static void pkt_send_back(struct rte_mbuf *mbuf, struct netif_port 
 #endif
 
 /********************************************* mbufpool *******************************************/
-static struct rte_mempool *pktmbuf_pool[NETIF_MAX_SOCKETS];
+static struct rte_mempool *pktmbuf_pool[DPVS_MAX_SOCKET];
 
 static inline void netif_pktmbuf_pool_init(void)
 {
     int i;
     char poolname[32];
-    for (i = 0; i < NETIF_MAX_SOCKETS; i++) {
+    for (i = 0; i < DPVS_MAX_SOCKET; i++) {
         snprintf(poolname, sizeof(poolname), "mbuf_pool_%d", i);
         pktmbuf_pool[i] = rte_pktmbuf_pool_create(poolname, netif_pktpool_nb_mbuf,
                 netif_pktpool_mbuf_cache, 0, RTE_MBUF_DEFAULT_BUF_SIZE, i);
@@ -1013,16 +1013,16 @@ static void kni_send2kern_loop(uint8_t port_id, struct netif_queue_conf *qconf);
 
 /****************************************** lcore  conf ********************************************/
 /* per-lcore statistics */
-static struct netif_lcore_stats lcore_stats[NETIF_MAX_LCORES];
+static struct netif_lcore_stats lcore_stats[DPVS_MAX_LCORE];
 /* per-lcore isolated reception queues */
-static struct list_head isol_rxq_tab[NETIF_MAX_LCORES];
+static struct list_head isol_rxq_tab[DPVS_MAX_LCORE];
 
 /* worker configuration array */
-static struct netif_lcore_conf lcore_conf[NETIF_MAX_LCORES + 1];
+static struct netif_lcore_conf lcore_conf[DPVS_MAX_LCORE + 1];
 
 /* Note: Lockless, lcore_conf is set on initialization stage by cfgfile /etc/dpvs.conf.
 config sample:
-static struct netif_lcore_conf lcore_conf[NETIF_MAX_LCORES + 1] = {
+static struct netif_lcore_conf lcore_conf[DPVS_MAX_LCORE + 1] = {
     {.id = 1, .nports = 2, .pqs = {
         {.id = 0, .nrxq = 1, .ntxq = 1, .rxqs = {{.id = 0, }, }, .txqs = {{.id = 0, }, }, },
         {.id = 1, .nrxq = 0, .ntxq = 1, .txqs = {{.id = 0, }, }, }, },
@@ -1060,7 +1060,7 @@ static void config_lcores(struct list_head *worker_list)
         }
     }
     while (cpu_left > 0) {
-        cpu_id_min = NETIF_MAX_LCORES;
+        cpu_id_min = DPVS_MAX_LCORE;
         worker_min = NULL;
 
         tk = 0;
@@ -1118,26 +1118,26 @@ static void config_lcores(struct list_head *worker_list)
 }
 
 /* fast searching tables */
-lcoreid_t lcore2index[NETIF_MAX_LCORES];
-portid_t port2index[NETIF_MAX_LCORES][NETIF_MAX_PORTS];
+lcoreid_t lcore2index[DPVS_MAX_LCORE];
+portid_t port2index[DPVS_MAX_LCORE][NETIF_MAX_PORTS];
 
 static void lcore_index_init(void)
 {
     lcoreid_t ii;
     int tk = 0;
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (rte_lcore_is_enabled(ii)) {
             if (likely(tk))
                 lcore2index[ii] = tk - 1;
             else
-                lcore2index[ii] = NETIF_MAX_LCORES;
+                lcore2index[ii] = DPVS_MAX_LCORE;
             tk++;
         } else
-            lcore2index[ii] = NETIF_MAX_LCORES;
+            lcore2index[ii] = DPVS_MAX_LCORE;
     }
 #ifdef CONFIG_DPVS_NETIF_DEBUG
     printf("lcore fast searching table: \n");
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++)
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++)
         printf("lcore2index[%d] = %d\n", ii, lcore2index[ii]);
 #endif
 }
@@ -1147,11 +1147,11 @@ static void port_index_init(void)
     int ii, jj, tk;
     lcoreid_t cid;
     portid_t pid;
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++)
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++)
         for (jj = 0; jj < NETIF_MAX_PORTS; jj++)
             port2index[ii][jj] = NETIF_PORT_ID_INVALID;
 
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         tk = 0;
         for (jj = 0; jj < lcore_conf[ii].nports; jj++) {
             cid = lcore_conf[ii].id;
@@ -1161,7 +1161,7 @@ static void port_index_init(void)
     }
 #ifdef CONFIG_DPVS_NETIF_DEBUG
     printf("port fast searching table(port2index[cid][pid]): \n");
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         for (jj = 0; jj < NETIF_MAX_PORTS; jj++)
             printf("%d-%d:%d ", ii, jj, port2index[ii][jj]);
         printf("\n");
@@ -1193,7 +1193,7 @@ static void netif_get_isol_rx_lcores(uint8_t *nb, uint64_t *mask)
     uint64_t isol_lcore_mask = 0L;
     uint8_t isol_lcore_nb = 0;
 
-    for (cid = 0; cid < NETIF_MAX_LCORES; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (!list_empty(&isol_rxq_tab[cid])) {
             isol_lcore_nb++;
             isol_lcore_mask |= (1L << cid);
@@ -1210,7 +1210,7 @@ static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)
 {
     lcoreid_t cid;
     cid = rte_lcore_id();
-    assert(cid < NETIF_MAX_LCORES);
+    assert(cid < DPVS_MAX_LCORE);
     memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
 }
 
@@ -1370,7 +1370,7 @@ static inline void lcore_stats_burst(struct netif_lcore_stats *stats,
 static inline void isol_rxq_init(void)
 {
     int i;
-    for (i = 0; i < NETIF_MAX_LCORES; i++) {
+    for (i = 0; i < DPVS_MAX_LCORE; i++) {
         INIT_LIST_HEAD(&isol_rxq_tab[i]);
     }
 }
@@ -1379,7 +1379,7 @@ static inline void isol_rxq_init(void)
 static int isol_rxq_add(lcoreid_t cid, portid_t pid, queueid_t qid,
                         unsigned rb_sz, struct netif_queue_conf *rxq)
 {
-    assert(cid <= NETIF_MAX_LCORES);
+    assert(cid <= DPVS_MAX_LCORE);
     int rb_sz_r;
     struct rx_partner *isol_rxq;
     struct rte_ring *rb;
@@ -1468,7 +1468,7 @@ inline static void recv_on_isol_lcore(void)
 
 inline static bool is_isol_rxq_lcore(lcoreid_t cid)
 {
-    assert(cid < NETIF_MAX_LCORES);
+    assert(cid < DPVS_MAX_LCORE);
 
     return !list_empty(&isol_rxq_tab[cid]);
 }
@@ -1908,7 +1908,7 @@ int netif_register_master_xmit_msg(void)
     mt.unicast_msg_cb = msg_type_master_xmit_cb;
 
     netif_get_slave_lcores(&slave_lcore_nb, &slave_lcore_mask);
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if(!(slave_lcore_mask & (1UL << ii)))
             continue;
         mt.cid = ii;
@@ -2075,7 +2075,7 @@ int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf)
 }
 
 /*for arp process*/
-static struct rte_ring *arp_ring[NETIF_MAX_LCORES];
+static struct rte_ring *arp_ring[DPVS_MAX_LCORE];
 
 static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
                                      uint16_t eth_type,
@@ -2117,7 +2117,7 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
         arp = rte_pktmbuf_mtod(mbuf, struct arp_hdr *);
         rte_pktmbuf_prepend(mbuf,(uint16_t)sizeof(struct ether_hdr));
         if (rte_be_to_cpu_16(arp->arp_op) == ARP_OP_REPLY) {
-            for (i = 0; i < NETIF_MAX_LCORES; i++) {
+            for (i = 0; i < DPVS_MAX_LCORE; i++) {
                 if ((i == cid) || (!is_lcore_id_fwd(i))
                      || (i == rte_get_master_lcore()))
                     continue;
@@ -2171,7 +2171,7 @@ static int netif_arp_ring_init(void)
     uint8_t cid;
 
     socket_id = rte_socket_id();
-    for (cid = 0; cid < NETIF_MAX_LCORES; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         snprintf(name_buf, RTE_RING_NAMESIZE, "arp_ring_c%d", cid);
         arp_ring[cid] = rte_ring_create(name_buf, ARP_RING_SIZE, socket_id, RING_F_SC_DEQ);
 
@@ -2345,7 +2345,7 @@ static void lcore_job_xmit(void *args)
 static int timer_sched_interval_us;
 static void lcore_job_timer_manage(void *args)
 {
-    static uint64_t tm_manager_time[NETIF_MAX_LCORES] = { 0 };
+    static uint64_t tm_manager_time[DPVS_MAX_LCORE] = { 0 };
     uint64_t now = rte_get_timer_cycles();
     portid_t cid = rte_lcore_id();
 
@@ -2365,7 +2365,7 @@ static void netif_lcore_init(void)
 
     timer_sched_interval_us = dpvs_timer_sched_interval_get();
 
-    for (cid = 0; cid < NETIF_MAX_LCORES; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (rte_lcore_is_enabled(cid))
             RTE_LOG(INFO, NETIF, "%s: lcore%d is enabled\n", __func__, cid);
         else
@@ -3612,7 +3612,7 @@ void netif_update_master_loop_cnt(void)
 
 #ifdef CONFIG_RECORD_BIG_LOOP
 #define BIG_LOOP_THRESH 2000 // 2000 us
-static uint32_t longest_lcore_loop[NETIF_MAX_LCORES] = { 0 };
+static uint32_t longest_lcore_loop[DPVS_MAX_LCORE] = { 0 };
 
 static void print_job_time(char *buf, size_t len)
 {
@@ -3665,7 +3665,7 @@ static inline void do_lcore_job(struct netif_lcore_loop_job *job)
 #endif
 }
 
-static uint32_t netif_loop_tick[NETIF_MAX_LCORES] = { 0 };
+static uint32_t netif_loop_tick[DPVS_MAX_LCORE] = { 0 };
 
 static int netif_loop(void *dummy)
 {
@@ -3677,7 +3677,7 @@ static int netif_loop(void *dummy)
     uint64_t loop_start, loop_end;
 #endif
 
-    assert(LCORE_ID_ANY != cid && cid < NETIF_MAX_LCORES);
+    assert(LCORE_ID_ANY != cid && cid < DPVS_MAX_LCORE);
 
     try_isol_rxq_lcore_loop();
     if (0 == lcore_conf[lcore2index[cid]].nports) {
@@ -3918,7 +3918,7 @@ static inline int lcore_stats_msg_init(void)
         .multicast_msg_cb = NULL,
     };
 
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if ((ii == g_master_lcore_id) || (g_slave_lcore_mask & (1L << ii))) {
             lcore_stats_msg_type.cid = ii;
             err = msg_type_register(&lcore_stats_msg_type);
@@ -3943,7 +3943,7 @@ static inline int lcore_stats_msg_term(void)
         .multicast_msg_cb = NULL,
     };
 
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if ((ii == g_master_lcore_id) || (g_slave_lcore_mask & (1L << ii))) {
             lcore_stats_msg_type.cid = ii;
             err = msg_type_unregister(&lcore_stats_msg_type);

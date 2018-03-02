@@ -80,7 +80,7 @@ struct raw_neigh {
 static int arp_unres_qlen = ARP_ENTRY_BUFF_SIZE_DEF;
 static int arp_timeout = DPVS_NEIGH_TIMEOUT_DEF;
 
-static struct rte_ring *neigh_ring[NETIF_MAX_LCORES];
+static struct rte_ring *neigh_ring[DPVS_MAX_LCORE];
 
 static void unres_qlen_handler(vector_t tokens)
 {
@@ -142,7 +142,7 @@ static int  num_neighbours = 0;
 static lcoreid_t g_cid = 0;
 static lcoreid_t master_cid = 0;
 
-static struct list_head neigh_table[NETIF_MAX_LCORES][ARP_TAB_SIZE];
+static struct list_head neigh_table[DPVS_MAX_LCORE][ARP_TAB_SIZE];
 
 static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* neighbour, bool add);
 
@@ -640,7 +640,7 @@ static int neigh_ring_init(void)
     int socket_id;
     uint8_t cid;
     socket_id = rte_socket_id();
-    for (cid = 0; cid < NETIF_MAX_LCORES; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         snprintf(name_buf, RTE_RING_NAMESIZE, "neigh_ring_c%d", cid);
         neigh_ring[cid] = rte_ring_create(name_buf, MAC_RING_SIZE, socket_id, RING_F_SC_DEQ);
         if (neigh_ring[cid] == NULL)
@@ -825,7 +825,7 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         }
 
 
-        for(i = 0; i < NETIF_MAX_LCORES; i++) {
+        for(i = 0; i < DPVS_MAX_LCORE; i++) {
             if ((i == cid) || (!is_lcore_id_valid(i)))
                 continue;
             mac_param = neigh_ring_clone_param(param, 1);
@@ -865,7 +865,7 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         rte_free(neigh);
         num_neighbours--;
 
-        for(i = 0; i < NETIF_MAX_LCORES; i++) {
+        for(i = 0; i < DPVS_MAX_LCORE; i++) {
             if ((i == cid) || (!is_lcore_id_valid(i)))
                 continue;
             mac_param = neigh_ring_clone_param(param, 0);
@@ -913,7 +913,7 @@ static int arp_init(void)
     uint64_t lcore_mask;
     lcoreid_t cid;
 
-    for (i = 0; i < NETIF_MAX_LCORES; i++) {
+    for (i = 0; i < DPVS_MAX_LCORE; i++) {
         for (j = 0; j < ARP_TAB_SIZE; j++) {
             INIT_LIST_HEAD(&neigh_table[i][j]);
         }
@@ -923,7 +923,7 @@ static int arp_init(void)
     /*choose one core to sync master*/
     netif_get_slave_lcores(NULL, &lcore_mask);
 
-    for (cid = 0 ; cid < NETIF_MAX_LCORES; cid++) {
+    for (cid = 0 ; cid < DPVS_MAX_LCORE; cid++) {
         if (lcore_mask & (1L << cid)) {
             g_cid = cid;
             break;

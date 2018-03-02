@@ -45,10 +45,6 @@ enum {
 #define NETIF_MAX_QUEUES            16
 /* max nic number used in the program */
 #define NETIF_MAX_PORTS             4096
-/* max lcore number used in the program */
-#define NETIF_MAX_LCORES            64
-/* max socket number used in the program */
-#define NETIF_MAX_SOCKETS           2
 /* maximum pkt number at a single burst */
 #define NETIF_MAX_PKT_BURST         32
 /* maximum bonding slave number */
@@ -151,7 +147,7 @@ struct netif_lcore_loop_job
     enum netif_lcore_job_type type;
     uint32_t skip_loops; /* for NETIF_LCORE_JOB_SLOW type only */
 #ifdef CONFIG_RECORD_BIG_LOOP
-    uint32_t job_time[NETIF_MAX_LCORES];
+    uint32_t job_time[DPVS_MAX_LCORE];
 #endif
     struct list_head list;
 } __rte_cache_aligned;

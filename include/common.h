@@ -58,9 +58,6 @@ typedef uint32_t    __be32;
 typedef uint16_t    __be16;
 #endif
 
-#define DPVS_MAX_SOCKET             2   /* num of NUMA socket */
-#define DPVS_MAX_LCORE              128 /* num of DPDK lcore (CPU cores) */
-
 typedef enum {
     DPVS_STATE_STOP = 1,
     DPVS_STATE_INIT,

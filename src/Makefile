@@ -35,6 +35,10 @@ include $(SRCDIR)/config.mk
 INCDIRS += -I $(SRCDIR)/../include
 
 # for dpvs main program.
+DEFS = -D DPVS_MAX_SOCKET=2
+DEFS += -D DPVS_MAX_LCORE=64
+CFLAGS += $(DEFS)
+
 CFLAGS += -D __DPVS__ -DDPVS_VERSION=\"$(VERSION_STRING)\" -DDPVS_BUILD_DATE=\"$(DATE_STRING)\" 
 
 CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes -mcmodel=medium

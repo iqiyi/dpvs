@@ -802,7 +802,7 @@ static int link_show(struct link_param *param)
                 printf("<< Data Plane >>\n");
                 cnt = 0;
                 for (ii = 0; cnt <= lcores.slave_lcore_num &&
-                        ii <= NETIF_MAX_LCORES; ii++) {
+                        ii <= DPVS_MAX_LCORE; ii++) {
                     if (lcores.slave_lcore_mask & (1L << ii)) {
                         err = link_cpu_show(ii, param);
                         if (err) {
@@ -817,7 +817,7 @@ static int link_show(struct link_param *param)
                     cnt = 0;
                     printf("<< Isolate RX Lcores >>\n");
                     for (ii = 0; cnt <= lcores.isol_rx_lcore_num &&
-                            ii <= NETIF_MAX_LCORES; ii++) {
+                            ii <= DPVS_MAX_LCORE; ii++) {
                         if (lcores.isol_rx_lcore_mask & (1L << ii)) {
                             err = link_cpu_show(ii, param);
                             if (err) {

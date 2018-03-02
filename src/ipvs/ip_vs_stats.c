@@ -28,8 +28,8 @@
 #define this_dpvs_stats             (dpvs_stats[rte_lcore_id()])
 #define this_dpvs_estats            (dpvs_estats[rte_lcore_id()])
 
-static struct dp_vs_stats dpvs_stats[NETIF_MAX_LCORES];
-static struct dp_vs_estats dpvs_estats[NETIF_MAX_LCORES];
+static struct dp_vs_stats dpvs_stats[DPVS_MAX_LCORE];
+static struct dp_vs_estats dpvs_estats[DPVS_MAX_LCORE];
 
 static void __dp_vs_stats_clear(struct dp_vs_stats *stats)
 {
@@ -48,7 +48,7 @@ void dp_vs_stats_clear(void)
     /* get configured data-plane lcores */
     netif_get_slave_lcores(&nlcore, &lcore_mask);
 
-    for (i = 0; i < NETIF_MAX_LCORES; i++) {
+    for (i = 0; i < DPVS_MAX_LCORE; i++) {
         if (!(lcore_mask & (1L<<i)))
             continue; /* unused */
 
@@ -66,7 +66,7 @@ void dp_svc_stats_clear(struct dp_vs_stats *stats)
 
     netif_get_slave_lcores(&nlcore, &lcore_mask);
 
-    for (i = 0; i < NETIF_MAX_LCORES; i++) {
+    for (i = 0; i < DPVS_MAX_LCORE; i++) {
         if (!(lcore_mask & (1L<<i)))
             continue;
         __dp_vs_stats_clear(&stats[i]);
@@ -81,12 +81,12 @@ static struct dp_vs_stats* alloc_percpu_stats(void)
     struct dp_vs_stats* svc_stats;
 
     netif_get_slave_lcores(&nlcore, &lcore_mask);
-    svc_stats = rte_malloc_socket(NULL, sizeof(struct dp_vs_stats) * NETIF_MAX_LCORES,
+    svc_stats = rte_malloc_socket(NULL, sizeof(struct dp_vs_stats) * DPVS_MAX_LCORE,
                                    RTE_CACHE_LINE_SIZE, rte_socket_id());
     if (!svc_stats)
         return NULL;
 
-    for (i = 0; i < NETIF_MAX_LCORES; i++) {
+    for (i = 0; i < DPVS_MAX_LCORE; i++) {
         if (!(lcore_mask & (1L<<i)))
             continue;
         __dp_vs_stats_clear(&svc_stats[i]);
@@ -118,7 +118,7 @@ void dp_vs_zero_stats(struct dp_vs_stats* stats)
     
     netif_get_slave_lcores(&nlcore,&lcore_mask);
 
-    for (i = 0; i < NETIF_MAX_LCORES; i++) {
+    for (i = 0; i < DPVS_MAX_LCORE; i++) {
         if (!(lcore_mask & (1L<<i)))
             continue;
         __dp_vs_stats_clear(&stats[i]);
