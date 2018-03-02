@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
     numa_nodes++;
 
     if (numa_nodes != DPVS_MAX_SOCKET) {
-        perror("DPVS_MAX_SOCKET and system numa nodes do not match!\n");
+        fprintf(stderr, "DPVS_MAX_SOCKET and system numa nodes do not match!\n");
         return -1;
     }
 

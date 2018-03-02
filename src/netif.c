@@ -3183,6 +3183,14 @@ int netif_port_start(struct netif_port *port)
         return EDPVS_DPDKAPIFAIL;
     }
 
+    if (port->nrxq > port->dev_info.max_rx_queues ||
+            port->ntxq > port->dev_info.max_tx_queues) {
+        rte_exit(EXIT_FAILURE, "%s: %s supports %d rx-queues and %d tx-queues at max, "
+                "but %d rx-queues and %d tx-queues are configured.\n", __func__,
+                port->name, port->dev_info.max_rx_queues,
+                port->dev_info.max_tx_queues, port->nrxq, port->ntxq);
+    }
+
     // device configure
     if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
