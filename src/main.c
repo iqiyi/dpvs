@@ -16,6 +16,7 @@
  *
  */
 #define _GNU_SOURCE
+#include <numa.h>
 #include <pthread.h>
 #include <assert.h>
 #include "pidfile.h"
@@ -75,7 +76,7 @@ static int set_all_thread_affinity(void)
 
 int main(int argc, char *argv[])
 {
-    int err, nports;
+    int err, nports, numa_nodes;
     portid_t pid;
     struct netif_port *dev;
     struct timeval tv;
@@ -94,6 +95,17 @@ int main(int argc, char *argv[])
 
     gettimeofday(&tv, NULL);
     srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
+
+    if (numa_available() < 0)
+        numa_nodes = 0;
+    else
+        numa_nodes = numa_max_node();
+    numa_nodes++;
+
+    if (numa_nodes != DPVS_MAX_SOCKET) {
+        perror("DPVS_MAX_SOCKET and system numa nodes do not match!\n");
+        return -1;
+    }
 
     if (set_all_thread_affinity() != 0) {
         fprintf(stderr, "set_all_thread_affinity failed\n");
