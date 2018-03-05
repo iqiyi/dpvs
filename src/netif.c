@@ -2772,8 +2772,58 @@ static struct netif_ops bond_netif_ops = {
     .op_set_fdir_filt   = bond_set_fdir_filt,
 };
 
+static inline void setup_dev_of_flags(struct netif_port *port)
+{
+    port->flag |= NETIF_PORT_FLAG_ENABLED;
+
+    /* tx offload conf and flags */
+    if (port->dev_info.tx_offload_capa & DEV_TX_OFFLOAD_IPV4_CKSUM)
+        port->flag |= NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD;
+
+    if (port->dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM)
+        port->flag |= NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
+    else
+        port->dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOXSUMTCP;
+
+    if (port->dev_info.tx_offload_capa & DEV_TX_OFFLOAD_UDP_CKSUM)
+        port->flag |= NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
+    else
+        port->dev_info.default_txconf.txq_flags |= ETH_TXQ_FLAGS_NOXSUMUDP;
+
+    /* FIXME: may be a bug in dev_info get for virtio device,
+     *        set the txq_of_flags manually for this type device */
+    if (strncmp(port->dev_info.driver_name, "net_virtio", strlen("net_virtio")) == 0) {
+        port->flag |= NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD;
+        port->flag &= ~NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
+        port->flag &= ~NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
+    }
+
+    /*
+     * we may have multiple vlan dev on one rte_ethdev,
+     * and mbuf->vlan_tci is RX only!
+     * while there's only one PVID (DEV_TX_OFFLOAD_VLAN_INSERT),
+     * to make things easier, do not support TX VLAN instert offload.
+     * or we have to check if VID is PVID (than to tx offload it).
+     */
+#if 0
+    if (dev_info->tx_offload_capa & DEV_TX_OFFLOAD_VLAN_INSERT) {
+        port->flag |= NETIF_PORT_FLAG_TX_VLAN_INSERT_OFFLOAD;
+        port->dev_conf.txmode.hw_vlan_insert_pvid = 1;
+        rte_eth_dev_set_vlan_pvid();
+    }
+#endif
+
+    /* rx offload conf and flags */
+    if (port->dev_info.rx_offload_capa & DEV_RX_OFFLOAD_VLAN_STRIP) {
+        port->flag |= NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD;
+        port->dev_conf.rxmode.hw_vlan_strip = 1;
+    }
+    if (port->dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM)
+        port->flag |= NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD;
+}
+
 /* TODO: refactor it with netif_alloc */
-static struct netif_port* netif_port_alloc(portid_t id, int nrxq, 
+static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
         int ntxq, const struct rte_eth_conf *conf)
 {
     struct netif_port *port;
@@ -2788,7 +2838,7 @@ static struct netif_port* netif_port_alloc(portid_t id, int nrxq,
     port->id = id;
     port->bond = (union netif_bond *)(port + 1);
     if (id >= phy_pid_base && id < phy_pid_end) {
-        port->type = PORT_TYPE_GENERAL; /* update later in netif_port_alloc */
+        port->type = PORT_TYPE_GENERAL; /* update later in netif_rte_port_alloc */
         port->netif_ops = &dpdk_netif_ops;
     } else if (id >= bond_pid_base && id < bond_pid_end) {
         port->type = PORT_TYPE_BOND_MASTER;
@@ -2806,15 +2856,8 @@ static struct netif_port* netif_port_alloc(portid_t id, int nrxq,
         return NULL;
     }
 
-    port->flag |= NETIF_PORT_FLAG_ENABLED;
-    /* FIXME: read offload features from driver */
-    port->flag |= NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD;
-    port->flag |= NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
-    port->flag |= NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
-    port->flag |= NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD;
-
-    port->nrxq = nrxq; // port_rx_queues_get();
-    port->ntxq = ntxq; // port_tx_queues_get();
+    port->nrxq = nrxq; // update after port_rx_queues_get();
+    port->ntxq = ntxq; // update after port_tx_queues_get();
     port->socket = rte_eth_dev_socket_id(id);
     port->hw_header_len = sizeof(struct ether_hdr);
     if (port->socket == SOCKET_ID_ANY)
@@ -2827,24 +2870,7 @@ static struct netif_port* netif_port_alloc(portid_t id, int nrxq,
     rte_rwlock_init(&port->dev_lock);
     netif_mc_init(port);
 
-    if (port->dev_info.rx_offload_capa & DEV_RX_OFFLOAD_VLAN_STRIP) {
-        port->flag |= NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD;
-        port->dev_conf.rxmode.hw_vlan_strip = 1;
-    }
-    /*
-     * we may have multiple vlan dev on one rte_ethdev,
-     * and mbuf->vlan_tci is RX only!
-     * while there's only one PVID (DEV_TX_OFFLOAD_VLAN_INSERT),
-     * to make things easier, do not support TX VLAN instert offload.
-     * or we have to check if VID is PVID (than to tx offload it).
-     */
-#if 0
-    if (port->dev_info.tx_offload_capa & DEV_TX_OFFLOAD_VLAN_INSERT) {
-        port->flag |= NETIF_PORT_FLAG_TX_VLAN_INSERT_OFFLOAD;
-        port->dev_conf.txmode.hw_vlan_insert_pvid = 1;
-        rte_eth_dev_set_vlan_pvid();
-    }
-#endif
+    setup_dev_of_flags(port);
 
     port->in_ptr = rte_zmalloc(NULL, sizeof(struct inet_device), RTE_CACHE_LINE_SIZE);
     if (!port->in_ptr) {
@@ -3584,7 +3610,7 @@ inline static void netif_port_init(const struct rte_eth_conf *conf)
 
     for (pid = 0; pid < nports; pid++) {
         /* queue number will be filled on device start */
-        port = netif_port_alloc(pid, 0, 0, &this_eth_conf);
+        port = netif_rte_port_alloc(pid, 0, 0, &this_eth_conf);
         if (!port)
             rte_exit(EXIT_FAILURE, "Port allocate fail, exiting...\n");
         if (netif_port_register(port) < 0)
@@ -3795,7 +3821,7 @@ int netif_virtual_devices_add(void)
         }
         RTE_LOG(INFO, NETIF, "create bondig device %s: mode=%d, primary=%s, socket=%d\n",
                 bond_cfg->name, bond_cfg->mode, bond_cfg->primary, socket_id);
-        bond_cfg->port_id = pid; /* relate port_id with port_name, used by netif_port_alloc */
+        bond_cfg->port_id = pid; /* relate port_id with port_name, used by netif_rte_port_alloc */
     }
 
     if (!list_empty(&bond_list)) {

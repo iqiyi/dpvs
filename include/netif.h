@@ -26,19 +26,19 @@
 #define RTE_LOGTYPE_NETIF RTE_LOGTYPE_USER1
 
 enum {
-    NETIF_PORT_FLAG_ENABLED                 = 0x1<<0,
-    NETIF_PORT_FLAG_RUNNING                 = 0x1<<1,
-    NETIF_PORT_FLAG_STOPPED                 = 0x1<<2,
-    NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD      = 0x1<<3,
-    NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD      = 0x1<<4,
-    NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD     = 0x1<<5,
-    NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD     = 0x1<<6,
-    NETIF_PORT_FLAG_TX_VLAN_INSERT_OFFLOAD  = 0x1<<7,
-    NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD   = 0x1<<8,
-    NETIF_PORT_FLAG_FORWARD2KNI             = 0x1<<9,
-    NETIF_PORT_FLAG_TC_EGRESS               = 0x1<<10,
-    NETIF_PORT_FLAG_TC_INGRESS              = 0x1<<11,
-    NETIF_PORT_FLAG_NO_ARP                  = 0x1<<12,
+    NETIF_PORT_FLAG_ENABLED                 = (0x1<<0),
+    NETIF_PORT_FLAG_RUNNING                 = (0x1<<1),
+    NETIF_PORT_FLAG_STOPPED                 = (0x1<<2),
+    NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD      = (0x1<<3),
+    NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD      = (0x1<<4),
+    NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD     = (0x1<<5),
+    NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD     = (0x1<<6),
+    NETIF_PORT_FLAG_TX_VLAN_INSERT_OFFLOAD  = (0x1<<7),
+    NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD   = (0x1<<8),
+    NETIF_PORT_FLAG_FORWARD2KNI             = (0x1<<9),
+    NETIF_PORT_FLAG_TC_EGRESS               = (0x1<<10),
+    NETIF_PORT_FLAG_TC_INGRESS              = (0x1<<11),
+    NETIF_PORT_FLAG_NO_ARP                  = (0x1<<12),
 };
 
 /* max tx/rx queue number for each nic */
