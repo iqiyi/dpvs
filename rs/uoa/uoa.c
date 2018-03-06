@@ -37,6 +37,7 @@
 #include <linux/uaccess.h>
 #include <linux/netdevice.h>
 #include <net/net_namespace.h>
+#include <net/udp.h>
 #include <linux/fs.h>
 #include <linux/sysctl.h>
 #include <linux/proc_fs.h>

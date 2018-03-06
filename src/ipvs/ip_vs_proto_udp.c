@@ -308,10 +308,6 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
                     struct rte_mbuf *mbuf)
 {
     struct udp_hdr *uh;
-    struct conn_uoa *uoa = (struct conn_uoa *)conn->prot_data;
-
-    if (uoa && g_uoa_max_trail > 0)
-        udp_insert_uoa(conn, mbuf, uoa);
 
     /* cannot use mbuf_header_pointer() */
     if (unlikely(mbuf->data_len < ip4_hdrlen(mbuf) + sizeof(struct udp_hdr)))
@@ -349,6 +345,18 @@ static int udp_fnat_out_handler(struct dp_vs_proto *proto,
     uh->dgram_cksum = rte_ipv4_udptcp_cksum(ip4_hdr(mbuf), uh);
 
     return EDPVS_OK;
+}
+
+static int udp_fnat_in_pre_handler(struct dp_vs_proto *proto,
+                                   struct dp_vs_conn *conn,
+                                   struct rte_mbuf *mbuf)
+{
+    struct conn_uoa *uoa = (struct conn_uoa *)conn->prot_data;
+
+    if (uoa && g_uoa_max_trail > 0)
+        return udp_insert_uoa(conn, mbuf, uoa);
+    else
+        return EDPVS_OK;
 }
 
 static int udp_snat_in_handler(struct dp_vs_proto *proto,
@@ -404,6 +412,7 @@ struct dp_vs_proto dp_vs_proto_udp = {
     .nat_out_handler    = udp_snat_out_handler,
     .fnat_in_handler    = udp_fnat_in_handler,
     .fnat_out_handler   = udp_fnat_out_handler,
+    .fnat_in_pre_handler= udp_fnat_in_pre_handler,
     .snat_in_handler    = udp_snat_in_handler,
     .snat_out_handler   = udp_snat_out_handler,
 };
