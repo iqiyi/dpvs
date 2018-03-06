@@ -148,6 +148,11 @@ fi
 
 case $1 in
 start)
+    ip addr show | grep $2 > /dev/null
+    [ $? -ne 0 ] && ip addr add $2/32 dev tunl0
+
+    ip link set tunl0 up
+
     sysctl -w net.ipv4.conf.tunl0.arp_ignore=1 > /dev/null
     sysctl -w net.ipv4.conf.tunl0.rp_filter=2 > /dev/null
 
@@ -157,12 +162,6 @@ start)
     sed -i /'net.ipv4.conf.tunl0.rp_filter'/d  $sysctl_file
     echo net.ipv4.conf.tunl0.arp_ignore=1 >>  $sysctl_file
     echo net.ipv4.conf.tunl0.rp_filter=2 >> $sysctl_file
-
-    ip addr show | grep $2 > /dev/null
-    [ $? -ne 0 ] && ip addr add $2/32 dev tunl0
-
-    ip link show tunl0 | grep DOWN > /dev/null
-    [ $? -ne 0 ] && ip link set tunl0 up
 
     add_tunl0_cfg $2
     if [ $? -ne 0 ]; then
