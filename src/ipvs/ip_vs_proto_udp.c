@@ -84,7 +84,7 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_RESOURCE;
     }
 
-    if ((*conn)->dest->fwdmode == DPVS_FWD_MODE_FNAT) {
+    if ((*conn)->dest->fwdmode == DPVS_FWD_MODE_FNAT && g_uoa_max_trail > 0) {
         struct conn_uoa *uoa;
 
         (*conn)->prot_data = rte_zmalloc(NULL, sizeof(struct conn_uoa), 0);
@@ -93,6 +93,9 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
         } else {
             uoa = (struct conn_uoa *)(*conn)->prot_data;
             uoa->state = UOA_S_SENDING;
+
+            /* not support fast-xmit during UOA_S_SENDING */
+            (*conn)->flags |= DPVS_CONN_F_NOFASTXMIT;
         }
     }
 
@@ -193,7 +196,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
         goto no_room;
     uh->source      = conn->lport;
     uh->dest        = conn->dport;
-    uh->len         = sizeof(struct udphdr); /* empty payload */
+    uh->len         = htons(sizeof(struct udphdr)); /* empty payload */
 
     /* udp checksum */
     uh->check       = 0;
@@ -212,7 +215,7 @@ no_room:
     return EDPVS_NOROOM;
 }
 
-static int udp_insert_uoa(const struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
                           struct conn_uoa *uoa)
 {
     struct iphdr *niph, *iph = (struct iphdr *)ip4_hdr(mbuf);
@@ -226,8 +229,9 @@ static int udp_insert_uoa(const struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
         return EDPVS_OK;
 
     /* stop sending if ACK received or max-trail reached */
-    if (uoa->sent >= g_uoa_max_trail && uoa->acked) {
+    if (uoa->sent >= g_uoa_max_trail || uoa->acked) {
         uoa->state = UOA_S_DONE;
+        conn->flags &= ~DPVS_CONN_F_NOFASTXMIT;
         return EDPVS_OK;
     }
 
@@ -284,7 +288,7 @@ static int udp_insert_uoa(const struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     optuoa->op_code = IPOPT_UOA;
     optuoa->op_len  = IPOLEN_UOA;
     optuoa->op_port = uh->source;
-    optuoa->op_addr = iph->saddr;
+    optuoa->op_addr = niph->saddr;
 
     niph->ihl += IPOLEN_UOA / 4;
     niph->tot_len = htons(ntohs(niph->tot_len) + IPOLEN_UOA);

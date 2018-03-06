@@ -203,7 +203,7 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    if (!fast_xmit_close) {
+    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
         dp_vs_save_xmit_info(mbuf, proto, conn);
         if (!dp_vs_fast_xmit_fnat(proto, conn, mbuf))
             return EDPVS_OK;
@@ -296,7 +296,7 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    if (!fast_xmit_close) {
+    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
         dp_vs_save_outxmit_info(mbuf, proto, conn);
         if (!dp_vs_fast_outxmit_fnat(proto, conn, mbuf))
             return EDPVS_OK;

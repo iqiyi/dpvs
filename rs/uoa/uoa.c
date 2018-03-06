@@ -152,7 +152,9 @@ static const struct file_operations uoa_stats_percpu_fops = {
  * miss UOA info. anyway, those're really conner cases, and
  * not hurt the system.
  */
-static unsigned long sk_data_ready_ptr;
+static unsigned long sk_data_ready_p;
+
+static int (*udp_rcv_p)(struct sk_buff *skb);
 
 static unsigned int addr_is_ro(unsigned long addr)
 {
@@ -197,7 +199,7 @@ static int inet_getname_uoa(struct socket *sock, struct sockaddr *uaddr,
 	}
 
 	/* sk_user_data is used by other modules ? */
-	if (sk_data_ready_ptr != (unsigned long)sk->sk_data_ready) {
+	if (sk_data_ready_p != (unsigned long)sk->sk_data_ready) {
 		UOA_STATS_INC(miss);
 		return err;
 	}
@@ -244,7 +246,7 @@ static int udp_rcv_uoa(struct sk_buff *skb)
 	skb_get(skb);
 
 	/* invoke original function first. */
-	err = udp_rcv(skb);
+	err = udp_rcv_p(skb);
 	if (err != 0)
 		goto out; /* bad UDP packet or unreachable ? */
 
@@ -361,7 +363,7 @@ static int uoa_unhook_func(void)
 		return -1;
 	}
 
-	udp_prot_p->handler = udp_rcv;
+	udp_prot_p->handler = udp_rcv_p;
 
 	inet_dgram_ops_p = (struct proto_ops *)&inet_dgram_ops;
 
@@ -402,9 +404,15 @@ static __init int uoa_init(void)
 		    &uoa_stats_percpu_fops);
 
 	/* the addr is used to check if sk->sk_user_data is using by others */
-	sk_data_ready_ptr = kallsyms_lookup_name("sock_def_readable");
-	if (!sk_data_ready_ptr) {
+	sk_data_ready_p = kallsyms_lookup_name("sock_def_readable");
+	if (!sk_data_ready_p) {
 		pr_err("Cannot get symbol sock_def_readable");
+		goto errout;
+	}
+
+	udp_rcv_p = (void *)kallsyms_lookup_name("udp_rcv");
+	if (!udp_rcv_p) {
+		pr_err("Cannot get symbol udp_rcv");
 		goto errout;
 	}
 
