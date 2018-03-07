@@ -645,8 +645,9 @@ MATCH1='proto=icmp,src-range=192.168.100.0-192.168.100.254,oif=dpdk1'
 ```
 
 You can also use keepalived to configure SNAT instead of using ipvsadm. Every SNAT serivce should has parameter 'match':
+
 ```
-virtual_server match SNAT1{
+virtual_server match SNAT1 {
     protocol UDP 
     lb_algo rr
     lb_kind SNAT
@@ -656,10 +657,9 @@ virtual_server match SNAT1{
     real_server 123.1.2.1  0 {
         weight 4
     }   
-
 }
 
-virtual_server match SNAT2{
+virtual_server match SNAT2 {
     protocol ICMP
     lb_algo wrr 
     lb_kind SNAT
@@ -671,12 +671,13 @@ virtual_server match SNAT2{
     real_server 123.1.2.1  0 {  
         weight 4
     }   
-
 }
 ```
-If you also want using keepalived instead of using dpip to configure WAN/LAN IP, you can using 'alpha' and 'omega' to configure keepalived. Healthy check is needed in alpha mode, you can use MISC_CHECK to make real_server/WAN IP always be healthy.
+
+If you also want to use keepalived instead of using dpip to configure WAN/LAN IP, you can using 'alpha' and 'omega' to configure keepalived. Healthy check is needed in alpha mode, so you have to make a healthy check. And the result of the healthy check must always be true or RS(LAN IP in fact) will be deleted. You can use MISC_CHECK to make real_server/WAN IP always be healthy:
+
 ```
-virtual_server match SNAT{
+virtual_server match SNAT {
     protocol UDP 
     delay_loop 3
     lb_algo rr
@@ -688,6 +689,7 @@ virtual_server match SNAT{
     quorum 1
     quorum_up "dpip addr add XXX;" ##Here is your cmd, you can also use a script.
     quorum_down "dpip addr del XXX;"
+
     real_server 123.1.2.2 0 { 
         weight 4
         MISC_CHECK {
@@ -695,7 +697,6 @@ virtual_server match SNAT{
            misc_timeout 10
         }   
     }   
-    
 }
 ```
 
