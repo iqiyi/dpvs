@@ -581,6 +581,7 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
         neighbour = neigh_add_table(nexhop_addr, NULL, port, hashkey, 0);
         if(!neighbour){
             RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
+            rte_pktmbuf_free(m);
             return EDPVS_NOMEM;
         }
         if(neighbour->que_num > arp_unres_qlen){
