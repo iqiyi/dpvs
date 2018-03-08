@@ -39,14 +39,6 @@
 #define ARP_ENTRY_BUFF_SIZE_MIN 16
 #define ARP_ENTRY_BUFF_SIZE_MAX 8192
 
-#define ARP_PKTPOOL_NB_MBUF_DEF 1023
-#define ARP_PKTPOOL_NB_MBUF_MIN 63
-#define ARP_PKTPOOL_NB_MBUF_MAX 32767
-
-#define ARP_PKTPOOL_CACHE_MBUF_DEF 32
-#define ARP_PKTPOOL_CACHE_MBUF_MIN 2
-#define ARP_PKTPOOL_CACHE_MBUF_MAX 512
-
 #define DPVS_NEIGH_TIMEOUT_DEF 60
 #define DPVS_NEIGH_TIMEOUT_MIN 1
 #define DPVS_NEIGH_TIMEOUT_MAX 3600
@@ -86,8 +78,6 @@ struct raw_neigh {
 
 /* params from config file */
 static int arp_unres_qlen = ARP_ENTRY_BUFF_SIZE_DEF;
-static int arp_pktpool_size = ARP_PKTPOOL_NB_MBUF_DEF;
-static int arp_pktpool_cache = ARP_PKTPOOL_CACHE_MBUF_DEF;
 static int arp_timeout = DPVS_NEIGH_TIMEOUT_DEF;
 
 static struct rte_ring *neigh_ring[NETIF_MAX_LCORES];
@@ -108,49 +98,6 @@ static void unres_qlen_handler(vector_t tokens)
         RTE_LOG(WARNING, NEIGHBOUR, "invalid arp_unres_qlen config %s, using default "
                 "%d\n", str, ARP_ENTRY_BUFF_SIZE_DEF);
         arp_unres_qlen = ARP_ENTRY_BUFF_SIZE_DEF;
-    }
-
-    FREE_PTR(str);
-}
-
-static void pktpool_size_handler(vector_t tokens)
-{
-    char *str = set_value(tokens);
-    int pktpool_size;
-
-    assert(str);
-    pktpool_size = atoi(str);
-    if (pktpool_size >= ARP_PKTPOOL_NB_MBUF_MIN &&
-            pktpool_size <= ARP_PKTPOOL_NB_MBUF_MAX) {
-        is_power2(pktpool_size, 1, &pktpool_size);
-        pktpool_size--;
-        RTE_LOG(INFO, NEIGHBOUR, "arp_pktpool_size = %d(round to 2^n-1)\n", pktpool_size);
-        arp_pktpool_size = pktpool_size;
-    } else {
-        RTE_LOG(WARNING, NEIGHBOUR, "invalid arp_pktpool_size config %s, using default "
-                "%d\n", str, ARP_PKTPOOL_NB_MBUF_DEF);
-        arp_pktpool_size = ARP_PKTPOOL_NB_MBUF_DEF;
-    }
-
-    FREE_PTR(str);
-}
-
-static void pktpool_cache_handler(vector_t tokens)
-{
-    char *str = set_value(tokens);
-    int pktpool_cache;
-
-    assert(str);
-    pktpool_cache = atoi(str);
-    if (pktpool_cache >= ARP_PKTPOOL_CACHE_MBUF_MIN &&
-            pktpool_cache <= ARP_PKTPOOL_CACHE_MBUF_MAX) {
-        is_power2(pktpool_cache, 0, &pktpool_cache);
-        RTE_LOG(INFO, NEIGHBOUR, "arp_pktpool_cache = %d(round to 2^n)\n", pktpool_cache);
-        arp_pktpool_cache = pktpool_cache;
-    } else {
-        RTE_LOG(WARNING, NEIGHBOUR, "invalid arp_pktpool_cache config %s, using default "
-                "%d\n", str, ARP_PKTPOOL_CACHE_MBUF_DEF);
-        arp_pktpool_cache = ARP_PKTPOOL_CACHE_MBUF_DEF;
     }
 
     FREE_PTR(str);
@@ -179,7 +126,6 @@ void neigh_keyword_value_init(void)
     if (dpvs_state_get() == DPVS_STATE_INIT) {
         /* KW_TYPE_INIT keyword */
         arp_unres_qlen = ARP_ENTRY_BUFF_SIZE_DEF;
-        arp_pktpool_cache = ARP_PKTPOOL_CACHE_MBUF_DEF;
         arp_timeout = DPVS_NEIGH_TIMEOUT_DEF;
     }
     /* KW_TYPE_NORMAL keyword */
@@ -189,8 +135,6 @@ void install_neighbor_keywords(void)
 {
     install_keyword_root("neigh_defs", NULL);
     install_keyword("unres_queue_length", unres_qlen_handler, KW_TYPE_INIT);
-    install_keyword("pktpool_size", pktpool_size_handler, KW_TYPE_INIT);
-    install_keyword("pktpool_cache", pktpool_cache_handler, KW_TYPE_INIT);
     install_keyword("timeout", timeout_handler, KW_TYPE_INIT);
 }
 
@@ -199,8 +143,6 @@ static lcoreid_t g_cid = 0;
 static lcoreid_t master_cid = 0;
 
 static struct list_head neigh_table[NETIF_MAX_LCORES][ARP_TAB_SIZE];
-
-struct rte_mempool *neigh_pktmbuf_pool[NETIF_MAX_SOCKETS];
 
 static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* neighbour, bool add);
 
@@ -521,7 +463,7 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
         } else {
             neighbour = neigh_add_table(ipaddr, &arp->arp_data.arp_sha, port, hashkey, 0);
             if(!neighbour){
-                RTE_LOG(INFO, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
+                RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
                 rte_pktmbuf_free(m);
                 return EDPVS_NOMEM;
             }
@@ -542,7 +484,7 @@ static int neigh_send_arp(struct netif_port *port, uint32_t src_ip, uint32_t dst
     
     uint32_t addr;
 
-    m = rte_pktmbuf_alloc(neigh_pktmbuf_pool[port->socket]);
+    m = rte_pktmbuf_alloc(port->mbuf_pool);
     if(unlikely(m==NULL)){
         return EDPVS_NOMEM;
     }
@@ -623,7 +565,7 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
                 return EDPVS_PKTSTOLEN;
             }
             if(neigh_send_arp(port, src_ip, nexhop_addr)){
-                RTE_LOG(INFO, NEIGHBOUR, "[%s] send arp failed\n", __func__);
+                RTE_LOG(ERR, NEIGHBOUR, "[%s] send arp failed\n", __func__);
                 return EDPVS_NOMEM;
             }
             return EDPVS_OK;
@@ -638,7 +580,7 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
     else{
         neighbour = neigh_add_table(nexhop_addr, NULL, port, hashkey, 0);
         if(!neighbour){
-            RTE_LOG(INFO, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
+            RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
             return EDPVS_NOMEM;
         }
         if(neighbour->que_num > arp_unres_qlen){
@@ -667,7 +609,7 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
         }
 
         if(neigh_send_arp(port, src_ip, nexhop_addr)){
-            RTE_LOG(INFO, NEIGHBOUR, "[%s] send arp failed\n", __func__);
+            RTE_LOG(ERR, NEIGHBOUR, "[%s] send arp failed\n", __func__);
             return EDPVS_NOMEM;
         }
 
@@ -1012,28 +954,15 @@ static int arp_init(void)
 
 int neigh_init(void)
 {
-    int i;
-    char poolname[32];
     if(EDPVS_NOMEM == arp_init()){
         return EDPVS_NOMEM;
     }
 
-    for (i = 0; i < NETIF_MAX_SOCKETS; i++) {
-        snprintf(poolname, sizeof(poolname), "neigh_mbuf_pool_%d", i);
-        neigh_pktmbuf_pool[i] = rte_pktmbuf_pool_create(poolname,
-                arp_pktpool_size, arp_pktpool_cache, 0, RTE_MBUF_DEFAULT_BUF_SIZE, i);
-        if(!neigh_pktmbuf_pool[i]){
-            return EDPVS_NOMEM;
-        }
-    }
     return EDPVS_OK;
 }
 
 int neigh_term(void)
 {
-    /*for (int i=0; i<ARP_TAB_SIZE; i++){
-
-    } */
-    return -1;
+    return EDPVS_OK;
 }
 
