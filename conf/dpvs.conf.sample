@@ -212,8 +212,6 @@ timer_defs {
 ! dpvs neighbor config
 neigh_defs {
     <init> unres_queue_length  128
-    <init> pktpool_size        1023
-    <init> pktpool_cache       32
     <init> timeout             60
 }
 
