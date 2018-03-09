@@ -31,6 +31,8 @@
 #include <linux/err.h>
 #include <linux/time.h>
 #include <linux/skbuff.h>
+#include <linux/netfilter.h>
+#include <linux/netfilter_ipv4.h>
 #include <net/protocol.h>
 #include <net/udp.h>
 #include <net/inet_common.h>
@@ -293,7 +295,7 @@ static int udp_rcv_uoa(struct sk_buff *skb)
 
 			if (uoa_send_ack(skb) != 0) {
 				UOA_STATS_INC(uoa_ack_fail);
-				pr_warn("fail to send UOA ACK");
+				pr_warn("fail to send UOA ACK\n");
 			}
 
 			goto out;
@@ -313,11 +315,61 @@ out:
 	return 0;
 }
 
+static unsigned int uoa_ip_local_in(void *priv, struct sk_buff *skb,
+				    const struct nf_hook_state *state)
+{
+	int err, protocol;
+
+	__skb_pull(skb, skb_network_header_len(skb));
+
+	protocol = ip_hdr(skb)->protocol;
+	if (protocol != IPPROTO_UDP)
+		return NF_ACCEPT;
+
+	/* compare to ip_local_deliver_finish, we do not handle
+	 * raw socket and xfrm */
+
+resubmit:
+	err = udp_rcv_uoa(skb);
+	if (err < 0) {
+		protocol = -err; /* xxx over UDP ? */
+		goto resubmit;
+	}
+
+	__IP_INC_STATS(state->net, IPSTATS_MIB_INDELIVERS);
+
+	return NF_STOLEN;
+}
+
+/*
+ * there's no way to access unexported symbol udp_protocol{}
+ * to override udp_rcv(). while in order to get sock{}, we have to
+ * invoke udp_rcv(), so just use nf LOCAL_IN hook.
+ */
+static const struct nf_hook_ops uoa_nf_ops[] = {
+	{
+		.hook		= uoa_ip_local_in,
+		.pf		= NFPROTO_IPV4,
+		.hooknum	= NF_INET_LOCAL_IN,
+		.priority	= NF_IP_PRI_NAT_SRC + 1,
+	},
+};
+
 static int uoa_hook_func(void)
 {
 	struct proto_ops *inet_dgram_ops_p;
-	struct net_protocol *udp_prot_p;
-	int is_ro = 0;
+	int is_ro = 0, err;
+
+	/*
+	 * no way to hook udp_rcv() and udp_recvmsg() is difficult
+	 * to be overwirten since it handles multiple skbs.
+	 */
+	err = nf_register_net_hooks(&init_net, uoa_nf_ops,
+				    ARRAY_SIZE(uoa_nf_ops));
+	if (err < 0) {
+		pr_err("fail to register netfilter hooks.\n");
+		return err;
+	}
 
 	/* it's "const" */
 	inet_dgram_ops_p = (struct proto_ops *)&inet_dgram_ops;
@@ -333,37 +385,15 @@ static int uoa_hook_func(void)
 	if (is_ro)
 		addr_set_ro((unsigned long)&inet_dgram_ops.getname);
 
-	/*
-	 * hook udp_rcv(), note udp_protocol{} is static.
-	 * udp_recvmsg() is more difficult to override,
-	 * since it handles multiple skbs.
-	 */
-	udp_prot_p = (struct net_protocol *)
-		     kallsyms_lookup_name("udp_protocol");
-	if (!udp_prot_p) {
-		pr_err("fail to get lookup udp_protocol");
-		return -1;
-	}
-
-	udp_prot_p->handler = udp_rcv_uoa;
-
 	return 0;
 }
 
 static int uoa_unhook_func(void)
 {
 	struct proto_ops *inet_dgram_ops_p;
-	struct net_protocol *udp_prot_p;
 	int is_ro = 0;
 
-	udp_prot_p = (struct net_protocol *)
-		     kallsyms_lookup_name("udp_protocol");
-	if (!udp_prot_p) {
-		pr_err("fail to get lookup udp_protocol");
-		return -1;
-	}
-
-	udp_prot_p->handler = udp_rcv_p;
+	nf_unregister_net_hooks(&init_net, uoa_nf_ops, ARRAY_SIZE(uoa_nf_ops));
 
 	inet_dgram_ops_p = (struct proto_ops *)&inet_dgram_ops;
 
@@ -406,22 +436,22 @@ static __init int uoa_init(void)
 	/* the addr is used to check if sk->sk_user_data is using by others */
 	sk_data_ready_p = kallsyms_lookup_name("sock_def_readable");
 	if (!sk_data_ready_p) {
-		pr_err("Cannot get symbol sock_def_readable");
+		pr_err("Cannot get symbol sock_def_readable\n");
 		goto errout;
 	}
 
 	udp_rcv_p = (void *)kallsyms_lookup_name("udp_rcv");
 	if (!udp_rcv_p) {
-		pr_err("Cannot get symbol udp_rcv");
+		pr_err("Cannot get symbol udp_rcv\n");
 		goto errout;
 	}
 
 	if (uoa_hook_func() != 0) {
-		pr_err("Fail to hook uoa functions");
+		pr_err("Fail to hook uoa functions\n");
 		goto errout;
 	}
 
-	pr_info("UOA module installed");
+	pr_info("UOA module installed\n");
 	return 0;
 
 errout:
@@ -435,7 +465,7 @@ errout:
 static __exit void uoa_exit(void)
 {
 	if (uoa_unhook_func() != 0)
-		pr_warn("Fail to unhook uoa functions");
+		pr_warn("Fail to unhook uoa functions\n");
 	synchronize_net();
 
 	remove_proc_entry("uoa_stats", init_net.proc_net);
@@ -443,7 +473,7 @@ static __exit void uoa_exit(void)
 
 	free_percpu(uoa_stats.cpustats);
 
-	pr_info("UOA module removed");
+	pr_info("UOA module removed\n");
 }
 
 module_init(uoa_init);
