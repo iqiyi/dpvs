@@ -68,7 +68,7 @@ static int alloc_vlan_info(struct netif_port *dev)
         INIT_HLIST_HEAD(&vinfo->vlan_dev_hash[i]);
 
     vinfo->real_dev = dev;
-    rte_spinlock_init(&vinfo->vlan_lock);
+    rte_rwlock_init(&vinfo->vlan_lock);
     rte_atomic32_set(&vinfo->refcnt, 1);
     dev->vlan_info = vinfo;
 
@@ -211,7 +211,7 @@ int vlan_add_dev(struct netif_port *real_dev, const char *ifname,
     vinfo = real_dev->vlan_info;
 
     head = &vinfo->vlan_dev_hash[vlan_dev_hash(vlan_proto, vlan_id)];
-    rte_spinlock_lock(&vinfo->vlan_lock);
+    rte_rwlock_write_lock(&vinfo->vlan_lock);
 
     /* already exist ? */
     hlist_for_each_entry(vlan, head, hlist) {
@@ -270,7 +270,7 @@ int vlan_add_dev(struct netif_port *real_dev, const char *ifname,
     err = EDPVS_OK;
 
 out:
-    rte_spinlock_unlock(&vinfo->vlan_lock);
+    rte_rwlock_write_unlock(&vinfo->vlan_lock);
     return err;
 }
 
@@ -291,7 +291,7 @@ int vlan_del_dev(struct netif_port *real_dev, __be16 vlan_proto,
         return EDPVS_NOTEXIST;
 
     head = &vinfo->vlan_dev_hash[vlan_dev_hash(vlan_proto, vlan_id)];
-    rte_spinlock_lock(&vinfo->vlan_lock);
+    rte_rwlock_write_lock(&vinfo->vlan_lock);
 
     hlist_for_each_entry(vlan, head, hlist) {
         if (vlan->vlan_proto == vlan_proto && vlan->vlan_id == vlan_id) {
@@ -301,7 +301,7 @@ int vlan_del_dev(struct netif_port *real_dev, __be16 vlan_proto,
     }
 
     if (!dev) {
-        rte_spinlock_unlock(&vinfo->vlan_lock);
+        rte_rwlock_write_unlock(&vinfo->vlan_lock);
         return EDPVS_NOTEXIST;
     }
 
@@ -313,7 +313,7 @@ int vlan_del_dev(struct netif_port *real_dev, __be16 vlan_proto,
 
     hlist_del(&vlan->hlist);
     vinfo->vlan_dev_num--;
-    rte_spinlock_unlock(&vinfo->vlan_lock);
+    rte_rwlock_write_unlock(&vinfo->vlan_lock);
 
     netif_port_unregister(dev);
     netif_free(dev);
@@ -338,16 +338,16 @@ struct netif_port *vlan_find_dev(const struct netif_port *real_dev,
         return NULL;
 
     head = &vinfo->vlan_dev_hash[vlan_dev_hash(vlan_proto, vlan_id)];
-    rte_spinlock_lock(&vinfo->vlan_lock);
+    rte_rwlock_read_lock(&vinfo->vlan_lock);
 
     hlist_for_each_entry(vlan, head, hlist) {
         if (vlan->vlan_proto == vlan_proto && vlan->vlan_id == vlan_id) {
-            rte_spinlock_unlock(&vinfo->vlan_lock);
+            rte_rwlock_read_unlock(&vinfo->vlan_lock);
             return vlan->dev;
         }
     }
 
-    rte_spinlock_unlock(&vinfo->vlan_lock);
+    rte_rwlock_read_unlock(&vinfo->vlan_lock);
     return NULL;
 }
 
@@ -556,13 +556,13 @@ static int vlan_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         return EDPVS_OK;
     }
 
-    rte_spinlock_lock(&vinfo->vlan_lock);
+    rte_rwlock_read_lock(&vinfo->vlan_lock);
 
     *outsize = sizeof(struct vlan_param_array) + \
                vinfo->vlan_dev_num * sizeof(struct vlan_param);
     array = *out = rte_calloc(NULL, 1, *outsize, 0);
     if (!array) {
-        rte_spinlock_unlock(&vinfo->vlan_lock);
+        rte_rwlock_read_unlock(&vinfo->vlan_lock);
         return EDPVS_NOMEM;
     }
 
@@ -591,7 +591,7 @@ static int vlan_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     }
 
 end:
-    rte_spinlock_unlock(&vinfo->vlan_lock);
+    rte_rwlock_read_unlock(&vinfo->vlan_lock);
     return EDPVS_OK;
 }
 
