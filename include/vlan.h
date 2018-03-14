@@ -39,7 +39,7 @@ struct vlan_info {
     struct netif_port   *real_dev;
     struct hlist_head   *vlan_dev_hash;
     uint16_t            vlan_dev_num;
-    rte_rwlock_t      vlan_lock;
+    rte_rwlock_t        vlan_lock;
     rte_atomic32_t      refcnt;
 };
 
