@@ -21,7 +21,7 @@
 # TODO: use standard way to define compile flags.
 #
 
-CFLAGS += -D DPVS_MAX_SOCKET=1
+CFLAGS += -D DPVS_MAX_SOCKET=2
 CFLAGS += -D DPVS_MAX_LCORE=64
 
 #CFLAGS += -D CONFIG_RECORD_BIG_LOOP

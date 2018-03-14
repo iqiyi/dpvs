@@ -22,7 +22,7 @@ sysconf_dir = $(sysconfdir)/sysconfig
 
 CC = @CC@
 STRIP = @STRIP@
-LDFLAGS = @LIBS@ @LDFLAGS@ -ldl
+LDFLAGS = @LIBS@ @LDFLAGS@ -ldl -lnuma
 SUBDIRS = core
 DPVSDEPS = ../../../src/common.o
 

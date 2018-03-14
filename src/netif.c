@@ -879,7 +879,7 @@ static inline void netif_pktmbuf_pool_init(void)
 {
     int i;
     char poolname[32];
-    for (i = 0; i < DPVS_MAX_SOCKET; i++) {
+    for (i = 0; i < get_numa_nodes(); i++) {
         snprintf(poolname, sizeof(poolname), "mbuf_pool_%d", i);
         pktmbuf_pool[i] = rte_pktmbuf_pool_create(poolname, netif_pktpool_nb_mbuf,
                 netif_pktpool_mbuf_cache, 0, RTE_MBUF_DEFAULT_BUF_SIZE, i);

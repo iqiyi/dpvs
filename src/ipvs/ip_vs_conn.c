@@ -1480,7 +1480,7 @@ int dp_vs_conn_init(void)
     conn_ctrl_init();
 
     /* connection cache on each NUMA socket */
-    for (i = 0; i < DPVS_MAX_SOCKET; i++) {
+    for (i = 0; i < get_numa_nodes(); i++) {
         snprintf(poolname, sizeof(poolname), "dp_vs_conn_%d", i);
         dp_vs_conn_cache[i] = rte_mempool_create(poolname,
                                     conn_pool_size,

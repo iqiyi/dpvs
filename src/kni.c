@@ -382,7 +382,7 @@ int kni_init(void)
     int i;
     char poolname[32];
 
-    for (i = 0; i < DPVS_MAX_SOCKET; i++) {
+    for (i = 0; i < get_numa_nodes(); i++) {
         memset(poolname, 0, sizeof(poolname));
         snprintf(poolname, sizeof(poolname) - 1, "kni_mbuf_pool_%d", i);
 

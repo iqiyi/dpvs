@@ -107,6 +107,8 @@ enum {
 
 extern const char *dpvs_strerror(int err);
 
+int get_numa_nodes(void);
+
 int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN]);
 int linux_hw_mc_add(const char *ifname, const uint8_t hwma[ETH_ALEN]);
 int linux_hw_mc_del(const char *ifname, const uint8_t hwma[ETH_ALEN]);
