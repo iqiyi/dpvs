@@ -205,6 +205,7 @@ struct netif_ops {
     int (*op_stop)(struct netif_port *dev);
     int (*op_xmit)(struct rte_mbuf *m, struct netif_port *dev);
     int (*op_set_mc_list)(struct netif_port *dev);
+    int (*op_filter_supported)(struct netif_port *dev, enum rte_filter_type fltype);
     int (*op_set_fdir_filt)(struct netif_port *dev, enum rte_filter_op op,
                             const struct rte_eth_fdir_filter *filt);
     int (*op_get_queue)(struct netif_port *dev, lcoreid_t cid, queueid_t *qid);

@@ -2717,6 +2717,24 @@ static int bond_set_mc_list(struct netif_port *dev)
     return err;
 }
 
+static int bond_filter_supported(struct netif_port *dev, enum rte_filter_type fltype)
+{
+    int i, err = EDPVS_NOTSUPP;
+    struct netif_port *slave;
+
+    if (dev->type != PORT_TYPE_BOND_MASTER)
+        return EDPVS_INVAL;
+
+    for (i = 0; i < dev->bond->master.slave_nb; i++) {
+        slave = dev->bond->master.slaves[i];
+        err = rte_eth_dev_filter_supported(slave->id, fltype);
+        if (err < 0)
+            return err;
+    }
+
+    return err;
+}
+
 static int bond_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
                               const struct rte_eth_fdir_filter *filt)
 {
@@ -2752,6 +2770,11 @@ static int dpdk_set_mc_list(struct netif_port *dev)
     return rte_eth_dev_set_mc_addr_list((uint8_t)dev->id, addrs, naddr);
 }
 
+static int dpdk_filter_supported(struct netif_port *dev, enum rte_filter_type fltype)
+{
+    return rte_eth_dev_filter_supported(dev->id, fltype);
+}
+
 static int dpdk_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
                               const struct rte_eth_fdir_filter *filt)
 {
@@ -2763,13 +2786,15 @@ static int dpdk_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
 }
 
 static struct netif_ops dpdk_netif_ops = {
-    .op_set_mc_list     = dpdk_set_mc_list,
-    .op_set_fdir_filt   = dpdk_set_fdir_filt,
+    .op_set_mc_list      = dpdk_set_mc_list,
+    .op_set_fdir_filt    = dpdk_set_fdir_filt,
+    .op_filter_supported = dpdk_filter_supported,
 };
 
 static struct netif_ops bond_netif_ops = {
-    .op_set_mc_list     = bond_set_mc_list,
-    .op_set_fdir_filt   = bond_set_fdir_filt,
+    .op_set_mc_list      = bond_set_mc_list,
+    .op_set_fdir_filt    = bond_set_fdir_filt,
+    .op_filter_supported = bond_filter_supported,
 };
 
 static inline void setup_dev_of_flags(struct netif_port *port)
