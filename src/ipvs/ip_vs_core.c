@@ -339,8 +339,9 @@ static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
 
     /* no translation needed for DR/TUN. */
-    if (conn->dest->fwdmode != DPVS_FWD_MODE_FNAT
-            && conn->dest->fwdmode != DPVS_FWD_MODE_NAT) {
+    if (conn->dest->fwdmode != DPVS_FWD_MODE_FNAT && 
+        conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
         if (!conn->packet_out_xmit) {
             RTE_LOG(WARNING, IPVS, "%s: missing packet_out_xmit\n", __func__);
             rte_pktmbuf_free(mbuf);
@@ -389,8 +390,9 @@ static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
 
     /* no translation needed for DR/TUN. */
-    if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT
-            && conn->dest->fwdmode != DPVS_FWD_MODE_FNAT) {
+    if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT  && 
+	conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
+	conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
         if (!conn->packet_xmit) {
             RTE_LOG(WARNING, IPVS, "%s: missing packet_xmit\n", __func__);
             rte_pktmbuf_free(mbuf);
