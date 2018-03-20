@@ -63,10 +63,30 @@ struct uoa_kstats {
 	__u64   uoa_ack_fail;	/* Fail to shand UOA ACK. */
 	__u64   uoa_miss;	/* Fail to get UOA info from pkt. */
 
-	__u64   success;	/* getname returns UOA address. */
-	__u64   miss;		/* getname fail to get UOA info in sock. */
-	__u64   invalid;	/* getname find invalid UOA option. */
-	__u64   empty;		/* getname not returns peer addr. */
+	__u64   success;	/* uoa address returned. */
+	__u64   miss;		/* no such uoa info . */
+	__u64   invalid;	/* bad uoa info found. */
+} __attribute__((__packed__));
+
+/* uoa socket options */
+enum {
+	UOA_BASE_CTL		= 2048,
+	/* set */
+	UOA_SO_SET_MAX		= UOA_BASE_CTL,
+	/* get */
+	UOA_SO_GET_LOOKUP	= UOA_BASE_CTL,
+	UOA_SO_GET_MAX		= UOA_SO_GET_LOOKUP,
+};
+
+struct uoa_param_map {
+	/* input */
+	__be32	saddr;
+	__be32	daddr;
+	__be16	sport;
+	__be16	dport;
+	/* output */
+	__be32	real_saddr;
+	__be16	real_sport;
 } __attribute__((__packed__));
 
 #endif

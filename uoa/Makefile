@@ -19,3 +19,8 @@ all:
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules clean
 
+install:
+	if [ -d "$(INSDIR)" ]; then \
+		install -m 664 uoa.ko $(INSDIR)/uoa.ko; \
+	fi
+

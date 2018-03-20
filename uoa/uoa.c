@@ -99,14 +99,14 @@ __uoa_map_tab_lock_array[UOA_MAP_LOCKARR_SIZE] __cacheline_aligned;
 
 static void uoa_map_expire(struct timer_list *timer);
 
-static inline void um_write_lock_bh(unsigned int hash)
+static inline void um_lock_bh(unsigned int hash)
 {
 	int i = hash & UOA_MAP_LOCKARR_MASK;
 
 	spin_lock_bh(&__uoa_map_tab_lock_array[i].lock);
 }
 
-static inline void um_write_unlock_bh(unsigned int hash)
+static inline void um_unlock_bh(unsigned int hash)
 {
 	int i = hash & UOA_MAP_LOCKARR_MASK;
 
@@ -138,10 +138,10 @@ static int uoa_stats_show(struct seq_file *seq, void *arg)
 	ks = uoa_stats.kstats;
 	spin_unlock_bh(&uoa_stats.lock);
 
-	seq_puts(seq, " Success     Miss  Invalid    Empty|UOA  Got     None    Saved Ack-Fail\n");
+	seq_puts(seq, " Success     Miss  Invalid|UOA  Got     None    Saved Ack-Fail\n");
 
-	seq_printf(seq, "%8llu %8llu %8llu %8llu %8llu %8llu %8llu %8llu\n",
-		   ks.success, ks.miss, ks.invalid, ks.empty,
+	seq_printf(seq, "%8llu %8llu %8llu %8llu %8llu %8llu %8llu\n",
+		   ks.success, ks.miss, ks.invalid,
 		   ks.uoa_got, ks.uoa_none, ks.uoa_saved, ks.uoa_ack_fail);
 
 	return 0;
@@ -151,11 +151,11 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
 {
 	int i;
 
-	seq_puts(seq, "CPU  Success     Miss  Invalid    Empty|UOA  Got     None    Saved Ack-Fail\n");
+	seq_puts(seq, "CPU  Success     Miss  Invalid|UOA  Got     None    Saved Ack-Fail\n");
 
 	for_each_possible_cpu(i) {
 		struct uoa_cpu_stats *s = per_cpu_ptr(uoa_stats.cpustats, i);
-		__u64 success, miss, invalid, empty, got, none, saved, ack_fail;
+		__u64 success, miss, invalid, got, none, saved, ack_fail;
 		unsigned int start;
 
 		do {
@@ -164,7 +164,6 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
 			success	= s->success;
 			miss	= s->miss;
 			invalid = s->invalid;
-			empty   = s->empty;
 			got	= s->uoa_got;
 			none	= s->uoa_none;
 			saved   = s->uoa_saved;
@@ -172,9 +171,8 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
 		} while (u64_stats_fetch_retry_irq(&s->syncp, start));
 
 		seq_printf(seq,
-		   "%3X  %8llu %8llu %8llu %8llu %8llu %8llu %8llu %8llu\n",
-		   i, success, miss, invalid, empty,
-		   got, none, saved, ack_fail);
+		   "%3X  %8llu %8llu %8llu %8llu %8llu %8llu %8llu\n",
+		   i, success, miss, invalid, got, none, saved, ack_fail);
 	}
 
 	return 0;
@@ -206,32 +204,38 @@ static const struct file_operations uoa_stats_percpu_fops = {
 	.release	= single_release,
 };
 
-static unsigned int addr_is_ro(unsigned long addr)
+static int uoa_stats_init(void)
 {
-	unsigned int level;
-	pte_t *pte = lookup_address(addr, &level);
+	int i;
 
-	if (pte->pte & ~_PAGE_RW)
-		return 1;
-	else
-		return 0;
+	spin_lock_init(&uoa_stats.lock);
+	memset(&uoa_stats.kstats, 0, sizeof(struct uoa_kstats));
+
+	uoa_stats.cpustats = alloc_percpu(struct uoa_cpu_stats);
+	if (!uoa_stats.cpustats) {
+		pr_err("fail to alloc percpu stats\n");
+		return -ENOMEM;
+	}
+
+	for_each_possible_cpu(i) {
+		struct uoa_cpu_stats *cs;
+
+		cs = per_cpu_ptr(uoa_stats.cpustats, i);
+		u64_stats_init(&cs->syncp);
+	}
+
+	proc_create("uoa_stats", 0, init_net.proc_net, &uoa_stats_fops);
+	proc_create("uoa_stats_percpu", 0, init_net.proc_net,
+		    &uoa_stats_percpu_fops);
+
+	return 0;
 }
 
-static void addr_set_rw(unsigned long addr)
+static void uoa_stats_exit(void)
 {
-	unsigned int level;
-	pte_t *pte = lookup_address(addr, &level);
-
-	if (pte->pte & ~_PAGE_RW)
-		pte->pte |= _PAGE_RW;
-}
-
-static void addr_set_ro(unsigned long addr)
-{
-	unsigned int level;
-	pte_t *pte = lookup_address(addr, &level);
-
-	pte->pte = pte->pte & ~_PAGE_RW;
+	remove_proc_entry("uoa_stats", init_net.proc_net);
+	remove_proc_entry("uoa_stats_percpu", init_net.proc_net);
+	free_percpu(uoa_stats.cpustats);
 }
 
 static inline void uoa_map_dump(const struct uoa_map *um, const char *pref)
@@ -240,14 +244,15 @@ static inline void uoa_map_dump(const struct uoa_map *um, const char *pref)
 		return;
 
 	pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d\n", pref ? : "",
-		&um->saddr, um->sport, &um->daddr, um->dport,
-		&um->optuoa.op_addr, um->optuoa.op_port);
+		&um->saddr, ntohs(um->sport), &um->daddr, ntohs(um->dport),
+		&um->optuoa.op_addr, ntohs(um->optuoa.op_port));
 }
 
 static inline unsigned int __uoa_map_hash_key(__be32 saddr, __be32 daddr,
 					      __be16 sport, __be16 dport)
 {
-	return jhash_3words(saddr, daddr, sport, uoa_map_rnd) &
+	/* do not cal daddr, it could be zero for wildcard lookup */
+	return jhash_3words(saddr, sport, dport, uoa_map_rnd) &
 		uoa_map_tab_mask;
 }
 
@@ -262,7 +267,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 	struct hlist_head *head = &uoa_map_tab[hash];
 	struct uoa_map *cur;
 
-	um_write_lock_bh(hash);
+	um_lock_bh(hash);
 
 	/* overwrite existing mapping */
 	hlist_for_each_entry_rcu(cur, head, hlist) {
@@ -273,7 +278,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 			/* update */
 			memcpy(&cur->optuoa, &um->optuoa, IPOLEN_UOA);
 
-			mod_timer(&um->timer, jiffies + uoa_map_timeout);
+			mod_timer(&cur->timer, jiffies + uoa_map_timeout * HZ);
 
 			kmem_cache_free(uoa_map_cache, um);
 		}
@@ -286,13 +291,13 @@ static inline void uoa_map_hash(struct uoa_map *um)
 	hlist_add_head_rcu(&um->hlist, head);
 
 	timer_setup(&um->timer, uoa_map_expire, 0);
-	mod_timer(&um->timer, jiffies + uoa_map_timeout);
+	mod_timer(&um->timer, jiffies + uoa_map_timeout * HZ);
 
 	atomic_inc(&uoa_map_count);
 	uoa_map_dump(um, "new:");
 
 hashed:
-	um_write_unlock_bh(hash);
+	um_unlock_bh(hash);
 }
 
 static inline int uoa_map_unhash(struct uoa_map *um)
@@ -300,13 +305,13 @@ static inline int uoa_map_unhash(struct uoa_map *um)
 	unsigned int hash = uoa_map_hash_key(um);
 	int err = -1;
 
-	um_write_lock_bh(hash);
+	um_lock_bh(hash);
 	if (refcount_dec_if_one(&um->refcnt)) {
 		hlist_del_rcu(&um->hlist);
 		atomic_dec(&uoa_map_count);
 		err = 0;
 	}
-	um_write_unlock_bh(hash);
+	um_unlock_bh(hash);
 
 	return err;
 }
@@ -318,17 +323,19 @@ static inline struct uoa_map *uoa_map_get(__be32 saddr, __be32 daddr,
 	struct hlist_head *head = &uoa_map_tab[hash];
 	struct uoa_map *um = NULL;
 
-	um_write_lock_bh(hash);
+	um_lock_bh(hash);
 
 	hlist_for_each_entry_rcu(um, head, hlist) {
-		if (um->saddr == saddr && um->daddr == daddr &&
+		/* we allow daddr being set to wildcard (zero),
+		 * since UDP server may bind INADDR_ANY */
+		if (um->saddr == saddr && (daddr == 0 || um->daddr == daddr) &&
 		    um->sport == sport && um->dport == dport) {
 			refcount_inc(&um->refcnt);
 			break;
 		}
 	}
 
-	um_write_unlock_bh(hash);
+	um_unlock_bh(hash);
 
 	return um;
 }
@@ -344,7 +351,7 @@ static void uoa_map_expire(struct timer_list *timer)
 
 	if (uoa_map_unhash(um) != 0) {
 		/* try again if some one is using it */
-		mod_timer(timer, jiffies + uoa_map_timeout);
+		mod_timer(timer, jiffies + uoa_map_timeout * HZ);
 
 		pr_debug("expire delaye: refcnt: %d\n",
 			 refcount_read(&um->refcnt));
@@ -385,62 +392,130 @@ flush_again:
 	}
 }
 
-static int uoa_inet_getname(struct socket *sock, struct sockaddr *uaddr,
-			    int *uaddr_len, int peer)
+static int uoa_so_set(struct sock *sk, int cmd, void __user *user,
+		      unsigned int len)
 {
-	int err;
-	struct sockaddr_in *sin = (struct sockaddr_in *)uaddr;
-	struct sockaddr_in local;
-	int len = sizeof(struct sockaddr_in);
+	return 0;
+}
+
+static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
+{
+	struct uoa_param_map map;
 	struct uoa_map *um;
+	int err;
 
-	err = inet_getname(sock, uaddr, uaddr_len, peer);
-
-	if (!peer)
-		return err; /* getting local address */
-
-	if (err != 0) {
-		/* not connected */
-		UOA_STATS_INC(empty);
-		if (uoa_debug)
-			pr_err("%s: get peer: %d\n", __func__, err);
-		return err;
+	if (cmd != UOA_SO_GET_LOOKUP) {
+		pr_debug("%s: bad cmd\n", __func__);
+		return -EINVAL;
 	}
 
-	/* get local address for table lookup */
-	if (inet_getname(sock, (struct sockaddr *)&local, &len, 0) != 0) {
-		UOA_STATS_INC(empty);
-		if (uoa_debug)
-			pr_err("%s: fail to get local\n", __func__);
-		return err;
+	if (*len < sizeof(struct uoa_param_map)) {
+		pr_debug("%s: bad param len\n", __func__);
+		return -EINVAL;
 	}
 
-	/* lookup uoa mapping table */
-	um = uoa_map_get(sin->sin_addr.s_addr, sin->sin_port,
-			 local.sin_addr.s_addr, local.sin_port);
+	if (copy_from_user(&map, user, sizeof(struct uoa_param_map)) != 0)
+		return -EFAULT;
+
+	if (uoa_debug) {
+		pr_err("%s: looking for: %pI4:%d->%pI4:%d\n", __func__,
+		       &map.saddr, ntohs(map.sport),
+		       &map.daddr, ntohs(map.dport));
+	}
+
+	/* lookup uap mapping table */
+	um = uoa_map_get(map.saddr, map.daddr, map.sport, map.dport);
 	if (!um) {
 		UOA_STATS_INC(miss);
-		if (uoa_debug)
-			pr_err("%s: no such uoa: %pI4:%d->%pI4:%d\n", __func__,
-			       &sin->sin_addr.s_addr, sin->sin_port,
-			       &local.sin_addr.s_addr, local.sin_port);
-		return err;
+		return -ENOENT;
 	}
 
 	uoa_map_dump(um, "lookup:");
 
 	if (likely(um->optuoa.op_code == IPOPT_UOA &&
 		   um->optuoa.op_len == IPOLEN_UOA)) {
+		map.real_saddr = um->optuoa.op_addr;
+		map.real_sport = um->optuoa.op_port;
 		UOA_STATS_INC(success);
-
-		sin->sin_port = um->optuoa.op_port;
-		sin->sin_addr.s_addr = um->optuoa.op_addr;
+		err = 0;
 	} else {
 		UOA_STATS_INC(invalid);
+		err = -EFAULT;
 	}
 
+	if (copy_to_user(user, &map, sizeof(struct uoa_param_map)) != 0)
+		err = -EFAULT;
+	*len = sizeof(struct uoa_param_map);
+
 	uoa_map_put(um);
+
 	return err;
+}
+
+static struct nf_sockopt_ops uoa_sockopts = {
+	.pf		= PF_INET,
+	.owner		= THIS_MODULE,
+	/* set */
+	.set_optmin	= UOA_BASE_CTL,
+	.set_optmax	= UOA_SO_SET_MAX+1,
+	.set		= uoa_so_set,
+	/* get */
+	.get_optmin	= UOA_BASE_CTL,
+	.get_optmax	= UOA_SO_GET_MAX+1,
+	.get		= uoa_so_get,
+};
+
+static int uoa_map_init(void)
+{
+	int i, err;
+
+	/* mapping table */
+	uoa_map_tab_size = 1 << uoa_map_tab_bits;
+	uoa_map_tab_mask = uoa_map_tab_size - 1;
+
+	uoa_map_tab = vmalloc(uoa_map_tab_size * sizeof(*uoa_map_tab));
+	if (!uoa_map_tab) {
+		pr_err("no memory for uoa mapping table\n");
+		return -ENOMEM;
+	}
+
+	atomic_set(&uoa_map_count, 0);
+	get_random_bytes(&uoa_map_rnd, sizeof(uoa_map_rnd));
+
+	for (i = 0; i < uoa_map_tab_size; i++)
+		INIT_HLIST_HEAD(&uoa_map_tab[i]);
+
+	for (i = 0; i < UOA_MAP_LOCKARR_SIZE; i++)
+		spin_lock_init(&__uoa_map_tab_lock_array[i].lock);
+
+	/* mapping cache */
+	uoa_map_cache = kmem_cache_create("uoa_map",
+					  sizeof(struct uoa_map), 0,
+					  SLAB_HWCACHE_ALIGN, NULL);
+	if (!uoa_map_cache) {
+		pr_err("fail to create uoa_map cache\n");
+		vfree(uoa_map_tab);
+		return -ENOMEM;
+	}
+
+	/* socket option */
+	err = nf_register_sockopt(&uoa_sockopts);
+	if (err != 0) {
+		pr_err("fail to register sockopt\n");
+		kmem_cache_destroy(uoa_map_cache);
+		vfree(uoa_map_tab);
+		return -ENOMEM;
+	}
+
+	pr_debug("mapping hash initialed, size %d\n", uoa_map_tab_size);
+	return 0;
+}
+
+static void uoa_map_exit(void)
+{
+	nf_unregister_sockopt(&uoa_sockopts);
+	kmem_cache_destroy(uoa_map_cache);
+	vfree(uoa_map_tab);
 }
 
 /*
@@ -562,10 +637,19 @@ static const struct nf_hook_ops uoa_nf_ops[] = {
 	},
 };
 
-static int uoa_hook_func(void)
+static __init int uoa_init(void)
 {
-	struct proto_ops *inet_dgram_ops_p;
-	int is_ro = 0, err;
+	int err = -ENOMEM;
+
+	/* uoa mapping hash table. */
+	err = uoa_map_init();
+	if (err != 0)
+		return err;
+
+	/* statistics */
+	err = uoa_stats_init();
+	if (err != 0)
+		goto stats_failed;
 
 	/*
 	 * no way to hook udp_rcv() and udp_recvmsg() is difficult
@@ -575,142 +659,28 @@ static int uoa_hook_func(void)
 				    ARRAY_SIZE(uoa_nf_ops));
 	if (err < 0) {
 		pr_err("fail to register netfilter hooks.\n");
-		return err;
+		goto hook_failed;
 	}
 
-	/* it's "const" */
-	inet_dgram_ops_p = (struct proto_ops *)&inet_dgram_ops;
-
-	/* hook inet_getname() */
-	if (addr_is_ro((unsigned long)&inet_dgram_ops.getname)) {
-		is_ro = 1;
-		addr_set_rw((unsigned long)&inet_dgram_ops.getname);
-	}
-
-	inet_dgram_ops_p->getname = uoa_inet_getname;
-
-	if (is_ro)
-		addr_set_ro((unsigned long)&inet_dgram_ops.getname);
-
-	return 0;
-}
-
-static int uoa_unhook_func(void)
-{
-	struct proto_ops *inet_dgram_ops_p;
-	int is_ro = 0;
-
-	nf_unregister_net_hooks(&init_net, uoa_nf_ops, ARRAY_SIZE(uoa_nf_ops));
-
-	inet_dgram_ops_p = (struct proto_ops *)&inet_dgram_ops;
-
-	if (addr_is_ro((unsigned long)&inet_dgram_ops.getname)) {
-		is_ro = 1;
-		addr_set_rw((unsigned long)&inet_dgram_ops.getname);
-	}
-
-	inet_dgram_ops_p->getname = inet_getname;
-
-	if (is_ro)
-		addr_set_ro((unsigned long)&inet_dgram_ops.getname);
-
-	return 0;
-}
-
-static __init int uoa_init(void)
-{
-	int i, err = -ENOMEM;
-
-	/*
-	 * uoa mapping hash table.
-	 */
-	uoa_map_tab_size = 1 << uoa_map_tab_bits;
-	uoa_map_tab_mask = uoa_map_tab_size - 1;
-
-	uoa_map_tab = vmalloc(uoa_map_tab_size * sizeof(*uoa_map_tab));
-	if (!uoa_map_tab) {
-		pr_err("no memory for uoa mapping table\n");
-		return -ENOMEM;
-	}
-
-	uoa_map_cache = kmem_cache_create("uoa_map",
-					  sizeof(struct uoa_map), 0,
-					  SLAB_HWCACHE_ALIGN, NULL);
-	if (!uoa_map_cache) {
-		pr_err("fail to create uoa_map cache\n");
-		goto errout;
-	}
-
-	for (i = 0; i < uoa_map_tab_size; i++)
-		INIT_HLIST_HEAD(&uoa_map_tab[i]);
-
-	for (i = 0; i < UOA_MAP_LOCKARR_SIZE; i++)
-		spin_lock_init(&__uoa_map_tab_lock_array[i].lock);
-
-	atomic_set(&uoa_map_count, 0);
-
-	get_random_bytes(&uoa_map_rnd, sizeof(uoa_map_rnd));
-
-	pr_info("mapping tab initialed, size %d\n", uoa_map_tab_size);
-
-	/* statistics */
-	spin_lock_init(&uoa_stats.lock);
-	memset(&uoa_stats.kstats, 0, sizeof(struct uoa_kstats));
-
-	uoa_stats.cpustats = alloc_percpu(struct uoa_cpu_stats);
-	if (!uoa_stats.cpustats) {
-		pr_err("fail to alloc percpu stats\n");
-		goto errout;
-	}
-
-	for_each_possible_cpu(i) {
-		struct uoa_cpu_stats *cs;
-
-		cs = per_cpu_ptr(uoa_stats.cpustats, i);
-		u64_stats_init(&cs->syncp);
-	}
-
-	proc_create("uoa_stats", 0, init_net.proc_net, &uoa_stats_fops);
-	proc_create("uoa_stats_percpu", 0, init_net.proc_net,
-		    &uoa_stats_percpu_fops);
-
-	err = uoa_hook_func();
-	if (err != 0) {
-		pr_err("Fail to hook uoa functions\n");
-		goto errout;
-	}
-
-	pr_info("UOA module installed\n");
+	pr_info("UOA module installed %s\n", uoa_debug ? "with debug" : "");
 	return 0;
 
-errout:
-	remove_proc_entry("uoa_stats", init_net.proc_net);
-	remove_proc_entry("uoa_stats_percpu", init_net.proc_net);
-
-	if (uoa_stats.cpustats)
-		free_percpu(uoa_stats.cpustats);
-	if (uoa_map_cache)
-		kmem_cache_destroy(uoa_map_cache);
-	if (uoa_map_tab)
-		vfree(uoa_map_tab);
-
+hook_failed:
+	uoa_stats_exit();
+stats_failed:
+	uoa_map_exit();
 	return err;
 }
 
 static __exit void uoa_exit(void)
 {
-	if (uoa_unhook_func() != 0)
-		pr_warn("Fail to unhook uoa functions\n");
+	nf_unregister_net_hooks(&init_net, uoa_nf_ops, ARRAY_SIZE(uoa_nf_ops));
 	synchronize_net();
 
+	uoa_stats_exit();
+
 	uoa_map_flush();
-
-	remove_proc_entry("uoa_stats", init_net.proc_net);
-	remove_proc_entry("uoa_stats_percpu", init_net.proc_net);
-
-	free_percpu(uoa_stats.cpustats);
-	kmem_cache_destroy(uoa_map_cache);
-	vfree(uoa_map_tab);
+	uoa_map_exit();
 
 	pr_info("UOA module removed\n");
 }
