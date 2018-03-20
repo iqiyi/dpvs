@@ -17,7 +17,7 @@
  */
 /*
  * UDP Option of Address (UOA) Kernel Module for Real Server.
- * it refers TOA of LVS, and ip_vs kernel module.
+ * it refers TOA of LVS and ip_vs kernel module.
  *
  * raychen@qiyi.com, Feb 2018, initial.
  */
@@ -63,6 +63,10 @@ struct uoa_map {
 
 	struct ipopt_uoa	optuoa;
 };
+
+static int uoa_debug = 0;
+module_param_named(uoa_debug, uoa_debug, int, 0444);
+MODULE_PARM_DESC(uoa_debug, "enable UOA debug by setting it to 1");
 
 static int uoa_map_timeout = 60;
 module_param_named(uoa_map_timeout, uoa_map_timeout, int, 0444);
@@ -230,6 +234,16 @@ static void addr_set_ro(unsigned long addr)
 	pte->pte = pte->pte & ~_PAGE_RW;
 }
 
+static inline void uoa_map_dump(const struct uoa_map *um, const char *pref)
+{
+	if (likely(!uoa_debug))
+		return;
+
+	pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d\n", pref ? : "",
+		&um->saddr, um->sport, &um->daddr, um->dport,
+		&um->optuoa.op_addr, um->optuoa.op_port);
+}
+
 static inline unsigned int __uoa_map_hash_key(__be32 saddr, __be32 daddr,
 					      __be16 sport, __be16 dport)
 {
@@ -264,6 +278,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 			kmem_cache_free(uoa_map_cache, um);
 		}
 
+		uoa_map_dump(cur, "update:");
 		goto hashed;
 	}
 
@@ -273,10 +288,11 @@ static inline void uoa_map_hash(struct uoa_map *um)
 	timer_setup(&um->timer, uoa_map_expire, 0);
 	mod_timer(&um->timer, jiffies + uoa_map_timeout);
 
+	atomic_inc(&uoa_map_count);
+	uoa_map_dump(um, "new:");
+
 hashed:
 	um_write_unlock_bh(hash);
-
-	atomic_inc(&uoa_map_count);
 }
 
 static inline int uoa_map_unhash(struct uoa_map *um)
@@ -335,6 +351,7 @@ static void uoa_map_expire(struct timer_list *timer)
 		return;
 	}
 
+	uoa_map_dump(um, "del:");
 	del_timer(&um->timer);
 	kmem_cache_free(uoa_map_cache, um);
 }
@@ -380,27 +397,37 @@ static int uoa_inet_getname(struct socket *sock, struct sockaddr *uaddr,
 	err = inet_getname(sock, uaddr, uaddr_len, peer);
 
 	if (!peer)
-		return err; /* user is getting local address */
+		return err; /* getting local address */
 
 	if (err != 0) {
 		/* not connected */
 		UOA_STATS_INC(empty);
+		if (uoa_debug)
+			pr_err("%s: get peer: %d\n", __func__, err);
 		return err;
 	}
 
-	/* get local address */
+	/* get local address for table lookup */
 	if (inet_getname(sock, (struct sockaddr *)&local, &len, 0) != 0) {
 		UOA_STATS_INC(empty);
+		if (uoa_debug)
+			pr_err("%s: fail to get local\n", __func__);
 		return err;
 	}
 
-	/* lookup uoa mapping */
-	um = uoa_map_get(local.sin_addr.s_addr, local.sin_port,
-			 sin->sin_addr.s_addr, sin->sin_port);
+	/* lookup uoa mapping table */
+	um = uoa_map_get(sin->sin_addr.s_addr, sin->sin_port,
+			 local.sin_addr.s_addr, local.sin_port);
 	if (!um) {
 		UOA_STATS_INC(miss);
+		if (uoa_debug)
+			pr_err("%s: no such uoa: %pI4:%d->%pI4:%d\n", __func__,
+			       &sin->sin_addr.s_addr, sin->sin_port,
+			       &local.sin_addr.s_addr, local.sin_port);
 		return err;
 	}
+
+	uoa_map_dump(um, "lookup:");
 
 	if (likely(um->optuoa.op_code == IPOPT_UOA &&
 		   um->optuoa.op_len == IPOLEN_UOA)) {
@@ -601,14 +628,18 @@ static __init int uoa_init(void)
 	uoa_map_tab_mask = uoa_map_tab_size - 1;
 
 	uoa_map_tab = vmalloc(uoa_map_tab_size * sizeof(*uoa_map_tab));
-	if (!uoa_map_tab)
+	if (!uoa_map_tab) {
+		pr_err("no memory for uoa mapping table\n");
 		return -ENOMEM;
+	}
 
 	uoa_map_cache = kmem_cache_create("uoa_map",
 					  sizeof(struct uoa_map), 0,
 					  SLAB_HWCACHE_ALIGN, NULL);
-	if (!uoa_map_cache)
+	if (!uoa_map_cache) {
+		pr_err("fail to create uoa_map cache\n");
 		goto errout;
+	}
 
 	for (i = 0; i < uoa_map_tab_size; i++)
 		INIT_HLIST_HEAD(&uoa_map_tab[i]);
@@ -627,8 +658,10 @@ static __init int uoa_init(void)
 	memset(&uoa_stats.kstats, 0, sizeof(struct uoa_kstats));
 
 	uoa_stats.cpustats = alloc_percpu(struct uoa_cpu_stats);
-	if (!uoa_stats.cpustats)
+	if (!uoa_stats.cpustats) {
+		pr_err("fail to alloc percpu stats\n");
 		goto errout;
+	}
 
 	for_each_possible_cpu(i) {
 		struct uoa_cpu_stats *cs;
