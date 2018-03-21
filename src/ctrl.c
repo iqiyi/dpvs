@@ -792,7 +792,7 @@ static int register_built_in_msg(void)
     }
 
     /* master_xmit_msg msg-type on all slave lcores */
-    if (unlikely(tret = netif_register_master_xmit_msg()));
+    if (unlikely(tret = netif_register_master_xmit_msg()))
         ret = tret;
 
     return ret;
