@@ -1,3 +1,25 @@
+/*
+ * DPVS is a software load balancer (Virtual Server) based on DPDK.
+ *
+ * Copyright (C) 2018 iQIYI (www.iqiyi.com).
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+/*
+ * Example UDP server to get real client IP/port by UOA.
+ *
+ * raychen@qiyi.com, Mar 2018, initial.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,15 +88,12 @@ int main(int argc, char *argv[])
 		mlen = sizeof(map);
 
 		if (getsockopt(sockfd, IPPROTO_IP, UOA_SO_GET_LOOKUP,
-			       &map, &mlen) != 0) {
-			perror("getsockopt: UOA_SO_GET_LOOKUP");
-			goto do_echo;
+			       &map, &mlen) == 0) {
+			inet_ntop(AF_INET, &map.real_saddr, from, sizeof(from));
+			printf("  real client %s:%d\n",
+			       from, ntohs(map.real_sport));
 		}
 
-		inet_ntop(AF_INET, &map.real_saddr, from, sizeof(from));
-		printf("  real client %s:%d\n", from, ntohs(map.real_sport));
-
-do_echo:
 		len = sizeof(peer);
 		sendto(sockfd, buff, n, 0, (SA *)&peer, len);
 	}
