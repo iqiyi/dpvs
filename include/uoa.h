@@ -17,7 +17,7 @@
  */
 /*
  * UDP Option of Address (UOA) Kernel Module for Real Server.
- * it refers TOA of LVS.
+ * it refers TOA of LVS and ip_vs kernel module.
  *
  * raychen@qiyi.com, Feb 2018, initial.
  */
@@ -41,14 +41,13 @@ struct ipopt_uoa {
 struct uoa_cpu_stats {
 	__u64   uoa_got;	/* UDP packet got UOA. */
 	__u64   uoa_none;	/* UDP packet has no UOA. */
-	__u64   uoa_saved;	/* UOA saved. */
+	__u64   uoa_saved;	/* UOA saved to mapping table */
 	__u64   uoa_ack_fail;	/* Fail to send UOA ACK. */
 	__u64   uoa_miss;	/* Fail to get UOA info from pkt. */
 
-	__u64   success;	/* getname returns UOA address. */
-	__u64   miss;		/* getname fail to get UOA info. */
-	__u64   invalid;	/* getname find invalid UOA option. */
-	__u64   empty;		/* getname not returns peer addr. */
+	__u64   success;	/* uoa address returned. */
+	__u64   miss;		/* no such uoa info . */
+	__u64   invalid;	/* bad uoa info found. */
 
 #ifdef __KERNEL__
 	struct u64_stats_sync syncp;
@@ -59,7 +58,7 @@ struct uoa_cpu_stats {
 struct uoa_kstats {
 	__u64   uoa_got;	/* UDP packet got UOA. */
 	__u64   uoa_none;	/* UDP packet has no UOA. */
-	__u64   uoa_saved;	/* UOA saved to sock */
+	__u64   uoa_saved;	/* UOA saved to mapping table */
 	__u64   uoa_ack_fail;	/* Fail to shand UOA ACK. */
 	__u64   uoa_miss;	/* Fail to get UOA info from pkt. */
 

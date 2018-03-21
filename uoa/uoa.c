@@ -44,7 +44,10 @@
 #include <linux/proc_fs.h>
 #include <linux/kallsyms.h>
 #include <linux/ip.h>
-#include <linux/refcount.h>
+#include <linux/atomic.h>
+#include <linux/mutex.h>
+#include <linux/spinlock.h>
+#include <linux/timer.h>
 #include <asm/pgtable_types.h>
 
 #include "uoa.h"
@@ -52,7 +55,7 @@
 /* uoa mapping hash table */
 struct uoa_map {
 	struct hlist_node	hlist;
-	refcount_t		refcnt;
+	atomic_t		refcnt;
 	struct timer_list	timer;
 
 	/* tuples as hash key */
@@ -97,7 +100,11 @@ struct uoa_map_lock {
 static struct uoa_map_lock
 __uoa_map_tab_lock_array[UOA_MAP_LOCKARR_SIZE] __cacheline_aligned;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,15,0)
 static void uoa_map_expire(struct timer_list *timer);
+#else
+static void uoa_map_expire(unsigned long data);
+#endif
 
 static inline void um_lock_bh(unsigned int hash)
 {
@@ -290,7 +297,11 @@ static inline void uoa_map_hash(struct uoa_map *um)
 	/* not exist */
 	hlist_add_head_rcu(&um->hlist, head);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,15,0)
 	timer_setup(&um->timer, uoa_map_expire, 0);
+#else
+	setup_timer(&um->timer, uoa_map_expire, (unsigned long)um);
+#endif
 	mod_timer(&um->timer, jiffies + uoa_map_timeout * HZ);
 
 	atomic_inc(&uoa_map_count);
@@ -306,7 +317,7 @@ static inline int uoa_map_unhash(struct uoa_map *um)
 	int err = -1;
 
 	um_lock_bh(hash);
-	if (refcount_dec_if_one(&um->refcnt)) {
+	if (atomic_read(&um->refcnt) == 0) {
 		hlist_del_rcu(&um->hlist);
 		atomic_dec(&uoa_map_count);
 		err = 0;
@@ -330,7 +341,8 @@ static inline struct uoa_map *uoa_map_get(__be32 saddr, __be32 daddr,
 		 * since UDP server may bind INADDR_ANY */
 		if (um->saddr == saddr && (daddr == 0 || um->daddr == daddr) &&
 		    um->sport == sport && um->dport == dport) {
-			refcount_inc(&um->refcnt);
+			mod_timer(&um->timer, jiffies + uoa_map_timeout * HZ);
+			atomic_inc(&um->refcnt);
 			break;
 		}
 	}
@@ -342,19 +354,17 @@ static inline struct uoa_map *uoa_map_get(__be32 saddr, __be32 daddr,
 
 static inline void uoa_map_put(struct uoa_map *um)
 {
-	refcount_dec(&um->refcnt);
+	atomic_dec(&um->refcnt);
 }
 
-static void uoa_map_expire(struct timer_list *timer)
+static inline void __uoa_map_expire(struct uoa_map *um, struct timer_list *timer)
 {
-	struct uoa_map *um = from_timer(um, timer, timer);
-
 	if (uoa_map_unhash(um) != 0) {
 		/* try again if some one is using it */
 		mod_timer(timer, jiffies + uoa_map_timeout * HZ);
 
-		pr_debug("expire delaye: refcnt: %d\n",
-			 refcount_read(&um->refcnt));
+		pr_warn("expire delaye: refcnt: %d\n",
+			 atomic_read(&um->refcnt));
 		return;
 	}
 
@@ -362,6 +372,22 @@ static void uoa_map_expire(struct timer_list *timer)
 	del_timer(&um->timer);
 	kmem_cache_free(uoa_map_cache, um);
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,15,0)
+static void uoa_map_expire(struct timer_list *timer)
+{
+	struct uoa_map *um = from_timer(um, timer, timer);
+
+	__uoa_map_expire(um, timer);
+}
+#else
+static void uoa_map_expire(unsigned long data)
+{
+	struct uoa_map *um = (struct uoa_map *)data;
+
+	__uoa_map_expire(um, &um->timer);
+}
+#endif
 
 static void uoa_map_flush(void)
 {
@@ -377,7 +403,7 @@ flush_again:
 			if (timer_pending(&um->timer))
 				del_timer(&um->timer);
 
-			if (refcount_dec_if_one(&um->refcnt) != 0)
+			if (atomic_read(&um->refcnt) != 0)
 				continue;
 
 			hlist_del(&um->hlist);
@@ -405,27 +431,26 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 	int err;
 
 	if (cmd != UOA_SO_GET_LOOKUP) {
-		pr_debug("%s: bad cmd\n", __func__);
+		pr_warn("%s: bad cmd\n", __func__);
 		return -EINVAL;
 	}
 
 	if (*len < sizeof(struct uoa_param_map)) {
-		pr_debug("%s: bad param len\n", __func__);
+		pr_warn("%s: bad param len\n", __func__);
 		return -EINVAL;
 	}
 
 	if (copy_from_user(&map, user, sizeof(struct uoa_param_map)) != 0)
 		return -EFAULT;
 
-	if (uoa_debug) {
-		pr_err("%s: looking for: %pI4:%d->%pI4:%d\n", __func__,
-		       &map.saddr, ntohs(map.sport),
-		       &map.daddr, ntohs(map.dport));
-	}
-
 	/* lookup uap mapping table */
 	um = uoa_map_get(map.saddr, map.daddr, map.sport, map.dport);
 	if (!um) {
+		if (uoa_debug) {
+			pr_warn("%s: not found: %pI4:%d->%pI4:%d\n", __func__,
+				&map.saddr, ntohs(map.sport),
+				&map.daddr, ntohs(map.dport));
+		}
 		UOA_STATS_INC(miss);
 		return -ENOENT;
 	}
@@ -575,7 +600,7 @@ static struct uoa_map *uoa_skb_rcv_opt(struct sk_buff *skb)
 				goto out;
 			}
 
-			refcount_set(&um->refcnt, 1);
+			atomic_set(&um->refcnt, 0);
 			um->saddr = iph->saddr;
 			um->daddr = iph->daddr;
 			um->sport = uh->source;
@@ -606,8 +631,22 @@ out:
 	return NULL;
 }
 
+/*
+ * the definition of nf_hookfn changes a lot.
+ * may need modify according to the Kernel version.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
 static unsigned int uoa_ip_local_in(void *priv, struct sk_buff *skb,
 				    const struct nf_hook_state *state)
+#elif RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7,2)
+static unsigned int uoa_ip_local_in(const struct nf_hook_ops *ops,
+				    struct sk_buff *skb,
+				    const struct net_device *in,
+				    const struct net_device *out,
+				    const struct nf_hook_state *state)
+#else
+#error "Pls modify the definition according to kernel version."
+#endif
 {
 	int protocol;
 	struct uoa_map *um;
@@ -624,11 +663,9 @@ static unsigned int uoa_ip_local_in(void *priv, struct sk_buff *skb,
 }
 
 /*
- * there's no way to access unexported symbol udp_protocol{}
- * to override udp_rcv(). while in order to get sock{}, we have to
- * invoke udp_rcv(), so just use nf LOCAL_IN hook.
+ * use nf LOCAL_IN hook to get UOA option.
  */
-static const struct nf_hook_ops uoa_nf_ops[] = {
+static struct nf_hook_ops uoa_nf_hook_ops[] __read_mostly = {
 	{
 		.hook		= uoa_ip_local_in,
 		.pf		= NFPROTO_IPV4,
@@ -655,8 +692,12 @@ static __init int uoa_init(void)
 	 * no way to hook udp_rcv() and udp_recvmsg() is difficult
 	 * to be overwirten since it handles multiple skbs.
 	 */
-	err = nf_register_net_hooks(&init_net, uoa_nf_ops,
-				    ARRAY_SIZE(uoa_nf_ops));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
+	err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops,
+				    ARRAY_SIZE(uoa_nf_hook_ops));
+#else
+	err = nf_register_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
+#endif
 	if (err < 0) {
 		pr_err("fail to register netfilter hooks.\n");
 		goto hook_failed;
@@ -674,7 +715,12 @@ stats_failed:
 
 static __exit void uoa_exit(void)
 {
-	nf_unregister_net_hooks(&init_net, uoa_nf_ops, ARRAY_SIZE(uoa_nf_ops));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
+	nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops,
+				ARRAY_SIZE(uoa_nf_hook_ops));
+#else
+	nf_unregister_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
+#endif
 	synchronize_net();
 
 	uoa_stats_exit();
