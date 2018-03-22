@@ -414,6 +414,7 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
         route4_put(rt);
         return EDPVS_KNICONTINUE; /* KNI may like it, don't drop */
     }
+
 drop:
     if (rt)
         route4_put(rt);
