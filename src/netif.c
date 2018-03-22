@@ -2156,6 +2156,8 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
         if (likely(NULL != rte_pktmbuf_prepend(mbuf,
             (mbuf->data_off - data_off)))) {
                 kni_ingress(mbuf, dev, qconf);
+        } else {
+            rte_pktmbuf_free(mbuf);
         }
     }
 
