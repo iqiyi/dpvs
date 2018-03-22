@@ -410,14 +410,9 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
         }
         return ipv4_forward(mbuf);
     } else {
-	RTE_LOG(DEBUG, IPV4, "%s: input route has no dst\n", __func__);
-        if (etype != ETH_PKT_HOST) {
-            /* multicast or broadcast */
-            route4_put(rt);
-            return EDPVS_KNICONTINUE; /* KNI may like it, don't drop */
-        }
-		/* send packet for bypass */
-        return ipv4_output(mbuf);
+        RTE_LOG(DEBUG, IPV4, "%s: input route has no dst\n", __func__);
+        route4_put(rt);
+        return EDPVS_KNICONTINUE; /* KNI may like it, don't drop */
     }
 drop:
     if (rt)
