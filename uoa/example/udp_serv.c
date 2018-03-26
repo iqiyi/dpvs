@@ -50,6 +50,7 @@ int main(int argc, char *argv[])
 	}
 
 	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable));
 
 	memset(&local, 0, sizeof(struct sockaddr_in));
 	local.sin_family	= AF_INET;
@@ -70,8 +71,10 @@ int main(int argc, char *argv[])
 		}
 
 		inet_ntop(AF_INET, &peer.sin_addr, from, sizeof(from));
+#if 0
 		printf("Receive %d bytes from %s:%d\n",
 		       n, from, ntohs(peer.sin_port));
+#endif
 
 		/*
 		 * get real client address:
