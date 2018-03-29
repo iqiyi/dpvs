@@ -1189,10 +1189,10 @@ again:
         return EDPVS_OK;
     }
 
-    for ( ; cid < NETIF_MAX_LCORES; cid++)
+    for ( ; cid < DPVS_MAX_LCORE; cid++)
         if (g_slave_lcore_mask & (1UL << cid))
             break;
-    if (cid >= NETIF_MAX_LCORES) {
+    if (cid >= DPVS_MAX_LCORE) {
         conn_arr->nconns = got;
         conn_arr->resl = GET_IPVS_CONN_RESL_OK;
         conn_arr->curcid = 0;
@@ -1371,7 +1371,7 @@ static int register_conn_get_msg(void)
     conn_get_all.mode = DPVS_MSG_UNICAST;
     conn_get_all.unicast_msg_cb = conn_get_all_msgcb_slave;
     conn_get_all.multicast_msg_cb = NULL;
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (!(g_slave_lcore_mask & (1UL << ii)))
             continue;
         conn_get_all.cid = ii;
@@ -1406,7 +1406,7 @@ static int unregister_conn_get_msg(void)
     conn_get_all.mode = DPVS_MSG_UNICAST;
     conn_get_all.unicast_msg_cb = conn_get_msgcb_slave;
     conn_get_all.multicast_msg_cb = NULL;
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (!(g_slave_lcore_mask & (1UL << ii)))
             continue;
         conn_get_all.cid = ii;
@@ -1480,7 +1480,7 @@ int dp_vs_conn_init(void)
     conn_ctrl_init();
 
     /* connection cache on each NUMA socket */
-    for (i = 0; i < DPVS_MAX_SOCKET; i++) {
+    for (i = 0; i < get_numa_nodes(); i++) {
         snprintf(poolname, sizeof(poolname), "dp_vs_conn_%d", i);
         dp_vs_conn_cache[i] = rte_mempool_create(poolname,
                                     conn_pool_size,

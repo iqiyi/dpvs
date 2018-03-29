@@ -39,6 +39,17 @@ static int dp_vs_fast_xmit_fnat(struct dp_vs_proto *proto,
     if(unlikely(conn->in_dev == NULL))
         return EDPVS_NOROUTE;
 
+    /* pre-handler before translation */
+    if (proto->fnat_in_pre_handler) {
+        err = proto->fnat_in_pre_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            return err;
+
+        /* re-fetch IP header
+         * the offset may changed during pre-handler */
+        iph = ip4_hdr(mbuf);
+    }
+
     iph->hdr_checksum = 0;
     iph->src_addr = conn->laddr.in.s_addr;
     iph->dst_addr = conn->daddr.in.s_addr;
@@ -81,6 +92,17 @@ static int dp_vs_fast_outxmit_fnat(struct dp_vs_proto *proto,
     /*need to judge?*/
     if(unlikely(conn->out_dev == NULL))
         return EDPVS_NOROUTE;
+
+    /* pre-handler before translation */
+    if (proto->fnat_out_pre_handler) {
+        err = proto->fnat_out_pre_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            return err;
+
+        /* re-fetch IP header
+         * the offset may changed during pre-handler */
+        iph = ip4_hdr(mbuf);
+    }
 
     iph->hdr_checksum = 0;
     iph->src_addr = conn->vaddr.in.s_addr;
@@ -181,7 +203,7 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    if (!fast_xmit_close) {
+    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
         dp_vs_save_xmit_info(mbuf, proto, conn);
         if (!dp_vs_fast_xmit_fnat(proto, conn, mbuf))
             return EDPVS_OK;
@@ -227,6 +249,17 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
         iph->time_to_live--;
     }
 
+    /* pre-handler before translation */
+    if (proto->fnat_in_pre_handler) {
+        err = proto->fnat_in_pre_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            goto errout;
+
+        /* re-fetch IP header
+         * the offset may changed during pre-handler */
+        iph = ip4_hdr(mbuf);
+    }
+
     /* L3 translation before l4 re-csum */
     iph->hdr_checksum = 0;
     iph->src_addr = conn->laddr.in.s_addr;
@@ -263,7 +296,7 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    if (!fast_xmit_close) {
+    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
         dp_vs_save_outxmit_info(mbuf, proto, conn);
         if (!dp_vs_fast_outxmit_fnat(proto, conn, mbuf))
             return EDPVS_OK;
@@ -304,6 +337,17 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         }
 
         iph->time_to_live--;
+    }
+
+    /* pre-handler before translation */
+    if (proto->fnat_out_pre_handler) {
+        err = proto->fnat_out_pre_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            goto errout;
+
+        /* re-fetch IP header
+         * the offset may changed during pre-handler */
+        iph = ip4_hdr(mbuf);
     }
 
     /* L3 translation before l4 re-csum */

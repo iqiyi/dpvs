@@ -95,6 +95,11 @@ int main(int argc, char *argv[])
     gettimeofday(&tv, NULL);
     srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
 
+    if (get_numa_nodes() > DPVS_MAX_SOCKET) {
+        fprintf(stderr, "DPVS_MAX_SOCKET is smaller than system numa nodes!\n");
+        return -1;
+    }
+
     if (set_all_thread_affinity() != 0) {
         fprintf(stderr, "set_all_thread_affinity failed\n");
         exit(EXIT_FAILURE);

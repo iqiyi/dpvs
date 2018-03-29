@@ -169,6 +169,20 @@ static int __add_del_filter(struct netif_port *dev, lcoreid_t cid,
     char ipaddr[64];
 #endif
 
+    if (dev->netif_ops && dev->netif_ops->op_filter_supported) {
+        if (dev->netif_ops->op_filter_supported(dev, RTE_ETH_FILTER_FDIR) < 0) {
+            if (dev->nrxq <= 1)
+                return EDPVS_OK;
+            RTE_LOG(ERR, SAPOOL, "%s: FDIR is not supported by device %s. Only"
+                    " single rxq can be configured.\n", __func__, dev->name);
+            return EDPVS_NOTSUPP;
+        }
+    } else {
+        RTE_LOG(ERR, SAPOOL, "%s: FDIR support of device %s is not known.\n",
+                __func__, dev->name);
+        return EDPVS_INVAL;
+    }
+
     err = netif_get_queue(dev, cid, &queue);
     if (err != EDPVS_OK)
         return err;

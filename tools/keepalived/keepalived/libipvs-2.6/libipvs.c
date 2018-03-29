@@ -40,11 +40,11 @@ struct ip_vs_getinfo ipvs_info;
 
 
 #define CHECK_IPV4(s, ret) if (s->af && s->af != AF_INET)	\
-	{ errno = EAFNOSUPPORT; return ret; }			\
+	{ errno = EAFNOSUPPORT; goto out_err; }			\
 	s->__addr_v4 = s->addr.ip;				\
 
-#define CHECK_PE(s, ret) if (s->pe_name[0] != 0)			\
-	{ errno = EAFNOSUPPORT; return ret; }
+#define CHECK_PE(s, ret) if (s->pe_name[0] != 0)		\
+	{ errno = EAFNOSUPPORT; goto out_err; }
 
 #define CHECK_COMPAT_DEST(s, ret) CHECK_IPV4(s, ret)
 
@@ -59,18 +59,18 @@ void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t
 int ipvs_init(void)
 {
 	socklen_t len;
-    struct ip_vs_getinfo *ipvs_info_rcv;
-    size_t len_rcv;
+	struct ip_vs_getinfo *ipvs_info_rcv;
+	size_t len_rcv;
 
 	ipvs_func = ipvs_init;
 	len = sizeof(ipvs_info);
-    len_rcv = len;
+	len_rcv = len;
 
 	if (dpvs_getsockopt(DPVS_SO_GET_INFO, (const void *)&ipvs_info, len,
                         (void **)&ipvs_info_rcv, &len_rcv))
 		return -1;
-    ipvs_info = *ipvs_info_rcv;
-    dpvs_sockopt_msg_free(ipvs_info_rcv);
+	ipvs_info = *ipvs_info_rcv;
+	dpvs_sockopt_msg_free(ipvs_info_rcv);
 	return 0;
 }
 
@@ -78,18 +78,18 @@ int ipvs_init(void)
 int ipvs_getinfo(void)
 {
 	socklen_t len;
-    struct ip_vs_getinfo *ipvs_info_rcv;
-    size_t len_rcv;
+	struct ip_vs_getinfo *ipvs_info_rcv;
+	size_t len_rcv;
 
 	ipvs_func = ipvs_getinfo;
 	len = sizeof(ipvs_info);
-    len_rcv = len;
+	len_rcv = len;
 
 	int ret = dpvs_getsockopt(DPVS_SO_GET_INFO, (const void *)&ipvs_info, len,
 			       (void **)&ipvs_info_rcv, &len_rcv);
-    ipvs_info = *ipvs_info_rcv;
-    dpvs_sockopt_msg_free(ipvs_info_rcv);
-    return ret;
+	ipvs_info = *ipvs_info_rcv;
+	dpvs_sockopt_msg_free(ipvs_info_rcv);
+	return ret;
 }
 
 
@@ -110,6 +110,8 @@ int ipvs_add_service(ipvs_service_t *svc)
 	ipvs_func = ipvs_add_service;
 	CHECK_COMPAT_SVC(svc, -1);
 	return dpvs_setsockopt(DPVS_SO_SET_ADD, (const void *)svc, sizeof(struct ip_vs_service_kern));
+out_err:
+	return -1;
 }
 
 
@@ -118,6 +120,8 @@ int ipvs_update_service(ipvs_service_t *svc)
 	ipvs_func = ipvs_update_service;
 	CHECK_COMPAT_SVC(svc, -1);
 	return dpvs_setsockopt(DPVS_SO_SET_EDIT, (const void *)svc, sizeof(struct ip_vs_service_kern));
+out_err:
+	return -1;
 }
 
 int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
@@ -188,6 +192,8 @@ int ipvs_del_service(ipvs_service_t *svc)
 	ipvs_func = ipvs_del_service;
 	CHECK_COMPAT_SVC(svc, -1);
 	return dpvs_setsockopt(DPVS_SO_SET_DEL, (const void *)svc, sizeof(struct ip_vs_service_kern));
+out_err:
+	return -1;
 }
 
 
@@ -196,6 +202,8 @@ int ipvs_zero_service(ipvs_service_t *svc)
 	ipvs_func = ipvs_zero_service;
 	CHECK_COMPAT_SVC(svc, -1);
 	return dpvs_setsockopt(DPVS_SO_SET_ZERO, (const void *)svc, sizeof(struct ip_vs_service_kern));
+out_err:
+	return -1;
 }
 
 
@@ -209,6 +217,8 @@ int ipvs_add_dest(ipvs_service_t *svc, ipvs_dest_t *dest)
 	memcpy(&svcdest.svc, svc, sizeof(svcdest.svc));
 	memcpy(&svcdest.dest, dest, sizeof(svcdest.dest));
 	return dpvs_setsockopt(DPVS_SO_SET_ADDDEST, &svcdest, sizeof(svcdest));
+out_err:
+	return -1;
 }
 
 
@@ -222,6 +232,8 @@ int ipvs_update_dest(ipvs_service_t *svc, ipvs_dest_t *dest)
 	memcpy(&svcdest.svc, svc, sizeof(svcdest.svc));
 	memcpy(&svcdest.dest, dest, sizeof(svcdest.dest));
 	return dpvs_setsockopt(DPVS_SO_SET_EDITDEST, &svcdest, sizeof(svcdest));
+out_err:
+	return -1;
 }
 
 
@@ -236,6 +248,8 @@ int ipvs_del_dest(ipvs_service_t *svc, ipvs_dest_t *dest)
 	memcpy(&svcdest.svc, svc, sizeof(svcdest.svc));
 	memcpy(&svcdest.dest, dest, sizeof(svcdest.dest));
 	return dpvs_setsockopt(DPVS_SO_SET_DELDEST, &svcdest, sizeof(svcdest)); 
+out_err:
+	return -1;
 }
 
 static void ipvs_fill_laddr_conf(ipvs_service_t *svc, ipvs_laddr_t *laddr, 
@@ -684,11 +698,10 @@ ipvs_get_service(struct ip_vs_service_user *hint)
 	snprintf(svc->oifname, sizeof(svc->oifname), "%s", hint->oifname);
 
 	CHECK_COMPAT_SVC(svc, NULL);
-	CHECK_PE(svc, NULL);
 	if (dpvs_getsockopt(DPVS_SO_GET_SERVICE,
 		       svc, len, (void **)&svc_rcv, &len_rcv)) {
 		free(svc);
-        dpvs_sockopt_msg_free(svc_rcv);
+		dpvs_sockopt_msg_free(svc_rcv);
 		return NULL;
 	}
 	memcpy(svc, svc_rcv, len_rcv);
@@ -697,6 +710,10 @@ ipvs_get_service(struct ip_vs_service_user *hint)
 	svc->pe_name[0] = '\0';
 	dpvs_sockopt_msg_free(svc_rcv);
 	return svc;
+out_err:
+	free(svc);
+	dpvs_sockopt_msg_free(svc_rcv);
+	return NULL;
 }
 
 

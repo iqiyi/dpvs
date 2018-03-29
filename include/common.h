@@ -58,8 +58,17 @@ typedef uint32_t    __be32;
 typedef uint16_t    __be16;
 #endif
 
-#define DPVS_MAX_SOCKET             2   /* num of NUMA socket */
-#define DPVS_MAX_LCORE              128 /* num of DPDK lcore (CPU cores) */
+#ifndef __u8
+typedef uint8_t     __u8;
+#endif
+
+#ifndef __u16
+typedef uint16_t    __u16;
+#endif
+
+#ifndef __u32
+typedef uint32_t    __u32;
+#endif
 
 typedef enum {
     DPVS_STATE_STOP = 1,
@@ -109,6 +118,8 @@ enum {
 };
 
 extern const char *dpvs_strerror(int err);
+
+int get_numa_nodes(void);
 
 int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN]);
 int linux_hw_mc_add(const char *ifname, const uint8_t hwma[ETH_ALEN]);

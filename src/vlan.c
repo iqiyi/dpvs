@@ -130,6 +130,14 @@ static int vlan_set_mc_list(struct netif_port *dev)
     return err;
 }
 
+static int vlan_filter_supported(struct netif_port *dev, enum rte_filter_type fltype)
+{
+    struct vlan_dev_priv *vlan = netif_priv(dev);
+    assert(vlan && vlan->real_dev);
+
+    return rte_eth_dev_filter_supported(vlan->real_dev->id, fltype);
+}
+
 static int vlan_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
                               const struct rte_eth_fdir_filter *filt)
 {
@@ -172,13 +180,14 @@ static int vlan_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
 }
 
 static struct netif_ops vlan_netif_ops = {
-    .op_xmit            = vlan_xmit,
-    .op_set_mc_list     = vlan_set_mc_list,
-    .op_set_fdir_filt   = vlan_set_fdir_filt,
-    .op_get_queue       = vlan_get_queue,
-    .op_get_link        = vlan_get_link,
-    .op_get_promisc     = vlan_get_promisc,
-    .op_get_stats       = vlan_get_stats,
+    .op_xmit             = vlan_xmit,
+    .op_set_mc_list      = vlan_set_mc_list,
+    .op_filter_supported = vlan_filter_supported,
+    .op_set_fdir_filt    = vlan_set_fdir_filt,
+    .op_get_queue        = vlan_get_queue,
+    .op_get_link         = vlan_get_link,
+    .op_get_promisc      = vlan_get_promisc,
+    .op_get_stats        = vlan_get_stats,
 };
 
 static void vlan_setup(struct netif_port *dev)

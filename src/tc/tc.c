@@ -362,7 +362,7 @@ int tc_init(void)
     tc_register_cls(&match_cls_ops);
 
     /* per-NUMA socket mempools for queued tc_mbuf{} */
-    for (s = 0; s < DPVS_MAX_SOCKET; s++) {
+    for (s = 0; s < get_numa_nodes(); s++) {
         char plname[64];
 
         snprintf(plname, sizeof(plname), "tc_mbuf_pool_%d", s);

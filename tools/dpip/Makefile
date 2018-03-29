@@ -27,6 +27,11 @@ CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes
 CFLAGS += -I ../../include
 CFLAGS += -I ../keepalived/keepalived/libipvs-2.6
 
+LIBS = -lnuma
+DEFS = -D DPVS_MAX_LCORE=64
+
+CFLAGS += $(LIBS) $(DEFS)
+
 OBJS = dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
 	   qsch.o cls.o tunnel.o ../../src/common.o \
 	   ../keepalived/keepalived/libipvs-2.6/sockopt.o

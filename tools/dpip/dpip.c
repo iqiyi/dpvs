@@ -71,6 +71,8 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         {"stats", no_argument, NULL, 's'},
         {"statistics", no_argument, NULL, 's'},
         {"color",  no_argument, NULL, 'C'},
+        {"interval", required_argument, NULL, 'i'},
+        {"count", required_argument, NULL, 'c'},
         {NULL, 0, NULL, 0},
     };
 
@@ -82,7 +84,7 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         exit(0);
     }
 
-    while ((opt = getopt_long(argc, argv, "vhV46f:sC", opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "vhV46f:si:c:C", opts, NULL)) != -1) {
         switch (opt) {
         case 'v':
             conf->verbose = 1;
@@ -112,6 +114,12 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         case 's':
             conf->stats = 1;
             break;
+        case 'i':
+            conf->interval = atoi(optarg);
+            break;
+        case 'c':
+            conf->count = atoi(optarg);
+            break;
         case 'C':
                 conf->color = true;
             break;
@@ -127,6 +135,9 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         usage();
         exit(1);
     }
+
+    if (conf->count && !conf->interval)
+        fprintf(stderr, "missing option '-i'\n");
 
     argc -= optind;
     argv += optind;

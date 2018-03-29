@@ -66,6 +66,13 @@ struct dp_vs_proto {
     int (*fnat_out_handler)(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn,
                        struct rte_mbuf *mbuf);
+    /* pre-handler for FNAT */
+    int (*fnat_in_pre_handler)(struct dp_vs_proto *proto,
+                       struct dp_vs_conn *conn,
+                       struct rte_mbuf *mbuf);
+    int (*fnat_out_pre_handler)(struct dp_vs_proto *proto,
+                       struct dp_vs_conn *conn,
+                       struct rte_mbuf *mbuf);
 
     /* for SNAT mode */
     int (*snat_in_handler)(struct dp_vs_proto *proto,

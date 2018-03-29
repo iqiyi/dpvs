@@ -57,8 +57,8 @@ static uint32_t msg_mc_qlen = DPVS_MULTICAST_LIST_LEN_DEF;
 typedef struct list_head msg_type_array_t[DPVS_MSG_LEN];
 typedef rte_rwlock_t msg_type_lock_t[DPVS_MSG_LEN];
 
-msg_type_array_t mt_array[NETIF_MAX_LCORES];
-msg_type_lock_t mt_lock[NETIF_MAX_LCORES];
+msg_type_array_t mt_array[DPVS_MAX_LCORE];
+msg_type_lock_t mt_lock[DPVS_MAX_LCORE];
 
 /* multicast_queue list (Master lcore only) */
 struct multicast_wait_list {
@@ -69,7 +69,7 @@ struct multicast_wait_list mc_wait_list;
 rte_rwlock_t mc_wait_lock;
 
 /* per-lcore msg queue */
-struct rte_ring *msg_ring[NETIF_MAX_LCORES];
+struct rte_ring *msg_ring[DPVS_MAX_LCORE];
 
 static inline int mt_hashkey(msgid_t type)
 {
@@ -81,7 +81,7 @@ static struct dpvs_msg_type* msg_type_get(msgid_t type, /*DPVS_MSG_MODE mode, */
     int hashkey = mt_hashkey(type);
     struct dpvs_msg_type *mt;
 
-    if (unlikely(cid >= NETIF_MAX_LCORES))
+    if (unlikely(cid >= DPVS_MAX_LCORE))
         return NULL;
 
     rte_rwlock_read_lock(&mt_lock[cid][hashkey]);
@@ -122,7 +122,7 @@ int msg_type_register(const struct dpvs_msg_type *msg_type)
     int hashkey;
     struct dpvs_msg_type *mt;
 
-    if (unlikely(NULL == msg_type  || msg_type->cid >= NETIF_MAX_LCORES)) {
+    if (unlikely(NULL == msg_type  || msg_type->cid >= DPVS_MAX_LCORE)) {
         RTE_LOG(WARNING, MSGMGR, "%s: invalid args !\n", __func__);
         return EDPVS_INVAL;
     }
@@ -157,7 +157,7 @@ int msg_type_unregister(const struct dpvs_msg_type *msg_type)
     int hashkey;
     struct dpvs_msg_type *mt;
 
-    if (unlikely(NULL == msg_type) || msg_type->cid >= NETIF_MAX_LCORES) {
+    if (unlikely(NULL == msg_type) || msg_type->cid >= DPVS_MAX_LCORE) {
         RTE_LOG(WARNING, MSGMGR, "%s: invalid args !\n", __func__);
         return EDPVS_INVAL;
     }
@@ -199,7 +199,7 @@ int msg_type_mc_register(const struct dpvs_msg_type *msg_type)
     mt.type = msg_type->type;
     mt.mode = DPVS_MSG_MULTICAST;
 
-    for (cid = 0; cid < NETIF_MAX_LCORES; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (cid == master_lcore) {
             mt.cid = cid;
             mt.unicast_msg_cb = NULL;
@@ -237,7 +237,7 @@ int msg_type_mc_unregister(const struct dpvs_msg_type *msg_type)
     memset(&mt, 0, sizeof(mt));
     mt.type = msg_type->type;
 
-    for (cid = 0; cid < NETIF_MAX_LCORES; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (cid == master_lcore) {
             mt.cid = cid;
             mt.mode = DPVS_MSG_MULTICAST;
@@ -443,7 +443,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
 
     /* send unicast msgs from master to all alive slaves */
     rte_atomic16_inc(&msg->refcnt); /* refcnt increase by 1 for itself */
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (slave_lcore_mask & (1L << ii)) {
             new_msg = msg_make(msg->type, msg->seq, DPVS_MSG_UNICAST, msg->cid, msg->len, msg->data);
             if (unlikely(!new_msg)) {
@@ -688,7 +688,7 @@ int msg_type_table_print(char *buf, int len)
         return EDPVS_INVAL;
     memset(buf, 0, len);
 
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (ii != master_lcore && !(slave_lcore_mask & (1L << ii)))
             continue;
 
@@ -765,7 +765,7 @@ static int register_built_in_msg(void)
     mt.mode = DPVS_MSG_UNICAST;
     mt.unicast_msg_cb = msg_type_reg_cb;
 
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (!rte_lcore_is_enabled(ii))
             continue;
         mt.cid = ii;
@@ -781,7 +781,7 @@ static int register_built_in_msg(void)
     mt.mode = DPVS_MSG_UNICAST;
     mt.unicast_msg_cb = msg_type_unreg_cb;
 
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (!rte_lcore_is_enabled(ii))
             continue;
         mt.cid = ii;
@@ -808,7 +808,7 @@ static int unregister_built_in_msg(void)
     mt.mode = DPVS_MSG_UNICAST;
     mt.unicast_msg_cb = msg_type_reg_cb;
 
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (!rte_lcore_is_enabled(ii))
             continue;
         mt.cid = ii;
@@ -824,7 +824,7 @@ static int unregister_built_in_msg(void)
     mt.mode = DPVS_MSG_UNICAST;
     mt.unicast_msg_cb = msg_type_unreg_cb;
 
-    for ( ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for ( ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (!rte_lcore_is_enabled(ii))
             continue;
         mt.cid = ii;
@@ -857,7 +857,7 @@ static inline int msg_init(void)
     }
 
     /* per-lcore msg type array init */
-    for (ii = 0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         for (jj = 0; jj < DPVS_MSG_LEN; jj++) {
             INIT_LIST_HEAD(&mt_array[ii][jj]);
             rte_rwlock_init(&mt_lock[ii][jj]);
@@ -869,7 +869,7 @@ static inline int msg_init(void)
     INIT_LIST_HEAD(&mc_wait_list.list);
 
     /* per-lcore msg queue */
-    for (ii =0; ii < NETIF_MAX_LCORES; ii++) {
+    for (ii =0; ii < DPVS_MAX_LCORE; ii++) {
         snprintf(ring_name, sizeof(ring_name), "msg_ring_%d", ii);
         msg_ring[ii] = rte_ring_create(ring_name, msg_ring_size,
                 rte_socket_id(), 0/*RING_F_SC_DEQ*/);
@@ -902,7 +902,7 @@ static inline int msg_term(void)
     int ii, ret;
 
     /* per-lcore msg queue */
-    for (ii= 0; ii < NETIF_MAX_LCORES; ii++)
+    for (ii= 0; ii < DPVS_MAX_LCORE; ii++)
         rte_ring_free(msg_ring[ii]);
 
     /* unregister netif-lcore-loop-job for Slaves */

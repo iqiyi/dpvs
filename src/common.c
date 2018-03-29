@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <numa.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -83,6 +84,18 @@ void dpvs_state_set(dpvs_state_t stat)
 dpvs_state_t dpvs_state_get(void)
 {
     return g_dpvs_tate;
+}
+
+int get_numa_nodes(void)
+{
+    int numa_nodes;
+
+    if (numa_available() < 0)
+        numa_nodes = 0;
+    else
+        numa_nodes = numa_max_node();
+
+    return (numa_nodes + 1);
 }
 
 /* if (num+offset) == 2^n, return true,

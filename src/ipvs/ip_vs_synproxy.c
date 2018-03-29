@@ -124,7 +124,7 @@ int dp_vs_synproxy_init(void)
     dpvs_timer_sched(&g_minute_timer, &tv, minute_timer_expire, NULL, true);
 
     /* allocate NUMA-aware ACK list cache */
-    for (i = 0; i < DPVS_MAX_SOCKET; i++) {
+    for (i = 0; i < get_numa_nodes(); i++) {
         snprintf(ack_mbufpool_name, sizeof(ack_mbufpool_name), "ack_mbufpool_%d", i);
         dp_vs_synproxy_ack_mbufpool[i] = rte_mempool_create(ack_mbufpool_name,
                 DP_VS_SYNPROXY_ACK_MBUFPOOL_SIZE,
@@ -153,7 +153,7 @@ int dp_vs_synproxy_term(void)
     int i;
     dpvs_timer_cancel(&g_minute_timer, true);
 
-    for (i = 0; i < DPVS_MAX_SOCKET; i++)
+    for (i = 0; i < get_numa_nodes(); i++)
         rte_mempool_free(dp_vs_synproxy_ack_mbufpool[i]);
 
     return EDPVS_OK;

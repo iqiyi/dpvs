@@ -589,6 +589,10 @@ ipvs_set_rule(int cmd, virtual_server_t * vs, real_server_t * rs)
 	srule->netmask = (vs->addr.ss_family == AF_INET6) ? 128 : ((u_int32_t) 0xffffffff);
 	srule->protocol = vs->service_type;
 	srule->conn_timeout = vs->conn_timeout;
+	snprintf(srule->srange, 256, "%s", vs->srange);
+	snprintf(srule->drange, 256, "%s", vs->drange);
+	snprintf(srule->iifname, IFNAMSIZ, "%s", vs->iifname);
+	snprintf(srule->oifname, IFNAMSIZ, "%s", vs->oifname);
 
 	if (!parse_timeout(vs->timeout_persistence, &srule->timeout))
 		log_message(LOG_INFO, "IPVS : Virtual service %s illegal timeout."
@@ -972,6 +976,10 @@ ipvs_cmd(int cmd, list vs_group, virtual_server_t * vs, real_server_t * rs)
 				srule->netmask = 128;
 			}
 			srule->fwmark = vs->vfwmark;
+		} else if (vs->loadbalancing_kind == IP_VS_CONN_F_SNAT) {
+			srule->af = vs->addr.ss_family;
+			srule->addr.ip = 0;
+			srule->port = inet_sockaddrport(&vs->addr);
 		} else {
 			srule->af = vs->addr.ss_family;
 			if (vs->addr.ss_family == AF_INET6)

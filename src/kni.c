@@ -45,7 +45,7 @@
 #define KNI_MBUFPOOL_ELEMS      65535
 #define KNI_MBUFPOOL_CACHE_SIZE 256
 
-static struct rte_mempool *kni_mbuf_pool[NETIF_MAX_SOCKETS];
+static struct rte_mempool *kni_mbuf_pool[DPVS_MAX_SOCKET];
 
 static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
                           struct rte_kni_conf *conf)
@@ -382,7 +382,7 @@ int kni_init(void)
     int i;
     char poolname[32];
 
-    for (i = 0; i < NETIF_MAX_SOCKETS; i++) {
+    for (i = 0; i < get_numa_nodes(); i++) {
         memset(poolname, 0, sizeof(poolname));
         snprintf(poolname, sizeof(poolname) - 1, "kni_mbuf_pool_%d", i);
 

@@ -45,7 +45,7 @@ else
 	CFLAGS += -g -O0 -D DEBUG
 endif
 
-LIBS += -lpthread
+LIBS += -lpthread -lnuma
 
 CFLAGS += $(INCDIRS) $(LIBS)
 
