@@ -1,13 +1,12 @@
-DPVS
-----
-
-![dpvs.png](./pic/dpvs.png)
+![dpvs-logo.png](./pic/DPVS-logo.png)
 
 # Introduction
 
 `DPVS` is a high performance **Layer-4 load balancer** based on [DPDK](http://dpdk.org). It's derived from Linux Virtual Server [LVS](http://www.linuxvirtualserver.org/) and its modification [alibaba/LVS](https://github.com/alibaba/LVS).
 
 >  the name `DPVS` comes from "DPDK-LVS".
+
+![dpvs.png](./pic/dpvs.png)
 
 Several techniques are applied for high performance:
 
@@ -50,7 +49,7 @@ This *quick start* is tested with the environment below.
 Other environment should also OK if DPDK works, pls check [dpdk.org](http://www.dpdk.org) for more info.
 
 * Pls check this link for NICs supported by DPDK: http://dpdk.org/doc/nics.
-* Note `flow-director` (fdir) is needed for `Full-NAT` and `SNAT` mode. http://dpdk.org/doc/guides/nics/overview.html#id1
+* Note `flow-director` ([fdir](http://dpdk.org/doc/guides/nics/overview.html#id1)) is needed for `Full-NAT` and `SNAT` mode with multi-cores.
 
 ## Clone DPVS
 
@@ -72,16 +71,26 @@ $ wget https://fast.dpdk.org/rel/dpdk-17.05.2.tar.xz   # download from dpdk.org 
 $ tar vxf dpdk-17.05.2.tar.xz
 ```
 
+### DPDK patchs
+
 There's a patch for DPDK `kni` driver for hardware multicast, apply it if needed (for example, launch `ospfd` on `kni` device).
 
 > assuming we are in DPVS root dir and dpdk-stable-17.05.2 is under it, pls note it's not mandatory, just for convenience.
 
 ```
 $ cd <path-of-dpvs>
-$ cp patch/dpdk-stable-17.05.2/0001-PATCH-kni-use-netlink-event-for-multicast-driver-par.patch dpdk-stable-17.05.2/
+$ cp patch/dpdk-stable-17.05.2/*.patch dpdk-stable-17.05.2/
 $ cd dpdk-stable-17.05.2/
 $ patch -p 1 < 0001-PATCH-kni-use-netlink-event-for-multicast-driver-par.patch
 ```
+
+Another DPDK patch is fixing checksum API for the packets with IP options, it's needed for `UOA` module.
+
+```
+$ patch -p1 < 0002-net-support-variable-IP-header-len-for-checksum-API.patch
+```
+
+### DPDK build and install
 
 Now build DPDK and export `RTE_SDK` env variable for DPDK app (DPVS).
 
@@ -218,12 +227,13 @@ Your ip:port : 192.168.100.3:56890
 More configure examples can be found in the [Tutorial Document](./doc/tutorial.md). Including,
 
 * WAN-to-LAN `Full-NAT` reverse proxy.
-* Direct Route (`DR`) mode.
-* Master/Backup model (keepalived).
-* OSPF/ECMP cluster model.
+* Direct Route (`DR`) mode setup.
+* Master/Backup model (`keepalived`) setup.
+* OSPF/ECMP cluster model setup.
 * `SNAT` mode for Internet access from internal network.
-* Virtual Devices (`Bonding`, `VLAN`, `kni`)
-* ... ...
+* Virtual Devices (`Bonding`, `VLAN`, `kni`, `ipip`/`GRE`).
+* `UOA` module to get real UDP client IP/port in `FNAT`.
+* ... and more ...
 
 # Performance Test
 
