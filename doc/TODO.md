@@ -22,7 +22,7 @@ Short-term
 * [ ] Logging
     - [ ] Packet based logging.
     - [ ] Session based logging (creation, expire, statistics)
-* [ ] CI and Test Automation
+* [ ] CI, Test Automation setup.
 * [ ] Performance optimization for 25G/40G NIC.
 * [ ] Documents update.
 
@@ -31,9 +31,10 @@ Long-term
 
 * [ ] VM support
 * [ ] IP fragment support, for UDP apps.
+* [ ] Session Sharing
 * [ ] ALG (ftp, sip, ...)
 * [ ] VxLAN Support
 * [ ] NIC without Flow-Director (fdir)
-  - Packet redirect for cpus.
+  - Packet redirect to workers.
   - RSS pre-calcuating.
 * [ ] IPv6 Support.

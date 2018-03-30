@@ -11,9 +11,14 @@ DPVS Tutorial
   - [Full-NAT with Keepalived (one-arm)](#fnat-keepalive)
 * [DR Mode (one-arm)](#dr)
 * [Tunnel Mode(one-arm)](#tunnel)
-* [NAT Mode(one-arm)] (#nat)
+* [NAT Mode(one-arm)](#nat)
 * [SNAT Mode (two-arm)](#snat)
-* [Bonding and VLAN devices](#bond-vlan)
+* [Virtual devices](#virt-dev)
+  - [Bonding Device](#vdev-bond)
+  - [VLAN Device](#vdev-vlan)
+  - [Tunnel Device](#vdev-tun)
+  - [KNI for virtual device](#vdev-kni)
+* [UDP Option of Address (UOA)](#uoa)
 
 > To compile and launch DPVS, pls check *README.md* for this project.
 
@@ -21,11 +26,9 @@ DPVS Tutorial
 
 # Terminology
 
-For the meanings of *Full-NAT* (`FNAT`), `DR`, `Tunnel`, `toa`, `OSPF`/`ECMP` and `keepalived`, pls refer [LVS](www.linuxvirtualserver.org) and [Alibaba/LVS](https://github.com/alibaba/LVS/tree/master/docs).
+About the concepts of *Full-NAT* (`FNAT`), `DR`, `Tunnel`, `toa`, `OSPF`/`ECMP` and `keepalived`, pls refer [LVS](www.linuxvirtualserver.org) and [Alibaba/LVS](https://github.com/alibaba/LVS/tree/master/docs).
 
-Note `DPVS` support `FNAT`, `DR`, `Tunnel`, `SNAT` forwarding modes, and each mode can be configured as `one-arm` or `two-arm` topology, with or without `ospfd`/`keepalived`. There're too many combinations, I cannot list all the examples here. Let's just give some popular working models used in our daily work.
-
-> `Tunneling` and `NAT` is not supported because we didn't see strong demand yet, at least from *iQiYi*. May add them in the future. :)
+Note `DPVS` support `FNAT`, `DR`, `Tunnel`, `SNAT` forwarding modes, and each mode can be configured as `one-arm` or `two-arm` topology, with or without `OSFP/ECMP`/`keepalived`. There're too many combinations, I cannot list all the examples here. Let's just give some popular working models used in our daily work.
 
 <a id='one-two-arm'/>
 
@@ -35,7 +38,7 @@ The term *two-arm* means, you have clients in one side of *load-balancer* (`LB`)
 
 On the other hand, *one-arm* means all clients and servers are in same side of `load-balancer`, `LB` forwards traffic through the same logical network interface.
 
-> *Logical interface* (or *device*) could be physical `DPDK` interface, or `DPVS` virtual devices like *Bonding* and *VLAN* devices.
+> *Logical interface* (or *device*) could be physical `DPDK` interface, or `DPVS` virtual devices like *bonding*, *vlan* and *tunnel* devices.
 
 To make things easier, we do not consider virtual devices for now. Thus, *two-arm* topology need
 
@@ -648,12 +651,12 @@ You can also use keepalived to configure SNAT instead of using ipvsadm. Every SN
 
 ```
 virtual_server match SNAT1 {
-    protocol UDP 
+    protocol UDP
     lb_algo rr
     lb_kind SNAT
     src-range 192.168.100.0-192.168.100.254
     oif dpdk1
-    
+
     real_server 123.1.2.1  0 {
         weight 4
     }   
@@ -661,13 +664,13 @@ virtual_server match SNAT1 {
 
 virtual_server match SNAT2 {
     protocol ICMP
-    lb_algo wrr 
+    lb_algo wrr
     lb_kind SNAT
     src-range 192.168.100.1-192.168.100.254
     dst-range 123.1.2.0-123.1.2.254
     oif dpdk1
     iif dpdk0
-    
+
     real_server 123.1.2.1  0 {  
         weight 4
     }   
@@ -678,7 +681,7 @@ If you also want to use keepalived instead of using dpip to configure WAN/LAN IP
 
 ```
 virtual_server match SNAT {
-    protocol UDP 
+    protocol UDP
     delay_loop 3
     lb_algo rr
     lb_kind SNAT
@@ -690,7 +693,7 @@ virtual_server match SNAT {
     quorum_up "dpip addr add XXX;" ##Here is your cmd, you can also use a script.
     quorum_down "dpip addr del XXX;"
 
-    real_server 123.1.2.2 0 { 
+    real_server 123.1.2.2 0 {
         weight 4
         MISC_CHECK {
            misc_path 'exit'##Just make a healthy check which will always judge real_server healthy
@@ -713,27 +716,86 @@ host$ ping www.iqiyi.com
 host$ curl www.iqiyi.com
 ```
 
-<a id='bond-vlan'/>
+<a id='virt-dev'/>
 
-# Bonding and VLAN devices
+# Virtual Devices
 
-`DPVS` supports *Bonding* and *VLAN* virtual devices.
+`DPVS` supports virtual devices, such as *Bonding*, *VLAN*, *IP-in-IP* and *GRE* Tunnel.
 
-For Bonding device, both `DPVS` and Switch need to set the Bonding interfaces with same Bonding mode. Note DPVS just supports bonding mode 0 and 4 for now. To enable Bonding device on `DPVS`, pls refer `conf/dpvs.bond.conf.sample`. Each Bonding device needs one or more DPDK Physical device (`dpdk0`, ...) to work as it's slaves.
+<a id='vdev-bond'/>
+
+## Bonding Device
+
+For Bonding device, both `DPVS` and connected Switch/Router need to set the Bonding interfaces with *same* Bonding mode. Note `DPVS` just supports bonding mode 0 and 4 for now. To enable Bonding device on `DPVS`, pls refer `conf/dpvs.bond.conf.sample`. Each Bonding device needs one or more DPDK Physical device (`dpdk0`, ...) to work as it's slaves.
+
+<a id='vdev-vlan'/>
+
+## VLAN Device
 
 To use *VLAN* device, you can use `dpip` tool, *VLAN* device can be created based on real DPDK Physical device (e.g., `dpdk0`, `dpdk1`) or Bonding device (e.g., `bond0`). But cannot create VLAN device on VLAN device.
 
 This is the VLAN example, pls check `dpip vlan help` for more info.
 
 ```bash
-./dpip vlan add dpdk0.100 link dpdk0 proto 802.1q id 100
-./dpip vlan add link dpdk0 proto 802.1q id 101            # auto generate dev name
-./dpip vlan add link dpdk1 id 102
-./dpip vlan add link bond1 id 103
+$ dpip vlan add dpdk0.100 link dpdk0 proto 802.1q id 100
+$ dpip vlan add link dpdk0 proto 802.1q id 101            # auto generate dev name
+$ dpip vlan add link dpdk1 id 102
+$ dpip vlan add link bond1 id 103
 ```
 
-![bond-vlan-kni](./pics/bond-vlan-kni.png)
+<a id='vdev-tun'/>
+
+## Tunnel Device
+
+`DPVS` support tunnel devices, including `IP-in-IP` and `GRE` tunnel. This can be used for example "SNAT-GRE" cluster, remote host use tunnel to access Internet through `DPVS` SNAT cluster.
+
+Setting up tunnel device is just like what we do on Linux, use `dpip` instead of `ip(8)`.
+
+```bash
+$ dpip tunnel add mode ipip ipip1 local 1.1.1.1 remote 2.2.2.2
+$ dpip tunnel add gre1 mode gre local 1.1.1.1 remote 2.2.2.2 dev dpdk0
+```
+
+Pls also check `dpip tunnel help` for details.
+
+> Pls Note, by using Tunnel
+> 1. RSS schedule all packets to same queue/CPU since underlay source IP may the same.
+>    if one lcore's `sa_pool` get full, `sa_miss` happens.
+> 2. `fdir`/`rss` won't works well on tunnel deivce, do not use tunnel for FNAT.
+
+<a id='vdev-kni'/>
+
+## KNI for Banding/VLAN
 
 Like DPDK Physical device, the *Bonding* and *VLAN* Virtual devices (e.g., `bond0` and `dpdk0.100`) have their own related `KNI` devices on Linux environment (e.g., `bond0.kni`, `dpdk0.100.kni`).
 
+This is the example devices relationship between physical, vlan, bonding and `KNI` devices.
+
+![bond-vlan-kni](./pics/bond-vlan-kni.png)
+
 To configure `DPVS` (`FNAT`/`DR`/`Tunnel`/`SNAT`, `one-arm`/`two-arm`, `keepalived`/`ospfd`) for Virtual device is nothing special. Just "replace" the logical interfaces on sections above (like `dpdk0`, `dpdk1`, `dpdk1.kni`) with corresponding virtual devices.
+
+<a id='uoa'/>
+
+# UDP Option of Address (UOA)
+
+As we know, `TOA` is used to get TCP's real Client IP/Port in LVS FNAT mode. We introduce *UDP Option of Address* or `UOA`, to let `RS` being able to retrieve *real client IP/Port* for the scenario source IP/port are modified by middle boxes (like UDP FNAT).
+
+To achieve this,
+
+1. The kernel module `uoa.ko` is needed to be installed on `RS`, and
+2. the program on `RS` just need a `getsockopt(2)` call to get the real client IP/port.
+
+The example C code for RS to fetch Real Client IP can be found [here](../uoa/example/udp_serv.c).
+
+```bash
+rs$ insmod `uoa`
+rs$ cat /proc/net/uoa_stats
+ Success     Miss  Invalid|UOA  Got     None    Saved Ack-Fail
+12866352 317136864        0  3637127 341266254  3628560        0
+```
+
+Statistics are supported for debug purpose. Note `recvfrom(2)` is kept untouched, it will still return the source IP/port in packets, means the IP/port modified or translated by `DPVS` in UDP `FNAT` mode.
+It's useful to send the data back by socket. Pls note UDP socket is connect-less, one `socket-fd` can be used to communicate with different peers.
+
+Actually, we use private IP option to implement `UOA`, pls check the details in [uoa.md](../uoa/uoa.md).
