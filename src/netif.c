@@ -156,20 +156,13 @@ bool is_lcore_id_valid(lcoreid_t cid)
             (g_isol_rx_lcore_mask & (1L << cid)));
 }
 
-static bool is_lcore_id_fwd(lcoreid_t cid) 
+static bool is_lcore_id_fwd(lcoreid_t cid)
 {
     if (unlikely(cid >= 63 || cid >= DPVS_MAX_LCORE))
         return false;
 
     return ((cid == rte_get_master_lcore()) ||
             (g_slave_lcore_mask & (1L << cid)));
-}
-
-static inline bool is_port_id_valid(portid_t pid)
-{
-    if (unlikely(pid >= NETIF_MAX_PORTS))
-        return false;
-    return true;
 }
 
 static inline struct port_conf_stream *get_port_conf_stream(const char *name)
@@ -4077,7 +4070,7 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
     return EDPVS_OK;
 }
 
-static int get_port_num(void **out, size_t *out_len)
+static int get_port_list(void **out, size_t *out_len)
 {
     int i, cnt = 0;
     size_t len;
@@ -4091,7 +4084,6 @@ static int get_port_num(void **out, size_t *out_len)
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
-    get->nic_num = g_nports;
     get->phy_pid_base = phy_pid_base;
     get->phy_pid_end = phy_pid_end;
     get->bond_pid_base = bond_pid_base;
@@ -4111,32 +4103,25 @@ static int get_port_num(void **out, size_t *out_len)
         }
     }
 
+    get->nic_num = cnt;
+
     *out = get;
-    *out_len = sizeof(netif_nic_num_get_t);
+    *out_len = len;
 
     return EDPVS_OK;
 }
 
-static int get_port_basic(portid_t pid, void **out, size_t *out_len)
+static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
 {
-    struct netif_port *port;
     struct rte_eth_link link;
     netif_nic_basic_get_t *get;
     bool promisc;
     int err;
 
-    assert(out && out_len && pid <= NETIF_MAX_PORTS);
-
     get = rte_zmalloc_socket(NULL, sizeof(netif_nic_basic_get_t),
             RTE_CACHE_LINE_SIZE, rte_socket_id());
     if (unlikely(!get))
         return EDPVS_NOMEM;
-
-    port = netif_port_get(pid);
-    if (!port) {
-        rte_free(get);
-        return EDPVS_NOTEXIST;
-    };
 
     err = netif_get_link(port, &link);
     if (err != EDPVS_OK) {
@@ -4144,18 +4129,44 @@ static int get_port_basic(portid_t pid, void **out, size_t *out_len)
         return err;
     }
 
-    get->port_id = pid;
+    get->port_id = port->id;
     strncpy(get->name, port->name, sizeof(port->name));
-    get->flags = port->flag;
     get->nrxq = port->nrxq;
     get->ntxq = port->ntxq;
     ether_format_addr(get->addr, sizeof(get->addr), &port->addr);
 
     get->socket_id = port->socket;
     get->mtu = port->mtu;
+
     get->link_speed = link.link_speed;
-    get->link_duplex = link.link_duplex;
-    get->link_status = link.link_status;
+
+    switch (link.link_status) {
+        case ETH_LINK_UP:
+            snprintf(get->link_status, sizeof(get->link_status), "%s", "UP");
+            break;
+        case ETH_LINK_DOWN:
+            snprintf(get->link_status, sizeof(get->link_status), "%s", "DOWN");
+            break;
+    }
+
+    switch (link.link_duplex) {
+        case ETH_LINK_HALF_DUPLEX:
+            snprintf(get->link_duplex, sizeof(get->link_duplex), "%s", "half-duplex");
+            break;
+        case ETH_LINK_FULL_DUPLEX:
+            snprintf(get->link_duplex, sizeof(get->link_duplex), "%s", "full-duplex");
+            break;
+    }
+
+    switch (link.link_autoneg) {
+        case ETH_LINK_FIXED:
+            snprintf(get->link_autoneg, sizeof(get->link_autoneg), "%s", "fixed-nego");
+            break;
+        case ETH_LINK_AUTONEG:
+            snprintf(get->link_autoneg, sizeof(get->link_autoneg), "%s", "auto-nego");
+            break;
+    }
+
     err = netif_get_promisc(port, &promisc);
     if (err != EDPVS_OK) {
         rte_free(get);
@@ -4256,36 +4267,31 @@ errout:
     return err;
 }
 
-static int get_port_ext_info(portid_t pid, void **out, size_t *out_len)
+static int get_port_ext_info(struct netif_port *port, void **out, size_t *out_len)
 {
     assert(out || out_len);
 
     struct rte_eth_dev_info dev_info;
     netif_nic_ext_get_t *get, *new;
-    struct netif_port *dev;
     char ctrlbuf[NETIF_CTRL_BUFFER_LEN];
     int len, naddr, err;
     size_t offset = 0;
-
-    dev = netif_port_get(pid);
-    if (!dev)
-        return EDPVS_NOTEXIST;
 
     get = rte_zmalloc(NULL, sizeof(netif_nic_ext_get_t), 0);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
-    get->port_id = pid;
+    get->port_id = port->id;
 
     /* dev info */
-    rte_eth_dev_info_get((uint8_t)pid, &dev_info);
+    rte_eth_dev_info_get((uint8_t)port->id, &dev_info);
     copy_dev_info(&get->dev_info, &dev_info);
 
     /* cfg_queues */
-    if (dev->type == PORT_TYPE_GENERAL ||
-        dev->type == PORT_TYPE_BOND_MASTER) {
+    if (port->type == PORT_TYPE_GENERAL ||
+        port->type == PORT_TYPE_BOND_MASTER) {
         len = NETIF_CTRL_BUFFER_LEN;
-        err = netif_print_lcore_conf(ctrlbuf, &len, false, pid);
+        err = netif_print_lcore_conf(ctrlbuf, &len, false, port->id);
         if (unlikely(EDPVS_OK != err))
             goto errout;
 
@@ -4306,7 +4312,7 @@ static int get_port_ext_info(portid_t pid, void **out, size_t *out_len)
 
     /* mc_list */
     len = NETIF_CTRL_BUFFER_LEN;
-    err = netif_print_mc_list(dev, ctrlbuf, &len, &naddr);
+    err = netif_print_mc_list(port, ctrlbuf, &len, &naddr);
     if (unlikely(EDPVS_OK != err))
         goto errout;
 
@@ -4356,7 +4362,7 @@ static inline void copy_port_stats(netif_nic_stats_get_t *get,
     memcpy(&get->q_errors, &stats->q_errors, sizeof(stats->q_errors));
 }
 
-static int get_port_stats(portid_t pid, void **out, size_t *out_len)
+static int get_port_stats(struct netif_port *port, void **out, size_t *out_len)
 {
     assert(out && out_len);
 
@@ -4364,11 +4370,7 @@ static int get_port_stats(portid_t pid, void **out, size_t *out_len)
     struct rte_eth_stats stats;
     netif_nic_stats_get_t *get;
 
-    struct netif_port *dev = netif_port_get(pid);
-    if (!dev)
-        return EDPVS_NOTEXIST;
-
-    err = netif_get_stats(dev, &stats);
+    err = netif_get_stats(port, &stats);
     if (err != EDPVS_OK)
         return err;
 
@@ -4377,9 +4379,9 @@ static int get_port_stats(portid_t pid, void **out, size_t *out_len)
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
-    get->port_id = pid;
-    get->mbuf_avail = rte_mempool_avail_count(dev->mbuf_pool);
-    get->mbuf_inuse = rte_mempool_in_use_count(dev->mbuf_pool);
+    get->port_id = port->id;
+    get->mbuf_avail = rte_mempool_avail_count(port->mbuf_pool);
+    get->mbuf_inuse = rte_mempool_in_use_count(port->mbuf_pool);
 
     copy_port_stats(get, &stats);
 
@@ -4389,13 +4391,13 @@ static int get_port_stats(portid_t pid, void **out, size_t *out_len)
     return EDPVS_OK;
 }
 
-static int get_bond_status(portid_t pid, void **out, size_t *out_len)
+static int get_bond_status(struct netif_port *port, void **out, size_t *out_len)
 {
     bool is_active;
     int i, j, xmit_policy;
     portid_t primary;
     uint8_t slaves[NETIF_MAX_BOND_SLAVES], actives[NETIF_MAX_BOND_SLAVES];
-    struct netif_port *sport, *mport = netif_port_get(pid);
+    struct netif_port *sport, *mport = port;
     netif_bond_status_get_t *get;
     assert(out && out_len);
 
@@ -4408,12 +4410,12 @@ static int get_bond_status(portid_t pid, void **out, size_t *out_len)
             RTE_CACHE_LINE_SIZE, rte_socket_id());
     if (unlikely(!get))
         return EDPVS_NOMEM;
-    get->mode = rte_eth_bond_mode_get((uint8_t)pid);
+    get->mode = rte_eth_bond_mode_get((uint8_t)port->id);
 
-    primary = rte_eth_bond_primary_get((uint8_t)pid);
-    get->slave_nb = rte_eth_bond_slaves_get((uint8_t)pid,
+    primary = rte_eth_bond_primary_get((uint8_t)port->id);
+    get->slave_nb = rte_eth_bond_slaves_get((uint8_t)port->id,
             slaves, NETIF_MAX_BOND_SLAVES);
-    get->active_nb = rte_eth_bond_active_slaves_get((uint8_t)pid,
+    get->active_nb = rte_eth_bond_active_slaves_get((uint8_t)port->id,
             actives, NETIF_MAX_BOND_SLAVES);
     for (i = 0; i < get->slave_nb; i++) {
         is_active = false;
@@ -4435,7 +4437,7 @@ static int get_bond_status(portid_t pid, void **out, size_t *out_len)
 
     ether_format_addr(get->macaddr, sizeof(get->macaddr), &mport->addr);
 
-    xmit_policy = rte_eth_bond_xmit_policy_get((uint8_t)pid);
+    xmit_policy = rte_eth_bond_xmit_policy_get((uint8_t)port->id);
     switch (xmit_policy) {
     case BALANCE_XMIT_POLICY_LAYER2:
         snprintf(get->xmit_policy, sizeof(get->xmit_policy), "LAYER2");
@@ -4450,9 +4452,9 @@ static int get_bond_status(portid_t pid, void **out, size_t *out_len)
         snprintf(get->xmit_policy, sizeof(get->xmit_policy), "UNKOWN");
     }
 
-    get->link_monitor_interval = rte_eth_bond_link_monitoring_get((uint8_t)pid);
-    get->link_down_prop_delay = rte_eth_bond_link_down_prop_delay_get((uint8_t)pid);
-    get->link_up_prop_delay = rte_eth_bond_link_up_prop_delay_get((uint8_t)pid);
+    get->link_monitor_interval = rte_eth_bond_link_monitoring_get((uint8_t)port->id);
+    get->link_down_prop_delay = rte_eth_bond_link_down_prop_delay_get((uint8_t)port->id);
+    get->link_up_prop_delay = rte_eth_bond_link_up_prop_delay_get((uint8_t)port->id);
 
     *out = get;
     *out_len = sizeof(netif_bond_status_get_t);
@@ -4464,7 +4466,8 @@ static int netif_sockopt_get(sockoptid_t opt, const void *in, size_t inlen,
 {
     int ret = EDPVS_OK;
     lcoreid_t cid;
-    portid_t pid;
+    char *name;
+    struct netif_port *port;
 
     if (!out || !outlen)
         return EDPVS_INVAL;
@@ -4491,40 +4494,44 @@ static int netif_sockopt_get(sockoptid_t opt, const void *in, size_t inlen,
                 return EDPVS_INVAL;
             ret = get_lcore_stats(cid, out, outlen);
             break;
-        case SOCKOPT_NETIF_GET_PORT_NUM:
-            ret = get_port_num(out, outlen);
+        case SOCKOPT_NETIF_GET_PORT_LIST:
+            ret = get_port_list(out, outlen);
             break;
         case SOCKOPT_NETIF_GET_PORT_BASIC:
-            if (!in || inlen != sizeof(portid_t))
+            if (!in)
                 return EDPVS_INVAL;
-            pid = *(portid_t *)in;
-            if (!is_port_id_valid(pid))
-                return EDPVS_INVAL;
-            ret = get_port_basic(pid, out, outlen);
+            name = (char *)in;
+            port = netif_port_get_by_name(name);
+            if (!port)
+                return EDPVS_NOTEXIST;
+            ret = get_port_basic(port, out, outlen);
             break;
         case SOCKOPT_NETIF_GET_PORT_STATS:
-            if (!in || inlen != sizeof(portid_t))
+            if (!in)
                 return EDPVS_INVAL;
-            pid = *(portid_t *)in;
-            if (!is_port_id_valid(pid))
-                return EDPVS_INVAL;
-            ret = get_port_stats(pid, out, outlen);
+            name = (char *)in;
+            port = netif_port_get_by_name(name);
+            if (!port)
+                return EDPVS_NOTEXIST;
+            ret = get_port_stats(port, out, outlen);
             break;
         case SOCKOPT_NETIF_GET_PORT_EXT_INFO:
-            if (!in || inlen != sizeof(portid_t))
+            if (!in)
                 return EDPVS_INVAL;
-            pid = *(portid_t *)in;
-            if (!is_port_id_valid(pid))
-                return EDPVS_INVAL;
-            ret = get_port_ext_info(pid, out, outlen);
+            name = (char *)in;
+            port = netif_port_get_by_name(name);
+            if (!port)
+                return EDPVS_NOTEXIST;
+            ret = get_port_ext_info(port, out, outlen);
             break;
         case SOCKOPT_NETIF_GET_BOND_STATUS:
-            if (!in || inlen != sizeof(portid_t))
+            if (!in)
                 return EDPVS_INVAL;
-            pid = *(portid_t *)in;
-            if (!is_port_id_valid(pid))
-                return EDPVS_INVAL;
-            ret = get_bond_status(pid, out, outlen);
+            name = (char*)in;
+            port = netif_port_get_by_name(name);
+            if (!port)
+                return EDPVS_NOTEXIST;
+            ret = get_bond_status(port, out, outlen);
             break;
         default:
             RTE_LOG(WARNING, NETIF,
