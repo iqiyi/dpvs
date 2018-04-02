@@ -129,6 +129,7 @@ struct uoa_stats {
 
 static struct uoa_stats uoa_stats;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 #define UOA_STATS_INC(_f_) do { \
 	struct uoa_cpu_stats *s = this_cpu_ptr(uoa_stats.cpustats); \
 	u64_stats_update_begin(&s->syncp); \
@@ -136,6 +137,13 @@ static struct uoa_stats uoa_stats;
 	u64_stats_update_end(&s->syncp); \
 	uoa_stats.kstats._f_++; \
 } while (0)
+#else
+#define UOA_STATS_INC(_f_) do { \
+	struct uoa_cpu_stats *s = this_cpu_ptr(uoa_stats.cpustats); \
+	s->_f_++; \
+	uoa_stats.kstats._f_++; \
+} while (0)
+#endif
 
 static int uoa_stats_show(struct seq_file *seq, void *arg)
 {
@@ -163,10 +171,12 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
 	for_each_possible_cpu(i) {
 		struct uoa_cpu_stats *s = per_cpu_ptr(uoa_stats.cpustats, i);
 		__u64 success, miss, invalid, got, none, saved, ack_fail;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 		unsigned int start;
 
 		do {
 			start = u64_stats_fetch_begin_irq(&s->syncp);
+#endif
 
 			success	= s->success;
 			miss	= s->miss;
@@ -175,7 +185,9 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
 			none	= s->uoa_none;
 			saved   = s->uoa_saved;
 			ack_fail = s->uoa_ack_fail;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 		} while (u64_stats_fetch_retry_irq(&s->syncp, start));
+#endif
 
 		seq_printf(seq,
 		   "%3X  %8llu %8llu %8llu %8llu %8llu %8llu %8llu\n",
@@ -228,7 +240,9 @@ static int uoa_stats_init(void)
 		struct uoa_cpu_stats *cs;
 
 		cs = per_cpu_ptr(uoa_stats.cpustats, i);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 		u64_stats_init(&cs->syncp);
+#endif
 	}
 
 	proc_create("uoa_stats", 0, init_net.proc_net, &uoa_stats_fops);
@@ -273,11 +287,18 @@ static inline void uoa_map_hash(struct uoa_map *um)
 	unsigned int hash = uoa_map_hash_key(um);
 	struct hlist_head *head = &uoa_map_tab[hash];
 	struct uoa_map *cur;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+	struct hlist_node *node;
+#endif
 
 	um_lock_bh(hash);
 
 	/* overwrite existing mapping */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 	hlist_for_each_entry_rcu(cur, head, hlist) {
+#else
+	hlist_for_each_entry_rcu(cur, node, head, hlist) {
+#endif
 		if (um->saddr == cur->saddr &&
 		    um->daddr == cur->daddr &&
 		    um->sport == cur->sport &&
@@ -333,10 +354,17 @@ static inline struct uoa_map *uoa_map_get(__be32 saddr, __be32 daddr,
 	unsigned int hash = __uoa_map_hash_key(saddr, daddr, sport, dport);
 	struct hlist_head *head = &uoa_map_tab[hash];
 	struct uoa_map *um = NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+	struct hlist_node *node;
+#endif
 
 	um_lock_bh(hash);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 	hlist_for_each_entry_rcu(um, head, hlist) {
+#else
+	hlist_for_each_entry_rcu(um, node, head, hlist) {
+#endif
 		/* we allow daddr being set to wildcard (zero),
 		 * since UDP server may bind INADDR_ANY */
 		if (um->saddr == saddr && (daddr == 0 || um->daddr == daddr) &&
@@ -398,8 +426,15 @@ flush_again:
 		struct uoa_map *um;
 		struct hlist_node *n;
 		struct hlist_head *head = &uoa_map_tab[i];
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+		struct hlist_node *node;
+#endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 		hlist_for_each_entry_safe(um, n, head, hlist) {
+#else
+		hlist_for_each_entry_safe(um, node, n, head, hlist) {
+#endif
 			if (timer_pending(&um->timer))
 				del_timer(&um->timer);
 
@@ -644,6 +679,12 @@ static unsigned int uoa_ip_local_in(const struct nf_hook_ops *ops,
 				    const struct net_device *in,
 				    const struct net_device *out,
 				    const struct nf_hook_state *state)
+#elif RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(6,4)
+static unsigned int uoa_ip_local_in(unsigned int hooknum,
+				    struct sk_buff *skb,
+				    const struct net_device *in,
+				    const struct net_device *out,
+				    int (*okfn)(struct sk_buff *))
 #else
 #error "Pls modify the definition according to kernel version."
 #endif

@@ -50,7 +50,9 @@ struct uoa_cpu_stats {
 	__u64   invalid;	/* bad uoa info found. */
 
 #ifdef __KERNEL__
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 	struct u64_stats_sync syncp;
+#endif
 #endif
 } __attribute__((__packed__));
 
