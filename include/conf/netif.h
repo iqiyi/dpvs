@@ -33,22 +33,6 @@ typedef uint8_t lcoreid_t;
 typedef uint16_t portid_t;
 typedef uint16_t queueid_t;
 
-#define NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD  0x1<<3
-#define NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD  0x1<<4
-#define NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD 0x1<<5
-#define NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD 0x1<<6
-#define NETIF_PORT_FLAG_FORWARD2KNI   0x1<<9
-
-#define ETH_LINK_DOWN           0
-#define ETH_LINK_UP             1
-
-#define ETH_LINK_HALF_DUPLEX    0 /**< Half-duplex connection. */
-#define ETH_LINK_FULL_DUPLEX    1 /**< Full-duplex connection. */
-#define ETH_LINK_DOWN           0 /**< Link is down. */
-#define ETH_LINK_UP             1 /**< Link is up. */
-#define ETH_LINK_FIXED          0 /**< No autonegotiation. */
-#define ETH_LINK_AUTONEG        1 /**< Autonegotiated. */
-
 /*** end of type from dpdk.h ***/
 
 enum {
@@ -56,7 +40,7 @@ enum {
     SOCKOPT_NETIF_GET_LCORE_MASK = 500,
     SOCKOPT_NETIF_GET_LCORE_BASIC,
     SOCKOPT_NETIF_GET_LCORE_STATS,
-    SOCKOPT_NETIF_GET_PORT_NUM,
+    SOCKOPT_NETIF_GET_PORT_LIST,
     SOCKOPT_NETIF_GET_PORT_BASIC,
     SOCKOPT_NETIF_GET_PORT_STATS,
     SOCKOPT_NETIF_GET_PORT_EXT_INFO,
@@ -105,23 +89,13 @@ typedef struct netif_lcore_stats_get
     uint64_t dropped; // software packet drop
 } netif_lcore_stats_get_t;
 
-/* nic number in use */
-typedef struct netif_nic_num_get
-{
-    uint16_t nic_num;
-    uint8_t phy_pid_base;
-    uint8_t phy_pid_end;
-    uint8_t bond_pid_base;
-    uint8_t bond_pid_end;
-    char pid_name_map[NETIF_MAX_PORTS][DEVICE_NAME_MAX_LEN];
-} netif_nic_num_get_t;
-
 struct port_id_name
 {
     portid_t id;
     char name[DEVICE_NAME_MAX_LEN];
 } __attribute__((__packed__));
 
+/* all nics in use */
 typedef struct netif_nic_list_get
 {
     uint16_t nic_num;
@@ -132,23 +106,20 @@ typedef struct netif_nic_list_get
     struct port_id_name idname[0];
 } netif_nic_list_get_t;
 
-
-
 /* basic nic info specified by port_id */
 typedef struct netif_nic_basic_get
 {
     portid_t port_id;
     char name[32];
-    uint16_t flags; /* NETIF_PORT_FLAG_ */
     uint8_t nrxq;
     uint8_t ntxq;
     char addr[32];
     uint8_t socket_id;
     uint16_t mtu;
     uint32_t link_speed; /* ETH_SPEED_NUM_ */
-    uint16_t link_duplex:1; /* ETH_LINK_[HALF/FULL]_DUPLEX */
-    uint16_t link_autoneg:1; /* ETH_LINK_SPEED_[AUTONEG/FIXED] */
-    uint16_t link_status:1; /* ETH_LINK_[DOWN/UP] */
+    char link_status[16];
+    char link_duplex[16];
+    char link_autoneg[16];
     uint16_t promisc:1; /* promiscuous mode */
     uint16_t fwd2kni:1;
     uint16_t tc_egress:1;
@@ -162,28 +133,28 @@ typedef struct netif_nic_basic_get
 /* nic statistics specified by port_id */
 typedef struct netif_nic_stats_get {
     portid_t port_id;
-	uint32_t mbuf_avail;/* Number of available mbuf in pktmempool */
-	uint32_t mbuf_inuse;/* Number of used mbuf in pktmempool */
-	uint64_t ipackets;  /* Total number of successfully received packets. */
-	uint64_t opackets;  /* Total number of successfully transmitted packets.*/
-	uint64_t ibytes;    /* Total number of successfully received bytes. */
-	uint64_t obytes;    /* Total number of successfully transmitted bytes. */
-	uint64_t imissed;
-	/* Total of RX packets dropped by the HW,
-	 * because there are no available mbufs (i.e. RX queues are full). */
-	uint64_t ierrors;   /* Total number of erroneous received packets. */
-	uint64_t oerrors;   /* Total number of failed transmitted packets. */
-	uint64_t rx_nombuf; /* Total number of RX mbuf allocation failures. */
-	uint64_t q_ipackets[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of queue RX packets. */
-	uint64_t q_opackets[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of queue TX packets. */
-	uint64_t q_ibytes[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of successfully received queue bytes. */
-	uint64_t q_obytes[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of successfully transmitted queue bytes. */
-	uint64_t q_errors[RTE_ETHDEV_QUEUE_STAT_CNTRS];
-	/* Total number of queue packets received that are dropped. */
+    uint32_t mbuf_avail;/* Number of available mbuf in pktmempool */
+    uint32_t mbuf_inuse;/* Number of used mbuf in pktmempool */
+    uint64_t ipackets;  /* Total number of successfully received packets. */
+    uint64_t opackets;  /* Total number of successfully transmitted packets.*/
+    uint64_t ibytes;    /* Total number of successfully received bytes. */
+    uint64_t obytes;    /* Total number of successfully transmitted bytes. */
+    uint64_t imissed;
+    /* Total of RX packets dropped by the HW,
+     * because there are no available mbufs (i.e. RX queues are full). */
+    uint64_t ierrors;   /* Total number of erroneous received packets. */
+    uint64_t oerrors;   /* Total number of failed transmitted packets. */
+    uint64_t rx_nombuf; /* Total number of RX mbuf allocation failures. */
+    uint64_t q_ipackets[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+    /* Total number of queue RX packets. */
+    uint64_t q_opackets[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+    /* Total number of queue TX packets. */
+    uint64_t q_ibytes[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+    /* Total number of successfully received queue bytes. */
+    uint64_t q_obytes[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+    /* Total number of successfully transmitted queue bytes. */
+    uint64_t q_errors[RTE_ETHDEV_QUEUE_STAT_CNTRS];
+    /* Total number of queue packets received that are dropped. */
 } netif_nic_stats_get_t;
 
 /* dev info specified by port_id */
