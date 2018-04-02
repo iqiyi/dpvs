@@ -226,7 +226,7 @@ static inline bool neigh_key_cmp(const struct neighbour_entry *neighbour,
            &&(neighbour->port->id==port->id));
 }
 
-static void neigh_entry_expire(void *data)
+static int neigh_entry_expire(void *data)
 {
     struct neighbour_entry *neighbour = data;
     struct timeval timeout;
@@ -266,7 +266,7 @@ static void neigh_entry_expire(void *data)
 
     rte_free(neighbour);
 
-    return;
+    return DTIMER_CB_RET_FREED;
 
 used:
     neighbour->used = 0;
@@ -274,7 +274,7 @@ used:
     timeout.tv_sec = arp_timeout;
     timeout.tv_usec = 0;
     dpvs_timer_update(&neighbour->timer, &timeout, false);
-    return;
+    return DTIMER_CB_RET_ALIVE;
 }
 
 
@@ -905,6 +905,31 @@ static struct dpvs_sockopts neigh_sockopts = {
 };
 
 static struct netif_lcore_loop_job neigh_sync_job;
+
+/*don't need lock because it is always in master core*/
+static int send_periodic_arp(void *data)
+{
+    struct neighbour_entry *neighbour;
+    union inet_addr src_ip;
+    union inet_addr dst_ip;
+    int i = 0;
+    memset(&src_ip, 0, sizeof(src_ip));
+    memset(&dst_ip, 0, sizeof(dst_ip));
+    for (i = 0; i < ARP_TAB_SIZE; i++) {
+        list_for_each_entry(neighbour, &neigh_table[master_cid][i], arp_list) {
+            if (neighbour->flag & NEIGHBOUR_COMPLETED) {
+                dst_ip.in.s_addr = neighbour->ip_addr.s_addr;
+                inet_addr_select(AF_INET, neighbour->port, &dst_ip, 0, &src_ip);
+                if (src_ip.in.s_addr) {
+                    if (neigh_send_arp(neighbour->port, src_ip.in.s_addr, dst_ip.in.s_addr)){
+                        RTE_LOG(INFO, NEIGHBOUR, "[%s] send arp failed\n", __func__);
+                    }
+                }
+            }
+        }
+    }
+    return DTIMER_CB_RET_ALIVE;
+}
 
 static int arp_init(void)
 {
