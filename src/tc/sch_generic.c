@@ -103,11 +103,11 @@ static int sch_recycle(void *arg)
     if (rte_atomic32_read(&sch->refcnt)) {
         dpvs_timer_reset(&sch->rc_timer, true);
         RTE_LOG(WARNING, TC, "%s: sch %u is in use.\n", __func__, sch->handle);
-        return DTIMER_CB_RET_ALIVE;
+        return DTIMER_OK;
     }
 
     __qsch_destroy(sch);
-    return DTIMER_CB_RET_FREED;
+    return DTIMER_STOP;
 }
 
 static void sch_dying(struct Qsch *sch)

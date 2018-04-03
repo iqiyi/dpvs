@@ -243,7 +243,7 @@ static int kni_rtnl_check(void *arg)
             if (errno == EWOULDBLOCK || errno == EAGAIN)
                 break; /* no more events */
             RTE_LOG(WARNING, Kni, "fail to check kni event!\n");
-            return DTIMER_CB_RET_ALIVE;
+            return DTIMER_OK;
         } else if (n == 0)
             break; /* closed */
 
@@ -258,7 +258,7 @@ static int kni_rtnl_check(void *arg)
     }
 
     if (!kni_dev_exist(dev))
-        return DTIMER_CB_RET_ALIVE;
+        return DTIMER_OK;
 
     /* note we should not update kni mac list for every event ! */
     if (update) {
@@ -269,7 +269,7 @@ static int kni_rtnl_check(void *arg)
             RTE_LOG(ERR, Kni, "update maddr of %s Failed!\n", dev->name);
     }
 
-    return DTIMER_CB_RET_ALIVE;
+    return DTIMER_OK;
 }
 
 static int kni_rtnl_init(struct netif_port *dev)

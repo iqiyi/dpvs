@@ -266,7 +266,7 @@ static int neigh_entry_expire(void *data)
 
     rte_free(neighbour);
 
-    return DTIMER_CB_RET_FREED;
+    return DTIMER_STOP;
 
 used:
     neighbour->used = 0;
@@ -274,7 +274,7 @@ used:
     timeout.tv_sec = arp_timeout;
     timeout.tv_usec = 0;
     dpvs_timer_update(&neighbour->timer, &timeout, false);
-    return DTIMER_CB_RET_ALIVE;
+    return DTIMER_OK;
 }
 
 
@@ -928,7 +928,7 @@ static int send_periodic_arp(void *data)
             }
         }
     }
-    return DTIMER_CB_RET_ALIVE;
+    return DTIMER_OK;
 }
 
 static int arp_init(void)

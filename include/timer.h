@@ -26,9 +26,10 @@
  * and do not block.
  */
 enum {
-    DTIMER_CB_RET_ALIVE = 0,
-    DTIMER_CB_RET_FREED,
+    DTIMER_OK = 0,
+    DTIMER_STOP,
 };
+
 typedef int (*dpvs_timer_cb_t)(void *arg);
 
 

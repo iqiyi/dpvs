@@ -193,7 +193,7 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
     err = handler(priv);
     rte_spinlock_lock(&sched->lock);
 
-    if (err != DTIMER_CB_RET_ALIVE || !timer->is_period)
+    if (err != DTIMER_OK || !timer->is_period)
         return;
 
     /* re-schedule for periodic timer */

@@ -92,7 +92,7 @@ static int minute_timer_expire( void *priv)
     tv.tv_usec = 0;
     dpvs_timer_update(&g_minute_timer, &tv, true);
 
-    return DTIMER_CB_RET_ALIVE;
+    return DTIMER_OK;
 }
 
 #ifdef CONFIG_SYNPROXY_DEBUG
@@ -109,7 +109,7 @@ static int second_timer_expire(void *priv)
     tv.tv_usec = 0;
     dpvs_timer_sched(&g_second_timer, &tv, second_timer_expire, NULL, true);
 
-    return DTIMER_CB_RET_ALIVE;
+    return DTIMER_OK;
 }
 #endif
 

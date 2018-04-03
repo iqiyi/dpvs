@@ -219,7 +219,7 @@ static int ifa_expire(void *arg)
         tv.tv_usec = 0;
         dpvs_timer_update(&ifa->timer, &tv, true);
         rte_rwlock_write_unlock(&in_addr_lock);
-        return DTIMER_CB_RET_ALIVE;
+        return DTIMER_OK;
     }
 
     list_del(&ifa->d_list);
@@ -237,7 +237,7 @@ static int ifa_expire(void *arg)
     rte_atomic32_dec(&in_addr_cnt);
 
     rte_rwlock_write_unlock(&in_addr_lock);
-    return DTIMER_CB_RET_FREED;
+    return DTIMER_STOP;
 }
 
 static int ifa_add_set(int af, const struct netif_port *dev, 

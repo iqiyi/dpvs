@@ -382,13 +382,13 @@ static int conn_expire(void *priv)
 
         /* expire later */
         dp_vs_conn_put(conn);
-        return DTIMER_CB_RET_ALIVE;
+        return DTIMER_OK;
     }
 
     /* somebody is controlled by me, expire later */
     if (rte_atomic32_read(&conn->n_control)) {
         dp_vs_conn_put(conn);
-        return DTIMER_CB_RET_ALIVE;
+        return DTIMER_OK;
     }
 
     /* unhash it then no further user can get it,
@@ -455,7 +455,7 @@ static int conn_expire(void *priv)
 #ifdef CONFIG_DPVS_IPVS_DEBUG
         conn_dump("del conn: ", conn);
 #endif
-        return DTIMER_CB_RET_FREED;
+        return DTIMER_STOP;
     }
 
     conn_hash(conn);
@@ -468,7 +468,7 @@ static int conn_expire(void *priv)
         dpvs_timer_update(&conn->timer, &conn->timeout, false);
 
     rte_atomic32_dec(&conn->refcnt);
-    return DTIMER_CB_RET_ALIVE;
+    return DTIMER_OK;
 }
 
 static void conn_flush(void)
