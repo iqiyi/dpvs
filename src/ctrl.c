@@ -845,6 +845,9 @@ static inline int msg_init(void)
     char ring_name[16];
     char buf[4096];
 
+    if (DPVS_MAX_LCORE >= 64)
+        return EDPVS_NOTSUPP;
+
     /* lcore mask init */
     slave_lcore_mask = 0;
     slave_lcore_nb = 0;
