@@ -18,7 +18,7 @@ global_defs {
 
 ! netif config
 netif_defs {
-    <init> pktpool_size     524287  <65535, 1023-134217728>
+    <init> pktpool_size     2097151 <65535, 1023-134217728>
     <init> pktpool_cache    256     <256, 32-8192>
 
     <init> device dpdk0 {
