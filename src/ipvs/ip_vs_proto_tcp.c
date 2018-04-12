@@ -20,6 +20,7 @@
 #include "common.h"
 #include "dpdk.h"
 #include "ipv4.h"
+#include "neigh.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/proto.h"
 #include "ipvs/proto_tcp.h"
@@ -506,6 +507,11 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
                 struct rte_mbuf *mbuf, int *direct, bool reverse, bool *drop)
 {
     struct tcphdr *th, _tcph;
+    struct dp_vs_conn *conn;
+    struct route_entry *nb_rt;
+    struct flow4 fl4;
+    struct in_addr nexthop;
+    struct ipv4_hdr *ipv4h = ip4_hdr(mbuf);
     assert(proto && iph && mbuf);
 
     th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
@@ -517,8 +523,30 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
         return NULL;
     }
 
-    return dp_vs_conn_get(iph->af, iph->proto, 
-            &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);
+    conn = dp_vs_conn_get(iph->af, iph->proto, 
+             &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);
+
+     /*L2 confirm neighbour*/
+     if (likely(conn != NULL)) {
+         if (th->ack) {
+             memset(&fl4, 0, sizeof(struct flow4));
+             fl4.daddr.s_addr = ipv4h->src_addr;
+             fl4.saddr = conn->laddr.in;
+             fl4.tos = ipv4h->type_of_service;
+             nb_rt = route4_output(&fl4);
+             
+             if (nb_rt) {
+                 if (nb_rt->gw.s_addr == htonl(INADDR_ANY))
+                     nexthop.s_addr = ipv4h->src_addr;
+                 else
+                     nexthop = nb_rt->gw;
+                 neigh_confirm(nexthop, nb_rt->port);
+                 route4_put(nb_rt);
+             }
+         }
+     }
+     
+     return conn;
 }
 
 static int tcp_fnat_in_handler(struct dp_vs_proto *proto,

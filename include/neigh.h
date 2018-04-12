@@ -57,6 +57,7 @@ int neigh_resolve_input(struct rte_mbuf *mbuf, struct netif_port *port);
 
 void neigh_process_ring(void *arg);
 
+void neigh_confirm(struct in_addr nexthop, struct netif_port *port);
 
 /* ethSwap(u16_t * to, u16_t * from) - Swap two 16 bit values */
 static __inline__ void
@@ -97,6 +98,5 @@ inetAddrCopy(void *t, void *f) {
 
     *d = *s; 
 }
-
 
 #endif /* __DPVS_NEIGH_H__ */
