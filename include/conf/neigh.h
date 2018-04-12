@@ -33,6 +33,7 @@ enum {
 struct dp_vs_neigh_conf {
     int af;
     uint8_t flag;
+    uint32_t state;
     union inet_addr ip_addr;
     struct ether_addr eth_addr;
     uint32_t que_num;

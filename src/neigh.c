@@ -51,7 +51,6 @@ struct neighbour_entry {
     struct dpvs_timer timer;
     struct list_head queue_list;
     uint8_t flag;
-    bool used;
     uint32_t que_num;
     uint32_t state;
 } __rte_cache_aligned;
@@ -85,6 +84,16 @@ struct nud_state {
     int next_state[DPVS_NUD_S_IDLE];
 };
 
+#ifdef CONFIG_DPVS_NEIGH_DEBUG
+static const char *nud_state_names[] = {
+    [DPVS_NUD_S_NONE]      = "NONE",
+    [DPVS_NUD_S_STATE]     = "STATE",
+    [DPVS_NUD_S_REACHABLE] = "REACHABLE",
+    [DPVS_NUD_S_PROBE]     = "PROBE",
+    [DPVS_NUD_S_DELAY]     = "DELAY",
+    [DPVS_NUD_S_IDLE]      = "BUG"
+};
+#endif
 
 #define sNNO DPVS_NUD_S_NONE
 #define sNST DPVS_NUD_S_STATE
@@ -290,7 +299,7 @@ static int neigh_entry_expire(struct neighbour_entry *neighbour)
                         __func__);
             else if (ret < 0) {
                 rte_free(mac_param);
-                RTE_LOG(WARNING, NETIF, "%s: neigh ring enqueue failed\n",
+                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring enqueue failed\n",
                         __func__);
             }
         }
@@ -303,15 +312,32 @@ static int neigh_entry_expire(struct neighbour_entry *neighbour)
     return DTIMER_STOP;
 }
 
+#ifdef CONFIG_DPVS_NEIGH_DEBUG
+static const char *nud_state_name(int state)
+{
+    if (state >= DPVS_NUD_S_IDLE)
+         return "ERR!";
+    return nud_state_names[state] ? nud_state_names[state] :"<Unknown>";
+}
+#endif
 
 static void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx)
 {
     struct timeval timeout;
 
-    if (nud_states[idx].next_state[neighbour->state] != DPVS_NUD_S_IDLE) {
+    if ((nud_states[idx].next_state[neighbour->state] != DPVS_NUD_S_IDLE)
+        && !(neighbour->flag & NEIGHBOUR_STATIC)) {
+#ifdef CONFIG_DPVS_NEIGH_DEBUG
+        int old_state = neighbour->state;
+#endif
         neighbour->state = nud_states[idx].next_state[neighbour->state];
         timeout.tv_sec = nud_timeouts[neighbour->state];
+        timeout.tv_usec = 0;
         dpvs_timer_update(&neighbour->timer, &timeout, false);
+#ifdef CONFIG_DPVS_NEIGH_DEBUG
+        RTE_LOG(DEBUG, NEIGHBOUR, "%s trans state to %s.\n",
+               nud_state_name(old_state), nud_state_name(neighbour->state));
+#endif
     }
 }
 
@@ -347,7 +373,8 @@ void neigh_confirm(struct in_addr nexthop, struct netif_port *port)
     /*find nexhop/neighbour to confirm, no matter whether it is the route in*/
     hashkey = neigh_hashkey(nexthop.s_addr, port);
     list_for_each_entry(neighbour, &neigh_table[cid][hashkey], arp_list) {
-        if (neigh_key_cmp(neighbour, &nexthop.s_addr, port)) {
+        if (neigh_key_cmp(neighbour, &nexthop.s_addr, port) &&
+            !(neighbour->flag & NEIGHBOUR_STATIC)) {
             neigh_entry_state_trans(neighbour, 2);
         }
     }
@@ -405,8 +432,6 @@ neigh_add_table(uint32_t ipaddr, const struct ether_addr* eth_addr,
     struct timeval delay;
     lcoreid_t cid = rte_lcore_id();
 
-    delay.tv_sec = arp_timeout;
-    delay.tv_usec = 0;
     new_neighbour = rte_zmalloc("new_neighbour_entry",
                     sizeof(struct neighbour_entry), RTE_CACHE_LINE_SIZE);
     if(new_neighbour == NULL)
@@ -425,7 +450,6 @@ neigh_add_table(uint32_t ipaddr, const struct ether_addr* eth_addr,
     }
 
     new_neighbour->port = port;
-    new_neighbour->used = 0;
     new_neighbour->que_num = 0;
     delay.tv_sec = nud_timeouts[new_neighbour->state];
     delay.tv_usec = 0;
@@ -531,7 +555,7 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
         ipaddr = arp->arp_data.arp_sip;
         hashkey = neigh_hashkey(ipaddr, port);
         neighbour = neigh_lookup_entry(&ipaddr, port, hashkey);
-        if(neighbour) {
+        if(neighbour && !(neighbour->flag & NEIGHBOUR_STATIC)) {
             neigh_edit(neighbour, &arp->arp_data.arp_sha, hashkey);
             neigh_entry_state_trans(neighbour, 1);
         } else {
@@ -806,6 +830,7 @@ static void neigh_fill_param(struct dp_vs_neigh_conf  *param,
     param->flag = entry->flag;
     ether_addr_copy(&entry->eth_addr,&param->eth_addr);
     param->que_num = entry->que_num;
+    param->state = entry->state;
 }
 
 static int neigh_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
