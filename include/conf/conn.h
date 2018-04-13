@@ -43,7 +43,7 @@ enum conn_get_result {
 
 enum {
     /* get */
-    SOCKOPT_GET_CONN_ALL = 900,
+    SOCKOPT_GET_CONN_ALL = 1000,
     SOCKOPT_GET_CONN_SPECIFIED,
 };
 

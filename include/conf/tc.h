@@ -37,7 +37,7 @@ typedef enum {
     SOCKOPT_TC_REPLACE,
 
     /* get */
-    SOCKOPT_TC_SHOW,
+    SOCKOPT_TC_SHOW = 900,
 } tc_oper_t;
 
 typedef enum {
