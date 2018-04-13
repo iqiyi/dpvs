@@ -170,7 +170,7 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
         return NULL;
 
     /* syn back ifname, it may generated. */
-    snprintf(params.ifname, IFNAMSIZ, "%s", dev->name);
+    snprintf(params.ifname, IFNAMSIZ, "%.15s", dev->name);
 
     tnl = netif_priv(dev);
 

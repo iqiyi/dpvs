@@ -601,7 +601,7 @@ static void ifa_fill_param(int af, struct inet_addr_param *param,
     param->bcast    = ifa->bcast;
     param->scope    = ifa->scope;
     param->flags    = ifa->flags;
-    snprintf(param->ifname, sizeof(param->ifname), "%s", ifa->idev->dev->name);
+    snprintf(param->ifname, sizeof(param->ifname), "%.15s", ifa->idev->dev->name);
 
     if (ifa->flags & IFA_F_PERMANENT) {
         param->valid_lft = param->prefered_lft = 0;
