@@ -3810,7 +3810,7 @@ int netif_virtual_devices_add(void)
         bond_pid_base = phy_pid_end;
 
     list_for_each_entry_reverse(bond_cfg, &bond_list, bond_list_node) {
-        if (bond_cfg->slaves[0] < 0) {
+        if (!bond_cfg->slaves[0]) {
             RTE_LOG(WARNING, NETIF, "%s: no slaves configured for %s, skip ...\n",
                     __func__, bond_cfg->name);
             return EDPVS_INVAL;
