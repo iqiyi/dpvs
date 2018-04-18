@@ -1447,7 +1447,7 @@ static void conn_ctrl_term(void)
         rte_free(calst);
     }
 
-    sockopt_register(&conn_sockopts);
+    sockopt_unregister(&conn_sockopts);
     unregister_conn_get_msg();
 }
 
