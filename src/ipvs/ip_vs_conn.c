@@ -1446,7 +1446,6 @@ static void conn_ctrl_term(void)
         list_del_init(&calst->ca_list);
         rte_free(calst);
     }
-    // Here should call sockopt_unregister() function.
     sockopt_unregister(&conn_sockopts);
     unregister_conn_get_msg();
 }
