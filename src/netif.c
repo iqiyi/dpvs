@@ -3729,7 +3729,7 @@ static int netif_loop(void *dummy)
     uint64_t loop_start, loop_end;
 #endif
 
-    assert(LCORE_ID_ANY != cid && cid < DPVS_MAX_LCORE);
+    assert(LCORE_ID_ANY != cid);
 
     try_isol_rxq_lcore_loop();
     if (0 == lcore_conf[lcore2index[cid]].nports) {
