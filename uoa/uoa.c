@@ -264,9 +264,10 @@ static inline void uoa_map_dump(const struct uoa_map *um, const char *pref)
 	if (likely(!uoa_debug))
 		return;
 
-	pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d\n", pref ? : "",
+	pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d, refcnt %d\n", pref ? : "",
 		&um->saddr, ntohs(um->sport), &um->daddr, ntohs(um->dport),
-		&um->optuoa.op_addr, ntohs(um->optuoa.op_port));
+		&um->optuoa.op_addr, ntohs(um->optuoa.op_port),
+		atomic_read(&um->refcnt));
 }
 
 static inline unsigned int __uoa_map_hash_key(__be32 saddr, __be32 daddr,
@@ -311,7 +312,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 			kmem_cache_free(uoa_map_cache, um);
 		}
 
-		uoa_map_dump(cur, "update:");
+		uoa_map_dump(cur, "upd:");
 		goto hashed;
 	}
 
@@ -371,13 +372,15 @@ static inline struct uoa_map *uoa_map_get(__be32 saddr, __be32 daddr,
 		    um->sport == sport && um->dport == dport) {
 			mod_timer(&um->timer, jiffies + uoa_map_timeout * HZ);
 			atomic_inc(&um->refcnt);
-			break;
+
+			um_unlock_bh(hash);
+			return um;
 		}
 	}
 
 	um_unlock_bh(hash);
 
-	return um;
+	return NULL;
 }
 
 static inline void uoa_map_put(struct uoa_map *um)
@@ -391,8 +394,7 @@ static inline void __uoa_map_expire(struct uoa_map *um, struct timer_list *timer
 		/* try again if some one is using it */
 		mod_timer(timer, jiffies + uoa_map_timeout * HZ);
 
-		pr_warn("expire delaye: refcnt: %d\n",
-			 atomic_read(&um->refcnt));
+		uoa_map_dump(um, "expire delayed:");
 		return;
 	}
 
@@ -430,6 +432,8 @@ flush_again:
 		struct hlist_node *node;
 #endif
 
+		um_lock_bh(i);
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 		hlist_for_each_entry_safe(um, n, head, hlist) {
 #else
@@ -441,13 +445,19 @@ flush_again:
 			if (atomic_read(&um->refcnt) != 0)
 				continue;
 
-			hlist_del(&um->hlist);
+			uoa_map_dump(um, "flu:");
+
+			hlist_del_rcu(&um->hlist);
 			atomic_dec(&uoa_map_count);
 			kmem_cache_free(uoa_map_cache, um);
 		}
+
+
+		um_unlock_bh(i);
 	}
 
 	if (atomic_read(&uoa_map_count) > 0) {
+		pr_debug("%s: again\n", __func__);
 		schedule();
 		goto flush_again;
 	}
@@ -490,7 +500,7 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 		return -ENOENT;
 	}
 
-	uoa_map_dump(um, "lookup:");
+	uoa_map_dump(um, "hit:");
 
 	if (likely(um->optuoa.op_code == IPOPT_UOA &&
 		   um->optuoa.op_len == IPOLEN_UOA)) {
