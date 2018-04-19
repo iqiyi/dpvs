@@ -108,9 +108,24 @@ struct dp_vs_laddr {
 
 static uint32_t dp_vs_laddr_max_trails = 16;
 
+static inline int __laddr_step(struct dp_vs_service *svc)
+{
+   /* Why can't we always use the next laddr(rr scheduler) to setup new session?
+    * Because realserver rr/wrr scheduler may get synchronous with the laddr rr
+    * scheduler. If so, the local IP may stay invariant for a specified realserver,
+    * which is a hurt for realserver concurrency performance. To avoid the problem,
+    * we just choose 5% sessions to use the one after the next laddr randomly.
+    * */
+    if (strncmp(svc->scheduler->name, "rr", 2) == 0 ||
+            strncmp(svc->scheduler->name, "wrr", 3) == 0)
+        return (random() % 100) < 5 ? 2 : 1;
+
+    return 1;
+}
 
 static inline struct dp_vs_laddr *__get_laddr(struct dp_vs_service *svc)
 {
+    int step;
     struct dp_vs_laddr *laddr = NULL;
 
     /* if list not inited ? list_empty() returns true ! */
@@ -120,13 +135,16 @@ static inline struct dp_vs_laddr *__get_laddr(struct dp_vs_service *svc)
         return NULL;
     }
 
-    if (unlikely(!svc->laddr_curr))
-        svc->laddr_curr = svc->laddr_list.next;
-    else
-        svc->laddr_curr = svc->laddr_curr->next;
+    step = __laddr_step(svc);
+    while (step-- > 0) {
+        if (unlikely(!svc->laddr_curr))
+            svc->laddr_curr = svc->laddr_list.next;
+        else
+            svc->laddr_curr = svc->laddr_curr->next;
 
-    if (svc->laddr_curr == &svc->laddr_list)
-        svc->laddr_curr = svc->laddr_list.next;
+        if (svc->laddr_curr == &svc->laddr_list)
+            svc->laddr_curr = svc->laddr_list.next;
+    }
 
     laddr = list_entry(svc->laddr_curr, struct dp_vs_laddr, list);
     rte_atomic32_inc(&laddr->refcnt);
