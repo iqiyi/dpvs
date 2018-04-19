@@ -28,6 +28,8 @@
 
 /////////////////////////////////// lcore  msg ///////////////////////////////////////////
 
+#define MSG_MAX_LCORE_SUPPORTED 64
+
 uint64_t slave_lcore_mask;     /* bit-wise enabled lcores */
 uint8_t slave_lcore_nb;        /* slave lcore number */
 lcoreid_t master_lcore;        /* master lcore id */
@@ -824,7 +826,7 @@ static int unregister_built_in_msg(void)
     mt.mode = DPVS_MSG_UNICAST;
     mt.unicast_msg_cb = msg_type_unreg_cb;
 
-    for ( ii = 0; ii < DPVS_MAX_LCORE; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (!rte_lcore_is_enabled(ii))
             continue;
         mt.cid = ii;
@@ -845,7 +847,7 @@ static inline int msg_init(void)
     char ring_name[16];
     char buf[4096];
 
-    if (DPVS_MAX_LCORE >= 64)
+    if (DPVS_MAX_LCORE > MSG_MAX_LCORE_SUPPORTED)
         return EDPVS_NOTSUPP;
 
     /* lcore mask init */
@@ -872,7 +874,7 @@ static inline int msg_init(void)
     INIT_LIST_HEAD(&mc_wait_list.list);
 
     /* per-lcore msg queue */
-    for (ii =0; ii < DPVS_MAX_LCORE; ii++) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         snprintf(ring_name, sizeof(ring_name), "msg_ring_%d", ii);
         msg_ring[ii] = rte_ring_create(ring_name, msg_ring_size,
                 rte_socket_id(), 0/*RING_F_SC_DEQ*/);
