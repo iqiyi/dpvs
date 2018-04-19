@@ -148,7 +148,7 @@ static uint64_t g_isol_rx_lcore_mask;
 
 bool is_lcore_id_valid(lcoreid_t cid)
 {
-    if (unlikely(cid >= 63 || cid >= DPVS_MAX_LCORE))
+    if (unlikely(cid >= DPVS_MAX_LCORE))
         return false;
 
     return ((cid == rte_get_master_lcore()) ||
@@ -158,7 +158,7 @@ bool is_lcore_id_valid(lcoreid_t cid)
 
 static bool is_lcore_id_fwd(lcoreid_t cid)
 {
-    if (unlikely(cid >= 63 || cid >= DPVS_MAX_LCORE))
+    if (unlikely(cid >= DPVS_MAX_LCORE))
         return false;
 
     return ((cid == rte_get_master_lcore()) ||
@@ -3810,7 +3810,7 @@ int netif_virtual_devices_add(void)
         bond_pid_base = phy_pid_end;
 
     list_for_each_entry_reverse(bond_cfg, &bond_list, bond_list_node) {
-        if (!bond_cfg->slaves[0]) {
+        if (!bond_cfg->slaves[0][0]) {
             RTE_LOG(WARNING, NETIF, "%s: no slaves configured for %s, skip ...\n",
                     __func__, bond_cfg->name);
             return EDPVS_INVAL;
