@@ -30,6 +30,15 @@ enum {
     SOCKOPT_SET_NEIGH_DEL,
 };
 
+enum {
+    DPVS_NUD_S_NONE        = 0, 
+    DPVS_NUD_S_SEND,
+    DPVS_NUD_S_REACHABLE,
+    DPVS_NUD_S_PROBE,
+    DPVS_NUD_S_DELAY,
+    DPVS_NUD_S_MAX /*Reserved*/
+};
+
 struct dp_vs_neigh_conf {
     int af;
     uint8_t flag;

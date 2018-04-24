@@ -71,51 +71,44 @@ struct raw_neigh {
 #define NEIGHBOUR_HASHED     0x01
 #define NEIGHBOUR_STATIC     0x02
 
-enum {
-    DPVS_NUD_S_NONE        = 0,
-    DPVS_NUD_S_STATE,
-    DPVS_NUD_S_REACHABLE,
-    DPVS_NUD_S_PROBE,
-    DPVS_NUD_S_DELAY,
-    DPVS_NUD_S_IDLE /*Reserved*/
-};
-
 struct nud_state {
-    int next_state[DPVS_NUD_S_IDLE];
+    int next_state[DPVS_NUD_S_MAX];
 };
 
 #ifdef CONFIG_DPVS_NEIGH_DEBUG
 static const char *nud_state_names[] = {
     [DPVS_NUD_S_NONE]      = "NONE",
-    [DPVS_NUD_S_STATE]     = "STATE",
+    [DPVS_NUD_S_SEND]      = "SEND",
     [DPVS_NUD_S_REACHABLE] = "REACHABLE",
     [DPVS_NUD_S_PROBE]     = "PROBE",
     [DPVS_NUD_S_DELAY]     = "DELAY",
-    [DPVS_NUD_S_IDLE]      = "BUG"
+    [DPVS_NUD_S_MAX]       = "BUG"
 };
 #endif
 
 #define sNNO DPVS_NUD_S_NONE
-#define sNST DPVS_NUD_S_STATE
+#define sNSD DPVS_NUD_S_SEND
 #define sNRE DPVS_NUD_S_REACHABLE
 #define sNPR DPVS_NUD_S_PROBE
 #define sNDE DPVS_NUD_S_DELAY
-#define sNID DPVS_NUD_S_IDLE
 
-static int nud_timeouts[DPVS_NUD_S_IDLE] = {
+#define DPVS_NUD_S_KEEP DPVS_NUD_S_MAX
+#define sNKP DPVS_NUD_S_KEEP /*Keep state and do not reset timer*/
+
+static int nud_timeouts[DPVS_NUD_S_MAX] = {
     [DPVS_NUD_S_NONE]        = 2,
-    [DPVS_NUD_S_STATE]       = 3,
+    [DPVS_NUD_S_SEND]        = 3,
     [DPVS_NUD_S_REACHABLE]   = 60,
     [DPVS_NUD_S_PROBE]       = 30,
     [DPVS_NUD_S_DELAY]       = 3,
 };
 
 static struct nud_state nud_states[] = {
-/*                sNNO, sNST, sNRE, sNPR, sNDE*/
-/*send arp*/    {{sNST, sNST, sNID, sNDE, sNDE}},
+/*                sNNO, sNSD, sNRE, sNPR, sNDE*/
+/*send arp*/    {{sNSD, sNSD, sNKP, sNDE, sNDE}},
 /*recv arp*/    {{sNRE, sNRE, sNRE, sNRE, sNRE}},
-/*ack confirm*/ {{sNID, sNID, sNRE, sNRE, sNRE}},
-/*mbuf ref*/    {{sNID, sNID, sNID, sNPR, sNID}},
+/*ack confirm*/ {{sNKP, sNKP, sNRE, sNRE, sNRE}},
+/*mbuf ref*/    {{sNKP, sNKP, sNKP, sNPR, sNKP}},
 /*timeout*/     {{sNNO, sNNO, sNPR, sNNO, sNNO}},
 };
 
@@ -315,7 +308,7 @@ static int neigh_entry_expire(struct neighbour_entry *neighbour)
 #ifdef CONFIG_DPVS_NEIGH_DEBUG
 static const char *nud_state_name(int state)
 {
-    if (state >= DPVS_NUD_S_IDLE)
+    if (state >= DPVS_NUD_S_KEEP)
          return "ERR!";
     return nud_state_names[state] ? nud_state_names[state] :"<Unknown>";
 }
@@ -325,7 +318,8 @@ static void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx)
 {
     struct timeval timeout;
 
-    if ((nud_states[idx].next_state[neighbour->state] != DPVS_NUD_S_IDLE)
+    /*DPVS_NUD_S_KEEP is not a real state, just use it to keep original state*/
+    if ((nud_states[idx].next_state[neighbour->state] != DPVS_NUD_S_KEEP)
         && !(neighbour->flag & NEIGHBOUR_STATIC)) {
 #ifdef CONFIG_DPVS_NEIGH_DEBUG
         int old_state = neighbour->state;
@@ -637,7 +631,7 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
 
     if (neighbour) {
         if ((neighbour->state == DPVS_NUD_S_NONE) ||
-           (neighbour->state == DPVS_NUD_S_STATE)) {
+           (neighbour->state == DPVS_NUD_S_SEND)) {
             if (neighbour->que_num > arp_unres_qlen){
                 rte_pktmbuf_free(m);
                 return EDPVS_DROP;
