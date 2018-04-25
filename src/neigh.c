@@ -633,7 +633,11 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
         if ((neighbour->state == DPVS_NUD_S_NONE) ||
            (neighbour->state == DPVS_NUD_S_SEND)) {
             if (neighbour->que_num > arp_unres_qlen){
+                /*don't need arp request now, 
+                  since neighbour will not be confirmed
+                  and it will be released late*/
                 rte_pktmbuf_free(m);
+                RTE_LOG(ERR, NEIGHBOUR, "[%s] arp_unres_queue is full, drop packet\n", __func__);
                 return EDPVS_DROP;
             }
             m_buf = rte_zmalloc("neigh_new_mbuf",
