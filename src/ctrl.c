@@ -484,6 +484,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
 
     rte_rwlock_write_lock(&mc_wait_lock);
     if (mc_wait_list.free_cnt <= 0) {
+        rte_rwlock_write_unlock(&mc_wait_lock);
         RTE_LOG(WARNING, MSGMGR, "%s: multicast msg wait queue full, "
                 "msg dropped and try later...\n", __func__);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
