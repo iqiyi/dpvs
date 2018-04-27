@@ -507,7 +507,7 @@ Your ip:port : 192.168.100.46:13862
 
 > DR mode for two-arm is similar with [two-arm FNAT](#simple-fnat), pls change the forwarding mode by `ipvsadm -g`, and you need NOT config `LIP`. Configuration of `RS`es are the same with one-arm.
 
-<a id=`tunnel`/>
+<a id='tunnel'/>
 
 # Tunnel Mode (one-arm)
 
@@ -659,7 +659,7 @@ virtual_server match SNAT1 {
 
     real_server 123.1.2.1  0 {
         weight 4
-    }   
+    }
 }
 
 virtual_server match SNAT2 {
@@ -671,9 +671,9 @@ virtual_server match SNAT2 {
     oif dpdk1
     iif dpdk0
 
-    real_server 123.1.2.1  0 {  
+    real_server 123.1.2.1  0 {
         weight 4
-    }   
+    }
 }
 ```
 

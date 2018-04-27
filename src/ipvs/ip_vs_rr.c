@@ -40,9 +40,11 @@ static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
     struct dp_vs_dest *dest;
 
     rte_rwlock_write_lock(&svc->sched_lock);
+
     p = (struct list_head *)svc->sched_data;
     p = p->next;
     q = p;
+
     do {
         /* skip list head */
         if (q == &svc->dests) {
@@ -61,7 +63,7 @@ static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
 
     return NULL;
 
-      out:
+out:
     svc->sched_data = q;
     rte_rwlock_write_unlock(&svc->sched_lock);
 
