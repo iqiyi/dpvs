@@ -497,8 +497,7 @@ int dp_vs_xmit_dr(struct dp_vs_proto *proto,
 
     mbuf->packet_type = ETHER_TYPE_IPv4;
     err = neigh_resolve_output(&conn->daddr.in, mbuf, rt->port);
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     return err; 
 
 errout:

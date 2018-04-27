@@ -506,14 +506,14 @@ int sa_fetch(struct netif_port *dev, const struct sockaddr_in *daddr,
     int err;
     assert(saddr);
 
-    if (saddr->sin_addr.s_addr != INADDR_ANY && saddr->sin_port != 0)
+    if (saddr && saddr->sin_addr.s_addr != INADDR_ANY && saddr->sin_port != 0)
         return 0; /* everything is known, why call this function ? */
 
     /* if source IP is assiged, we can find ifa->this_sa_pool
      * without @daddr and @dev. */
-    if (saddr && saddr->sin_addr.s_addr) {
+    if (saddr->sin_addr.s_addr) {
         ifa = inet_addr_ifa_get(AF_INET, dev,
-                                (union inet_addr*)&saddr->sin_addr);
+                (union inet_addr*)&saddr->sin_addr);
         if (!ifa)
             return EDPVS_NOTEXIST;
 
