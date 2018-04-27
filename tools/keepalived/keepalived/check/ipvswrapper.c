@@ -617,8 +617,15 @@ ipvs_set_rule(int cmd, virtual_server_t * vs, real_server_t * rs)
 		if (vs->granularity_persistence)
 			srule->netmask = vs->granularity_persistence;
 
-	if(vs->syn_proxy)
+	if (vs->syn_proxy)
 		srule->flags |= IP_VS_CONN_F_SYNPROXY;
+
+	if (!strcmp(vs->sched, "conhash")) {
+		if (vs->hash_target)
+			srule->flags |= vs->hash_target;
+		else
+			srule->flags |= IP_VS_SVC_F_SIP_HASH; //default
+	}
 
 	/* SVR specific */
 	if (rs) {
