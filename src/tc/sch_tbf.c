@@ -267,11 +267,13 @@ static void tbf_reset(struct Qsch *sch)
 
 static int tbf_dump(struct Qsch *sch, void *arg)
 {
-    struct tbf_sch_priv *priv = qsch_priv(sch);
+    struct tbf_sch_priv *priv;
     struct tc_tbf_qopt *qopt = arg;
 
-    if (!sch && sch->ops != &tbf_sch_ops)
+    if (!sch || sch->ops != &tbf_sch_ops)
         return EDPVS_INVAL;
+
+    priv = qsch_priv(sch);
 
     memset(qopt, 0, sizeof(&qopt));
     qopt->rate.rate     = priv->rate.rate_bytes_ps * 8;

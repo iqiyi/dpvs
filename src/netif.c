@@ -1940,7 +1940,7 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     lcoreid_t cid;
     int pid, qindex;
     struct netif_queue_conf *txq;
-    struct netif_ops *ops = dev->netif_ops;
+    struct netif_ops *ops;
     int ret = EDPVS_OK;
 
     if (unlikely(NULL == mbuf || NULL == dev)) {
@@ -1949,6 +1949,7 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
         return EDPVS_INVAL;
     }
 
+    ops = dev->netif_ops;
     if (ops && ops->op_xmit)
         return ops->op_xmit(mbuf, dev);
 
