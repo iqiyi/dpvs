@@ -621,10 +621,16 @@ ipvs_set_rule(int cmd, virtual_server_t * vs, real_server_t * rs)
 		srule->flags |= IP_VS_CONN_F_SYNPROXY;
 
 	if (!strcmp(vs->sched, "conhash")) {
-		if (vs->hash_target)
-			srule->flags |= vs->hash_target;
-		else
+		if (vs->hash_target) {
+			if ((srule->protocol != IPPROTO_UDP) &&
+			    (vs->hash_target == IP_VS_SVC_F_QID_HASH)) {
+				log_message(LOG_ERR, "qid hash can only be set in udp service");
+			} else {
+				srule->flags |= vs->hash_target;
+			}
+		} else {
 			srule->flags |= IP_VS_SVC_F_SIP_HASH; //default
+		}
 	}
 
 	/* SVR specific */

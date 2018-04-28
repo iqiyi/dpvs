@@ -39,7 +39,7 @@ static int get_quic_hash_target(const struct rte_mbuf *mbuf, uint64_t *quic_cid)
     if (mbuf_may_pull((struct rte_mbuf *)mbuf, quic_len) != 0)
         return EDPVS_NOTEXIST;
 
-    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *, quic_len);
+    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *, ip4_hdrlen(mbuf) + sizeof(struct udp_hdr));
     pub_flags = *((uint8_t *)quic_data);
 
     if ((pub_flags & QUIC_PACKET_8BYTE_CONNECTION_ID) == 0) {
