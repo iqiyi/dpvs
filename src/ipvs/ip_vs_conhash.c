@@ -82,6 +82,7 @@ dp_vs_conhash_get(struct dp_vs_service *svc, struct conhash_s *conhash,
         } else {
             return NULL;
         }
+
     } else if (svc->flags & DP_VS_SVC_F_SIP_HASH) {
         if (EDPVS_OK == get_sip_hash_target(mbuf, &sip)) {
             snprintf(str, sizeof(str),"%u", sip);
