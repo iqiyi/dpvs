@@ -59,35 +59,38 @@ void neigh_process_ring(void *arg);
 
 void neigh_confirm(struct in_addr nexthop, struct netif_port *port);
 
+/* Used to compare MAC addresses. */
+#define MAC_ADDR_CMP 0xFFFFFFFFFFFFULL
+
 /* ethSwap(u16_t * to, u16_t * from) - Swap two 16 bit values */
 static __inline__ void
 uint16Swap(void *t, void *f) {
-        uint16_t *d = (uint16_t *)t;
-        uint16_t *s = (uint16_t *)f;
-        uint16_t v;
+    uint16_t *d = (uint16_t *)t;
+    uint16_t *s = (uint16_t *)f;
+    uint16_t v;
 
-        v = *d; *d = *s; *s = v;
+    v = *d; *d = *s; *s = v;
 }
 
 /* ethAddrSwap( u16_t * to, u16_t * from ) - Swap two ethernet addresses */
 static __inline__ void
 ethAddrSwap(void *t, void *f) {
-        uint16_t    *d = (uint16_t *)t;
-        uint16_t    *s = (uint16_t *)f;
+    uint16_t    *d = (uint16_t *)t;
+    uint16_t    *s = (uint16_t *)f;
 
-        uint16Swap(d++, s++);
-        uint16Swap(d++, s++);
-        uint16Swap(d, s); 
+    uint16Swap(d++, s++);
+    uint16Swap(d++, s++);
+    uint16Swap(d, s); 
 }
 
 /* inetAddrSwap( void * t, void * f ) - Swap two IPv4 addresses */
 static __inline__ void
 inetAddrSwap(void *t, void *f) {
-        uint32_t *d = (uint32_t *)t;
-        uint32_t *s = (uint32_t *)f;
-        uint32_t v;
+    uint32_t *d = (uint32_t *)t;
+    uint32_t *s = (uint32_t *)f;
+    uint32_t v;
 
-        v  = *d; *d = *s; *s = v;
+    v  = *d; *d = *s; *s = v;
 }
 
 /* inetAddrCopy( void * t, void * f ) - Copy IPv4 address */

@@ -508,10 +508,6 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
 {
     struct tcphdr *th, _tcph;
     struct dp_vs_conn *conn;
-    struct route_entry *nb_rt;
-    struct flow4 fl4;
-    struct in_addr nexthop;
-    struct ipv4_hdr *ipv4h = ip4_hdr(mbuf);
     assert(proto && iph && mbuf);
 
     th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
@@ -524,29 +520,24 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     }
 
     conn = dp_vs_conn_get(iph->af, iph->proto, 
-             &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);
+            &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);
 
-     /*L2 confirm neighbour*/
-     if (likely(conn != NULL)) {
-         if (th->ack) {
-             memset(&fl4, 0, sizeof(struct flow4));
-             fl4.daddr.s_addr = ipv4h->src_addr;
-             fl4.saddr = conn->laddr.in;
-             fl4.tos = ipv4h->type_of_service;
-             nb_rt = route4_output(&fl4);
-             
-             if (nb_rt) {
-                 if (nb_rt->gw.s_addr == htonl(INADDR_ANY))
-                     nexthop.s_addr = ipv4h->src_addr;
-                 else
-                     nexthop = nb_rt->gw;
-                 neigh_confirm(nexthop, nb_rt->port);
-                 route4_put(nb_rt);
-             }
-         }
-     }
-     
-     return conn;
+    /*L2 confirm neighbour
+     *pkt in from client confirm neighbour to client 
+     *pkt out from rs confirm neighbour to rs */
+    if (likely(conn != NULL)) {
+        if (th->ack) {
+            if ((*direct == DPVS_CONN_DIR_INBOUND) && conn->out_dev 
+                 && (conn->out_neighbour.in.s_addr != htonl(INADDR_ANY))) {
+                neigh_confirm(conn->out_neighbour.in, conn->out_dev);
+            } else if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
+                        && (conn->in_neighbour.in.s_addr != htonl(INADDR_ANY))) {
+                neigh_confirm(conn->in_neighbour.in, conn->in_dev);
+            }
+        }
+    }
+
+    return conn;
 }
 
 static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
