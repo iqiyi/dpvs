@@ -602,7 +602,10 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
         new->daddr  = dest->addr;
     new->dport  = rport;
 
-    /* L2 fast xmit */
+    /* neighbour confirm cache */
+    new->in_neighbour.in.s_addr = htonl(INADDR_ANY);
+    new->out_neighbour.in.s_addr = htonl(INADDR_ANY);
+
     new->in_dev = NULL;
     new->out_dev = NULL;
 

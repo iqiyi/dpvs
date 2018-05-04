@@ -390,14 +390,14 @@ static void
 oif_handler(vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
-	snprintf(vs->iifname, sizeof(vs->iifname), "%s", (char *)vector_slot(strvec, 1));
+	snprintf(vs->oifname, sizeof(vs->oifname), "%s", (char *)vector_slot(strvec, 1));
 }
 
 static void
 iif_handler(vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
-	snprintf(vs->oifname, sizeof(vs->oifname), "%s", (char *)vector_slot(strvec, 1));
+	snprintf(vs->iifname, sizeof(vs->iifname), "%s", (char *)vector_slot(strvec, 1));
 }
 
 static void

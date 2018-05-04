@@ -697,7 +697,7 @@ virtual_server match SNAT {
     real_server 123.1.2.2 0 {
         weight 4
         MISC_CHECK {
-           misc_path 'exit'##Just make a healthy check which will always judge real_server healthy
+           misc_path "exit 0"##Just make a healthy check which will always judge real_server healthy
            misc_timeout 10
         }   
     }   
