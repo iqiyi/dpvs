@@ -923,6 +923,8 @@ $ cp conf/dpvs.conf.single-nic.sample /etc/dpvs.conf
 ```
 do some changes for vm
 $ cat /etc/dpvs.conf
+
+```bash
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! This is dpvs default configuration file.
 !
@@ -1077,6 +1079,7 @@ ipvs_defs {
 sa_pool {
     pool_hash_size   16
 }
+```
 and start DPVS,
 
 ```bash
