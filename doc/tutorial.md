@@ -921,8 +921,8 @@ Now, `dpvs.conf` must be put at `/etc/dpvs.conf`, just copy it from `conf/dpvs.c
 ```bash
 $ cp conf/dpvs.conf.single-nic.sample /etc/dpvs.conf
 ```
-do some changes for vm
-$ cat /etc/dpvs.conf
+do some changes for vm ( e1000 do not support fdir ,use single cpu )
+$ cat /etc/dpvs.conf 
 
 ```bash
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
