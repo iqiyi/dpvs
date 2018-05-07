@@ -40,7 +40,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	-mkdir -p ./build/
-	gcc $(CFLAGS) -o $@ $^
+	gcc $(CFLAGS) -o $@ $^ $(LIBS)
 
 clean:
 	rm -rf ./build/ *.o
