@@ -950,12 +950,12 @@ netif_defs {
 
     <init> device dpdk0 {
         rx {
-            queue_number        8
+            queue_number        2
             descriptor_number   1024
             rss                 tcp
         }
         tx {
-            queue_number        8
+            queue_number        2
             descriptor_number   1024
         }
     !    promisc_mode
