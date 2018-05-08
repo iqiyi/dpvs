@@ -835,7 +835,7 @@ $ cp conf/dpvs.conf.single-nic.sample /etc/dpvs.conf
 ```
 do some changes for vm ( e1000 do not support fdir ,use single cpu )
 
-### change queue_number ,  worker cpu numbers , conn_pool_size
+ change queue_number ,  worker cpu numbers , conn_pool_size like this.
 
 
 $ cat /etc/dpvs.conf 
