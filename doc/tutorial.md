@@ -817,6 +817,7 @@ Now to set up DPDK hugepage, our test environment is NUMA system. For single-nod
 ```bash
 $ # for single node machine
 $ echo 1024 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
+```
 
 ## Build DPVS
 
