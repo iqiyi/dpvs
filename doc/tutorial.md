@@ -802,66 +802,15 @@ Actually, we use private IP option to implement `UOA`, pls check the details in 
 
 # DPVS in Ubuntu (Ubuntu16.04)
 
-# quick start
-
-## Clone DPVS
-
-```bash
-$ git clone https://github.com/iqiyi/dpvs.git
-$ cd dpvs
-```
-
-Well, let's start from DPDK then.
-
-## DPDK setup.
-
-Currently, `dpdk-stable-17.05.2` is used for `DPVS`.
-
-> You can skip this section if experienced with DPDK, and refer the [link](http://dpdk.org/doc/guides/linux_gsg/index.html) for details.
-
-```bash
-$ wget https://fast.dpdk.org/rel/dpdk-17.05.2.tar.xz   # download from dpdk.org if link failed.
-$ tar vxf dpdk-17.05.2.tar.xz
-```
-
-### DPDK patchs
-
-There's a patch for DPDK `kni` driver for hardware multicast, apply it if needed (for example, launch `ospfd` on `kni` device).
-
-> assuming we are in DPVS root dir and dpdk-stable-17.05.2 is under it, pls note it's not mandatory, just for convenience.
-
-```
-$ cd <path-of-dpvs>
-$ cp patch/dpdk-stable-17.05.2/*.patch dpdk-stable-17.05.2/
-$ cd dpdk-stable-17.05.2/
-$ patch -p 1 < 0001-PATCH-kni-use-netlink-event-for-multicast-driver-par.patch
-```
-
-Another DPDK patch is fixing checksum API for the packets with IP options, it's needed for `UOA` module.
-
-```
-$ patch -p1 < 0002-net-support-variable-IP-header-len-for-checksum-API.patch
-```
 
 ### DPDK build and install
 
-Fix code for ubuntu in vm
+Before DPDK build and install ,Fix code for ubuntu in vm
 
 ```
 $ cd dpdk-stable-17.05.2/
 $ sed -i "s/pci_intx_mask_supported(dev)/pci_intx_mask_supported(dev)||true/g" lib/librte_eal/linuxapp/igb_uio/igb_uio.c
 ```
-Now build DPDK and export `RTE_SDK` env variable for DPDK app (DPVS).
-
-```bash
-$ cd dpdk-stable-17.05.2/
-$ make config T=x86_64-native-linuxapp-gcc
-Configuration done
-$ make # or make -j40 to save time, where 40 is the cpu core number.
-$ export RTE_SDK=$PWD
-```
-
-In our tutorial, `RTE_TARGET` is not set, the value is "build" by default, thus DPDK libs and header files can be found in `dpdk-stable-17.05.2/build`.
 
 Now to set up DPDK hugepage, our test environment is NUMA system. For single-node system pls refer the [link](http://dpdk.org/doc/guides/linux_gsg/sys_reqs.html).
 
@@ -869,51 +818,13 @@ Now to set up DPDK hugepage, our test environment is NUMA system. For single-nod
 $ # for single node machine
 $ echo 1024 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
 
-$ mkdir /mnt/huge
-$ mount -t hugetlbfs nodev /mnt/huge
-```
-Install Kernel modules and bind NIC with `igb_uio` driver. Quick start uses only one NIC, normally we use 2 for Full-NAT cluster, even 4 for bonding mode. Assuming `eth0` will be used for DPVS/DPDK, and another standalone Linux NIC for debug, for example, `eth1`.
-
-```bash
-$ modprobe uio
-$ cd dpdk-stable-17.05.2
-
-$ insmod build/kmod/igb_uio.ko
-$ insmod build/kmod/rte_kni.ko
-
-$ ./usertools/dpdk-devbind.py --status
-$ ifconfig ens33 down  # assuming ens33 is 0000:02:01.0
-$ ./usertools/dpdk-devbind.py -b igb_uio 0000:02:01.0
-```
-
-`dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver like `ixgbe`. You can also use `lspci` or `ethtool -i eth0` to check the NIC PCI bus-id. Pls see [DPDK site](http://www.dpdk.org) for details.
-
 ## Build DPVS
 
 
-It's simple, just set `RTE_SDK` and build it.
-
-```bash
-$ cd dpdk-stable-17.05.2/
-$ export RTE_SDK=$PWD
-$ cd <path-of-dpvs>
-
-$ make # or "make -j40" to speed up.
-$ make install
-```
 
 > may need install dependencies, like `openssl`, `popt` and `numactl`, e.g., ` apt-get install libpopt-dev libssl-dev libnuma-dev` (Ubuntu).
 
-Output files are installed to `dpvs/bin`.
 
-```bash
-$ ls bin/
-dpip  dpvs  ipvsadm  keepalived
-```
-
-* `dpvs` is the main program.
-* `dpip` is the tool to set IP address, route, vlan, neigh etc.
-* `ipvsadm` and `keepalived` come from LVS, both are modified.
 
 ## Launch DPVS
 Now, `dpvs.conf` must be put at `/etc/dpvs.conf`, just copy it from `conf/dpvs.conf.single-nic.sample`.
@@ -922,6 +833,10 @@ Now, `dpvs.conf` must be put at `/etc/dpvs.conf`, just copy it from `conf/dpvs.c
 $ cp conf/dpvs.conf.single-nic.sample /etc/dpvs.conf
 ```
 do some changes for vm ( e1000 do not support fdir ,use single cpu )
+
+### change queue_number ,  worker cpu numbers , conn_pool_size
+
+
 $ cat /etc/dpvs.conf 
 
 ```bash
@@ -1080,55 +995,4 @@ sa_pool {
     pool_hash_size   16
 }
 ```
-and start DPVS,
 
-```bash
-$ cd <path-of-dpvs>/bin
-$ ./dpvs &
-```
-Check if it's get started ?
-
-```bash
-$ ./dpip link show
-1: dpdk0: socket 0 mtu 1500 rx-queue 1 tx-queue 1
-    UP 10000 Mbps full-duplex auto-nego
-    addr 00:0C:29:A4:4F:C7 OF_RX_IP_CSUM OF_TX_IP_CSUM OF_TX_TCP_CSUM OF_TX_UDP_CSUM
-```
-If you see this message. Well done, `DPVS` is working with NIC `dpdk0`!
-
-> Don't worry if you see this error,
-```
-EAL: Error - exiting with code: 1
-  Cause: ports in DPDK RTE (2) != ports in dpvs.conf(1)
-```
-it means the NIC used by DPVS is not match `/etc/dpvs.conf`. Pls use `dpdk-devbind` to adjust the NIC number or modify `dpvs.conf`. We'll improve this part to make DPVS more "clever" to avoid modify config file when NIC count is not match.
-
-
-## Test Full-NAT Load Balancer
-
-
-
-Set VIP and Local IP (LIP, needed by Full-NAT mode) on DPVS. Let's put commands into `setup.sh`. You do some check by `./ipvsadm -ln`, `./dpip addr show`.
-
-```bash
-$ cat setup.sh
-VIP=192.168.94.100
-LIP=192.168.94.200
-RS=192.168.94.133
-
-./dpip addr add ${VIP}/24 dev dpdk0
-./ipvsadm -A -t ${VIP}:80 -s rr
-./ipvsadm -a -t ${VIP}:80 -r ${RS} -b
-
-./ipvsadm --add-laddr -z ${LIP} -t 192.168.94.100:80 -F dpdk0
-$
-
-$ ./setup.sh
-```
-
-Access VIP from Client, it looks good!
-
-```bash
-client $ curl 192.168.94.100
-Your ip : 192.168.94.133
-```
