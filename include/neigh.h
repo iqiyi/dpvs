@@ -59,9 +59,6 @@ void neigh_process_ring(void *arg);
 
 void neigh_confirm(struct in_addr nexthop, struct netif_port *port);
 
-/* Used to compare MAC addresses. */
-#define MAC_ADDR_CMP 0xFFFFFFFFFFFFULL
-
 /* ethSwap(u16_t * to, u16_t * from) - Swap two 16 bit values */
 static __inline__ void
 uint16Swap(void *t, void *f) {

@@ -49,8 +49,10 @@ static int dp_vs_fast_xmit_fnat(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /* re-fetch IP header
-         * the offset may changed during pre-handler */
+        /* 
+         * re-fetch IP header
+         * the offset may changed during pre-handler 
+         */
         iph = ip4_hdr(mbuf);
     }
 
@@ -106,8 +108,10 @@ static int dp_vs_fast_outxmit_fnat(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /* re-fetch IP header
-         * the offset may changed during pre-handler */
+        /* 
+         * re-fetch IP header
+         * the offset may changed during pre-handler 
+         */
         iph = ip4_hdr(mbuf);
     }
 
@@ -142,9 +146,10 @@ static int dp_vs_fast_outxmit_fnat(struct dp_vs_proto *proto,
     return EDPVS_OK;
 }
 
-/*ARP_HDR_ETHER SUPPORT ONLY
- *save source mac(client) for output in conn as dest mac
- * */
+/* 
+ * ARP_HDR_ETHER SUPPORT ONLY
+ * save source mac(client) for output in conn as dest mac
+ */
 static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf, 
                           struct dp_vs_proto *proto,
                           struct dp_vs_conn *conn)
@@ -166,7 +171,8 @@ static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
     rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr));
 }
 
-/*save source mac(rs) for input in conn as dest mac
+/*
+ * save source mac(rs) for input in conn as dest mac
  */
 static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
                              struct dp_vs_proto *proto,
@@ -189,28 +195,30 @@ static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
     rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr));
 }
 
-/*in: route to rs
- *out:route to client*/
+/*
+ * in: route to rs
+ * out:route to client
+ */
 static void dp_vs_conn_cache_rt(struct dp_vs_conn *conn, struct route_entry *rt, bool in)
 {
-    if ((in && conn->in_dev && (conn->in_neighbour.in.s_addr == htonl(INADDR_ANY))) ||
-        (!in && conn->out_dev && (conn->out_neighbour.in.s_addr == htonl(INADDR_ANY))))
+    if ((in && conn->in_dev && (conn->in_nexthop.in.s_addr == htonl(INADDR_ANY))) ||
+        (!in && conn->out_dev && (conn->out_nexthop.in.s_addr == htonl(INADDR_ANY))))
         return;
 
     if (in) {
         conn->in_dev = rt->port;
         if (rt->gw.s_addr == htonl(INADDR_ANY)) {
-            conn->in_neighbour.in = conn->daddr.in;
+            conn->in_nexthop.in = conn->daddr.in;
         } else {           
-            conn->in_neighbour.in = rt->gw;
+            conn->in_nexthop.in = rt->gw;
         }  
 
     } else {
         conn->out_dev = rt->port;
         if (rt->gw.s_addr == htonl(INADDR_ANY)) {
-            conn->out_neighbour.in = conn->caddr.in;
+            conn->out_nexthop.in = conn->caddr.in;
         } else {
-            conn->out_neighbour.in = rt->gw;
+            conn->out_nexthop.in = rt->gw;
         }
     }
 }
@@ -231,8 +239,10 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
         }
     }
 
-    /* drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route. */
+    /*
+     * drop old route. just for safe, because
+     * FNAT is PRE_ROUTING, should not have route. 
+     */
     if (unlikely(mbuf->userdata != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n", 
                 __func__, mbuf->userdata);
@@ -250,9 +260,11 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
     }
 
 
-    /*didn't cache the pointer to rt
-     *or route can't be deleted when there is conn ref
-     *this is for neighbour confirm */ 
+    /*
+     * didn't cache the pointer to rt
+     * or route can't be deleted when there is conn ref
+     * this is for neighbour confirm 
+     */ 
     dp_vs_conn_cache_rt(conn, rt, true);
 
     mtu = rt->mtu;
@@ -283,8 +295,10 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             goto errout;
 
-        /* re-fetch IP header
-         * the offset may changed during pre-handler */
+        /* 
+         * re-fetch IP header
+         * the offset may changed during pre-handler 
+         */
         iph = ip4_hdr(mbuf);
     }
 
@@ -331,8 +345,10 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         }
     }
 
-    /* drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route. */
+    /* 
+     * drop old route. just for safe, because
+     * FNAT is PRE_ROUTING, should not have route. 
+     */
     if (unlikely(mbuf->userdata != NULL))
         route4_put((struct route_entry *)mbuf->userdata);
 
@@ -346,9 +362,11 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    /*didn't cache the pointer to rt
-     *or route can't be deleted when there is conn ref
-     *this is for neighbour confirm */
+    /*
+     * didn't cache the pointer to rt
+     * or route can't be deleted when there is conn ref
+     * this is for neighbour confirm 
+     */
     dp_vs_conn_cache_rt(conn, rt, false);
 
     mtu = rt->mtu;
@@ -379,8 +397,10 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             goto errout;
 
-        /* re-fetch IP header
-         * the offset may changed during pre-handler */
+        /* 
+         * re-fetch IP header
+         * the offset may changed during pre-handler 
+         */
         iph = ip4_hdr(mbuf);
     }
 
@@ -552,17 +572,21 @@ int dp_vs_xmit_snat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    /* drop old route. just for safe, because
+    /* 
+     * drop old route. just for safe, because
      * inbound SNAT traffic is hooked at PRE_ROUTING,
-     * should not have route. */
+     * should not have route.
+     */
     if (unlikely(mbuf->userdata != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: SNAT have route %p ?\n",
                 __func__, mbuf->userdata);
         route4_put((struct route_entry *)mbuf->userdata);
     }
 
-    /* hosts inside SNAT may belongs to diff net,
-     * let's route it. */
+    /* 
+     * hosts inside SNAT may belongs to diff net,
+     * let's route it. 
+     */
     memset(&fl4, 0, sizeof(struct flow4));
     fl4.daddr = conn->daddr.in;
     fl4.saddr = conn->caddr.in;
@@ -703,8 +727,10 @@ int dp_vs_xmit_nat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    /* drop old route. just for safe, because
-     * NAT is PREROUTING, should not have route.*/
+    /* 
+     * drop old route. just for safe, because
+     * NAT is PREROUTING, should not have route.
+     */
     if (unlikely(mbuf->userdata != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n",
                 __func__, mbuf->userdata);
@@ -779,8 +805,10 @@ int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    /* drop old route. just for safe, because
-     * NAT is PREROUTING, should not have route.*/
+    /* 
+     * drop old route. just for safe, because
+     * NAT is PREROUTING, should not have route.
+     */
     if (unlikely(mbuf->userdata != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n",
                 __func__, mbuf->userdata);
@@ -857,8 +885,10 @@ int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
     uint16_t df = old_iph->fragment_offset & htons(IPV4_HDR_DF_FLAG);
     int err, mtu;
 
-    /* drop old route. just for safe, because
-     * TUNNEL is PREROUTING, should not have route. */
+    /*
+     * drop old route. just for safe, because
+     * TUNNEL is PREROUTING, should not have route.
+     */
     if (unlikely(mbuf->userdata != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n",
                 __func__, mbuf->userdata);

@@ -129,13 +129,15 @@ udp_conn_lookup(struct dp_vs_proto *proto,
                           uh->src_port, uh->dst_port, 
                           direct, reverse);
 
-    /*L2 confirm neighbour
-     *UDP has no ack, we don't know pkt from client is response or not
-     *UDP can only confirm neighbour to rs*/
+    /*
+     * L2 confirm neighbour
+     * UDP has no ack, we don't know pkt from client is response or not
+     * UDP can only confirm neighbour to RS
+     */
     if (likely(conn != NULL)) {
         if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
-             && (conn->in_neighbour.in.s_addr != htonl(INADDR_ANY))){
-            neigh_confirm(conn->in_neighbour.in, conn->in_dev);
+             && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))){
+            neigh_confirm(conn->in_nexthop.in, conn->in_dev);
         }
     }
 

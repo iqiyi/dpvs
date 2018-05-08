@@ -116,8 +116,8 @@ struct dp_vs_conn {
     /* route for neigbour */
     struct netif_port       *in_dev;    /* inside to rs*/
     struct netif_port       *out_dev;   /* outside to client*/
-    union inet_addr         in_neighbour;  /* to rs*/
-    union inet_addr         out_neighbour; /* to client*/
+    union inet_addr         in_nexthop;  /* to rs*/
+    union inet_addr         out_nexthop; /* to client*/
 
     /* statistics */
     struct dp_vs_conn_stats stats;

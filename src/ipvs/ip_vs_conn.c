@@ -603,8 +603,8 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     new->dport  = rport;
 
     /* neighbour confirm cache */
-    new->in_neighbour.in.s_addr = htonl(INADDR_ANY);
-    new->out_neighbour.in.s_addr = htonl(INADDR_ANY);
+    new->in_nexthop.in.s_addr = htonl(INADDR_ANY);
+    new->out_nexthop.in.s_addr = htonl(INADDR_ANY);
 
     new->in_dev = NULL;
     new->out_dev = NULL;

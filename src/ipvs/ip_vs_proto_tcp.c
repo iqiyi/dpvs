@@ -522,17 +522,19 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     conn = dp_vs_conn_get(iph->af, iph->proto, 
             &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);
 
-    /*L2 confirm neighbour
-     *pkt in from client confirm neighbour to client 
-     *pkt out from rs confirm neighbour to rs */
+    /*
+     * L2 confirm neighbour
+     * pkt in from client confirm neighbour to client 
+     * pkt out from rs confirm neighbour to rs 
+     */
     if (likely(conn != NULL)) {
         if (th->ack) {
             if ((*direct == DPVS_CONN_DIR_INBOUND) && conn->out_dev 
-                 && (conn->out_neighbour.in.s_addr != htonl(INADDR_ANY))) {
-                neigh_confirm(conn->out_neighbour.in, conn->out_dev);
+                 && (conn->out_nexthop.in.s_addr != htonl(INADDR_ANY))) {
+                neigh_confirm(conn->out_nexthop.in, conn->out_dev);
             } else if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
-                        && (conn->in_neighbour.in.s_addr != htonl(INADDR_ANY))) {
-                neigh_confirm(conn->in_neighbour.in, conn->in_dev);
+                        && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))) {
+                neigh_confirm(conn->in_nexthop.in, conn->in_dev);
             }
         }
     }
