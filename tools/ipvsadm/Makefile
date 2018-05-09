@@ -95,7 +95,7 @@ DEFINES		+= $(shell if [ ! -f ../ip_vs.h ]; then	\
 all:            ipvsadm
 
 ipvsadm:	$(OBJS) $(STATIC_LIBS)
-		$(CC) $(CFLAGS) -o $@ $^ $(LIBS) $(DPVSDEPS)
+		$(CC) $(CFLAGS) -o $@ $^ $(DPVSDEPS) $(LIBS)
 
 install:        all
 		if [ ! -d $(SBIN) ]; then $(MKDIR) -p $(SBIN); fi
