@@ -71,7 +71,7 @@ static int uoa_debug = 0;
 module_param_named(uoa_debug, uoa_debug, int, 0444);
 MODULE_PARM_DESC(uoa_debug, "enable UOA debug by setting it to 1");
 
-static int uoa_map_timeout = 60;
+static int uoa_map_timeout = 360;
 module_param_named(uoa_map_timeout, uoa_map_timeout, int, 0444);
 MODULE_PARM_DESC(uoa_map_timeout, "UOA mapping timeout in second");
 
