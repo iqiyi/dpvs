@@ -30,7 +30,7 @@ CFLAGS += -I ../keepalived/keepalived/libipvs-2.6
 LIBS = -lnuma
 DEFS = -D DPVS_MAX_LCORE=64
 
-CFLAGS += $(LIBS) $(DEFS)
+CFLAGS += $(DEFS)
 
 OBJS = dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
 	   qsch.o cls.o tunnel.o ../../src/common.o \
@@ -40,7 +40,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	-mkdir -p ./build/
-	gcc $(CFLAGS) -o $@ $^
+	gcc $(CFLAGS) -o $@ $^ $(LIBS)
 
 clean:
 	rm -rf ./build/ *.o
