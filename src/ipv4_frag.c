@@ -284,7 +284,7 @@ int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
 		/* if we are not last frag,
 		 * ensure next start on eight byte boundary */
 		if (len < left)
-			left &= ~7;
+			len &= ~7;
 
 		/* mbuf should have enough headroom,
 		 * but no way to extend tail room. */
