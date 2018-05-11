@@ -416,7 +416,6 @@ hash_target_handler(vector_t *strvec)
 	}
 }
 
-
 vector_t *
 check_init_keywords(void)
 {
