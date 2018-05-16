@@ -456,7 +456,7 @@ check_init_keywords(void)
 	install_keyword("dst-range", &dst_range_handler);
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
-        install_keyword("hash_target", &hash_target_handler);
+	install_keyword("hash_target", &hash_target_handler);
 
 	/* Pool regression detection and handling. */
 	install_keyword("alpha", &alpha_handler);

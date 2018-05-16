@@ -384,8 +384,9 @@ static void neigh_arp_confirm(struct neighbour_entry *neighbour)
     if (!saddr.in.s_addr) {
         RTE_LOG(ERR, NEIGHBOUR, "[%s]no source ip\n", __func__);
     }
-    if(neigh_send_arp(neighbour->port, saddr.in.s_addr, daddr.in.s_addr) 
-        != EDPVS_OK){
+
+    if (neigh_send_arp(neighbour->port, saddr.in.s_addr,
+                       daddr.in.s_addr) != EDPVS_OK) {
         RTE_LOG(ERR, NEIGHBOUR, "[%s] send arp failed\n", __func__);
     }
 } 
@@ -549,7 +550,7 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
         ipaddr = arp->arp_data.arp_sip;
         hashkey = neigh_hashkey(ipaddr, port);
         neighbour = neigh_lookup_entry(&ipaddr, port, hashkey);
-        if(neighbour && !(neighbour->flag & NEIGHBOUR_STATIC)) {
+        if (neighbour && !(neighbour->flag & NEIGHBOUR_STATIC)) {
             neigh_edit(neighbour, &arp->arp_data.arp_sha, hashkey);
             neigh_entry_state_trans(neighbour, 1);
         } else {
@@ -632,7 +633,7 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
     if (neighbour) {
         if ((neighbour->state == DPVS_NUD_S_NONE) ||
            (neighbour->state == DPVS_NUD_S_SEND)) {
-            if (neighbour->que_num > arp_unres_qlen){
+            if (neighbour->que_num > arp_unres_qlen) {
                 /*don't need arp request now, 
                   since neighbour will not be confirmed
                   and it will be released late*/
@@ -642,7 +643,7 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
             }
             m_buf = rte_zmalloc("neigh_new_mbuf",
                                sizeof(struct neighbour_mbuf_entry), RTE_CACHE_LINE_SIZE);
-            if (!m_buf){
+            if (!m_buf) {
                 rte_pktmbuf_free(m);
                 return EDPVS_DROP;
             }
@@ -657,8 +658,8 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
             return EDPVS_OK;
         }
         else if ((neighbour->state == DPVS_NUD_S_REACHABLE) ||
-                (neighbour->state == DPVS_NUD_S_PROBE) ||
-                (neighbour->state == DPVS_NUD_S_DELAY)){
+                 (neighbour->state == DPVS_NUD_S_PROBE) ||
+                 (neighbour->state == DPVS_NUD_S_DELAY)) {
 
             neigh_fill_mac(neighbour, m);
             netif_xmit(m, neighbour->port);

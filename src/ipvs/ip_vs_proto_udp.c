@@ -134,7 +134,7 @@ udp_conn_lookup(struct dp_vs_proto *proto,
      * UDP has no ack, we don't know pkt from client is response or not
      * UDP can only confirm neighbour to RS
      */
-    if (likely(conn != NULL)) {
+    if (conn != NULL) {
         if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
              && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))){
             neigh_confirm(conn->in_nexthop.in, conn->in_dev);

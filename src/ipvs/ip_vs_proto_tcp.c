@@ -527,7 +527,7 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
      * pkt in from client confirm neighbour to client 
      * pkt out from rs confirm neighbour to rs 
      */
-    if (likely(conn != NULL)) {
+    if (conn != NULL) {
         if (th->ack) {
             if ((*direct == DPVS_CONN_DIR_INBOUND) && conn->out_dev 
                  && (conn->out_nexthop.in.s_addr != htonl(INADDR_ANY))) {
