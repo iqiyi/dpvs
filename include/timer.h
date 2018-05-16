@@ -25,7 +25,12 @@
  * timer handler should be as quick as possible
  * and do not block.
  */
-typedef void (*dpvs_timer_cb_t)(void *arg);
+enum {
+    DTIMER_OK = 0,
+    DTIMER_STOP,
+};
+
+typedef int (*dpvs_timer_cb_t)(void *arg);
 
 
 typedef uint32_t dpvs_tick_t;

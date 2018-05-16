@@ -22,14 +22,79 @@
 
 #define REPLICA 160
 
-static inline struct dp_vs_dest *
-dp_vs_conhash_get(int af, struct conhash_s *conhash,
-             const uint32_t addr)
+#define QUIC_PACKET_8BYTE_CONNECTION_ID  (1 << 3)
+
+
+/* QUIC CID hash target for quic*
+ * QUIC CID(qid) should be configured in UDP service*/
+static int get_quic_hash_target(const struct rte_mbuf *mbuf, uint64_t *quic_cid)
 {
-    char str[40];
+    uint8_t pub_flags;
+    char *quic_data;
+    uint32_t quic_len;
+
+    quic_len = ip4_hdrlen(mbuf) + sizeof(struct udp_hdr) + \
+                  sizeof(pub_flags) + sizeof(*quic_cid);
+
+    if (mbuf_may_pull((struct rte_mbuf *)mbuf, quic_len) != 0)
+        return EDPVS_NOTEXIST;
+
+    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *, ip4_hdrlen(mbuf) + sizeof(struct udp_hdr));
+    pub_flags = *((uint8_t *)quic_data);
+
+    if ((pub_flags & QUIC_PACKET_8BYTE_CONNECTION_ID) == 0) {
+        RTE_LOG(WARNING, IPVS, "packet without cid, pub_flag:%u\n", pub_flags);
+        return EDPVS_NOTEXIST;
+    }
+
+    quic_data += sizeof(pub_flags);
+    *quic_cid = *((uint64_t*)quic_data);
+
+    return EDPVS_OK;
+}
+
+/*source ip hash target*/
+static int get_sip_hash_target(const struct rte_mbuf *mbuf, uint32_t *sip)
+{
+    *sip = ip4_hdr(mbuf)->src_addr;
+    return EDPVS_OK;
+}
+
+static inline struct dp_vs_dest *
+dp_vs_conhash_get(struct dp_vs_service *svc, struct conhash_s *conhash,
+                  const struct rte_mbuf *mbuf)
+{
+    char str[40] = {0};
+    uint64_t quic_cid;
+    uint32_t sip;
     const struct node_s *node;
 
-    snprintf(str, sizeof(str),"%u", rte_be_to_cpu_32(addr));
+    if (svc->flags & DP_VS_SVC_F_QID_HASH) {
+        if (svc->proto != IPPROTO_UDP) {
+            RTE_LOG(ERR, IPVS, "QUIC cid hash scheduler should only be set in UDP service.\n");
+            return NULL;
+        }
+        /* try to get CID for hash target first, then source IP. */
+        if (EDPVS_OK == get_quic_hash_target(mbuf, &quic_cid)) {
+            snprintf(str, sizeof(str), "%lu", quic_cid);
+        } else if (EDPVS_OK == get_sip_hash_target(mbuf, &sip)) {
+            snprintf(str, sizeof(str), "%u", sip);
+        } else {
+            return NULL;
+        }
+
+    } else if (svc->flags & DP_VS_SVC_F_SIP_HASH) {
+        if (EDPVS_OK == get_sip_hash_target(mbuf, &sip)) {
+            snprintf(str, sizeof(str), "%u", sip);
+        } else {
+            return NULL;
+        }
+
+    } else {
+        RTE_LOG(ERR, IPVS, "%s: invalid hash target.\n", __func__);
+        return NULL;
+    }
+
     node = conhash_lookup(conhash, str);
     return node == NULL? NULL: node->data;
 }
@@ -57,7 +122,7 @@ dp_vs_conhash_assign(struct dp_vs_service *svc)
            rte_atomic32_inc(&dest->refcnt);
            p_node->data = dest;
 
-           snprintf(str, sizeof(str), "%u", rte_be_to_cpu_32(dest->addr.in.s_addr));
+           snprintf(str, sizeof(str), "%u", dest->addr.in.s_addr);
 
            conhash_set_node(p_node, str, weight*REPLICA);
            conhash_add_node(svc->sched_data, p_node);
@@ -124,8 +189,7 @@ dp_vs_conhash_schedule(struct dp_vs_service *svc, const struct rte_mbuf *mbuf)
 {
     struct dp_vs_dest *dest;
 
-    dest = dp_vs_conhash_get(svc->af, (struct conhash_s *)(svc->sched_data), 
-                                               ip4_hdr(mbuf)->src_addr);
+    dest = dp_vs_conhash_get(svc, (struct conhash_s *)svc->sched_data, mbuf);
 
     if (!dest
         || !(dest->flags & DPVS_DEST_F_AVAILABLE)

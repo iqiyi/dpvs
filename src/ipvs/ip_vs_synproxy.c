@@ -82,7 +82,7 @@ static uint32_t g_net_secret[2];
 static struct dpvs_timer g_minute_timer;
 static rte_atomic32_t g_minute_count;
 
-static void minute_timer_expire( void *priv)
+static int minute_timer_expire( void *priv)
 {
     struct timeval tv;
     
@@ -91,10 +91,12 @@ static void minute_timer_expire( void *priv)
     tv.tv_sec = 60; /* one minute timer */
     tv.tv_usec = 0;
     dpvs_timer_update(&g_minute_timer, &tv, true);
+
+    return DTIMER_OK;
 }
 
 #ifdef CONFIG_SYNPROXY_DEBUG
-static void second_timer_expire(void *priv)
+static int second_timer_expire(void *priv)
 {
     struct timeval tv;
 
@@ -106,6 +108,8 @@ static void second_timer_expire(void *priv)
     tv.tv_sec = 1;
     tv.tv_usec = 0;
     dpvs_timer_sched(&g_second_timer, &tv, second_timer_expire, NULL, true);
+
+    return DTIMER_OK;
 }
 #endif
 

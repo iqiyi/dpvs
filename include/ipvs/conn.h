@@ -108,12 +108,16 @@ struct dp_vs_conn {
                         struct rte_mbuf *mbuf);
 
     /* L2 fast xmit */
-    struct netif_port       *in_dev;    /* inside (RS faced) */
     struct ether_addr       in_smac;
     struct ether_addr       in_dmac;
-    struct netif_port       *out_dev;   /* outside */
     struct ether_addr       out_smac;
     struct ether_addr       out_dmac;
+
+    /* route for neigbour */
+    struct netif_port       *in_dev;    /* inside to rs*/
+    struct netif_port       *out_dev;   /* outside to client*/
+    union inet_addr         in_nexthop;  /* to rs*/
+    union inet_addr         out_nexthop; /* to client*/
 
     /* statistics */
     struct dp_vs_conn_stats stats;

@@ -29,6 +29,7 @@
 #include "ipvs/blklst.h"
 #include "parser/parser.h"
 #include "uoa.h"
+#include "neigh.h"
 
 #define UOA_DEF_MAX_TRAIL   3
 
@@ -110,6 +111,7 @@ udp_conn_lookup(struct dp_vs_proto *proto,
                 bool reverse, bool *drop)
 {
     struct udp_hdr *uh, _udph;
+    struct dp_vs_conn *conn;
     assert(proto && iph && mbuf);
 
     uh = mbuf_header_pointer(mbuf, iph->len, sizeof(_udph), &_udph);
@@ -122,10 +124,24 @@ udp_conn_lookup(struct dp_vs_proto *proto,
         return NULL;
     }  
 
-    return dp_vs_conn_get(iph->af, iph->proto, 
+    conn = dp_vs_conn_get(iph->af, iph->proto, 
                           &iph->saddr, &iph->daddr, 
                           uh->src_port, uh->dst_port, 
                           direct, reverse);
+
+    /*
+     * L2 confirm neighbour
+     * UDP has no ack, we don't know pkt from client is response or not
+     * UDP can only confirm neighbour to RS
+     */
+    if (conn != NULL) {
+        if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
+             && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))){
+            neigh_confirm(conn->in_nexthop.in, conn->in_dev);
+        }
+    }
+
+    return conn;
 }
 
 static int udp_conn_expire(struct dp_vs_proto *proto, struct dp_vs_conn *conn)

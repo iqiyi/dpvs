@@ -190,10 +190,10 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
         list_del(&timer->list);
 
     rte_spinlock_unlock(&sched->lock);
-    handler(priv);
+    err = handler(priv);
     rte_spinlock_lock(&sched->lock);
 
-    if (!timer->is_period)
+    if (err != DTIMER_OK || !timer->is_period)
         return;
 
     /* re-schedule for periodic timer */

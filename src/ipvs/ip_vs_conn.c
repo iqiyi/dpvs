@@ -324,7 +324,7 @@ static inline void conn_tab_dump(void)
 #endif
 
 /* timeout hanlder */
-static void conn_expire(void *priv)
+static int conn_expire(void *priv)
 {
     struct dp_vs_conn *conn = priv;
     struct dp_vs_proto *pp;
@@ -382,13 +382,13 @@ static void conn_expire(void *priv)
 
         /* expire later */
         dp_vs_conn_put(conn);
-        return;
+        return DTIMER_OK;
     }
 
     /* somebody is controlled by me, expire later */
     if (rte_atomic32_read(&conn->n_control)) {
         dp_vs_conn_put(conn);
-        return;
+        return DTIMER_OK;
     }
 
     /* unhash it then no further user can get it,
@@ -455,7 +455,7 @@ static void conn_expire(void *priv)
 #ifdef CONFIG_DPVS_IPVS_DEBUG
         conn_dump("del conn: ", conn);
 #endif
-        return;
+        return DTIMER_STOP;
     }
 
     conn_hash(conn);
@@ -468,7 +468,7 @@ static void conn_expire(void *priv)
         dpvs_timer_update(&conn->timer, &conn->timeout, false);
 
     rte_atomic32_dec(&conn->refcnt);
-    return;
+    return DTIMER_OK;
 }
 
 static void conn_flush(void)
@@ -602,7 +602,10 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
         new->daddr  = dest->addr;
     new->dport  = rport;
 
-    /* L2 fast xmit */
+    /* neighbour confirm cache */
+    new->in_nexthop.in.s_addr = htonl(INADDR_ANY);
+    new->out_nexthop.in.s_addr = htonl(INADDR_ANY);
+
     new->in_dev = NULL;
     new->out_dev = NULL;
 

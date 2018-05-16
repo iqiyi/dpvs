@@ -137,6 +137,13 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 
 	if( options & OPT_SCHEDULER ) {
 		strcpy(user.sched_name, svc->sched_name);
+		if (strcmp(svc->sched_name, "conhash")) {
+			user.flags &= ~IP_VS_SVC_F_QID_HASH;
+			user.flags &= ~IP_VS_SVC_F_SIP_HASH;
+		}
+		else {
+			user.flags |= IP_VS_SVC_F_SIP_HASH;
+		}
 	}
 
 	if( options & OPT_PERSISTENT ) {
@@ -158,6 +165,16 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 
 	if( options & OPT_ONEPACKET ) {
 		user.flags |= IP_VS_SVC_F_ONEPACKET;
+	}
+
+	if( options & OPT_SIPHASH ) {
+		user.flags |= IP_VS_SVC_F_SIP_HASH;
+		user.flags &= ~IP_VS_SVC_F_QID_HASH;
+	}
+
+	if( options & OPT_QIDHASH ) {
+		user.flags |= IP_VS_SVC_F_QID_HASH;
+		user.flags &= ~IP_VS_SVC_F_SIP_HASH;
 	}
 
 	return ipvs_update_service(&user);
@@ -867,5 +884,9 @@ void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t
 	user->af        = entry->af;
 	user->addr      = entry->addr;
 	strcpy(user->pe_name, entry->pe_name);
+	strcpy(user->srange, entry->srange);
+	strcpy(user->drange, entry->drange);
+	strcpy(user->iifname, entry->iifname);
+	strcpy(user->iifname, entry->iifname);
 }
 

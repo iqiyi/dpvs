@@ -174,6 +174,7 @@ typedef struct _virtual_server {
 	char				drange[256];
 	char				iifname[IFNAMSIZ];
 	char				oifname[IFNAMSIZ];
+	unsigned			hash_target;
 #if defined(_WITH_SNMP_) && defined(_KRNL_2_6_) && defined(_WITH_LVS_)
 	/* Statistics */
 	time_t				lastupdated;
@@ -258,6 +259,7 @@ static inline int inaddr_equal(sa_family_t family, void *addr1, void *addr2)
 			 (X)->vfwmark                 == (Y)->vfwmark			&&\
 			 (X)->service_type            == (Y)->service_type		&&\
 			 (X)->loadbalancing_kind      == (Y)->loadbalancing_kind	&&\
+			 (X)->hash_target             == (Y)->hash_target		&&\
 			 (X)->nat_mask                == (Y)->nat_mask			&&\
 			 (X)->granularity_persistence == (Y)->granularity_persistence	&&\
 			 (X)->syn_proxy		      == (Y)->syn_proxy			&&\

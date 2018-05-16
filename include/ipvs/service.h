@@ -34,6 +34,9 @@
 #define DP_VS_SVC_F_HASHED          0x0002      /* hashed entry */
 #define DP_VS_SVC_F_SYNPROXY        0x8000      /* synrpoxy flag */
 
+#define DP_VS_SVC_F_SIP_HASH        0x0100      /* sip hash target */
+#define DP_VS_SVC_F_QID_HASH        0x0200      /* quic cid hash target */
+
 #define DP_VS_SCHEDNAME_MAXLEN      16
 
 rte_rwlock_t __dp_vs_svc_lock;

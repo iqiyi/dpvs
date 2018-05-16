@@ -378,6 +378,19 @@ dump_vs(void *data)
 #endif
 	}
 
+	switch (vs->hash_target) {
+
+	case IP_VS_SVC_F_SIP_HASH:
+		log_message(LOG_INFO, "   hash target = sip");
+		break;
+	case IP_VS_SVC_F_QID_HASH:
+		log_message(LOG_INFO, "   hash target = quicid");
+		break;
+	default:
+		log_message(LOG_INFO, "   hash target not support");
+		break;
+	}
+
 	if (vs->s_svr) {
 		log_message(LOG_INFO, "   sorry server = %s"
 				    , FMT_RS(vs->s_svr));
@@ -428,6 +441,7 @@ alloc_vs(char *ip, char *port)
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;
+	new->hash_target = 0;
 	memset(new->srange, 0, 256);
 	memset(new->drange, 0, 256);
 	memset(new->iifname, 0, IFNAMSIZ);

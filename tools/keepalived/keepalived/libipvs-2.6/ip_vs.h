@@ -43,6 +43,9 @@
 #define IP_VS_SVC_F_SCHED2	0x0010		/* scheduler flag 2 */
 #define IP_VS_SVC_F_SCHED3	0x0020		/* scheduler flag 3 */
 
+#define IP_VS_SVC_F_SIP_HASH    0x0100          /* sip hash target */
+#define IP_VS_SVC_F_QID_HASH    0x0200          /* quic cid hash target */
+
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK	IP_VS_SVC_F_SCHED1 /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT	IP_VS_SVC_F_SCHED2 /* SH use port */
 

@@ -101,7 +101,7 @@ static void neigh_dump(struct dp_vs_neigh_conf *neigh)
 {
     char ipaddr[64];
 
-    if (neigh->flag & NEIGHBOUR_COMPLETED)
+    if (neigh->state >= DPVS_NUD_S_REACHABLE)
         printf("ip: %s      mac: %02x:%02x:%02x:%02x:%02x:%02x      mbuf: %d %s\n",
             inet_ntop(neigh->af, &neigh->ip_addr, ipaddr, sizeof(ipaddr)) ? ipaddr : "::",
             neigh->eth_addr.ether_addr_octet[0],

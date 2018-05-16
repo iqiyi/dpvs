@@ -2177,18 +2177,15 @@ static int netif_arp_ring_init(void)
 }
 
 static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
-                      lcoreid_t cid, uint16_t count, bool pretetch)
+                      lcoreid_t cid, uint16_t count, bool pkts_from_ring)
 {
     int i, t;
     struct ether_hdr *eth_hdr;
-    bool pkts_from_ring = !pretetch;
     struct rte_mbuf *mbuf_copied = NULL;
 
     /* prefetch packets */
-    if (pretetch) {
-        for (t = 0; t < qconf->len && t < NETIF_PKT_PREFETCH_OFFSET; t++)
-            rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *));
-    }
+    for (t = 0; t < count && t < NETIF_PKT_PREFETCH_OFFSET; t++)
+        rte_prefetch0(rte_pktmbuf_mtod(mbufs[t], void *));
 
     /* L2 filter */
     for (i = 0; i < count; i++) {
@@ -2205,8 +2202,8 @@ static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbu
             mbuf->port = dev->id;
         }
 
-        if (pretetch && (t < qconf->len)) {
-            rte_prefetch0(rte_pktmbuf_mtod(qconf->mbufs[t], void *));
+        if (t < count) {
+            rte_prefetch0(rte_pktmbuf_mtod(mbufs[t], void *));
             t++;
         }
 
@@ -2278,7 +2275,7 @@ static void lcore_process_arp_ring(struct netif_queue_conf *qconf, lcoreid_t cid
     nb_rb = rte_ring_dequeue_burst(arp_ring[cid], (void**)mbufs, NETIF_MAX_PKT_BURST, NULL);
 
     if (nb_rb > 0) {
-        lcore_process_packets(qconf, mbufs, cid, nb_rb, 0);
+        lcore_process_packets(qconf, mbufs, cid, nb_rb, 1);
     }
 }
 
@@ -2299,12 +2296,12 @@ static void lcore_job_recv_fwd(void *arg)
         for (j = 0; j < lcore_conf[lcore2index[cid]].pqs[i].nrxq; j++) {
             qconf = &lcore_conf[lcore2index[cid]].pqs[i].rxqs[j];
 
-            lcore_process_arp_ring(qconf,cid);
+            lcore_process_arp_ring(qconf, cid);
             qconf->len = netif_rx_burst(pid, qconf);
 
             lcore_stats_burst(&lcore_stats[cid], qconf->len);
 
-            lcore_process_packets(qconf, qconf->mbufs, cid, qconf->len, 1);
+            lcore_process_packets(qconf, qconf->mbufs, cid, qconf->len, 0);
             kni_send2kern_loop(pid, qconf);
         }
     }

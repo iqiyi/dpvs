@@ -96,17 +96,18 @@ static void __qsch_destroy(struct Qsch *sch)
     sch_free(sch);
 }
 
-static void sch_recycle(void *arg)
+static int sch_recycle(void *arg)
 {
     struct Qsch *sch = arg;
 
     if (rte_atomic32_read(&sch->refcnt)) {
         dpvs_timer_reset(&sch->rc_timer, true);
         RTE_LOG(WARNING, TC, "%s: sch %u is in use.\n", __func__, sch->handle);
-        return;
+        return DTIMER_OK;
     }
 
     __qsch_destroy(sch);
+    return DTIMER_STOP;
 }
 
 static void sch_dying(struct Qsch *sch)

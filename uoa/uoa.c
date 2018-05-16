@@ -129,6 +129,7 @@ struct uoa_stats {
 
 static struct uoa_stats uoa_stats;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 #define UOA_STATS_INC(_f_) do { \
 	struct uoa_cpu_stats *s = this_cpu_ptr(uoa_stats.cpustats); \
 	u64_stats_update_begin(&s->syncp); \
@@ -136,6 +137,13 @@ static struct uoa_stats uoa_stats;
 	u64_stats_update_end(&s->syncp); \
 	uoa_stats.kstats._f_++; \
 } while (0)
+#else
+#define UOA_STATS_INC(_f_) do { \
+	struct uoa_cpu_stats *s = this_cpu_ptr(uoa_stats.cpustats); \
+	s->_f_++; \
+	uoa_stats.kstats._f_++; \
+} while (0)
+#endif
 
 static int uoa_stats_show(struct seq_file *seq, void *arg)
 {
@@ -163,10 +171,12 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
 	for_each_possible_cpu(i) {
 		struct uoa_cpu_stats *s = per_cpu_ptr(uoa_stats.cpustats, i);
 		__u64 success, miss, invalid, got, none, saved, ack_fail;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 		unsigned int start;
 
 		do {
 			start = u64_stats_fetch_begin_irq(&s->syncp);
+#endif
 
 			success	= s->success;
 			miss	= s->miss;
@@ -175,7 +185,9 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
 			none	= s->uoa_none;
 			saved   = s->uoa_saved;
 			ack_fail = s->uoa_ack_fail;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 		} while (u64_stats_fetch_retry_irq(&s->syncp, start));
+#endif
 
 		seq_printf(seq,
 		   "%3X  %8llu %8llu %8llu %8llu %8llu %8llu %8llu\n",
@@ -228,7 +240,9 @@ static int uoa_stats_init(void)
 		struct uoa_cpu_stats *cs;
 
 		cs = per_cpu_ptr(uoa_stats.cpustats, i);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 		u64_stats_init(&cs->syncp);
+#endif
 	}
 
 	proc_create("uoa_stats", 0, init_net.proc_net, &uoa_stats_fops);
@@ -250,9 +264,10 @@ static inline void uoa_map_dump(const struct uoa_map *um, const char *pref)
 	if (likely(!uoa_debug))
 		return;
 
-	pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d\n", pref ? : "",
+	pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d, refcnt %d\n", pref ? : "",
 		&um->saddr, ntohs(um->sport), &um->daddr, ntohs(um->dport),
-		&um->optuoa.op_addr, ntohs(um->optuoa.op_port));
+		&um->optuoa.op_addr, ntohs(um->optuoa.op_port),
+		atomic_read(&um->refcnt));
 }
 
 static inline unsigned int __uoa_map_hash_key(__be32 saddr, __be32 daddr,
@@ -273,11 +288,18 @@ static inline void uoa_map_hash(struct uoa_map *um)
 	unsigned int hash = uoa_map_hash_key(um);
 	struct hlist_head *head = &uoa_map_tab[hash];
 	struct uoa_map *cur;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+	struct hlist_node *node;
+#endif
 
 	um_lock_bh(hash);
 
 	/* overwrite existing mapping */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 	hlist_for_each_entry_rcu(cur, head, hlist) {
+#else
+	hlist_for_each_entry_rcu(cur, node, head, hlist) {
+#endif
 		if (um->saddr == cur->saddr &&
 		    um->daddr == cur->daddr &&
 		    um->sport == cur->sport &&
@@ -290,7 +312,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 			kmem_cache_free(uoa_map_cache, um);
 		}
 
-		uoa_map_dump(cur, "update:");
+		uoa_map_dump(cur, "upd:");
 		goto hashed;
 	}
 
@@ -333,23 +355,32 @@ static inline struct uoa_map *uoa_map_get(__be32 saddr, __be32 daddr,
 	unsigned int hash = __uoa_map_hash_key(saddr, daddr, sport, dport);
 	struct hlist_head *head = &uoa_map_tab[hash];
 	struct uoa_map *um = NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+	struct hlist_node *node;
+#endif
 
 	um_lock_bh(hash);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 	hlist_for_each_entry_rcu(um, head, hlist) {
+#else
+	hlist_for_each_entry_rcu(um, node, head, hlist) {
+#endif
 		/* we allow daddr being set to wildcard (zero),
 		 * since UDP server may bind INADDR_ANY */
 		if (um->saddr == saddr && (daddr == 0 || um->daddr == daddr) &&
 		    um->sport == sport && um->dport == dport) {
 			mod_timer(&um->timer, jiffies + uoa_map_timeout * HZ);
 			atomic_inc(&um->refcnt);
-			break;
+
+			um_unlock_bh(hash);
+			return um;
 		}
 	}
 
 	um_unlock_bh(hash);
 
-	return um;
+	return NULL;
 }
 
 static inline void uoa_map_put(struct uoa_map *um)
@@ -363,8 +394,7 @@ static inline void __uoa_map_expire(struct uoa_map *um, struct timer_list *timer
 		/* try again if some one is using it */
 		mod_timer(timer, jiffies + uoa_map_timeout * HZ);
 
-		pr_warn("expire delaye: refcnt: %d\n",
-			 atomic_read(&um->refcnt));
+		uoa_map_dump(um, "expire delayed:");
 		return;
 	}
 
@@ -398,21 +428,36 @@ flush_again:
 		struct uoa_map *um;
 		struct hlist_node *n;
 		struct hlist_head *head = &uoa_map_tab[i];
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+		struct hlist_node *node;
+#endif
 
+		um_lock_bh(i);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
 		hlist_for_each_entry_safe(um, n, head, hlist) {
+#else
+		hlist_for_each_entry_safe(um, node, n, head, hlist) {
+#endif
 			if (timer_pending(&um->timer))
 				del_timer(&um->timer);
 
 			if (atomic_read(&um->refcnt) != 0)
 				continue;
 
-			hlist_del(&um->hlist);
+			uoa_map_dump(um, "flu:");
+
+			hlist_del_rcu(&um->hlist);
 			atomic_dec(&uoa_map_count);
 			kmem_cache_free(uoa_map_cache, um);
 		}
+
+
+		um_unlock_bh(i);
 	}
 
 	if (atomic_read(&uoa_map_count) > 0) {
+		pr_debug("%s: again\n", __func__);
 		schedule();
 		goto flush_again;
 	}
@@ -455,7 +500,7 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 		return -ENOENT;
 	}
 
-	uoa_map_dump(um, "lookup:");
+	uoa_map_dump(um, "hit:");
 
 	if (likely(um->optuoa.op_code == IPOPT_UOA &&
 		   um->optuoa.op_len == IPOLEN_UOA)) {
@@ -644,6 +689,12 @@ static unsigned int uoa_ip_local_in(const struct nf_hook_ops *ops,
 				    const struct net_device *in,
 				    const struct net_device *out,
 				    const struct nf_hook_state *state)
+#elif RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(6,4)
+static unsigned int uoa_ip_local_in(unsigned int hooknum,
+				    struct sk_buff *skb,
+				    const struct net_device *in,
+				    const struct net_device *out,
+				    int (*okfn)(struct sk_buff *))
 #else
 #error "Pls modify the definition according to kernel version."
 #endif

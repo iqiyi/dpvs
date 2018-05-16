@@ -199,6 +199,7 @@ static const char* optnames[] = {
 	"synproxy" , 
 	"ifname" , 
 	"sockpair" ,
+	"hash-target",
 };
 
 /*
@@ -211,27 +212,27 @@ static const char* optnames[] = {
  */
 static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 {
-        /* -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr blst syn ifname sockpair */
-/*ADD*/      {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x'},
-/*EDIT*/     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x'},
-/*DEL*/      {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*FLUSH*/    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*LIST*/     {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x',  'x', 'x' ,' '},
-/*ADDSRV*/   {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*DELSRV*/   {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*EDITSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*TIMEOUT*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*STARTD*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*STOPD*/    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*RESTORE*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*SAVE*/     {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*ZERO*/     {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*ADDLADDR*/ {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x'},
-/*DELLADDR*/ {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x'},
-/*GETLADDR*/ {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
-/*ADDBLKLST*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x'},
-/*DELBLKLST*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x'},
-/*GETBLKLST*/{'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x'},
+        /* -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr blst syn ifname sockpair hashtag*/
+/*ADD*/      {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' '},
+/*EDIT*/     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' '},
+/*DEL*/      {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*FLUSH*/    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*LIST*/     {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x',  'x', 'x' ,' ' ,'x'},
+/*ADDSRV*/   {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*DELSRV*/   {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*EDITSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*TIMEOUT*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*STARTD*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*STOPD*/    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*RESTORE*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*SAVE*/     {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*ZERO*/     {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*ADDLADDR*/ {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x'},
+/*DELLADDR*/ {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x'},
+/*GETLADDR*/ {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/*ADDBLKLST*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x'},
+/*DELBLKLST*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x'},
+/*GETBLKLST*/{'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
 };
 
 /* printing format flags */
@@ -450,6 +451,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
 		{ "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
+		{ "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
 
@@ -578,6 +580,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			set_option(options, OPT_SCHEDULER);
 			strncpy(ce->svc.sched_name,
 				optarg, IP_VS_SCHEDNAME_MAXLEN);
+			if (!memcmp(ce->svc.sched_name, "conhash", strlen("conhash")))
+				ce->svc.flags = ce->svc.flags | IP_VS_SVC_F_SIP_HASH; 
 			break;
 		case 'p':
 			set_option(options, OPT_PERSISTENT);
@@ -765,6 +769,28 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			else
 				fail(2 , "synproxy switch must be enable or disable\n");
 
+			break;
+			}
+		case 'Y':
+			{
+			set_option(options, OPT_HASHTAG);
+
+			if (strcmp(ce->svc.sched_name, "conhash"))
+				fail(2 , "hash target can only be set when schedule is conhash\n");
+			if (!memcmp(optarg, "sip", strlen("sip"))) {
+				set_option(options, OPT_SIPHASH);
+				ce->svc.flags = ce->svc.flags | IP_VS_SVC_F_SIP_HASH;
+				ce->svc.flags = ce->svc.flags & (~IP_VS_SVC_F_QID_HASH);
+			}
+			else if (!memcmp(optarg, "qid", strlen("qid"))) {
+				if (ce->svc.protocol != IPPROTO_UDP)
+					fail(2 , "qid hash can only be set in udp service\n");
+				set_option(options, OPT_QIDHASH);
+				ce->svc.flags = ce->svc.flags | IP_VS_SVC_F_QID_HASH;
+				ce->svc.flags = ce->svc.flags & (~IP_VS_SVC_F_SIP_HASH);
+			}
+			else
+				fail(2 , "hash target not support\n");
 			break;
 			}
 		default:
@@ -1429,7 +1455,8 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --numeric      -n                   numeric output of addresses and ports\n"
 		"  --ifname       -F                   nic interface for laddrs\n"
 		"  --synproxy     -j                   TCP syn proxy\n"
-		"  --match        -H MATCH             select service by MATCH 'proto,srange,drange,iif,oif'\n",
+		"  --match        -H MATCH             select service by MATCH 'proto,srange,drange,iif,oif'\n"
+		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n",
 		DEF_SCHED);
 
 	exit(exit_status);
@@ -1809,6 +1836,10 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		print_largenum(se->stats.outbps, format);
 	} else {
 		printf("%s %s", svc_name, se->sched_name);
+		if (se->flags & IP_VS_SVC_F_SIP_HASH)
+			printf(" sip");
+		if (se->flags & IP_VS_SVC_F_QID_HASH)
+			printf(" qid");
 		if (se->flags & IP_VS_SVC_F_PERSISTENT) {
 			printf(" persistent %u", se->timeout);
 			if (se->af == AF_INET)
