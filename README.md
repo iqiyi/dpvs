@@ -62,25 +62,25 @@ Well, let's start from DPDK then.
 
 ## DPDK setup.
 
-Currently, `dpdk-stable-17.05.2` is used for `DPVS`.
+Currently, `dpdk-stable-17.11.2` is used for `DPVS`.
 
 > You can skip this section if experienced with DPDK, and refer the [link](http://dpdk.org/doc/guides/linux_gsg/index.html) for details.
 
 ```bash
-$ wget https://fast.dpdk.org/rel/dpdk-17.05.2.tar.xz   # download from dpdk.org if link failed.
-$ tar vxf dpdk-17.05.2.tar.xz
+$ wget https://fast.dpdk.org/rel/dpdk-17.11.2.tar.xz   # download from dpdk.org if link failed.
+$ tar vxf dpdk-17.11.2.tar.xz
 ```
 
 ### DPDK patchs
 
 There's a patch for DPDK `kni` driver for hardware multicast, apply it if needed (for example, launch `ospfd` on `kni` device).
 
-> assuming we are in DPVS root dir and dpdk-stable-17.05.2 is under it, pls note it's not mandatory, just for convenience.
+> assuming we are in DPVS root dir and dpdk-stable-17.11.2 is under it, pls note it's not mandatory, just for convenience.
 
 ```
 $ cd <path-of-dpvs>
-$ cp patch/dpdk-stable-17.05.2/*.patch dpdk-stable-17.05.2/
-$ cd dpdk-stable-17.05.2/
+$ cp patch/dpdk-stable-17.11.2/*.patch dpdk-stable-17.11.2/
+$ cd dpdk-stable-17.11.2/
 $ patch -p 1 < 0001-PATCH-kni-use-netlink-event-for-multicast-driver-par.patch
 ```
 
@@ -95,14 +95,14 @@ $ patch -p1 < 0002-net-support-variable-IP-header-len-for-checksum-API.patch
 Now build DPDK and export `RTE_SDK` env variable for DPDK app (DPVS).
 
 ```bash
-$ cd dpdk-stable-17.05.2/
+$ cd dpdk-stable-17.11.2/
 $ make config T=x86_64-native-linuxapp-gcc
 Configuration done
 $ make # or make -j40 to save time, where 40 is the cpu core number.
 $ export RTE_SDK=$PWD
 ```
 
-In our tutorial, `RTE_TARGET` is not set, the value is "build" by default, thus DPDK libs and header files can be found in `dpdk-stable-17.05.2/build`.
+In our tutorial, `RTE_TARGET` is not set, the value is "build" by default, thus DPDK libs and header files can be found in `dpdk-stable-17.11.2/build`.
 
 Now to set up DPDK hugepage, our test environment is NUMA system. For single-node system pls refer the [link](http://dpdk.org/doc/guides/linux_gsg/sys_reqs.html).
 
@@ -119,7 +119,7 @@ Install Kernel modules and bind NIC with `igb_uio` driver. Quick start uses only
 
 ```bash
 $ modprobe uio
-$ cd dpdk-stable-17.05.2
+$ cd dpdk-stable-17.11.2
 
 $ insmod build/kmod/igb_uio.ko
 $ insmod build/kmod/rte_kni.ko
@@ -136,7 +136,7 @@ $ ./usertools/dpdk-devbind.py -b igb_uio 0000:06:00.0
 It's simple, just set `RTE_SDK` and build it.
 
 ```bash
-$ cd dpdk-stable-17.05.2/
+$ cd dpdk-stable-17.11.2/
 $ export RTE_SDK=$PWD
 $ cd <path-of-dpvs>
 
