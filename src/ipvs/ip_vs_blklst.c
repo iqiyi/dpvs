@@ -50,11 +50,16 @@ static uint32_t dp_vs_blklst_rnd;
 static inline uint32_t blklst_hashkey(const union inet_addr *vaddr,
                                      const union inet_addr *blklst)
 {
+    /* jhash hurts performance, we do not use it here
+     *
     return rte_jhash_2words((uint32_t) vaddr->in.s_addr, 
                             (uint32_t) blklst->in.s_addr, 
                             dp_vs_blklst_rnd) & DPVS_BLKLST_TAB_MASK;
+    */
+    return ((rte_be_to_cpu_32(vaddr->in.s_addr) * 31
+                + rte_be_to_cpu_32(blklst->in.s_addr)) * 31
+            + dp_vs_blklst_rnd) & DPVS_BLKLST_TAB_MASK;
 }
-
 
 struct blklst_entry *dp_vs_blklst_lookup(uint8_t proto, const union inet_addr *vaddr,
                                          uint16_t vport, const union inet_addr *blklst)
