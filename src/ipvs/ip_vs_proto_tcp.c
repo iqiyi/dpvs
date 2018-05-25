@@ -452,6 +452,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 
     /* only TCP-SYN without other flag can be scheduled */
     if (!th->syn || th->ack || th->fin || th->rst) {
+#ifdef CONFIG_DPVS_IPVS_DEBUG
         char dbuf[64], sbuf[64];
         const char *daddr, *saddr;
 
@@ -463,6 +464,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
                 th->syn ? 'S' : '.', th->fin ? 'F' : '.',
                 th->ack ? 'A' : '.', th->rst ? 'R' : '.',
                 saddr, ntohs(th->source), daddr, ntohs(th->dest));
+#endif
 
         /* Drop tcp packet which is send to vip and !vport */
         if (g_defence_tcp_drop &&

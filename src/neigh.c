@@ -50,9 +50,10 @@ struct neighbour_entry {
     struct netif_port *port;
     struct dpvs_timer timer;
     struct list_head queue_list;
-    uint8_t flag;
     uint32_t que_num;
     uint32_t state;
+    uint32_t ts;
+    uint8_t flag;
 } __rte_cache_aligned;
 
 struct neighbour_mbuf_entry {
@@ -283,7 +284,7 @@ static int neigh_entry_expire(struct neighbour_entry *neighbour)
         rte_free(mbuf);
     }
 
-    if (cid  == g_cid) {
+    if (cid == g_cid) {
         mac_param = neigh_ring_clone_entry(neighbour, 0);
         if (mac_param) {
             int ret = rte_ring_enqueue(neigh_ring[master_cid], mac_param);
@@ -321,13 +322,22 @@ static void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx)
     /*DPVS_NUD_S_KEEP is not a real state, just use it to keep original state*/
     if ((nud_states[idx].next_state[neighbour->state] != DPVS_NUD_S_KEEP)
         && !(neighbour->flag & NEIGHBOUR_STATIC)) {
-#ifdef CONFIG_DPVS_NEIGH_DEBUG
         int old_state = neighbour->state;
-#endif
+        struct timespec now = { 0 };
+
         neighbour->state = nud_states[idx].next_state[neighbour->state];
+        if (neighbour->state == old_state) {
+            if (likely(clock_gettime(CLOCK_REALTIME_COARSE, &now)) == 0)
+                /* frequent timer updates hurt performance,
+                 * do not update timer unless half timeout passed */
+                if ((now.tv_sec - neighbour->ts)*2 < nud_timeouts[old_state])
+                    return;
+        }
+
         timeout.tv_sec = nud_timeouts[neighbour->state];
         timeout.tv_usec = 0;
         dpvs_timer_update(&neighbour->timer, &timeout, false);
+        neighbour->ts = now.tv_sec;
 #ifdef CONFIG_DPVS_NEIGH_DEBUG
         RTE_LOG(DEBUG, NEIGHBOUR, "%s trans state to %s.\n",
                nud_state_name(old_state), nud_state_name(neighbour->state));
@@ -351,7 +361,7 @@ static struct neighbour_entry *neigh_lookup_entry(const void *key, const struct 
     struct neighbour_entry *neighbour;
     lcoreid_t cid = rte_lcore_id();
     list_for_each_entry(neighbour, &neigh_table[cid][hashkey], arp_list){
-        if(neigh_key_cmp(neighbour, key, port)){
+        if(neigh_key_cmp(neighbour, key, port)) {
             return neighbour;
         }
     }
@@ -389,7 +399,7 @@ static void neigh_arp_confirm(struct neighbour_entry *neighbour)
                        daddr.in.s_addr) != EDPVS_OK) {
         RTE_LOG(ERR, NEIGHBOUR, "[%s] send arp failed\n", __func__);
     }
-} 
+}
 
 static int neigh_edit(struct neighbour_entry *neighbour, struct ether_addr* eth_addr,
                       unsigned int hashkey)
