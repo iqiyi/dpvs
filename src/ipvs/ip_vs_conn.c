@@ -515,7 +515,6 @@ static void conn_flush(void)
 
                 rte_mempool_put(conn->connpool, conn);
                 this_conn_count--;
-                return;
             }
             rte_atomic32_dec(&conn->refcnt);
         }
