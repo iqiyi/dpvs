@@ -38,6 +38,11 @@ enum uoa_state {
     UOA_S_DONE,
 };
 
+enum uoa_mode {
+    UOA_M_OPP,      /* priave "option-protocol" (IPPROTO_OPT) with UOA */
+    UOA_M_IPO,      /* add UOA as IPv4 Option field */
+};
+
 struct conn_uoa {
     enum uoa_state  state;
     uint8_t         sent;
@@ -45,6 +50,7 @@ struct conn_uoa {
 };
 
 static int g_uoa_max_trail = UOA_DEF_MAX_TRAIL; /* zero to disable UOA */
+static int g_uoa_mode = UOA_M_OPP; /* by default */
 
 int g_defence_udp_drop = 0;
 
@@ -163,13 +169,15 @@ static int udp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
 static int send_standalone_uoa(const struct dp_vs_conn *conn,
                                const struct rte_mbuf *ombuf,
                                const struct iphdr *oiph,
-                               const struct udphdr *ouh)
+                               const struct udphdr *ouh,
+                               enum uoa_mode mode)
 {
     struct rte_mbuf *mbuf = NULL;
     struct route_entry *rt;
     struct iphdr *iph;
     struct udphdr *uh;
-    struct ipopt_uoa *uoa;
+    struct ipopt_uoa *uoa = NULL;
+    struct opphdr *opp;
 
     assert(conn && ombuf && oiph && ouh && ombuf->userdata);
 
@@ -186,21 +194,42 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
     if (unlikely(!iph))
         goto no_room;
     iph->version    = 4;
-    iph->ihl        = (sizeof(struct iphdr) + IPOLEN_UOA) / 4;
     iph->tos        = oiph->tos;
-    iph->tot_len    = htons(sizeof(struct iphdr) + \
-                            IPOLEN_UOA + sizeof(struct udphdr));
     iph->id         = ip4_select_id((struct ipv4_hdr *)iph);
     iph->frag_off   = 0;
     iph->ttl        = oiph->ttl;
-    iph->protocol   = oiph->protocol; /* should always UDP */
     iph->saddr      = conn->laddr.in.s_addr;
     iph->daddr      = conn->daddr.in.s_addr;
 
+    if (mode == UOA_M_IPO) {
+        iph->ihl    = (sizeof(struct iphdr) + IPOLEN_UOA) / 4;
+        iph->tot_len = htons(sizeof(*iph) + IPOLEN_UOA + sizeof(*uh));
+        iph->protocol = oiph->protocol; /* should always UDP */
+
+        uoa = (void *)rte_pktmbuf_append(mbuf, IPOLEN_UOA);
+    } else { /* UOA_M_OPP */
+        iph->ihl    = sizeof(struct iphdr) / 4;
+        iph->tot_len = \
+            htons(sizeof(*iph) + sizeof(*opp) + sizeof(*uoa) + sizeof(*uh));
+        iph->protocol = IPPROTO_OPT;
+
+        /* option-proto */
+        opp = (void *)rte_pktmbuf_append(mbuf, sizeof(*opp));
+        if (unlikely(!opp))
+            goto no_room;
+
+        memset(opp, 0, sizeof(*opp));
+        opp->version = 0x01;
+        opp->protocol = oiph->protocol;
+        opp->length = htons(sizeof(*opp) + sizeof(*uoa));
+
+        uoa = (void *)opp->options;
+    }
+
     /* UOA option */
-    uoa = (void *)rte_pktmbuf_append(mbuf, IPOLEN_UOA);
     if (unlikely(!uoa))
         goto no_room;
+
     uoa->op_code    = IPOPT_UOA;
     uoa->op_len     = IPOLEN_UOA;
     uoa->op_port    = ouh->source;
@@ -231,41 +260,14 @@ no_room:
     return EDPVS_NOROOM;
 }
 
-static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
-                          struct conn_uoa *uoa)
+static int insert_ipopt_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+                            struct iphdr *iph, struct udphdr *uh, int mtu)
 {
-    struct iphdr *niph, *iph = (struct iphdr *)ip4_hdr(mbuf);
-    struct route_entry *rt = mbuf->userdata;
+    struct iphdr *niph = NULL;
     struct ipopt_uoa *optuoa;
-    struct udphdr *uh = NULL;
-    int err;
 
-    /* already send enough UOA */
-    if (uoa->state == UOA_S_DONE)
-        return EDPVS_OK;
-
-    /* stop sending if ACK received or max-trail reached */
-    if (uoa->sent >= g_uoa_max_trail || uoa->acked) {
-        uoa->state = UOA_S_DONE;
-        conn->flags &= ~DPVS_CONN_F_NOFASTXMIT;
-        return EDPVS_OK;
-    }
-
-    /* get udp header before any 'standalone_uoa' */
-    uh = rte_pktmbuf_mtod_offset(mbuf, struct udphdr *, ip4_hdrlen(mbuf));
-
-    /*
-     * send standalone (empty-payload) UDP/IP pkt with UOA if
-     * no room in IP header or exceeding MTU.
-     *
-     * Note: don't worry about inserting IPOPT_END, since it's
-     * not mandatory and Linux codes can handle absent of IPOPT_END.
-     * actually just adding UOA will not cause "... end of option coincide
-     * with the end of the internet header. - RFC791". if original packet
-     * is coincide, the IPOPT_END should already exist.
-     */
     if ((ip4_hdrlen(mbuf) + sizeof(struct ipopt_uoa) > MAX_IPOPTLEN) ||
-        (mbuf->pkt_len + sizeof(struct ipopt_uoa) > rt->mtu))
+            (mbuf->pkt_len + sizeof(struct ipopt_uoa) > mtu))
         goto standalone_uoa;
 
     /*
@@ -275,9 +277,7 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
      * otherwise move left parts (IP opts, UDP hdr and payloads).
      */
     if (likely(ntohs(iph->tot_len) >= (sizeof(struct iphdr) * 2))) {
-        niph = (struct iphdr *)
-               rte_pktmbuf_prepend(mbuf, IPOLEN_UOA);
-
+        niph = (struct iphdr *)rte_pktmbuf_prepend(mbuf, IPOLEN_UOA);
         if (unlikely(!niph))
             goto standalone_uoa;
 
@@ -310,11 +310,123 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     niph->tot_len = htons(ntohs(niph->tot_len) + IPOLEN_UOA);
     /* UDP/IP checksum will recalc later*/
 
-    uoa->sent++;
     return EDPVS_OK;
 
 standalone_uoa:
-    err = send_standalone_uoa(conn, mbuf, iph, uh);
+    return send_standalone_uoa(conn, mbuf, iph, uh, UOA_M_IPO);
+}
+
+static int insert_opp_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+                          struct iphdr *iph, struct udphdr *uh, int mtu)
+{
+    struct iphdr *niph;
+    struct opphdr *opph;
+    struct ipopt_uoa *uoa;
+
+    if (mbuf->pkt_len + sizeof(*opph) + IPOLEN_UOA > mtu)
+        goto standalone_uoa;
+
+    /*
+     * new protocol in inserted after IPv4 header (including existing
+     * options), and before UDP header. so unlike "ipo" mode, do not
+     * need handle IPOPT_END coincide issue.
+     */
+    if (likely(ntohs(iph->tot_len) >= (iph->ihl<<2) * 2)) {
+        niph = (void *)rte_pktmbuf_prepend(mbuf, sizeof(*opph) + IPOLEN_UOA);
+        if (unlikely(!niph))
+            goto standalone_uoa;
+
+        memmove(niph, iph, iph->ihl << 2);
+    } else {
+        unsigned char *ptr;
+
+        niph = iph;
+
+        if (unlikely(mbuf_may_pull(mbuf, mbuf->pkt_len) != 0))
+            goto standalone_uoa;
+
+        ptr = (void *)rte_pktmbuf_append(mbuf, sizeof(*opph) + IPOLEN_UOA);
+        if (unlikely(!ptr))
+            goto standalone_uoa;
+
+        memmove((void *)iph + (iph->ihl << 2) + sizeof(*opph) + IPOLEN_UOA,
+                (void *)iph + (iph->ihl << 2),
+                ntohs(iph->tot_len) - (iph->ihl << 2));
+
+        uh = (void *)uh + sizeof(*opph) + IPOLEN_UOA;
+    }
+
+    opph = (struct opphdr *)((void *)niph + (niph->ihl << 2));
+    memset(opph, 0, sizeof(*opph));
+    opph->version   = 0x1;
+    opph->protocol  = niph->protocol;
+    opph->length    = htons(sizeof(*opph) + IPOLEN_UOA);
+
+    uoa = (void *)opph->options;
+    uoa->op_code    = IPOPT_UOA;
+    uoa->op_len     = IPOLEN_UOA;
+    uoa->op_port    = uh->source;
+    uoa->op_addr    = niph->saddr;
+
+    niph->protocol = IPPROTO_OPT;
+    niph->tot_len = htons(ntohs(niph->tot_len) + sizeof(*opph) + IPOLEN_UOA);
+    /* UDP/IP checksum will recalc later*/
+
+    return EDPVS_OK;
+
+standalone_uoa:
+    return send_standalone_uoa(conn, mbuf, iph, uh, UOA_M_OPP);
+}
+
+static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+                          struct conn_uoa *uoa)
+{
+    struct iphdr *iph = (struct iphdr *)ip4_hdr(mbuf);
+    struct route_entry *rt = NULL;
+    struct udphdr *uh = NULL;
+    int err;
+
+    /* already send enough UOA */
+    if (uoa->state == UOA_S_DONE)
+        return EDPVS_OK;
+
+    /* stop sending if ACK received or max-trail reached */
+    if (uoa->sent >= g_uoa_max_trail || uoa->acked) {
+        uoa->state = UOA_S_DONE;
+        conn->flags &= ~DPVS_CONN_F_NOFASTXMIT;
+        return EDPVS_OK;
+    }
+
+    /* get udp header before any 'standalone_uoa' */
+    uh = rte_pktmbuf_mtod_offset(mbuf, struct udphdr *, ip4_hdrlen(mbuf));
+
+    rt = mbuf->userdata;
+    if (!rt) {
+        RTE_LOG(ERR, IPVS, "%s: no route\n", __func__);
+        return EDPVS_INVPKT;
+    }
+
+    /*
+     * send standalone (empty-payload) UDP/IP pkt with UOA if
+     * no room in IP header or exceeding MTU.
+     *
+     * Note: don't worry about inserting IPOPT_END, since it's
+     * not mandatory and Linux codes can handle absent of IPOPT_END.
+     * actually just adding UOA will not cause "... end of option coincide
+     * with the end of the internet header. - RFC791". if original packet
+     * is coincide, the IPOPT_END should already exist.
+     */
+    switch (g_uoa_mode) {
+    case UOA_M_IPO:
+        err = insert_ipopt_uoa(conn, mbuf, iph, uh, rt->mtu);
+
+    case UOA_M_OPP:
+        err = insert_opp_uoa(conn, mbuf, iph, uh, rt->mtu);
+
+    default:
+        return EDPVS_INVAL;
+    }
+
     if (err == EDPVS_OK)
         uoa->sent++;
     else
@@ -327,12 +439,21 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
                     struct dp_vs_conn *conn,
                     struct rte_mbuf *mbuf)
 {
-    struct udp_hdr *uh;
+    struct udp_hdr *uh = NULL;
+    struct iphdr *iph = (void *)ip4_hdr(mbuf);
 
     /* cannot use mbuf_header_pointer() */
     if (unlikely(mbuf->data_len < ip4_hdrlen(mbuf) + sizeof(struct udp_hdr)))
         return EDPVS_INVPKT;
-    uh = rte_pktmbuf_mtod_offset(mbuf, struct udp_hdr *, ip4_hdrlen(mbuf));
+
+    if (iph->protocol == IPPROTO_UDP) {
+        uh = (void *)iph + ip4_hdrlen(mbuf);
+    } else if (iph->protocol == IPPROTO_OPT) {
+        struct opphdr *opp = (void *)iph + ip4_hdrlen(mbuf);
+
+        uh = (void *)opp + ntohs(opp->length);
+    }
+
     if (unlikely(!uh))
         return EDPVS_INVPKT;
 
@@ -461,6 +582,22 @@ static void uoa_max_trail_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
+static void uoa_mode_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+
+    assert(str);
+
+    if (strcmp(str, "opp") == 0)
+        g_uoa_mode = UOA_M_OPP;
+    else if (strcmp(str, "ipo") == 0)
+        g_uoa_mode = UOA_M_IPO;
+    else
+        RTE_LOG(WARNING, IPVS, "invalid uoa_mode: %s\n", str);
+
+    FREE_PTR(str);
+}
+
 static void timeout_normal_handler(vector_t tokens)
 {
     int timeout;
@@ -517,6 +654,7 @@ void install_proto_udp_keywords(void)
 {
     install_keyword("defence_udp_drop", defence_udp_drop_handler, KW_TYPE_NORMAL);
     install_keyword("uoa_max_trail", uoa_max_trail_handler, KW_TYPE_NORMAL);
+    install_keyword("uoa_mode", uoa_mode_handler, KW_TYPE_NORMAL);
 
     install_keyword("timeout", NULL, KW_TYPE_NORMAL);
     install_sublevel();
