@@ -480,7 +480,7 @@ static void conn_flush(void)
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_lock(&this_conn_lock);
 #endif
-    for (i = 0; i < NELEMS(this_conn_tab); i++) {
+    for (i = 0; i < DPVS_CONN_TAB_SIZE; i++) {
         list_for_each_entry_safe(tuphash, next, &this_conn_tab[i], list) {
             conn = tuplehash_to_conn(tuphash);
 
