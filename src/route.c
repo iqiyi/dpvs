@@ -477,11 +477,9 @@ static int route_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
             return EDPVS_INVAL;
     }
     else {
-        if (inet_is_addr_any(cf->af, &cf->dst)) {
+        flags |= RTF_FORWARD;
+        if (inet_is_addr_any(cf->af, &cf->dst))
             flags |= RTF_DEFAULT;
-        } else {
-            flags |= RTF_FORWARD;
-        }
     }
 
     dev = netif_port_get_by_name(cf->ifname);
