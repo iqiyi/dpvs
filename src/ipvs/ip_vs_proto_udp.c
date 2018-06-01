@@ -244,8 +244,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
     uh->len         = htons(sizeof(struct udphdr)); /* empty payload */
 
     /* udp checksum */
-    uh->check       = 0;
-    uh->check       = rte_ipv4_udptcp_cksum(ip4_hdr(mbuf), uh);
+    uh->check       = 0; /* rte_ipv4_udptcp_cksum fails if opp inserted. */
 
     /* ip checksum will calc later */
 
@@ -419,9 +418,11 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     switch (g_uoa_mode) {
     case UOA_M_IPO:
         err = insert_ipopt_uoa(conn, mbuf, iph, uh, rt->mtu);
+        break;
 
     case UOA_M_OPP:
         err = insert_opp_uoa(conn, mbuf, iph, uh, rt->mtu);
+        break;
 
     default:
         return EDPVS_INVAL;
@@ -441,6 +442,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
 {
     struct udp_hdr *uh = NULL;
     struct iphdr *iph = (void *)ip4_hdr(mbuf);
+    struct opphdr *opp = NULL;
 
     /* cannot use mbuf_header_pointer() */
     if (unlikely(mbuf->data_len < ip4_hdrlen(mbuf) + sizeof(struct udp_hdr)))
@@ -449,7 +451,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
     if (iph->protocol == IPPROTO_UDP) {
         uh = (void *)iph + ip4_hdrlen(mbuf);
     } else if (iph->protocol == IPPROTO_OPT) {
-        struct opphdr *opp = (void *)iph + ip4_hdrlen(mbuf);
+        opp = (void *)iph + ip4_hdrlen(mbuf);
 
         uh = (void *)opp + ntohs(opp->length);
     }
@@ -461,7 +463,19 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
     uh->dst_port    = conn->dport;
 
     uh->dgram_cksum = 0;
-    uh->dgram_cksum = rte_ipv4_udptcp_cksum(ip4_hdr(mbuf), uh);
+
+    /*
+     * XXX: UDP pseudo header need UDP length, but the common helper function
+     * rte_ipv4_udptcp_cksum() use (IP.tot_len - IP.header_len), it's not
+     * correct if OPP header insterted between IP header and UDP header.
+     * We can modify the function, or change IP.tot_len before use
+     * rte_ipv4_udptcp_cksum() and restore it after.
+     *
+     * However, UDP checksum is not mandatory, to make things easier, when OPP
+     * header exist, we just not calc UDP checksum.
+     */
+    if (!opp)
+        uh->dgram_cksum = rte_ipv4_udptcp_cksum(ip4_hdr(mbuf), uh);
 
     return EDPVS_OK;
 }
