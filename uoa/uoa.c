@@ -310,10 +310,10 @@ static inline void uoa_map_hash(struct uoa_map *um)
 			mod_timer(&cur->timer, jiffies + uoa_map_timeout * HZ);
 
 			kmem_cache_free(uoa_map_cache, um);
-		}
 
-		uoa_map_dump(cur, "upd:");
-		goto hashed;
+			uoa_map_dump(cur, "upd:");
+			goto hashed;
+		}
 	}
 
 	/* not exist */
