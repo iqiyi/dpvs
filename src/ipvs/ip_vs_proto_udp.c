@@ -223,7 +223,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
         opp->protocol = oiph->protocol;
         opp->length = htons(sizeof(*opp) + sizeof(*uoa));
 
-        uoa = (void *)opp->options;
+        uoa = (void *)rte_pktmbuf_append(mbuf, sizeof(*uoa));
     }
 
     /* UOA option */
