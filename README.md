@@ -206,6 +206,8 @@ LIP=192.168.100.200
 RS=192.168.100.2
 
 ./dpip addr add ${VIP}/24 dev dpdk0
+# Add default outgoing route if need.
+# ./dpip route add default via ${GATEWAY} dev dpdk0
 ./ipvsadm -A -t ${VIP}:80 -s rr
 ./ipvsadm -a -t ${VIP}:80 -r ${RS} -b
 
