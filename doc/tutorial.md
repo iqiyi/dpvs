@@ -97,6 +97,8 @@ The setting including:
 
 # add VIP to WAN interface
 ./dpip addr add 10.0.0.100/32 dev dpdk1
+# Add default outgoing route if need.
+# ./dpip route add default via ${GATEWAY} dev dpdk1
 
 # route for WAN/LAN access
 # add routes for other network or default route if needed.
