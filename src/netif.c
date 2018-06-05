@@ -2291,7 +2291,7 @@ static void lcore_job_recv_fwd(void *arg)
 
     for (i = 0; i < lcore_conf[lcore2index[cid]].nports; i++) {
         pid = lcore_conf[lcore2index[cid]].pqs[i].id;
-        assert(pid < rte_eth_dev_count());
+        assert(pid <= bond_pid_end);
 
         for (j = 0; j < lcore_conf[lcore2index[cid]].pqs[i].nrxq; j++) {
             qconf = &lcore_conf[lcore2index[cid]].pqs[i].rxqs[j];
