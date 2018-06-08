@@ -20,10 +20,16 @@
  * it refers TOA of LVS and ip_vs kernel module.
  *
  * raychen@qiyi.com, Feb 2018, initial.
+ *                   May 2018, add private "Option Protocol".
  */
 
 #ifndef __DPVS_UOA__
 #define __DPVS_UOA__
+#ifdef __KERNEL__
+#include <asm/byteorder.h>
+#else
+#include <endian.h>
+#endif
 
 /* avoid IANA ip options */
 #define IPOPT_UOA	(31|IPOPT_CONTROL)
@@ -88,6 +94,63 @@ struct uoa_param_map {
 	/* output */
 	__be32	real_saddr;
 	__be16	real_sport;
+} __attribute__((__packed__));
+
+/**
+ * Why use private IP protocol for Address ?
+ *
+ * we found not all l3-switch support IPv4 options,
+ * or even if support, there's speed limitation like 300pps.
+ *
+ * the reason from provider is the switch HW (chips) do not
+ * handle IP options, just have to drop the whole packet.
+ * or pass the pkt with option to CPU for process, with a
+ * limited speed which is too poor to accept.
+ *
+ * On the other hand, the switch can "support" unkown IP
+ * protocol, we can forwarding this kind of packets.
+ *
+ * Why not use GRE ? there's no space for insert private data
+ * like client IP/port.
+ */
+
+/**
+ *  "Option Protocol": IPPROTO_OPT
+ *
+ *   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+ *  +---------------+---------------+---------------+--------------+
+ *  |  Ver. | Rsvd. |    Protocol   |            Length            |
+ *  +---------------+---------------+---------------+--------------+
+ *  :                           Options                            :
+ *  +---------------+---------------+---------------+--------------+
+ *
+ *  Ver.	Version, now 0x1 (1).
+ *  Rsvd.	Reserved bits, must be zero.
+ *  Protocol    Next level protocol, e.g., IPPROTO_UDP.
+ *  Length	Length of fixed header and options, not include payloads.
+ *  Options	Compatible with IPv4 options, including IPOPT_UOA.
+ */
+
+#define IPPROTO_OPT	0xf8 /* 248 */
+
+/* OPtion Protocol header */
+struct opphdr {
+#if defined(__LITTLE_ENDIAN_BITFIELD) || (__BYTE_ORDER == __LITTLE_ENDIAN)
+	unsigned int rsvd0:4;
+	unsigned int version:4;
+#elif defined (__BIG_ENDIAN_BITFIELD) || (__BYTE_ORDER == __BIG_ENDIAN)
+	unsigned int version:4;
+	unsigned int rsvd0:4;
+#else
+#ifndef __KERNEL__
+# error	"Please fix <bits/endian.h>"
+#else
+# error	"Please fix <asm/byteorder.h>"
+#endif
+#endif
+	__u8	protocol;	/* IPPROTO_XXX */
+	__be16	length;		/* length of fixed header and options */
+	__u8	options[0];
 } __attribute__((__packed__));
 
 #endif

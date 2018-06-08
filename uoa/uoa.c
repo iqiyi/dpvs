@@ -48,6 +48,7 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/timer.h>
+#include <linux/vmalloc.h>
 #include <asm/pgtable_types.h>
 
 #include "uoa.h"
@@ -599,25 +600,12 @@ static int uoa_send_ack(const struct sk_buff *oskb)
 	return 0;
 }
 
-static struct uoa_map *uoa_skb_rcv_opt(struct sk_buff *skb)
+static struct uoa_map *uoa_parse_ipopt(unsigned char *optptr, int optlen,
+				       __be32 saddr, __be32 daddr,
+				       __be16 sport, __be16 dport)
 {
-	struct iphdr *iph;
-	struct udphdr *uh;
-	int optlen, l;
-	unsigned char *optptr;
+	int l;
 	struct uoa_map *um = NULL;
-
-	/* try get UOA from IP header */
-	iph = ip_hdr(skb);
-	if (likely(iph->ihl <= 5))
-		goto uoa_none;
-
-	if (!pskb_may_pull(skb, ip_hdrlen(skb) + sizeof(struct udphdr)))
-		goto out;
-	uh = (void *)iph + ip_hdrlen(skb);
-
-	optlen = ip_hdrlen(skb) - sizeof(struct iphdr);
-	optptr = (unsigned char *)(iph + 1);
 
 	for (l = optlen; l > 0; ) {
 		switch (*optptr) {
@@ -646,20 +634,14 @@ static struct uoa_map *uoa_skb_rcv_opt(struct sk_buff *skb)
 			}
 
 			atomic_set(&um->refcnt, 0);
-			um->saddr = iph->saddr;
-			um->daddr = iph->daddr;
-			um->sport = uh->source;
-			um->dport = uh->dest;
+			um->saddr = saddr;
+			um->daddr = daddr;
+			um->sport = sport;
+			um->dport = dport;
 
 			memcpy(&um->optuoa, optptr, IPOLEN_UOA);
 
 			UOA_STATS_INC(uoa_saved);
-
-			if (uoa_send_ack(skb) != 0) {
-				UOA_STATS_INC(uoa_ack_fail);
-				pr_warn("fail to send UOA ACK\n");
-			}
-
 			return um;
 		}
 
@@ -668,11 +650,100 @@ static struct uoa_map *uoa_skb_rcv_opt(struct sk_buff *skb)
 		continue;
 	}
 
-uoa_none:
 	/* no UOA option */
 	UOA_STATS_INC(uoa_none);
 
 out:
+	return NULL;
+}
+
+/* get uoa info from uoa-option in IP header. */
+static struct uoa_map *uoa_iph_rcv(const struct iphdr *iph, struct sk_buff *skb)
+{
+	struct udphdr *uh;
+	int optlen;
+	unsigned char *optptr;
+	struct uoa_map *um = NULL;
+
+	if (!pskb_may_pull(skb, ip_hdrlen(skb) + sizeof(struct udphdr)))
+		return NULL;
+
+	uh = (void *)iph + ip_hdrlen(skb);
+
+	optlen = ip_hdrlen(skb) - sizeof(struct iphdr);
+	optptr = (unsigned char *)(iph + 1);
+
+	um = uoa_parse_ipopt(optptr, optlen, iph->saddr, iph->daddr,
+			     uh->source, uh->dest);
+
+	if (um && uoa_send_ack(skb) != 0) {
+		UOA_STATS_INC(uoa_ack_fail);
+		pr_warn("fail to send UOA ACK\n");
+	}
+
+	return um;
+}
+
+/* get uoa info from private option protocol. */
+static struct uoa_map *uoa_opp_rcv(struct iphdr *iph, struct sk_buff *skb)
+{
+	struct opphdr *opph;
+	struct udphdr *uh;
+	int optlen, opplen;
+	unsigned char *optptr;
+	struct uoa_map *um = NULL;
+
+	if (!pskb_may_pull(skb, ip_hdrlen(skb) + sizeof(struct opphdr)))
+		return NULL;
+
+	opph = (void *)iph + ip_hdrlen(skb);
+	opplen = ntohs(opph->length);
+
+	if (unlikely(opph->version != 0x01 || opph->protocol != IPPROTO_UDP)) {
+		pr_warn("bad opp header\n");
+		return NULL;
+	}
+
+	if (!pskb_may_pull(skb, ip_hdrlen(skb) + opplen + sizeof(*uh)))
+		return NULL;
+
+	uh = (void *)iph + ip_hdrlen(skb) + opplen;
+
+	optlen = opplen - sizeof(*opph);
+	optptr = (unsigned char *)(opph + 1);
+
+	/* try parse UOA option from ip-options */
+	um = uoa_parse_ipopt(optptr, optlen, iph->saddr, iph->daddr,
+			     uh->source, uh->dest);
+
+	if (um && uoa_send_ack(skb) != 0) {
+		UOA_STATS_INC(uoa_ack_fail);
+		pr_warn("fail to send UOA ACK\n");
+	}
+
+	/*
+	 * "remove" private option protocol, then adjust IP header
+	 * protocol, tot_len and checksum. these could be slow ?
+	 */
+	skb_set_transport_header(skb, ip_hdrlen(skb) + opplen);
+
+	/* need change it to parse transport layer */
+	iph->protocol = opph->protocol;
+	ip_send_check(iph);
+
+	return um;
+}
+
+static struct uoa_map *uoa_skb_rcv_opt(struct sk_buff *skb)
+{
+	struct iphdr *iph = ip_hdr(skb);
+
+	if (unlikely(iph->ihl > 5) && iph->protocol == IPPROTO_UDP)
+		return uoa_iph_rcv(iph, skb);
+	else if (unlikely(iph->protocol == IPPROTO_OPT))
+		return uoa_opp_rcv(iph, skb);
+
+	UOA_STATS_INC(uoa_none);
 	return NULL;
 }
 
@@ -699,12 +770,7 @@ static unsigned int uoa_ip_local_in(unsigned int hooknum,
 #error "Pls modify the definition according to kernel version."
 #endif
 {
-	int protocol;
 	struct uoa_map *um;
-
-	protocol = ip_hdr(skb)->protocol;
-	if (protocol != IPPROTO_UDP)
-		return NF_ACCEPT;
 
 	um = uoa_skb_rcv_opt(skb);
 	if (um)
