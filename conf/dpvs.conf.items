@@ -171,6 +171,8 @@ ipvs_defs {
 
     udp {
         defence_udp_drop        <enable>
+        uoa_mode                opp   <opp for private protocol by default, or ipo for IP-option mode>
+        uoa_max_trail           3     <max trails for send UOA for a connection>
         timeout {               <1-31535999>
             normal      300     <300>
             last        3       <3>
