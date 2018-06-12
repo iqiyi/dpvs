@@ -31,6 +31,7 @@
 
 #define IFA
 #define RTE_LOGTYPE_IFA             RTE_LOGTYPE_USER1
+#define INET_ADDR_LOCK
 
 #define INET_ADDR_HSIZE_SHIFT       8
 #define INET_ADDR_HSIZE             (1U << INET_ADDR_HSIZE_SHIFT)
