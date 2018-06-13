@@ -167,7 +167,14 @@ Pls use `ipvsadm --add-laddr` to set `LIP` instead of `dpip addr add ...`. Becau
 
 Another tip is you can use `dpip addr add 10.0.0.100/16 dev dpdk1` to set VIP and WAN route simultaneously. But let's use two commands to make it clear.
 
-Optionally, if `RS` need to obtain client's real *IP:port* by socket API, e.g., `getpeername` or `accept`, instead of some application manner. `TOA` kernel module should be installed on `RS`. `TOA` is developped for some version of Linux kernel, and porting may needed for other versions or other OS Kernel like *BSD* or *mTCP*. Pls refer this [doc](https://github.com/alibaba/LVS/blob/master/docs/LVS_user_manual.pdf) to get `TOA` source code and porting to your `RS` if needed.
+Optionally, if `RS` need to obtain client's real *IP:port* by socket API, e.g., `getpeername` or `accept`, instead of some application manner. `TOA` kernel module should be installed on `RS`. `TOA` is developped for some version of Linux kernel, and porting may needed for other versions or other OS Kernel like *BSD* or *mTCP*.
+
+You could refer to following links to get `TOA` source code and porting to your `RS` if needed.
+
+* [Alibaba LVS](https://github.com/alibaba/LVS/blob/master/docs/LVS_user_manual.pdf)
+* [UCloud TOA](https://docs.ucloud.cn/security/uads/faq/game)
+* [Huawai TOA](https://github.com/Huawei/TCP_option_address)
+* [IPVS CA](https://github.com/yubo/ip_vs_ca)
 
 <a id='fnat-ospf'/>
 
@@ -699,8 +706,8 @@ virtual_server match SNAT {
         MISC_CHECK {
            misc_path "exit 0"##Just make a healthy check which will always judge real_server healthy
            misc_timeout 10
-        }   
-    }   
+        }
+    }
 }
 ```
 
@@ -831,7 +838,7 @@ Now, `dpvs.conf` must be put at `/etc/dpvs.conf`, just copy it from `conf/dpvs.c
 
 ```bash
 $ cp conf/dpvs.conf.single-nic.sample /etc/dpvs.conf
-``` 
+```
 
 The NIC for Ubuntu may not support flow-director(fdir),for that case ,pls use 'single worker',may decrease conn_pool_size .
 
@@ -855,4 +862,4 @@ worker_defs {
         }
     }
 
-```   
+```

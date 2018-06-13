@@ -209,7 +209,7 @@ RS=192.168.100.2
 ./ipvsadm -A -t ${VIP}:80 -s rr
 ./ipvsadm -a -t ${VIP}:80 -r ${RS} -b
 
-./ipvsadm --add-laddr -z ${LIP} -t 192.168.100.100:80 -F dpdk0
+./ipvsadm --add-laddr -z ${LIP} -t ${VIP}:80 -F dpdk0
 $
 
 $ ./setup.sh
