@@ -543,6 +543,7 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     struct dp_vs_route_conf_array *array;
     size_t nroute, hash;
     struct route_entry *entry;
+    struct netif_port *port = NULL;
     int off = 0;
 
     if (conf && size >= sizeof(*cf))
@@ -550,7 +551,15 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     else
         cf = NULL;
 
-    /* FIXME: route number may change, need bigger lock ! */
+    if (cf && strlen(cf->ifname)) {
+        port = netif_port_get_by_name(cf->ifname);
+        if (!port) {
+            RTE_LOG(WARNING, ROUTE, "%s: no such device: %s\n",
+                    __func__, cf->ifname);
+            return EDPVS_NOTEXIST;
+        }
+    }
+
     nroute = rte_atomic32_read(&this_num_routes);
 
     *outsize = sizeof(struct dp_vs_route_conf_array) + \
@@ -559,22 +568,39 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     if (!(*out))
         return EDPVS_NOMEM;
     array = *out;
-    array->nroute = nroute;
 
-    /* XXX: again, the lock is not safe ! */
-    for (hash = 0; hash < LOCAL_ROUTE_TAB_SIZE; hash++) {
-        list_for_each_entry(entry, &this_local_route_table[hash], list) {
+    if (port) {
+        for (hash = 0; hash < LOCAL_ROUTE_TAB_SIZE; hash++) {
+            list_for_each_entry(entry, &this_local_route_table[hash], list) {
+                if (off >= nroute)
+                    break;
+                if (port == entry->port)
+                    route_fill_conf(AF_INET, &array->routes[off++], entry);
+            }
+        }
+
+        list_for_each_entry(entry, &this_net_route_table, list) {
+            if (off >= nroute)
+                break;
+            if (port == entry->port)
+                route_fill_conf(AF_INET, &array->routes[off++], entry);
+        }
+    } else {
+        for (hash = 0; hash < LOCAL_ROUTE_TAB_SIZE; hash++) {
+            list_for_each_entry(entry, &this_local_route_table[hash], list) {
+                if (off >= nroute)
+                    break;
+                route_fill_conf(AF_INET, &array->routes[off++], entry);
+            }   
+        }   
+
+        list_for_each_entry(entry, &this_net_route_table, list) {
             if (off >= nroute)
                 break;
             route_fill_conf(AF_INET, &array->routes[off++], entry);
-        }
+        }   
     }
-
-    list_for_each_entry(entry, &this_net_route_table, list) {
-        if (off >= nroute)
-            break;
-        route_fill_conf(AF_INET, &array->routes[off++], entry);
-    }
+    array->nroute = off;
 
     return EDPVS_OK;
 }

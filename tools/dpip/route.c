@@ -200,6 +200,9 @@ static int route_parse_args(struct dpip_conf *conf,
         return -1;
     }
 
+    if (conf->cmd == DPIP_CMD_SHOW)
+        return 0;
+
     if (!prefix) {
         fprintf(stderr, "missing prefix\n");
         return -1;
@@ -268,11 +271,8 @@ static int route_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
     size_t size, i;
     int err;
 
-    if (conf->cmd == DPIP_CMD_ADD || conf->cmd == DPIP_CMD_DEL 
-            || conf->cmd == DPIP_CMD_SET) {
-        if (route_parse_args(conf, &route) != 0)
-            return EDPVS_INVAL;
-    }
+    if (route_parse_args(conf, &route) != 0)
+        return EDPVS_INVAL;
 
     switch (conf->cmd) {
     case DPIP_CMD_ADD:
@@ -288,7 +288,7 @@ static int route_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         return dpvs_setsockopt(SOCKOPT_SET_ROUTE_FLUSH, NULL, 0);
 
     case DPIP_CMD_SHOW:
-        err = dpvs_getsockopt(SOCKOPT_GET_ROUTE_SHOW, NULL, 0, 
+        err = dpvs_getsockopt(SOCKOPT_GET_ROUTE_SHOW, &route, sizeof(route),
                               (void **)&array, &size);
         if (err != 0)
             return err;

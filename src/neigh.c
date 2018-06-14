@@ -849,11 +849,22 @@ static int neigh_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     struct dp_vs_neigh_conf_array *array;
     size_t hash, off;
     struct neighbour_entry *entry;
+    struct netif_port *port = NULL;
 
     if (conf && size >= sizeof(*cf))
         cf = conf;
     else
         cf = NULL;
+
+    if (cf && strlen(cf->ifname)) {
+        port = netif_port_get_by_name(cf->ifname);
+        if (!port) {
+            RTE_LOG(WARNING, NEIGHBOUR, "%s: no such device: %s\n",
+                    __func__, cf->ifname);
+            return EDPVS_NOTEXIST;
+        }
+    }
+
 
     *outsize = sizeof(struct dp_vs_neigh_conf_array) + \
                num_neighbours * sizeof(struct dp_vs_neigh_conf);
@@ -862,14 +873,24 @@ static int neigh_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         return EDPVS_NOMEM;
 
     array = *out;
-    array->n_neigh = num_neighbours;
     off = 0;
 
-    for (hash = 0; hash < ARP_TAB_SIZE; hash ++){
-        list_for_each_entry(entry, &neigh_table[master_cid][hash], arp_list) {
-            neigh_fill_param(&array->addrs[off++], entry);
+    if (port) {
+        for (hash = 0; hash < ARP_TAB_SIZE; hash ++){
+            list_for_each_entry(entry, &neigh_table[master_cid][hash], arp_list) {
+                if (port == entry->port) {
+                    neigh_fill_param(&array->addrs[off++], entry);
+                }
+            }
+        }
+    } else {
+        for (hash = 0; hash < ARP_TAB_SIZE; hash ++){
+            list_for_each_entry(entry, &neigh_table[master_cid][hash], arp_list) {
+                 neigh_fill_param(&array->addrs[off++], entry);
+            }
         }
     }
+    array->n_neigh = off;
 
     return EDPVS_OK;
 }
