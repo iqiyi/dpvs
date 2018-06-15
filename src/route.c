@@ -165,7 +165,8 @@ static struct route_entry *route_local_lookup(uint32_t dest, const struct netif_
     struct route_entry *route_node;
     hashkey = route_local_hashkey(dest, port);
     list_for_each_entry(route_node, &this_local_route_table[hashkey], list){
-        if (dest == route_node->dest.s_addr) {
+        if ((dest == route_node->dest.s_addr)
+                && (port ? (port->id == route_node->port->id) : true)) {
             rte_atomic32_inc(&route_node->refcnt);
             return route_node;
         }
