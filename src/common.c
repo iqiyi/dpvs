@@ -45,10 +45,15 @@ const char *dpvs_strerror(int err)
         { EDPVS_NOTEXIST,       "not exist" },
         { EDPVS_INVPKT,         "invalid packet" },
         { EDPVS_DROP,           "packet dropped" },
+        { EDPVS_NOPROT,         "no protocol" },
+        { EDPVS_NOROUTE,        "no route" },
+        { EDPVS_DEFRAG,         "defragment error" },
+        { EDPVS_FRAG,           "fragment error" },
         { EDPVS_DPDKAPIFAIL,    "failed dpdk api" },
         { EDPVS_IDLE,           "nothing to do" },
         { EDPVS_BUSY,           "resource busy" },
         { EDPVS_NOTSUPP,        "not support" },
+        { EDPVS_RESOURCE,       "no resource" },
         { EDPVS_OVERLOAD,       "overloaded" },
         { EDPVS_NOSERV,         "no service" },
         { EDPVS_DISABLED,       "disabled" },
@@ -58,11 +63,12 @@ const char *dpvs_strerror(int err)
         { EDPVS_IO,             "I/O error" },
         { EDPVS_MSG_FAIL,       "msg callback failed"},
         { EDPVS_MSG_DROP,       "msg dropped"},
-        { EDPVS_SYSCALL,        "system call failed"},
-        { EDPVS_KNICONTINUE,    "kni to continue"},
         { EDPVS_PKTSTOLEN,      "stolen packet"},
-        { EDPVS_INPROGRESS,     "in progress"},
+        { EDPVS_SYSCALL,        "system call failed"},
         { EDPVS_NODEV,          "no such device"},
+
+        { EDPVS_KNICONTINUE,    "kni to continue"},
+        { EDPVS_INPROGRESS,     "in progress"},
     };
     int i;
 
