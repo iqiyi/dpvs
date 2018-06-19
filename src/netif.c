@@ -313,7 +313,8 @@ static void rss_handler(vector_t tokens)
             struct port_conf_stream, port_list_node);
 
     assert(str);
-    if (!strcmp(str, "tcp") || !strcmp(str, "ip")) {
+    if (!strcmp(str, "all") || !strcmp(str, "ip") || !strcmp(str, "tcp") || !strcmp(str, "udp") 
+            || !strcmp(str, "sctp") || !strcmp(str, "ether") || !strcmp(str, "port") || !strcmp(str, "tunnel")) {
         RTE_LOG(INFO, NETIF, "%s:rss = %s\n", current_device->name, str);
         strncpy(current_device->rss, str, sizeof(current_device->rss));
     } else {
@@ -3108,10 +3109,22 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
     cfg_stream = get_port_conf_stream(port->name);
     if (cfg_stream) {
         /* device specific configurations from cfgfile */
-        if (!strcmp(cfg_stream->rss, "ip"))
+        if (!strcmp(cfg_stream->rss, "all"))
+            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_IP | ETH_RSS_TCP | ETH_RSS_UDP;
+        else if (!strcmp(cfg_stream->rss, "ip"))
             port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_IP;
         else if (!strcmp(cfg_stream->rss, "tcp"))
             port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_TCP;
+        else if (!strcmp(cfg_stream->rss, "udp"))
+            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_UDP;
+        else if (!strcmp(cfg_stream->rss, "sctp"))
+            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_SCTP;
+        else if (!strcmp(cfg_stream->rss, "ether"))
+            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_L2_PAYLOAD;
+        else if (!strcmp(cfg_stream->rss, "port"))
+            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_PORT;
+        else if (!strcmp(cfg_stream->rss, "tunnel"))
+            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_TUNNEL;
 
         if (cfg_stream->rx_queue_nb > 0 && port->nrxq > cfg_stream->rx_queue_nb) {
             RTE_LOG(WARNING, NETIF, "%s: rx-queues(%d) configured in workers != "
@@ -3531,7 +3544,7 @@ static struct rte_eth_conf default_port_conf = {
 
 int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *len)
 {
-    char tbuf1[256], tbuf2[64];
+    char tbuf1[256], tbuf2[128];
     if (unlikely(NULL == buf) || 0 == len)
         return EDPVS_INVAL;
     if (port_conf == NULL)
@@ -3540,19 +3553,25 @@ int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *
     memset(buf, 0, *len);
     if (port_conf->rxmode.mq_mode == ETH_MQ_RX_RSS) {
         memset(tbuf2, 0, sizeof(tbuf2));
-        switch (port_conf->rx_adv_conf.rss_conf.rss_hf) {
-        case ETH_RSS_IP:
-            snprintf(tbuf2, sizeof(tbuf2), "ETH_RSS_IP");
-            break;
-        case ETH_RSS_TCP:
-            snprintf(tbuf2, sizeof(tbuf2), "ETH_RSS_TCP");
-            break;
-        case ETH_RSS_UDP:
-            snprintf(tbuf2, sizeof(tbuf2), "ETH_RSS_UDP");
-            break;
-        default:
-            snprintf(tbuf2, sizeof(tbuf2), "ETH_RSS_UNKOWN");
+        if (port_conf->rx_adv_conf.rss_conf.rss_hf) {
+            if (port_conf->rx_adv_conf.rss_conf.rss_hf & ETH_RSS_IP)
+                snprintf(tbuf2 + strlen(tbuf2), sizeof(tbuf2) - strlen(tbuf2), "ETH_RSS_IP ");
+            if (port_conf->rx_adv_conf.rss_conf.rss_hf & ETH_RSS_TCP)
+                snprintf(tbuf2 + strlen(tbuf2), sizeof(tbuf2) - strlen(tbuf2), "ETH_RSS_TCP ");
+            if (port_conf->rx_adv_conf.rss_conf.rss_hf & ETH_RSS_UDP)
+                snprintf(tbuf2 + strlen(tbuf2), sizeof(tbuf2) - strlen(tbuf2), "ETH_RSS_UDP ");
+            if (port_conf->rx_adv_conf.rss_conf.rss_hf & ETH_RSS_SCTP)
+                snprintf(tbuf2 + strlen(tbuf2), sizeof(tbuf2) - strlen(tbuf2), "ETH_RSS_SCTP ");
+            if (port_conf->rx_adv_conf.rss_conf.rss_hf & ETH_RSS_L2_PAYLOAD)
+                snprintf(tbuf2 + strlen(tbuf2), sizeof(tbuf2) - strlen(tbuf2), "ETH_RSS_L2_PAYLOAD ");
+            if (port_conf->rx_adv_conf.rss_conf.rss_hf & ETH_RSS_PORT)
+                snprintf(tbuf2 + strlen(tbuf2), sizeof(tbuf2) - strlen(tbuf2), "ETH_RSS_PORT ");
+            if (port_conf->rx_adv_conf.rss_conf.rss_hf & ETH_RSS_TUNNEL)
+                snprintf(tbuf2 + strlen(tbuf2), sizeof(tbuf2) - strlen(tbuf2), "ETH_RSS_TUNNEL ");
+        } else {
+            snprintf(tbuf2, sizeof(tbuf2), "Inhibited");
         }
+
         memset(tbuf1, 0, sizeof(tbuf1));
         snprintf(tbuf1, sizeof(tbuf1), "RSS: %s\n", tbuf2);
         if (*len - strlen(buf) - 1 < strlen(tbuf1)) {
