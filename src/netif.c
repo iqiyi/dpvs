@@ -4182,7 +4182,7 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
     }
 
     get->port_id = port->id;
-    strncpy(get->name, port->name, sizeof(port->name));
+    strncpy(get->name, port->name, sizeof(get->name));
     get->nrxq = port->nrxq;
     get->ntxq = port->ntxq;
     ether_format_addr(get->addr, sizeof(get->addr), &port->addr);
