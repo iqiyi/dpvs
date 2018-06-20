@@ -96,7 +96,7 @@ static const char *nud_state_names[] = {
 static int nud_timeouts[DPVS_NUD_S_MAX] = {
     [DPVS_NUD_S_NONE]        = 2,
     [DPVS_NUD_S_SEND]        = 3,
-    [DPVS_NUD_S_REACHABLE]   = 60,
+    [DPVS_NUD_S_REACHABLE]   = DPVS_NEIGH_TIMEOUT_DEF,
     [DPVS_NUD_S_PROBE]       = 30,
     [DPVS_NUD_S_DELAY]       = 3,
 };
