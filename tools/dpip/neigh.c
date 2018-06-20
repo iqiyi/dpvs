@@ -25,9 +25,6 @@
 #include "conf/neigh.h"
 #include "sockopt.h"
 
-#define NEIGHBOUR_COMPLETED  0x04
-#define NEIGHBOUR_STATIC     0x10
-
 static void neigh_help(void)
 {
     fprintf(stderr,

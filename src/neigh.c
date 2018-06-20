@@ -69,9 +69,6 @@ struct raw_neigh {
     uint8_t flag;
 } __rte_cache_aligned;
 
-#define NEIGHBOUR_HASHED     0x01
-#define NEIGHBOUR_STATIC     0x02
-
 struct nud_state {
     int next_state[DPVS_NUD_S_MAX];
 };
