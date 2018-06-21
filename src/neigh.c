@@ -114,7 +114,6 @@ static struct nud_state nud_states[] = {
 
 /* params from config file */
 static int arp_unres_qlen = ARP_ENTRY_BUFF_SIZE_DEF;
-static int arp_timeout = DPVS_NEIGH_TIMEOUT_DEF;
 
 static struct rte_ring *neigh_ring[DPVS_MAX_LCORE];
 
@@ -126,8 +125,8 @@ static void unres_qlen_handler(vector_t tokens)
     assert(str);
     unres_qlen = atoi(str);
 
-    if (arp_unres_qlen >= ARP_ENTRY_BUFF_SIZE_MIN &&
-            arp_unres_qlen <= ARP_ENTRY_BUFF_SIZE_MAX) {
+    if (unres_qlen >= ARP_ENTRY_BUFF_SIZE_MIN &&
+            unres_qlen <= ARP_ENTRY_BUFF_SIZE_MAX) {
         RTE_LOG(INFO, NEIGHBOUR, "arp_unres_qlen = %d\n", unres_qlen);
         arp_unres_qlen = unres_qlen;
     } else {
@@ -147,12 +146,12 @@ static void timeout_handler(vector_t tokens)
     assert(str);
     timeout = atoi(str);
     if (timeout >= DPVS_NEIGH_TIMEOUT_MIN && timeout <= DPVS_NEIGH_TIMEOUT_MAX) {
-        RTE_LOG(INFO, NEIGHBOUR, "arp_timeout = %d\n", timeout);
-        arp_timeout = timeout;
+        RTE_LOG(INFO, NEIGHBOUR, "arp_reachable_timeout = %d\n", timeout);
+        nud_timeouts[DPVS_NUD_S_REACHABLE] = timeout;
     } else {
-        RTE_LOG(INFO, NEIGHBOUR, "invalid arp_timeout config %s, using default %d\n",
+        RTE_LOG(INFO, NEIGHBOUR, "invalid arp_reachable_timeout config %s, using default %d\n",
                 str, DPVS_NEIGH_TIMEOUT_DEF);
-        arp_timeout = DPVS_NEIGH_TIMEOUT_DEF;
+        nud_timeouts[DPVS_NUD_S_REACHABLE] = DPVS_NEIGH_TIMEOUT_DEF;
     }
     FREE_PTR(str);
 }
@@ -162,7 +161,7 @@ void neigh_keyword_value_init(void)
     if (dpvs_state_get() == DPVS_STATE_INIT) {
         /* KW_TYPE_INIT keyword */
         arp_unres_qlen = ARP_ENTRY_BUFF_SIZE_DEF;
-        arp_timeout = DPVS_NEIGH_TIMEOUT_DEF;
+        nud_timeouts[DPVS_NUD_S_REACHABLE] = DPVS_NEIGH_TIMEOUT_DEF;
     }
     /* KW_TYPE_NORMAL keyword */
 }
