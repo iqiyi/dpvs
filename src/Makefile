@@ -41,6 +41,8 @@ CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes -mcmodel=medium
 
 ifeq ($(shell test $(GCC_VERSION) -ge 70 && echo 1), 1)
 	CFLAGS += -Wno-format-truncation
+	CFLAGS += -Wno-stringop-truncation
+	CFLAGS += -Wstringop-overflow=0
 endif
 
 ifeq ($(DEBUG),)
