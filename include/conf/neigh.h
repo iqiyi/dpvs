@@ -54,4 +54,7 @@ struct dp_vs_neigh_conf_array {
     struct dp_vs_neigh_conf addrs[0];
 }__attribute__((__packed__));
 
+#define NEIGHBOUR_HASHED     0x01
+#define NEIGHBOUR_STATIC     0x02
+
 #endif 

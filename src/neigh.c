@@ -69,9 +69,6 @@ struct raw_neigh {
     uint8_t flag;
 } __rte_cache_aligned;
 
-#define NEIGHBOUR_HASHED     0x01
-#define NEIGHBOUR_STATIC     0x02
-
 struct nud_state {
     int next_state[DPVS_NUD_S_MAX];
 };
@@ -99,7 +96,7 @@ static const char *nud_state_names[] = {
 static int nud_timeouts[DPVS_NUD_S_MAX] = {
     [DPVS_NUD_S_NONE]        = 2,
     [DPVS_NUD_S_SEND]        = 3,
-    [DPVS_NUD_S_REACHABLE]   = 60,
+    [DPVS_NUD_S_REACHABLE]   = DPVS_NEIGH_TIMEOUT_DEF,
     [DPVS_NUD_S_PROBE]       = 30,
     [DPVS_NUD_S_DELAY]       = 3,
 };
