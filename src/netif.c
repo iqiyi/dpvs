@@ -3150,9 +3150,11 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         assert(port->bond->master.primary);
 
         /* For some legacy broken DPDK PMD drivers whose flow_type_rss_offloads may not
-         * be filled correctly in dev_info, that will cause the rss reconfiguration in
-         * DPDK's bond PMD driver slave_configure() disable NIC's rss. Leave out the rss
-         * reconfiguration in bonding if flow_type_rss_offloads not be filled however.
+         * be filled but left zero in dev_info, that will cause the rss reconfiguration
+         * in DPDK's bond PMD driver slave_configure() disable the real physical NIC's
+         * rss. Since when start the real physical NICs before bond have done a correct
+         * configuration of the rss, a workaround is to leave out the rss reconfiguration
+         * in bonding if the flow_type_rss_offloads not be filled in PMD driver.
          */
         if (!port->bond->master.primary->dev_info.flow_type_rss_offloads)
             port->dev_conf.rxmode.mq_mode = 0;
