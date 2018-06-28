@@ -446,7 +446,7 @@ ipvs_talk(int cmd)
 			break;
 		case IP_VS_SO_SET_EDITDEST:
 			if ((result = ipvs_update_dest(srule, drule)) &&
-			    (errno == ENOENT))
+			    (result == EDPVS_NOTEXIST))
 				result = ipvs_add_dest(srule, drule);
 			break;
 	}
