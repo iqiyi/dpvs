@@ -306,7 +306,7 @@ static int xmit_inbound(struct rte_mbuf *mbuf,
     }
       
     /* is dest avaible to forward the packet ? */
-    if (!conn->dest || !(conn->dest->flags & DPVS_DEST_F_AVAILABLE)) {
+    if (!conn->dest) {
         /* silently drop packet without reset connection timer.
          * wait for dest available or connection timeout. */
         dp_vs_conn_put_no_reset(conn);
