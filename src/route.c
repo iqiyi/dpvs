@@ -419,12 +419,12 @@ struct route_entry *route4_output(const struct flow4 *fl4)
     struct route_entry *route;
 
 
-    route = route_out_local_lookup(fl4->daddr.s_addr);
+    route = route_out_local_lookup(fl4->fl4_daddr.s_addr);
     if(route){
         return route;
     }
-
-    route = route_out_net_lookup(&fl4->daddr);
+    
+    route = route_out_net_lookup(&fl4->fl4_daddr);
     if(route){
         return route;
     }

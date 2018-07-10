@@ -362,9 +362,9 @@ static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->caddr.in;
-    fl4.saddr = conn->vaddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->caddr.in;
+    fl4.fl4_saddr = conn->vaddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         rte_pktmbuf_free(mbuf);
@@ -387,7 +387,8 @@ static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
     /* translation for outer L3, ICMP, and inner L3 and L4 */
     dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_OUTBOUND);
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 }
 
 /* mbuf should be consumed here. */
@@ -413,9 +414,9 @@ static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->daddr.in;
-    fl4.saddr = conn->laddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->daddr.in;
+    fl4.fl4_saddr = conn->laddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         rte_pktmbuf_free(mbuf);
@@ -438,7 +439,8 @@ static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
     /* translation for outer L3, ICMP, and inner L3 and L4 */
     dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_INBOUND);
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 }
 
 /* return verdict INET_XXX */
@@ -768,7 +770,7 @@ int dp_vs_init(void)
         RTE_LOG(ERR, IPVS, "fail to init stats: %s\n", dpvs_strerror(err));
         goto err_stats;
     }
-    err = ipv4_register_hooks(dp_vs_ops, NELEMS(dp_vs_ops));
+    err = inet_register_hooks(AF_INET, dp_vs_ops, NELEMS(dp_vs_ops));
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to register hooks: %s\n", dpvs_strerror(err));
         goto err_hooks;
@@ -801,7 +803,7 @@ int dp_vs_term(void)
 {
     int err;
 
-    err = ipv4_unregister_hooks(dp_vs_ops, NELEMS(dp_vs_ops));
+    err = inet_unregister_hooks(AF_INET, dp_vs_ops, NELEMS(dp_vs_ops));
     if (err != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "fail to unregister hooks: %s\n", dpvs_strerror(err));
 
