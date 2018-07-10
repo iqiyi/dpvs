@@ -250,9 +250,9 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->daddr.in;
-    fl4.saddr = conn->laddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->daddr.in;
+    fl4.fl4_saddr = conn->laddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         err = EDPVS_NOROUTE;
@@ -320,7 +320,8 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
         ip4_send_csum(iph);
     }
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 
 errout:
     if (rt)
@@ -353,9 +354,9 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         route4_put((struct route_entry *)mbuf->userdata);
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->caddr.in;
-    fl4.saddr = conn->vaddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->caddr.in;
+    fl4.fl4_saddr = conn->vaddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         err = EDPVS_NOROUTE;
@@ -422,7 +423,8 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         ip4_send_csum(iph);
     }
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 
 errout:
     if (rt)
@@ -530,9 +532,9 @@ int dp_vs_xmit_dr(struct dp_vs_proto *proto,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr.s_addr = conn->daddr.in.s_addr;
-    fl4.saddr.s_addr = iph->src_addr;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr.s_addr = conn->daddr.in.s_addr;
+    fl4.fl4_saddr.s_addr = iph->src_addr;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         err = EDPVS_NOROUTE;
@@ -588,9 +590,9 @@ int dp_vs_xmit_snat(struct dp_vs_proto *proto,
      * let's route it.
      */
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->daddr.in;
-    fl4.saddr = conn->caddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->daddr.in;
+    fl4.fl4_saddr = conn->caddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         err = EDPVS_NOROUTE;
@@ -638,7 +640,8 @@ int dp_vs_xmit_snat(struct dp_vs_proto *proto,
     else
         ip4_send_csum(iph);
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 
 errout:
     if (rt)
@@ -658,9 +661,9 @@ int dp_vs_out_xmit_snat(struct dp_vs_proto *proto,
 
     if (!rt) {
         memset(&fl4, 0, sizeof(struct flow4));
-        fl4.daddr = conn->caddr.in;
-        fl4.saddr = conn->vaddr.in;
-        fl4.tos = iph->type_of_service;
+        fl4.fl4_daddr = conn->caddr.in;
+        fl4.fl4_saddr = conn->vaddr.in;
+        fl4.fl4_tos = iph->type_of_service;
         rt = route4_output(&fl4);
         if (!rt) {
             err = EDPVS_NOROUTE;
@@ -709,7 +712,8 @@ int dp_vs_out_xmit_snat(struct dp_vs_proto *proto,
     else
         ip4_send_csum(iph);
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 
 errout:
     if (rt)
@@ -835,9 +839,9 @@ int dp_vs_xmit_nat(struct dp_vs_proto *proto,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->daddr.in;
-    fl4.saddr = conn->caddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->daddr.in;
+    fl4.fl4_saddr = conn->caddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         err = EDPVS_NOROUTE;
@@ -884,7 +888,8 @@ int dp_vs_xmit_nat(struct dp_vs_proto *proto,
         ip4_send_csum(iph);
     }
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 
 errout:
     if (rt)
@@ -920,9 +925,9 @@ int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->caddr.in;
-    fl4.saddr = conn->vaddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->caddr.in;
+    fl4.fl4_saddr = conn->vaddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         err = EDPVS_NOROUTE;
@@ -969,7 +974,8 @@ int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
         ip4_send_csum(iph);
     }
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 
 errout:
     if (rt)
@@ -1000,8 +1006,8 @@ int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->daddr.in;
-    fl4.tos = tos;
+    fl4.fl4_daddr = conn->daddr.in;
+    fl4.fl4_tos = tos;
     rt = route4_output(&fl4);
     if (!rt) {
         err = EDPVS_NOROUTE;
@@ -1045,7 +1051,8 @@ int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
         ip4_send_csum(new_iph);
     }
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 
 errout:
     if (rt)

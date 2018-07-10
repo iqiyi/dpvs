@@ -72,11 +72,11 @@ static int icmp_echo(struct rte_mbuf *mbuf)
     ich->icmp_cksum = (csum == 0xffff) ? csum : ~csum;
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr.s_addr = iph->src_addr;
-    fl4.saddr.s_addr = iph->dst_addr;
-    fl4.oif = netif_port_get(mbuf->port);
-    fl4.proto = IPPROTO_ICMP;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr.s_addr = iph->src_addr;
+    fl4.fl4_saddr.s_addr = iph->dst_addr;
+    fl4.fl4_oif = netif_port_get(mbuf->port);
+    fl4.fl4_proto = IPPROTO_ICMP;
+    fl4.fl4_tos = iph->type_of_service;
 
     return ipv4_xmit(mbuf, &fl4);
 
@@ -220,17 +220,17 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
            | IPTOS_PREC_INTERNETCONTROL) : iph->type_of_service;
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr.s_addr = iph->src_addr;
-    fl4.saddr = saddr;
-    fl4.oif  = netif_port_get(imbuf->port);
-    fl4.proto = IPPROTO_ICMP;
-    fl4.tos = tos;
-    if (!fl4.oif) {
+    fl4.fl4_daddr.s_addr    = iph->src_addr;
+    fl4.fl4_saddr           = saddr;
+    fl4.fl4_oif             = netif_port_get(imbuf->port);
+    fl4.fl4_proto           = IPPROTO_ICMP;
+    fl4.fl4_tos             = tos;
+    if (!fl4.fl4_oif) {
         RTE_LOG(DEBUG, ICMP, "%s: no output iface.\n", __func__);
         return;
     }
 
-    mbuf = rte_pktmbuf_alloc(fl4.oif->mbuf_pool);
+    mbuf = rte_pktmbuf_alloc(fl4.fl4_oif->mbuf_pool);
     if (!mbuf) {
         RTE_LOG(DEBUG, ICMP, "%s: no memory.\n", __func__);
         return;
@@ -249,7 +249,7 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     icmph->un.gateway = info; /* not good */
 
     /* copy as much as we can without exceeding 576 (min-MTU) */
-    room = fl4.oif->mtu > 576 ? 576 : fl4.oif->mtu;
+    room = fl4.fl4_oif->mtu > 576 ? 576 : fl4.fl4_oif->mtu;
     room -= sizeof(struct ipv4_hdr);
     room -= sizeof(struct icmphdr);
 

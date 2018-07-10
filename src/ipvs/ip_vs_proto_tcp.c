@@ -861,18 +861,18 @@ struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir)
     if (unlikely(!dev)) {
         memset(&fl4, 0, sizeof(struct flow4));
         if (dir == DPVS_CONN_DIR_INBOUND) {
-            fl4.saddr = conn->laddr.in;
-            fl4.daddr = conn->daddr.in;
-            fl4.sport = conn->lport;
-            fl4.dport = conn->dport;
+            fl4.fl4_saddr = conn->laddr.in;
+            fl4.fl4_daddr = conn->daddr.in;
+            fl4.fl4_sport = conn->lport;
+            fl4.fl4_dport = conn->dport;
         } else {
-            fl4.saddr = conn->vaddr.in;
-            fl4.daddr = conn->caddr.in;
-            fl4.sport = conn->vport;
-            fl4.dport = conn->cport;
+            fl4.fl4_saddr = conn->vaddr.in;
+            fl4.fl4_daddr = conn->caddr.in;
+            fl4.fl4_sport = conn->vport;
+            fl4.fl4_dport = conn->cport;
         }
 
-        fl4.proto = IPPROTO_TCP;
+        fl4.fl4_proto = IPPROTO_TCP;
         if ((rt = route4_output(&fl4)) == NULL)
             return NULL;
         dev = rt->port;
