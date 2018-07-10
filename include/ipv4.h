@@ -19,12 +19,11 @@
 #define __DPVS_IPV4_H__
 #include <stdint.h>
 #include "common.h"
+#include "inet.h"
 #include "netif.h"
 #include "route.h"
 
 #define IPPROTO_OSPF        89 /* OSPF protocol */
-
-#define INET_DEF_TTL        64
 
 int ipv4_init(void);
 int ipv4_term(void);
@@ -62,49 +61,8 @@ enum {
     IP_DEFRAG_VS_FWD,
 };
 
-/* 
- * Inet Hooks
- */
-enum {
-    INET_HOOK_PRE_ROUTING,
-    INET_HOOK_LOCAL_IN,
-    INET_HOOK_FORWARD,
-    INET_HOOK_LOCAL_OUT,
-    INET_HOOK_POST_ROUTING,
-    INET_HOOK_NUMHOOKS,
-};
-
-struct inet_hook_state {
-    unsigned int        hook;
-} __rte_cache_aligned;
-
-enum {
-    INET_DROP           = 0,
-    INET_ACCEPT,
-    INET_STOLEN,
-    INET_REPEAT,
-    INET_STOP,
-    INET_VERDICT_NUM,
-};
-
-typedef int (*inet_hook_fn)(void *priv, struct rte_mbuf *mbuf, 
-        const struct inet_hook_state *state);
-
-struct inet_hook_ops {
-    inet_hook_fn        hook;
-    unsigned int        hooknum;
-    void                *priv;
-    int                 priority;
-
-    struct list_head    list;
-};
-
 int ipv4_register_hooks(struct inet_hook_ops *ops, size_t n);
 int ipv4_unregister_hooks(struct inet_hook_ops *ops, size_t n);
-
-int INET_HOOK(unsigned int hook, struct rte_mbuf *mbuf, 
-        struct netif_port *in, struct netif_port *out,
-        int (*okfn)(struct rte_mbuf *mbuf));
 
 /*
  * Statistics
@@ -153,44 +111,9 @@ extern rte_spinlock_t ip4_stats_lock;
 #define IP4_UPD_PO_STATS(field, val)
 #endif
 
-struct ip4_stats {
-    uint64_t inpkts;            /* InReceives */
-    uint64_t inoctets;          /* InOctets */
-    uint64_t indelivers;        /* InDelivers */
-    uint64_t outforwdatagrams;  /* OutForwDatagrams */
-    uint64_t outpkts;           /* OutRequests */
-    uint64_t outoctets;         /* OutOctets */
-    uint64_t inhdrerrors;       /* InHdrErrors */
-    uint64_t intoobigerrors;    /* InTooBigErrors */
-    uint64_t innoroutes;        /* InNoRoutes */
-    uint64_t inaddrerrors;      /* InAddrErrors */
-    uint64_t inunknownprotos;   /* InUnknownProtos */
-    uint64_t intruncatedpkts;   /* InTruncatedPkts */
-    uint64_t indiscards;        /* InDiscards */
-    uint64_t outdiscards;       /* OutDiscards */
-    uint64_t outnoroutes;       /* OutNoRoutes */
-    uint64_t reasmtimeout;      /* ReasmTimeout */
-    uint64_t reasmreqds;        /* ReasmReqds */
-    uint64_t reasmoks;          /* ReasmOKs */
-    uint64_t reasmfails;        /* ReasmFails */
-    uint64_t fragoks;           /* FragOKs */
-    uint64_t fragfails;         /* FragFails */
-    uint64_t fragcreates;       /* FragCreates */
-    uint64_t inmcastpkts;       /* InMcastPkts */
-    uint64_t outmcastpkts;      /* OutMcastPkts */
-    uint64_t inbcastpkts;       /* InBcastPkts */
-    uint64_t outbcastpkts;      /* OutBcastPkts */
-    uint64_t inmcastoctets;     /* InMcastOctets */
-    uint64_t outmcastoctets;    /* OutMcastOctets */
-    uint64_t inbcastoctets;     /* InBcastOctets */
-    uint64_t outbcastoctets;    /* OutBcastOctets */
-    uint64_t csumerrors;        /* InCsumErrors */
-    uint64_t noectpkts;         /* InNoECTPkts */
-    uint64_t ect1pkts;          /* InECT1Pkts */
-    uint64_t ect0pkts;          /* InECT0Pkts */
-    uint64_t cepkts;            /* InCEPkts */
-} __rte_cache_aligned;
+typedef struct inet_stats ip4_stats;
 
+struct ip4_stats;
 int ipv4_get_stats(struct ip4_stats *stats);
 int ip4_defrag(struct rte_mbuf *mbuf, int user);
 

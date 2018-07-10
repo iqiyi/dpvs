@@ -17,16 +17,63 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include <netinet/in.h>
+#include "inet.h"
 #include "ipv4.h"
+#include "ipv6.h"
 #include "route.h"
 #include "neigh.h"
-#include "inet.h"
 #include "icmp.h"
 #include "inetaddr.h"
 
 #define INET
 #define RTE_LOGTYPE_INET RTE_LOGTYPE_USER1
+
+static struct list_head inet_hooks[INET_HOOK_NUMHOOKS];
+static rte_rwlock_t inet_hook_lock;
+
+static struct list_head inet6_hooks[INET_HOOK_NUMHOOKS];
+static rte_rwlock_t inet6_hook_lock;
+
+static inline struct list_head *af_inet_hooks(int af, size_t num)
+{
+    assert((af == AF_INET || af == AF_INET6) && num < INET_HOOK_NUMHOOKS);
+
+    if (af == AF_INET)
+        return &inet_hooks[num];
+    else
+        return &inet6_hooks[num];
+}
+
+static inline rte_rwlock_t *af_inet_hook_lock(int af)
+{
+    assert(af == AF_INET || af == AF_INET6);
+
+    if (af == AF_INET)
+        return &inet_hook_lock;
+    else
+        return &inet6_hook_lock;
+}
+
+static int inet_hook_init(void)
+{
+    int i;
+
+    rte_rwlock_init(&inet_hook_lock);
+    rte_rwlock_write_lock(&inet_hook_lock);
+    for (i = 0; i < NELEMS(inet_hooks); i++)
+        INIT_LIST_HEAD(&inet_hooks[i]);
+    rte_rwlock_write_unlock(&inet_hook_lock);
+
+    rte_rwlock_init(&inet6_hook_lock);
+    rte_rwlock_write_lock(&inet6_hook_lock);
+    for (i = 0; i < NELEMS(inet6_hooks); i++)
+            INIT_LIST_HEAD(&inet6_hooks[i]);
+    rte_rwlock_write_unlock(&inet6_hook_lock);
+
+    return EDPVS_OK;
+}
 
 int inet_init(void)
 {
@@ -36,7 +83,11 @@ int inet_init(void)
         return err;
     if ((err = route_init()) != 0)
         return err;
+    if ((err = inet_hook_init()) != 0)
+        return err;
     if ((err = ipv4_init()) != 0)
+        return err;
+    if ((err = ipv6_init()) != 0)
         return err;
     if ((err = icmp_init()) != 0)
         return err;
@@ -53,6 +104,8 @@ int inet_term(void)
     if ((err = inet_addr_term()) != 0)
         return err;
     if ((err = icmp_term()) != 0)
+        return err;
+    if ((err = ipv6_term()) != 0)
         return err;
     if ((err = ipv4_term()) != 0)
         return err;
@@ -133,4 +186,167 @@ bool inet_addr_same_net(int af, uint8_t plen,
     default:
         return false;
     }
+}
+
+static int __inet_register_hooks(struct list_head *head,
+                                 struct inet_hook_ops *reg)
+{
+    struct inet_hook_ops *elem;
+
+    /* check if exist */
+    list_for_each_entry(elem, head, list) {
+        if (elem == reg) {
+            RTE_LOG(ERR, INET, "%s: hook already exist\n", __func__);
+            return EDPVS_EXIST; /* error ? */
+        }
+    }
+
+    list_for_each_entry(elem, head, list) {
+        if (reg->priority < elem->priority)
+            break;
+    }
+    list_add(&reg->list, elem->list.prev);
+
+    return EDPVS_OK;
+}
+
+int INET_HOOK(int af, unsigned int hook, struct rte_mbuf *mbuf,
+              struct netif_port *in, struct netif_port *out,
+              int (*okfn)(struct rte_mbuf *mbuf))
+{
+    struct list_head *hook_list;
+    struct inet_hook_ops *ops;
+    struct inet_hook_state state;
+    int verdict = INET_ACCEPT;
+
+    state.hook = hook;
+    hook_list = af_inet_hooks(af, hook);
+
+    rte_rwlock_read_lock(af_inet_hook_lock(af));
+
+    ops = list_entry(hook_list, struct inet_hook_ops, list);
+
+    if (!list_empty(hook_list)) {
+        verdict = INET_ACCEPT;
+        list_for_each_entry_continue(ops, hook_list, list) {
+repeat:
+            verdict = ops->hook(ops->priv, mbuf, &state);
+            if (verdict != INET_ACCEPT) {
+                if (verdict == INET_REPEAT)
+                    goto repeat;
+                break;
+            }
+        }
+    }
+
+    rte_rwlock_read_unlock(af_inet_hook_lock(af));
+
+    if (verdict == INET_ACCEPT || verdict == INET_STOP) {
+        return okfn(mbuf);
+    } else if (verdict == INET_DROP) {
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_DROP;
+    } else { /* INET_STOLEN */
+        return EDPVS_OK;
+    }
+}
+
+int inet_register_hooks(int af, struct inet_hook_ops *reg, size_t n)
+{
+    size_t i, err;
+    struct list_head *hook_list;
+    assert(reg);
+
+    for (i = 0; i < n; i++) {
+        if (reg[i].hooknum >= INET_HOOK_NUMHOOKS || !reg[i].hook) {
+            err = EDPVS_INVAL;
+            goto rollback;
+        }
+        hook_list = af_inet_hooks(af, reg[i].hooknum);
+
+        rte_rwlock_write_lock(af_inet_hook_lock(af));
+        err = __inet_register_hooks(hook_list, &reg[i]);
+        rte_rwlock_write_unlock(af_inet_hook_lock(af));
+
+        if (err != EDPVS_OK)
+            goto rollback;
+    }
+
+    return EDPVS_OK;
+
+rollback:
+    inet_unregister_hooks(af, reg, n);
+    return err;
+}
+
+int inet_unregister_hooks(int af, struct inet_hook_ops *reg, size_t n)
+{
+    size_t i;
+    struct inet_hook_ops *elem, *next;
+    struct list_head *hook_list;
+    assert(reg);
+
+    for (i = 0; i < n; i++) {
+        if (reg[i].hooknum >= INET_HOOK_NUMHOOKS) {
+            RTE_LOG(WARNING, INET, "%s: bad hook number\n", __func__);
+            continue; /* return error ? */
+        }
+        hook_list = af_inet_hooks(af, reg[i].hooknum);
+
+#ifdef CONFIG_DPVS_IPV4_INET_HOOK
+        rte_rwlock_write_lock(&inet_hook_lock);
+#endif
+        list_for_each_entry_safe(elem, next, hook_list, list) {
+            if (elem == &reg[i]) {
+                list_del(&elem->list);
+                break;
+            }
+        }
+#ifdef CONFIG_DPVS_IPV4_INET_HOOK
+        rte_rwlock_write_unlock(&inet_hook_lock);
+#endif
+        if (&elem->list == hook_list)
+            RTE_LOG(WARNING, INET, "%s: hook not found\n", __func__);
+    }
+
+    return EDPVS_OK;
+}
+
+void inet_stats_add(struct inet_stats *stats, const struct inet_stats *diff)
+{
+   stats->inpkts            += diff->inpkts;
+   stats->inoctets          += diff->inoctets;
+   stats->indelivers        += diff->indelivers;
+   stats->outforwdatagrams  += diff->outforwdatagrams;
+   stats->outpkts           += diff->outpkts;
+   stats->outoctets         += diff->outoctets;
+   stats->inhdrerrors       += diff->inhdrerrors;
+   stats->intoobigerrors    += diff->intoobigerrors;
+   stats->innoroutes        += diff->innoroutes;
+   stats->inaddrerrors      += diff->inaddrerrors;
+   stats->inunknownprotos   += diff->inunknownprotos;
+   stats->intruncatedpkts   += diff->intruncatedpkts;
+   stats->indiscards        += diff->indiscards;
+   stats->outdiscards       += diff->outdiscards;
+   stats->outnoroutes       += diff->outnoroutes;
+   stats->reasmtimeout      += diff->reasmtimeout;
+   stats->reasmreqds        += diff->reasmreqds;
+   stats->reasmoks          += diff->reasmoks;
+   stats->reasmfails        += diff->reasmfails;
+   stats->fragoks           += diff->fragoks;
+   stats->fragfails         += diff->fragfails;
+   stats->fragcreates       += diff->fragcreates;
+   stats->inmcastpkts       += diff->inmcastpkts;
+   stats->outmcastpkts      += diff->outmcastpkts;
+   stats->inbcastpkts       += diff->inbcastpkts;
+   stats->outbcastpkts      += diff->outbcastpkts;
+   stats->inmcastoctets     += diff->inmcastoctets;
+   stats->outmcastoctets    += diff->outmcastoctets;
+   stats->inbcastoctets     += diff->inbcastoctets;
+   stats->outbcastoctets    += diff->outbcastoctets;
+   stats->csumerrors        += diff->csumerrors;
+   stats->noectpkts         += diff->noectpkts;
+   stats->ect1pkts          += diff->ect1pkts;
+   stats->ect0pkts          += diff->ect0pkts;
+   stats->cepkts            += diff->cepkts;
 }
