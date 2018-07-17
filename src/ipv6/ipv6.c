@@ -277,7 +277,7 @@ static int ip6_output_fin2(struct rte_mbuf *mbuf)
     nexthop = ip6_rt_nexthop(rt, &hdr->ip6_dst);
     mbuf->packet_type = ETHER_TYPE_IPv6;
 
-    err = neigh6_resolve_output(nexthop, mbuf, rt->rt6_dev);
+    err = neigh6_output(nexthop, mbuf, rt->rt6_dev);
     route6_put(rt);
 
     return err;

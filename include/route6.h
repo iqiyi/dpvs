@@ -17,55 +17,36 @@
  */
 /**
  * IPv6 route.
- * Linux Kernel is referred.
- *
- * Lei Chen <raychen@qiyi.com>, initial, Jul 2018.
  */
 #ifndef __DPVS_ROUTE6_H__
 #define __DPVS_ROUTE6_H__
 #include "flow.h"
 
-/*
- * it's better to define protocol indenpendent route struct,
- * but currentlly, we use v6 route to keep more IPv4 codes
- * from being changed.
- */
-struct route6 {
-    struct in6_addr     rt6_dst;
-    struct in6_addr     rt6_gateway;
-    struct in6_addr     rt6_mask;
-    uint32_t            rt6_flags; /* RTF_XXX */
-    struct netif_port   *rt6_dev;
-    uint32_t            rt6_mtu;
+struct rt6_prefix {
+    struct in6_addr     addr;
+    int                 plen;
 };
 
-/* stub functions */
-static inline struct route6 *route6_input(struct rte_mbuf *mbuf,
-                                          struct flow6 *fl6)
-{
-    static struct route6 route = {
-    };
-    return &route;
-}
+struct route6 {
+    struct rt6_prefix   rt6_dst;
+    struct rt6_prefix   rt6_src;
+    struct rt6_prefix   rt6_prefsrc;
+    struct in6_addr     rt6_gateway;
+    struct netif_port   *rt6_dev;
+    uint32_t            rt6_mtu;
+    uint32_t            rt6_flags; /* RTF_XXX */
+};
 
-static inline struct route6 *route6_output(struct rte_mbuf *mbuf,
-                                           struct flow6 *fl6)
-{
-    static struct route6 route = {
-    };
-    return &route;
-}
+struct route6 *route6_input(struct rte_mbuf *mbuf, struct flow6 *fl6);
+struct route6 *route6_output(struct rte_mbuf *mbuf, struct flow6 *fl6);
+int route6_put(struct route6 *rt);
 
-static inline int route6_put(struct route6 *rt)
-{
-    return 0;
-}
+int route6_init(void);
+int route6_term(void);
 
-static inline int neigh6_resolve_output(struct in6_addr *daddr,
-                                        struct rte_mbuf *mbuf,
-                                        struct netif_port *dev)
-{
-    return 0;
-}
+
+/* should not be here ! test only */
+int neigh6_output(struct in6_addr *daddr, struct rte_mbuf *mbuf,
+                  struct netif_port *dev);
 
 #endif /* __DPVS_ROUTE6_H__ */
