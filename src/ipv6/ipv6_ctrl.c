@@ -53,6 +53,11 @@ static int ip6_msg_get_stats(struct dpvs_msg *msg)
     return EDPVS_OK;
 }
 
+static int ip6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
+{
+    return EDPVS_NOTSUPP;
+}
+
 static int ip6_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                            void **out, size_t *outsize)
 {
@@ -110,6 +115,10 @@ static struct dpvs_msg_type ip6_stats_msg = {
 
 static struct dpvs_sockopts ip6_sockopts = {
     .version        = SOCKOPT_VERSION,
+    .set_opt_min    = SOCKOPT_IP6_SET,
+    .set_opt_max    = SOCKOPT_IP6_SET,
+    .set            = ip6_sockopt_set,
+
     .get_opt_min    = SOCKOPT_IP6_STATS,
     .get_opt_max    = SOCKOPT_IP6_STATS,
     .get            = ip6_sockopt_get,

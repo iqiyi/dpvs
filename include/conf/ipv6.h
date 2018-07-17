@@ -25,8 +25,10 @@
 #include "inet.h"
 
 enum {
+    /* set */
+    SOCKOPT_IP6_SET = 1100,
     /* get */
-    SOCKOPT_IP6_STATS = 1100,
+    SOCKOPT_IP6_STATS,
 };
 
 struct ip6_stats_param {
