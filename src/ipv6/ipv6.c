@@ -611,7 +611,7 @@ int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6)
     struct route6 *rt;
     struct ip6_hdr *hdr;
 
-    if (unlikely(!mbuf || !fl6 || !ipv6_addr_any(&fl6->fl6_daddr))) {
+    if (unlikely(!mbuf || !fl6 || ipv6_addr_any(&fl6->fl6_daddr))) {
         if (mbuf)
             rte_pktmbuf_free(mbuf);
         return EDPVS_INVAL;
