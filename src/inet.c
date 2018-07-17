@@ -23,8 +23,10 @@
 #include "ipv4.h"
 #include "ipv6.h"
 #include "route.h"
+#include "route6.h"
 #include "neigh.h"
 #include "icmp.h"
+#include "icmp6.h"
 #include "inetaddr.h"
 
 #define INET
@@ -83,6 +85,8 @@ int inet_init(void)
         return err;
     if ((err = route_init()) != 0)
         return err;
+    if ((err = route6_init()) != 0)
+        return err;
     if ((err = inet_hook_init()) != 0)
         return err;
     if ((err = ipv4_init()) != 0)
@@ -90,6 +94,8 @@ int inet_init(void)
     if ((err = ipv6_init()) != 0)
         return err;
     if ((err = icmp_init()) != 0)
+        return err;
+    if ((err = icmpv6_init()) != 0)
         return err;
     if ((err = inet_addr_init()) != 0)
         return err;
@@ -103,11 +109,15 @@ int inet_term(void)
 
     if ((err = inet_addr_term()) != 0)
         return err;
+    if ((err = icmpv6_term()) != 0)
+        return err;
     if ((err = icmp_term()) != 0)
         return err;
     if ((err = ipv6_term()) != 0)
         return err;
     if ((err = ipv4_term()) != 0)
+        return err;
+    if ((err = route6_term()) != 0)
         return err;
     if ((err = route_term()) != 0)
         return err;
