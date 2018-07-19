@@ -54,6 +54,7 @@ static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
 
         dest = list_entry(q, struct dp_vs_dest, n_list);
         if (!(dest->flags & DPVS_DEST_F_OVERLOAD) &&
+            (dest->flags & DPVS_DEST_F_AVAILABLE) &&
             rte_atomic16_read(&dest->weight) > 0)
             /* HIT */
             goto out;

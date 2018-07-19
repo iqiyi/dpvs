@@ -533,9 +533,9 @@ int sa_fetch(struct netif_port *dev, const struct sockaddr_in *daddr,
 
     /* try to find source ifa by @dev and @daddr */
     memset(&fl, 0, sizeof(struct flow4));
-    fl.oif = dev;
-    fl.daddr.s_addr = daddr ? daddr->sin_addr.s_addr : htonl(INADDR_ANY);
-    fl.saddr.s_addr = saddr ? saddr->sin_addr.s_addr : htonl(INADDR_ANY);
+    fl.fl4_oif = dev;
+    fl.fl4_daddr.s_addr = daddr ? daddr->sin_addr.s_addr : htonl(INADDR_ANY);
+    fl.fl4_saddr.s_addr = saddr ? saddr->sin_addr.s_addr : htonl(INADDR_ANY);
     rt = route4_output(&fl);
     if (!rt)
         return EDPVS_NOROUTE;;

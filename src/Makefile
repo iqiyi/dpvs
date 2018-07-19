@@ -23,7 +23,12 @@
 
 TARGET := dpvs
 
-VERSION_STRING := $(shell ./VERSION)
+ifneq ("$(wildcard VERSION)","")
+    VERSION_STRING := $(shell ./VERSION)
+else
+    VERSION_STRING := $(shell git describe --tags --always)
+endif
+
 DATE_STRING := $(shell date +%Y.%m.%d.%H:%M:%S)
 
 # same path of THIS Makefile
