@@ -121,6 +121,19 @@ static void ip6_conf_disable(vector_t tokens)
     FREE_PTR(str);
 }
 
+/* refer linux:ipv6_chk_mcast_addr */
+static bool ip6_chk_mcast_addr(struct netif_port *dev,
+                               const struct in6_addr *group,
+                               const struct in6_addr *src)
+{
+    /*
+     * TODO:
+     * 1. check inetaddr module for multicast group joined.
+     * 2. check source-specific multicast (SSM) if @src is assigned.
+     */
+    return true;
+}
+
 /* refer linux:ip6_input_finish() */
 static int ip6_local_in_fin(struct rte_mbuf *mbuf)
 {
@@ -179,8 +192,10 @@ resubmit_final:
     } else if (is_final) {
         have_final = true;
 
-        /* not support mcast, and kni may like it. */
-        if (ipv6_addr_is_multicast(&hdr->ip6_dst)) {
+        /* check mcast, if failed, kni may like it. */
+        if (ipv6_addr_is_multicast(&hdr->ip6_dst) &&
+            !ip6_chk_mcast_addr(netif_port_get(mbuf->port),
+                                &hdr->ip6_dst, &hdr->ip6_src)) {
             rte_rwlock_read_unlock(&inet6_prot_lock);
             goto kni;
         }
@@ -269,9 +284,14 @@ static int ip6_output_fin2(struct rte_mbuf *mbuf)
     int err;
 
     if (ipv6_addr_is_multicast(&hdr->ip6_dst)) {
-        IP6_INC_STATS(outdiscards);
-        rte_pktmbuf_free(mbuf);
-        return EDPVS_NOTSUPP;
+        IP6_UPD_PO_STATS(outmcast, mbuf->pkt_len);
+
+        if (IPV6_ADDR_MC_SCOPE(&hdr->ip6_dst) <= IPV6_ADDR_SCOPE_NODELOCAL) {
+            IP6_INC_STATS(outdiscards);
+            rte_pktmbuf_free(mbuf);
+            route6_put(rt);
+            return EDPVS_INVAL;
+        }
     }
 
     nexthop = ip6_rt_nexthop(rt, &hdr->ip6_dst);
