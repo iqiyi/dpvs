@@ -122,7 +122,7 @@ dp_vs_conhash_assign(struct dp_vs_service *svc)
            rte_atomic32_inc(&dest->refcnt);
            p_node->data = dest;
 
-           snprintf(str, sizeof(str), "%u", dest->addr.in.s_addr);
+           snprintf(str, sizeof(str), "%u%d", dest->addr.in.s_addr, dest->port);
 
            conhash_set_node(p_node, str, weight*REPLICA);
            conhash_add_node(svc->sched_data, p_node);
@@ -139,7 +139,7 @@ static void node_fini(struct node_s *node)
     if (node->data) {
         rte_atomic32_dec(&(((struct dp_vs_dest *)(node->data))->refcnt));
         node->data = NULL;
-    } 
+    }
 
     rte_free(node);
 }
@@ -168,7 +168,7 @@ static int dp_vs_conhash_done_svc(struct dp_vs_service *svc)
 static int dp_vs_conhash_update_svc(struct dp_vs_service *svc)
 {
     conhash_fini(svc->sched_data, node_fini);
-    
+
     svc->sched_data = conhash_init(NULL);
 
     dp_vs_conhash_assign(svc);
