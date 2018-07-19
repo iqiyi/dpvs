@@ -90,8 +90,9 @@ int route6_term(void)
     return EDPVS_OK;
 }
 
-int neigh6_output(struct in6_addr *daddr, struct rte_mbuf *mbuf,
-                  struct netif_port *dev)
+/* neighbour codes should not be here ! test only, remove it later. */
+int neigh_output(int af, union inet_addr *nexthop, struct rte_mbuf *mbuf,
+                 struct netif_port *dev)
 {
     struct ether_addr temp, *ea1, *ea2;
 
