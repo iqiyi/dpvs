@@ -361,6 +361,10 @@ static int ip6_forward(struct rte_mbuf *mbuf)
     if (mbuf->packet_type != ETH_PKT_HOST)
         goto drop;
 
+    /* not support forward multicast */
+    if (ipv6_addr_is_multicast(&hdr->ip6_dst))
+        goto error;
+
     if (hdr->ip6_hlim <= 1) {
         mbuf->port = rt->rt6_dev->id;
         //icmpv6_send(mbuf, ICMPV6_TIME_EXCEED, ICMPV6_EXC_HOPLIMIT, 0);
