@@ -44,5 +44,5 @@ LIBS += -Wl,--no-as-needed -fvisibility=default \
 		-Wl,--whole-archive -lrte_hash -lrte_kvargs -Wl,-lrte_mbuf -lrte_eal \
 		-Wl,-lrte_mempool -lrte_ring -lrte_cmdline -lrte_cfgfile -lrte_kni \
 		-lrte_mempool_ring -lrte_timer -lrte_net -Wl,-lrte_pmd_virtio \
-		-lrte_pci -lrte_bus_pci -lrte_bus_vdev \
+		-lrte_pci -lrte_bus_pci -lrte_bus_vdev -lrte_lpm \
 		-Wl,--no-whole-archive -lrt -lm -ldl -lcrypto
