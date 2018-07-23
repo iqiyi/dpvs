@@ -167,6 +167,52 @@ static inline int inet_addr_range_dump(int af,
                     min_ip, max_ip, min_port, max_port);
 }
 
+static inline void inet_stats_dump(const char *title, const char *prefix,
+                                   const struct inet_stats *st)
+{
+    if (!st)
+        return;
+
+    if (title)
+        printf("%s\n", title);
+
+    printf("%s%-18s %lu\n", prefix ? : "", "InReceives:", st->inpkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "InOctets:", st->inoctets);
+    printf("%s%-18s %lu\n", prefix ? : "", "InDelivers:", st->indelivers);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutForwDatagrams:", st->outforwdatagrams);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutRequests:", st->outpkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutOctets:", st->outoctets);
+    printf("%s%-18s %lu\n", prefix ? : "", "InHdrErrors:", st->inhdrerrors);
+    printf("%s%-18s %lu\n", prefix ? : "", "InTooBigErrors:", st->intoobigerrors);
+    printf("%s%-18s %lu\n", prefix ? : "", "InNoRoutes:", st->innoroutes);
+    printf("%s%-18s %lu\n", prefix ? : "", "InAddrErrors:", st->inaddrerrors);
+    printf("%s%-18s %lu\n", prefix ? : "", "InUnknownProtos:", st->inunknownprotos);
+    printf("%s%-18s %lu\n", prefix ? : "", "InTruncatedPkts:", st->intruncatedpkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "InDiscards:", st->indiscards);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutDiscards:", st->outdiscards);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutNoRoutes:", st->outnoroutes);
+    printf("%s%-18s %lu\n", prefix ? : "", "ReasmTimeout:", st->reasmtimeout);
+    printf("%s%-18s %lu\n", prefix ? : "", "ReasmReqds:", st->reasmreqds);
+    printf("%s%-18s %lu\n", prefix ? : "", "ReasmOKs:", st->reasmoks);
+    printf("%s%-18s %lu\n", prefix ? : "", "ReasmFails:", st->reasmfails);
+    printf("%s%-18s %lu\n", prefix ? : "", "FragOKs:", st->fragoks);
+    printf("%s%-18s %lu\n", prefix ? : "", "FragFails:", st->fragfails);
+    printf("%s%-18s %lu\n", prefix ? : "", "FragCreates:", st->fragcreates);
+    printf("%s%-18s %lu\n", prefix ? : "", "InMcastPkts:", st->inmcastpkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutMcastPkts:", st->outmcastpkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "InBcastPkts:", st->inbcastpkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutBcastPkts:", st->outbcastpkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "InMcastOctets:", st->inmcastoctets);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutMcastOctets:", st->outmcastoctets);
+    printf("%s%-18s %lu\n", prefix ? : "", "InBcastOctets:", st->inbcastoctets);
+    printf("%s%-18s %lu\n", prefix ? : "", "OutBcastOctets:", st->outbcastoctets);
+    printf("%s%-18s %lu\n", prefix ? : "", "InCsumErrors:", st->csumerrors);
+    printf("%s%-18s %lu\n", prefix ? : "", "InNoECTPkts:", st->noectpkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "InECT1Pkts:", st->ect1pkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "InECT0Pkts:", st->ect0pkts);
+    printf("%s%-18s %lu\n", prefix ? : "", "InCEPkts:", st->cepkts);
+}
+
 #ifdef __DPVS__
 #include "dpdk.h"
 #include "netif.h"
