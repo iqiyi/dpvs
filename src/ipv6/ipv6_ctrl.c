@@ -34,9 +34,6 @@ static int ip6_msg_get_stats(struct dpvs_msg *msg)
     struct inet_stats *stats;
     assert(msg);
 
-    if (unlikely(msg->cid != rte_lcore_id()))
-        return EDPVS_INVAL;
-
     stats = rte_zmalloc(NULL, sizeof(*stats), 0);
     if (!stats)
         return EDPVS_NOMEM;
