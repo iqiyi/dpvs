@@ -324,6 +324,7 @@ static inline void ipv6_addr_copy(struct in6_addr *a1,
 	memcpy(a1, a2, sizeof(struct in6_addr));
 }
 
+/* net/addrconf.h */
 static inline void addrconf_addr_solict_mult(const struct in6_addr *addr,
                                              struct in6_addr *solicited)
 {
@@ -331,6 +332,33 @@ static inline void addrconf_addr_solict_mult(const struct in6_addr *addr,
                       htonl(0xFF020000), 0,
                       htonl(0x1),
                       htonl(0xFF000000) | addr->s6_addr32[3]);
+}
+
+static inline bool ipv6_addr_is_ll_all_nodes(const struct in6_addr *addr)
+{
+	return ((addr->s6_addr32[0] ^ htonl(0xff020000)) |
+		addr->s6_addr32[1] | addr->s6_addr32[2] |
+		(addr->s6_addr32[3] ^ htonl(0x00000001))) == 0;
+}
+
+static inline bool ipv6_addr_is_ll_all_routers(const struct in6_addr *addr)
+{
+	return ((addr->s6_addr32[0] ^ htonl(0xff020000)) |
+		addr->s6_addr32[1] | addr->s6_addr32[2] |
+		(addr->s6_addr32[3] ^ htonl(0x00000002))) == 0;
+}
+
+static inline bool ipv6_addr_is_isatap(const struct in6_addr *addr)
+{
+	return (addr->s6_addr32[2] | htonl(0x02000000)) == htonl(0x02005EFE);
+}
+
+static inline bool ipv6_addr_is_solict_mult(const struct in6_addr *addr)
+{
+	return ((addr->s6_addr32[0] ^ htonl(0xff020000)) |
+		addr->s6_addr32[1] |
+		(addr->s6_addr32[2] ^ htonl(0x00000001)) |
+		(addr->s6_addr[12] ^ 0xff)) == 0;
 }
 
 #endif /* __LINUX_IPV6_H__ */
