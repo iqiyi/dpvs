@@ -11,7 +11,7 @@
 #include "ipv6.h"
 #include "route6.h"
 
-static struct route6 routes[4] = {};
+static struct route6 routes[6] = {};
 
 struct neigh {
     int                 af;
@@ -108,6 +108,18 @@ int route6_init(void)
     inet_pton(AF_INET6, "2001:db8:1::1", &rt->rt6_gateway);
     rt->rt6_mtu = 1500;
     rt->rt6_flags = RTF_FORWARD;
+
+    rt = &routes[4];
+    inet_pton(AF_INET6, "ff00::", &rt->rt6_dst.addr);
+    rt->rt6_dst.plen = 8;
+    rt->rt6_dev = netif_port_get_by_name("dpdk0");
+    rt->rt6_mtu = 1500;
+
+    rt = &routes[5];
+    inet_pton(AF_INET6, "fe80::", &rt->rt6_dst.addr);
+    rt->rt6_dst.plen = 64;
+    rt->rt6_dev = netif_port_get_by_name("dpdk0");
+    rt->rt6_mtu = 1500;
 
     neigh = &neigh_tab[0];
     neigh->af = AF_INET6;
