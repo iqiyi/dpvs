@@ -4,6 +4,7 @@
 #include <netinet/ip6.h>
 #include "ipv6.h"
 #include "icmp6.h"
+#include "ndisc.h"
 
 static inline uint16_t icmp6_csum(struct ip6_hdr *iph, struct icmp6_hdr *ich)
 {
@@ -62,6 +63,13 @@ static int icmp6_rcv(struct rte_mbuf *mbuf)
 
     if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
         goto drop;
+
+    /* ndisc test*/
+    if ((ich->icmp6_type == ND_NEIGHBOR_SOLICIT) ||
+       (ich->icmp6_type == ND_NEIGHBOR_ADVERT)) {
+        ndisc_rcv(mbuf, netif_port_get(mbuf->port));
+        goto drop;
+    }
 
     if (ich->icmp6_type != ICMP6_ECHO_REQUEST)
         goto drop;
