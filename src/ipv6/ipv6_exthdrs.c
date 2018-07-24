@@ -33,12 +33,12 @@ static int ip6_dummy_hdr_rcv(struct rte_mbuf *mbuf)
     struct ip6_hdr *hdr = mbuf->userdata;
     struct ip6_ext *exthdr;
 
-    if (!mbuf_may_pull(mbuf, 8))
+    if (mbuf_may_pull(mbuf, 8) != 0)
         goto drop;
 
     exthdr = rte_pktmbuf_mtod(mbuf, struct ip6_ext *);
 
-    if (!mbuf_may_pull(mbuf, 8 + (exthdr->ip6e_len<<3)))
+    if (mbuf_may_pull(mbuf, 8 + (exthdr->ip6e_len<<3)) != 0)
         goto drop;
 
     if (ipv6_addr_is_multicast(&hdr->ip6_dst) ||
