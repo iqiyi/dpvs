@@ -131,7 +131,16 @@ static bool ip6_chk_mcast_addr(struct netif_port *dev,
      * 1. check inetaddr module for multicast group joined.
      * 2. check source-specific multicast (SSM) if @src is assigned.
      */
-    return true;
+
+    /*
+     * XXX: test only, not correct, remove them.
+     */
+    if (ipv6_addr_is_ll_all_nodes(group) ||
+        ipv6_addr_is_ll_all_routers(group) ||
+        ipv6_addr_is_solict_mult(group))
+        return true;
+
+    return false;
 }
 
 /* refer linux:ip6_input_finish() */
@@ -242,6 +251,21 @@ static int ip6_local_in(struct rte_mbuf *mbuf)
 {
     return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_IN, mbuf,
                      netif_port_get(mbuf->port), NULL, ip6_local_in_fin);
+}
+
+static int ip6_mc_local_in(struct rte_mbuf *mbuf)
+{
+    struct ip6_hdr *iph = ip6_hdr(mbuf);
+    struct route6 *rt = mbuf->userdata;
+
+    IP6_UPD_PO_STATS(inmcast, mbuf->pkt_len);
+
+    if (ip6_chk_mcast_addr(netif_port_get(mbuf->port), &iph->ip6_dst, NULL))
+        return ip6_local_in(mbuf);
+    else {
+        route6_put(rt);
+        return EDPVS_KNICONTINUE; /* not drop */
+    }
 }
 
 static inline struct in6_addr *ip6_rt_nexthop(struct route6 *rt,
@@ -429,6 +453,7 @@ static int ip6_rcv_fin(struct rte_mbuf *mbuf)
 {
     struct route6 *rt = NULL;
     eth_type_t etype = mbuf->packet_type;
+    struct ip6_hdr *iph = ip6_hdr(mbuf);
 
     rt = ip6_route_input(mbuf);
     if (!rt) {
@@ -445,6 +470,8 @@ static int ip6_rcv_fin(struct rte_mbuf *mbuf)
 
     if (rt->rt6_flags & RTF_LOCALIN) {
         return ip6_local_in(mbuf);
+    } else if (ipv6_addr_type(&iph->ip6_dst) & IPV6_ADDR_MULTICAST) {
+        return ip6_mc_local_in(mbuf);
     } else if (rt->rt6_flags & RTF_FORWARD) {
         /* pass multi-/broad-cast to kni */
         if (etype != ETH_PKT_HOST)
@@ -540,10 +567,8 @@ static int ip6_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
         }
 
         if (mbuf->pkt_len > tot_len) {
-            if (rte_pktmbuf_trim(mbuf, mbuf->pkt_len - tot_len) != 0) {
-                IP6_INC_STATS(inhdrerrors);
-                goto drop;
-            }
+            if (rte_pktmbuf_trim(mbuf, mbuf->pkt_len - tot_len) != 0)
+                goto err;
         }
     }
 
@@ -557,10 +582,8 @@ static int ip6_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
 
     /* hop-by-hop option header */
     if (hdr->ip6_nxt == NEXTHDR_HOP) {
-        if (ipv6_parse_hopopts(mbuf) != EDPVS_OK) {
-            IP6_INC_STATS(inhdrerrors);
-            goto drop;
-        }
+        if (ipv6_parse_hopopts(mbuf) != EDPVS_OK)
+            goto err;
     }
 
     return INET_HOOK(AF_INET6, INET_HOOK_PRE_ROUTING, mbuf,

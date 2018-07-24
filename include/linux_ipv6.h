@@ -307,4 +307,32 @@ static inline bool ipv6_addr_is_multicast(const struct in6_addr *addr)
 	return (addr->s6_addr32[0] & htonl(0xFF000000)) == htonl(0xFF000000);
 }
 
+/* net/addrconf.h */
+static inline bool ipv6_addr_is_ll_all_nodes(const struct in6_addr *addr)
+{
+	return ((addr->s6_addr32[0] ^ htonl(0xff020000)) |
+		addr->s6_addr32[1] | addr->s6_addr32[2] |
+		(addr->s6_addr32[3] ^ htonl(0x00000001))) == 0;
+}
+
+static inline bool ipv6_addr_is_ll_all_routers(const struct in6_addr *addr)
+{
+	return ((addr->s6_addr32[0] ^ htonl(0xff020000)) |
+		addr->s6_addr32[1] | addr->s6_addr32[2] |
+		(addr->s6_addr32[3] ^ htonl(0x00000002))) == 0;
+}
+
+static inline bool ipv6_addr_is_isatap(const struct in6_addr *addr)
+{
+	return (addr->s6_addr32[2] | htonl(0x02000000)) == htonl(0x02005EFE);
+}
+
+static inline bool ipv6_addr_is_solict_mult(const struct in6_addr *addr)
+{
+	return ((addr->s6_addr32[0] ^ htonl(0xff020000)) |
+		addr->s6_addr32[1] |
+		(addr->s6_addr32[2] ^ htonl(0x00000001)) |
+		(addr->s6_addr[12] ^ 0xff)) == 0;
+}
+
 #endif /* __LINUX_IPV6_H__ */
