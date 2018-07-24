@@ -10,6 +10,7 @@
 #include "netif.h"
 #include "ipv6.h"
 #include "route6.h"
+#include "inetaddr.h"
 
 static struct route6 routes[4] = {};
 
@@ -35,11 +36,15 @@ static struct route6 *rt6_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
 
 struct route6 *route6_input(struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
+    if (ipv6_addr_is_multicast(&fl6->fl6_daddr))
+        return &routes[0];
     return rt6_lookup(mbuf, fl6);
 }
 
 struct route6 *route6_output(struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
+    if (ipv6_addr_is_multicast(&fl6->fl6_daddr))
+        return &routes[1];
     return rt6_lookup(mbuf, fl6);
 }
 
@@ -53,14 +58,14 @@ int route6_init(void)
     struct route6 *rt;
 
     rt = &routes[0];
-    inet_pton(AF_INET6, "2001:db8::1", &rt->rt6_dst.addr);
+    inet_pton(AF_INET6, "2001:db8:0:f101::2", &rt->rt6_dst.addr);
     rt->rt6_dst.plen = 128;
     rt->rt6_dev = netif_port_get_by_name("dpdk0");
     rt->rt6_mtu = 1500;
     rt->rt6_flags = RTF_LOCALIN | RTF_HOST;
 
     rt = &routes[1];
-    inet_pton(AF_INET6, "2001:db8::", &rt->rt6_dst.addr);
+    inet_pton(AF_INET6, "2001:db8:0:f101::", &rt->rt6_dst.addr);
     rt->rt6_dst.plen = 64;
     rt->rt6_dev = netif_port_get_by_name("dpdk0");
     rt->rt6_mtu = 1500;
@@ -85,24 +90,20 @@ int route6_init(void)
     return EDPVS_OK;
 }
 
+/*test, remember delete me!!*/
+int ipv6_addr_init(void)
+{
+      /*addr hardcode*/
+    union inet_addr addr;
+    inet_pton(AF_INET6, "2001:db8:0:f101::2", &addr);
+    
+    inet_addr_add(AF_INET6, routes[0].rt6_dev, &addr, 64, NULL,
+                  0, 0 ,0, 0);
+    return EDPVS_OK;	
+}
+
 int route6_term(void)
 {
     return EDPVS_OK;
 }
 
-/* neighbour codes should not be here ! test only, remove it later. */
-int neigh_output(int af, union inet_addr *nexthop, struct rte_mbuf *mbuf,
-                 struct netif_port *dev)
-{
-    struct ether_addr temp, *ea1, *ea2;
-
-    /* assume eth header is exist and just need swap src/dst */
-    ea1 = (void *)rte_pktmbuf_prepend(mbuf, sizeof(struct ether_hdr));
-    ea2 = ea1 + 1;
-
-    ether_addr_copy(ea1, &temp);
-    ether_addr_copy(ea2, ea1);
-    ether_addr_copy(&temp, ea2);
-
-    return netif_xmit(mbuf, dev);
-}

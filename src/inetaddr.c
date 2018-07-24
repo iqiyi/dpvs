@@ -204,6 +204,35 @@ static int ifa_del_route(struct inet_ifaddr *ifa)
     return EDPVS_OK;
 }
 
+/*todo: add mcast mac and ipaddr*/
+static int ifa_add_mcast(struct inet_ifaddr *ifa)
+{
+    /*hard code here*/
+    struct ether_addr addrs[2];
+    addrs[0].addr_bytes[0] = 0x33;
+    addrs[0].addr_bytes[1] = 0x33;
+    addrs[0].addr_bytes[2] = 0xff;
+    addrs[0].addr_bytes[3] = 0x00;
+    addrs[0].addr_bytes[4] = 0x00;
+    addrs[0].addr_bytes[5] = 0x01;
+
+    addrs[1].addr_bytes[0] = 0x33;
+    addrs[1].addr_bytes[1] = 0x33;
+    addrs[1].addr_bytes[2] = 0xff;
+    addrs[1].addr_bytes[3] = 0x00;
+    addrs[1].addr_bytes[4] = 0x00;
+    addrs[1].addr_bytes[5] = 0x02;
+
+    rte_eth_dev_set_mc_addr_list(ifa->idev->dev->id, addrs, 2);
+
+    return EDPVS_OK;
+}
+
+static int ifa_del_mcast(struct inet_ifaddr *ifa)
+{
+    return EDPVS_OK;
+}
+
 static int ifa_expire(void *arg)
 {
     struct inet_ifaddr *ifa = arg;
@@ -285,10 +314,19 @@ static int ifa_add_set(int af, const struct netif_port *dev,
         dpvs_time_now(&ifa->cstemp, true);
         rte_atomic32_init(&ifa->refcnt);
 
-        /* set routes for local and network */
-        err = ifa_add_route(ifa);
+        /* set mult*/
+        err = ifa_add_mcast(ifa);
         if (err != EDPVS_OK)
             goto free_ifa;
+
+        /* set routes for local and network 
+         * FIX ME! support ipv6
+         * */
+        if (af == AF_INET) { //TEST HARD_CODE
+            err = ifa_add_route(ifa);
+            if (err != EDPVS_OK)
+                goto free_ifa;
+        }
 
         err = __ifa_insert(idev, ifa);
         if (err != EDPVS_OK)
@@ -386,6 +424,7 @@ int inet_addr_del(int af, struct netif_port *dev,
         dpvs_timer_cancel(&ifa->timer, true);
         if (ifa->flags & IFA_F_SAPOOL)
             sa_pool_destroy(ifa);
+        ifa_del_mcast(ifa);
         ifa_del_route(ifa);
         idev_put(ifa->idev);
         rte_free(ifa);
@@ -484,7 +523,6 @@ void inet_addr_select(int af, const struct netif_port *dev,
         addr->in.s_addr = htonl(INADDR_ANY);
     else {
         addr->in6 = in6addr_any;
-        return; /* not support IPv6 now */
     }
 
     if (!idev)
@@ -516,8 +554,6 @@ struct inet_ifaddr *inet_addr_ifa_get(int af, const struct netif_port *dev,
 {
 	struct inet_ifaddr *ifa = NULL;
 	struct inet_device *idev = NULL;
-
-	assert(af == AF_INET && addr);
 
 #ifdef INET_ADDR_LOCK
 	rte_rwlock_write_lock(&in_addr_lock);

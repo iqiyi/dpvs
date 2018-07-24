@@ -193,6 +193,8 @@ bool inet_addr_same_net(int af, uint8_t plen,
     case AF_INET:
         mask = htonl(~((0x1<<(32-plen)) - 1));
         return !((addr1->in.s_addr^addr2->in.s_addr)&mask);
+    case AF_INET6:
+        return true;//fix me!!
     default:
         return false;
     }

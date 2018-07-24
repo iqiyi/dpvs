@@ -33,6 +33,7 @@
 #include "ipv6.h"
 #include "route6.h"
 #include "parser/parser.h"
+#include "neigh.h"
 
 /*
  * IPv6 inet hooks
