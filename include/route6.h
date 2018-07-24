@@ -20,6 +20,7 @@
  */
 #ifndef __DPVS_ROUTE6_H__
 #define __DPVS_ROUTE6_H__
+
 #include "flow.h"
 
 struct rt6_prefix {
@@ -39,15 +40,12 @@ struct route6 {
     /* private members */
     uint32_t            arr_idx;    /* lpm6 array index */
     struct list_head    hnode;      /* hash list node */
-    rte_atomic32_t      refcnt;
+    //rte_atomic32_t    refcnt;     /* no needed for per-lcore routes */
 };
 
 struct route6 *route6_input(struct rte_mbuf *mbuf, struct flow6 *fl6);
 struct route6 *route6_output(struct rte_mbuf *mbuf, struct flow6 *fl6);
 int route6_put(struct route6 *rt);
-
-int route6_add(const struct route6 *rt6);
-int route6_del(const struct route6 *rt6);
 
 int route6_init(void);
 int route6_term(void);
@@ -61,5 +59,9 @@ static inline int dump_rt6_prefix(const struct rt6_prefix *rt6_p, char *buf, int
             rt6_p->addr.s6_addr16[6], rt6_p->addr.s6_addr16[7],
             rt6_p->plen);
 }
+
+/* neighbour codes should not be here ! test only, remove it later. */
+int neigh_output(int af, union inet_addr *nexthop, struct rte_mbuf *mbuf,
+                 struct netif_port *dev);
 
 #endif /* __DPVS_ROUTE6_H__ */
