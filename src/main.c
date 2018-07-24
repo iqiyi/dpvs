@@ -309,7 +309,7 @@ end:
     if ((err = ctrl_term()) != 0)
         RTE_LOG(ERR, DPVS, "Fail to term ctrl plane\n");
     if ((err = netif_term()) != 0)
-        RTE_LOG(ERR, DPVS, "Fail to term route\n");
+        RTE_LOG(ERR, DPVS, "Fail to term netif\n");
     if ((err = cfgfile_term()) != 0)
         RTE_LOG(ERR, DPVS, "Fail to term configuration file: %s\n",
                 dpvs_strerror(err));

@@ -19,20 +19,49 @@
 #ifndef __DPVS_ROUTE6_CONF_H__
 #define __DPVS_ROUTE6_CONF_H__
 
+/* copied from "flow.h" */
+#ifndef __DPVS_FLOW_H__
+#define RTF_FORWARD     0x0400
+#define RTF_LOCALIN     0x0800
+#define RTF_DEFAULT     0x1000
+#define RTF_KNI         0X2000
+#endif
+
+#ifndef __DPVS_ROUTE6_H__
+struct rt6_prefix {
+    struct in6_addr     addr;
+    int                 plen;
+};
+#endif
+
 enum {
     /* set */
-    SOCKOPT_SET_ROUTE6_ADD   = 6300,
-    SOCKOPT_SET_ROUTE6_DEL,
+    SOCKOPT_SET_ROUTE6_ADD_DEL  = 6300,
+    SOCKOPT_SET_ROUTE6_FLUSH,
 
     /* get */
-    SOCKOPT_GET_ROUTE6_SHOW,
+    SOCKOPT_GET_ROUTE6_SHOW     = 6300,
+};
+
+enum {
+    RT6_OPS_GET = 1,
+    RT6_OPS_ADD,
+    RT6_OPS_DEL,
 };
 
 struct dp_vs_route6_conf {
-
+    int                 af;
+    int                 ops;
+    struct rt6_prefix   dst;
+    struct rt6_prefix   src;
+    struct rt6_prefix   prefsrc;
+    char                ifname[64];
+    struct in6_addr     gateway;
+    uint32_t            mtu;
+    uint32_t            flags;
 } __attribute__((__packed__));
 
-struct dp_vs_route_conf_array {
+struct dp_vs_route6_conf_array {
     int                         nroute;
     struct dp_vs_route6_conf    routes[0];
 } __attribute__((__packed__));
