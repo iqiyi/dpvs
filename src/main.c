@@ -34,6 +34,7 @@
 #include "cfgfile.h"
 #include "ip_tunnel.h"
 #include "sys_time.h"
+#include "route6.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
@@ -249,6 +250,9 @@ int main(int argc, char *argv[])
             RTE_LOG(WARNING, DPVS, "Start %s failed, skipping ...\n",
                     dev->name);
     }
+
+    /*mult_mac shoule be set after port is up. test, delete me later!*/
+    ipv6_addr_init();
 
     /* print port-queue-lcore relation */
     netif_print_lcore_conf(pql_conf_buf, &pql_conf_buf_len, true, 0);

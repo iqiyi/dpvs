@@ -143,7 +143,7 @@ udp_conn_lookup(struct dp_vs_proto *proto,
     if (conn != NULL) {
         if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
              && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))){
-            neigh_confirm(conn->in_nexthop.in, conn->in_dev);
+            neigh_confirm(AF_INET, &conn->in_nexthop, conn->in_dev);
         }
     }
 

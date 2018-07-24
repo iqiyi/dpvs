@@ -44,8 +44,6 @@ int route6_put(struct route6 *rt);
 int route6_init(void);
 int route6_term(void);
 
-/* neighbour codes should not be here ! test only, remove it later. */
-int neigh_output(int af, union inet_addr *nexthop, struct rte_mbuf *mbuf,
-                 struct netif_port *dev);
-
+/*test, delete me!*/
+int ipv6_addr_init(void);
 #endif /* __DPVS_ROUTE6_H__ */

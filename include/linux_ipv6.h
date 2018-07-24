@@ -21,6 +21,7 @@
 #ifndef __LINUX_IPV6_H__
 #define __LINUX_IPV6_H__
 #include <stdbool.h>
+#include <netinet/in.h>
 #include "common.h"
 
 #define IPV6_MAXPLEN		65535
@@ -36,7 +37,7 @@
 #define NEXTHDR_ROUTING     43	/* Routing header. */
 #define NEXTHDR_FRAGMENT    44	/* Fragmentation/reassembly header. */
 #define NEXTHDR_GRE         47	/* GRE header. */
-#define NEXTHDR_ESP		    50	/* Encapsulating security payload. */
+#define NEXTHDR_ESP         50	/* Encapsulating security payload. */
 #define NEXTHDR_AUTH        51	/* Authentication header. */
 #define NEXTHDR_ICMP        58	/* ICMP for IPv6. */
 #define NEXTHDR_NONE        59	/* No next header */
@@ -305,6 +306,31 @@ static inline bool ipv6_addr_orchid(const struct in6_addr *a)
 static inline bool ipv6_addr_is_multicast(const struct in6_addr *addr)
 {
 	return (addr->s6_addr32[0] & htonl(0xFF000000)) == htonl(0xFF000000);
+}
+
+static inline void ipv6_addr_set(struct in6_addr *addr, 
+                                 uint32_t w1, uint32_t w2, 
+                                 uint32_t w3, uint32_t w4) 
+{
+        addr->s6_addr32[0] = w1; 
+        addr->s6_addr32[1] = w2; 
+        addr->s6_addr32[2] = w3; 
+        addr->s6_addr32[3] = w4; 
+}
+
+static inline void ipv6_addr_copy(struct in6_addr *a1, 
+                                  const struct in6_addr *a2)
+{
+	memcpy(a1, a2, sizeof(struct in6_addr));
+}
+
+static inline void addrconf_addr_solict_mult(const struct in6_addr *addr,
+                                             struct in6_addr *solicited)
+{
+        ipv6_addr_set(solicited,
+                      htonl(0xFF020000), 0,
+                      htonl(0x1),
+                      htonl(0xFF000000) | addr->s6_addr32[3]);
 }
 
 /* net/addrconf.h */
