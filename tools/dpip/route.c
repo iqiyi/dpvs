@@ -44,6 +44,8 @@ static void route_help(void)
         "    dpip route add default via 10.0.0.1\n"
         "    dpip route add 172.0.0.0/16 via 172.0.0.3 dev dpdk0\n"
         "    dpip route add 192.168.0.0/24 dev dpdk0\n"
+        "    dpip -6 route add ffe1::/128 dev dpdk0"
+        "    dpip -6 route add 2001:db8:1::/64 via 2001:db8:1::1 dev dpdk0\n"
         "    dpip route del 172.0.0.0/16\n"
         "    dpip route set 172.0.0.0/16 via 172.0.0.1\n"
         "    dpip route flush\n"
@@ -151,10 +153,13 @@ static void route6_dump(const struct dp_vs_route6_conf *rt6_cfg)
     } else
         snprintf(scope, sizeof(scope), "%s", "::");
 
-    printf("%s %s/%d", af_itoa(rt6_cfg->af),
-        inet_ntop(rt6_cfg->af, (union inet_addr*)&rt6_cfg->dst.addr,
-            dst, sizeof(dst)) ? dst : "::",
-        rt6_cfg->dst.plen);
+    if (ipv6_addr_any(&rt6_cfg->dst.addr) && rt6_cfg->dst.plen == 0) {
+        snprintf(dst, sizeof(dst), "%s", "default");
+        printf("%s %s", af_itoa(rt6_cfg->af), dst);
+    } else {
+        inet_ntop(rt6_cfg->af, (union inet_addr*)&rt6_cfg->dst.addr, dst, sizeof(dst));
+        printf("%s %s/%d", af_itoa(rt6_cfg->af), dst, rt6_cfg->dst.plen);
+    }
 
     if (!ipv6_addr_any(&rt6_cfg->gateway))
         printf(" via %s", inet_ntop(rt6_cfg->af, (union inet_addr*)&rt6_cfg->gateway,
