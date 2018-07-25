@@ -47,6 +47,7 @@ enum {
     RT6_OPS_GET = 1,
     RT6_OPS_ADD,
     RT6_OPS_DEL,
+    RT6_OPS_FLUSH,
 };
 
 struct dp_vs_route6_conf {
