@@ -484,6 +484,7 @@ static int route6_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         case DPIP_CMD_SET:
             return EDPVS_NOTSUPP;
         case DPIP_CMD_FLUSH:
+            rt6_cfg.ops = RT6_OPS_FLUSH;
             return dpvs_setsockopt(SOCKOPT_SET_ROUTE6_FLUSH, &rt6_cfg, sizeof(rt6_cfg));
         case DPIP_CMD_SHOW:
             err = dpvs_getsockopt(SOCKOPT_GET_ROUTE6_SHOW, &rt6_cfg, sizeof(rt6_cfg),
