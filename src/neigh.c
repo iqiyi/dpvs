@@ -238,17 +238,11 @@ static inline int neigh_unhash(struct neighbour_entry *neighbour)
 }
 
 static inline bool neigh_key_cmp(int af, const struct neighbour_entry *neighbour,
-                                 const void *key, const struct netif_port* port)
+                                 union inet_addr *key, const struct netif_port* port)
 {
-    if (af == AF_INET) {
-        return ((neighbour->ip_addr.in.s_addr == *(uint32_t*)key)
-           &&(neighbour->port->id==port->id) && (neighbour->af == AF_INET));
-    } else {
-        return (ipv6_addr_equal(&neighbour->ip_addr.in6, 
-                               (const struct in6_addr *)key) &&
-                               (neighbour->port->id == port->id) &&
-                               (neighbour->af == AF_INET6));
-    }
+    
+    return (inet_addr_equal(af, key, neighbour->ip_addr)) &&
+           (neighbour->port == port) && (neighbour->af == af)
 }
 
 static int neigh_entry_expire(struct neighbour_entry *neighbour)
@@ -340,7 +334,7 @@ static int neighbour_timer_event(void *data)
     return DTIMER_OK;
 }
 
-struct neighbour_entry *neigh_lookup_entry(int af, const void *key, 
+struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key, 
                                            const struct netif_port* port, 
                                            unsigned int hashkey)
 {
@@ -568,8 +562,9 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
 
     } else if(arp->arp_op == htons(ARP_OP_REPLY)) {
         ipaddr = arp->arp_data.arp_sip;
-        hashkey = neigh_hashkey(&ipaddr, port);
-        neighbour = neigh_lookup_entry(AF_INET, &ipaddr, port, hashkey);
+        hashkey = neigh_hashkey((union inet_addr *)&ipaddr, port);
+        neighbour = neigh_lookup_entry(AF_INET, (union inet_addr *)&ipaddr, 
+                                       port, hashkey);
         if (neighbour && !(neighbour->flag & NEIGHBOUR_STATIC)) {
             neigh_edit(neighbour, &arp->arp_data.arp_sha, hashkey);
             neigh_entry_state_trans(neighbour, 1);
@@ -808,15 +803,15 @@ void neigh_process_ring(void *arg)
        int i;
        for (i = 0; i < nb_rb; i++) {
            param = params[i];
-           hash = neigh_hashkey(&param->ip_addr.in.s_addr, param->port);
-           neigh = neigh_lookup_entry(AF_INET, &param->ip_addr.in.s_addr, 
+           hash = neigh_hashkey(&param->ip_addr, param->port);
+           neigh = neigh_lookup_entry(AF_INET, &param->ip_addr, 
                                       param->port, hash);
            if (param->add) {
                if (neigh) {
                    neigh_edit(neigh, &param->eth_addr, hash);
                }
                else {
-                   neigh = neigh_add_table(AF_INET, (union inet_addr *)&param->ip_addr.in.s_addr, 
+                   neigh = neigh_add_table(AF_INET, &param->ip_addr, 
                                            &param->eth_addr, param->port, hash, param->flag);
                    if ((cid == master_cid)&&(neigh)) {
                        num_neighbours++;
@@ -943,11 +938,11 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         return EDPVS_INVAL;
     }
 
-    hash = neigh_hashkey(&param->ip_addr.in.s_addr, port);
+    hash = neigh_hashkey(&param->ip_addr, port);
 
     switch (opt) {
     case SOCKOPT_SET_NEIGH_ADD:
-        neigh = neigh_lookup_entry(AF_INET, &param->ip_addr.in.s_addr, port, hash);
+        neigh = neigh_lookup_entry(AF_INET, &param->ip_addr, port, hash);
         if (neigh) {
             RTE_LOG(WARNING, NEIGHBOUR, "%s: already exist\n", __func__);
             return EDPVS_EXIST;
@@ -986,7 +981,7 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         break;
 
     case SOCKOPT_SET_NEIGH_DEL:
-        neigh = neigh_lookup_entry(AF_INET, &param->ip_addr.in.s_addr, port, hash);
+        neigh = neigh_lookup_entry(AF_INET, &param->ip_addr, port, hash);
         if (!neigh) {
             RTE_LOG(WARNING, NEIGHBOUR, "%s: not exist\n", __func__);
             return EDPVS_NOTEXIST;

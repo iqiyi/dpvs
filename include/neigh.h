@@ -67,15 +67,15 @@ struct neighbour_entry {
 /* 
  * no matter which kind of ip_addr, just use 32 bit to hash
  * since neighbour table is not a large table
- * */
-static inline unsigned int neigh_hashkey(const void* ip_addr, 
-                                        struct netif_port *port) {
-    return rte_be_to_cpu_32(*(uint32_t *)ip_addr) & NEIGH_TAB_MASK;
+ */
+static inline unsigned int neigh_hashkey(const union inet_addr* ip_addr, 
+                                         struct netif_port *port) {
+    return rte_be_to_cpu_32(ip_addr) & NEIGH_TAB_MASK;
 }
 
 void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx);
 
-struct neighbour_entry *neigh_lookup_entry(int af, const void *key,
+struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key,
                                            const struct netif_port* port, 
                                            unsigned int hashkey);
 
