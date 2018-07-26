@@ -28,10 +28,12 @@ struct nd_msg {
 
 /*
  * netinet/icmp6.h define ND_OPT by '#define', ND_OPT_MAX is not defined.
- * kernel define ND_OPT_ARRAY_MAX by enum, ND_OPT_MTU + 1 is used instead here.
- * */
+ * kernel define ND_OPT_ARRAY_MAX by enum, just define 256 here.
+ */
+#define __ND_OPT_ARRAY_MAX 256
+
 struct ndisc_options {
-    struct nd_opt_hdr *nd_opt_array[ND_OPT_MTU + 1]; 
+    struct nd_opt_hdr *nd_opt_array[__ND_OPT_ARRAY_MAX]; 
     struct nd_opt_hdr *nd_useropts;
     struct nd_opt_hdr *nd_useropts_end;
 };
