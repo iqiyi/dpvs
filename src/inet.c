@@ -194,7 +194,7 @@ bool inet_addr_same_net(int af, uint8_t plen,
         mask = htonl(~((0x1<<(32-plen)) - 1));
         return !((addr1->in.s_addr^addr2->in.s_addr)&mask);
     case AF_INET6:
-        return true;//fix me!!
+        return ipv6_prefix_equal(&addr1->in6, &addr2->in6, plen);
     default:
         return false;
     }

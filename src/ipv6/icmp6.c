@@ -75,8 +75,7 @@ static int icmp6_rcv(struct rte_mbuf *mbuf)
     /* ndisc test*/
     if ((ich->icmp6_type == ND_NEIGHBOR_SOLICIT) ||
        (ich->icmp6_type == ND_NEIGHBOR_ADVERT)) {
-        ndisc_rcv(mbuf, netif_port_get(mbuf->port));
-        goto drop;
+        return ndisc_rcv(mbuf, netif_port_get(mbuf->port));
     }
 
     if (ich->icmp6_type != ICMP6_ECHO_REQUEST)
