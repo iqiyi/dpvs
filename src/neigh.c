@@ -238,11 +238,12 @@ static inline int neigh_unhash(struct neighbour_entry *neighbour)
 }
 
 static inline bool neigh_key_cmp(int af, const struct neighbour_entry *neighbour,
-                                 union inet_addr *key, const struct netif_port* port)
+                                 const union inet_addr *key, const struct netif_port* port)
 {
     
-    return (inet_addr_equal(af, key, neighbour->ip_addr)) &&
-           (neighbour->port == port) && (neighbour->af == af)
+    return (inet_addr_equal(af, key, &neighbour->ip_addr)) &&
+           (neighbour->port == port) && 
+           (neighbour->af == af);
 }
 
 static int neigh_entry_expire(struct neighbour_entry *neighbour)

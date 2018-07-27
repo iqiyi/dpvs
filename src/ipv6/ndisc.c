@@ -295,7 +295,7 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
     struct nd_msg *msg = rte_pktmbuf_mtod(mbuf, struct nd_msg *);
     int dad = ipv6_addr_any(saddr);
 
-    if (mbuf_may_pull(mbuf, struct nd_msg))
+    if (mbuf_may_pull(mbuf, sizeof(struct nd_msg)))
         return EDPVS_DROP;
 
     ndoptlen = mbuf->data_len - offsetof(struct nd_msg, opt);

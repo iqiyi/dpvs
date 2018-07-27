@@ -28,13 +28,27 @@
 
 struct inet_device {
     struct netif_port   *dev;
-    int                 af;
     struct list_head    ifa_list;   /* inet_ifaddr list */
+    struct list_head    ifm_list;   /* inet_ifmcaddr list*/
     rte_atomic32_t      ifa_cnt;
     rte_atomic32_t      refcnt;
 };
 
-/**
+/*
+ * use no refcnt and timer, release me by inet_ifaddr
+ */
+struct inet_ifmcaddr6 {
+    struct list_head        d_list;
+    struct inet_device      *idev;
+    struct in6_addr         addr;
+    uint32_t                flags;
+    /* user will not hold ifmcaddr, just read it now.
+     * refcnt is not used yet. 
+     * if other module hold, enable me*/
+    rte_atomic32_t          refcnt;
+};
+
+/*
  * do not support peer address now.
  */
 struct inet_ifaddr {
@@ -42,6 +56,7 @@ struct inet_ifaddr {
     struct list_head        h_list;     /* global hash, key is addr */
     struct inet_device      *idev;
 
+    int                     af;
     union inet_addr         addr;       /* primary address of iface */
     uint8_t                 plen;
     union inet_addr         mask;
