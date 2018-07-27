@@ -70,7 +70,7 @@ struct neighbour_entry {
  */
 static inline unsigned int neigh_hashkey(const union inet_addr* ip_addr, 
                                          struct netif_port *port) {
-    return rte_be_to_cpu_32(ip_addr) & NEIGH_TAB_MASK;
+    return rte_be_to_cpu_32(*(uint32_t *)ip_addr) & NEIGH_TAB_MASK;
 }
 
 void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx);
