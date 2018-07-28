@@ -381,12 +381,12 @@ dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /* Save old weight */
     old_weight = rte_atomic16_read(&dest->weight);
 
-    __dp_vs_update_dest(svc, dest, udest);
-
     rte_rwlock_write_lock(&__dp_vs_svc_lock);
 
     /* Wait until all other svc users go away */
     DPVS_WAIT_WHILE(rte_atomic32_read(&svc->usecnt) > 1);
+
+     __dp_vs_update_dest(svc, dest, udest);
 
     /* Update service weight */
     svc->weight = svc->weight - old_weight + udest->weight;
