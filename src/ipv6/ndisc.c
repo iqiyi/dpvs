@@ -338,7 +338,7 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
     ifa = inet_addr_ifa_get(AF_INET6, dev, (union inet_addr *)&msg->target);
     if (!ifa) {
         RTE_LOG(ERR, NEIGHBOUR, "[%s] RECVNs: dpvs is not the target!\n", __func__);
-        return EDPVS_DROP;
+        return EDPVS_KNICONTINUE;
     }
     inet_addr_ifa_put(ifa);
 
@@ -371,8 +371,7 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
     ndisc_send_na(dev, saddr, &msg->target,
                   1, inc, inc);
 
-    rte_pktmbuf_free(mbuf);
-    return EDPVS_OK;
+    return EDPVS_KNICONTINUE;
 }
 
 static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
@@ -422,7 +421,7 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
         /* delete? */
         RTE_LOG(ERR, NEIGHBOUR, "ICMPv6 NA: someone advertises our address.\n");
         inet_addr_ifa_put(ifa);
-        return EDPVS_DROP;
+        return EDPVS_KNICONTINUE;
     }
 
     /* notice: override flag ignored */
@@ -442,8 +441,7 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     }
     neigh_send_mbuf_cach(neigh);
 
-    rte_pktmbuf_free(mbuf);
-    return EDPVS_OK;
+    return EDPVS_KNICONTINUE;
 }
 
 int ndisc_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
@@ -481,10 +479,10 @@ int ndisc_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
     case ND_ROUTER_SOLICIT:
     case ND_ROUTER_ADVERT:
     case ND_REDIRECT:
-        ret = EDPVS_DROP;
+        ret = EDPVS_KNICONTINUE;
         break;
     default:
-        ret = EDPVS_DROP;
+        ret = EDPVS_KNICONTINUE;
         break;
     }
 
