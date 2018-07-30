@@ -21,4 +21,7 @@
 int route6_lpm_init(void);
 int route6_lpm_term(void);
 
+void route6_lpm_keyword_value_init(void);
+void install_rt6_lpm_keywords(void);
+
 #endif /* __DPVS_ROUTE6_LPM_H__ */
