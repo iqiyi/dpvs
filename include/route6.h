@@ -55,12 +55,15 @@ int route6_term(void);
 
 static inline int dump_rt6_prefix(const struct rt6_prefix *rt6_p, char *buf, int len)
 {
-    return snprintf(buf, len, "%X:%X:%X:%X:%X:%X:%X:%X/%d",
-            rt6_p->addr.s6_addr16[0], rt6_p->addr.s6_addr16[1],
-            rt6_p->addr.s6_addr16[2], rt6_p->addr.s6_addr16[3],
-            rt6_p->addr.s6_addr16[4], rt6_p->addr.s6_addr16[5],
-            rt6_p->addr.s6_addr16[6], rt6_p->addr.s6_addr16[7],
-            rt6_p->plen);
+    size_t rlen;
+
+    if (!inet_ntop(AF_INET6, &rt6_p->addr, buf, len))
+        return 0;
+
+    rlen = strlen(buf);
+    rlen += snprintf(buf+rlen, len-rlen, "/%d", rt6_p->plen);
+
+    return rlen;
 }
 
 #include "conf/route6.h"
@@ -111,6 +114,9 @@ static inline void rt6_fill_cfg(struct dp_vs_route6_conf *cf,
     cf->mtu = rt6->rt6_mtu;
     cf->flags = rt6->rt6_flags;
 }
+
+void install_route6_keywords(void);
+void route6_keyword_value_init(void);
 
 /* neighbour codes should not be here ! test only, remove it later. */
 int neigh_output(int af, union inet_addr *nexthop, struct rte_mbuf *mbuf,

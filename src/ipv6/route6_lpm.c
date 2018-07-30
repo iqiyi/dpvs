@@ -28,11 +28,11 @@
 #include "route6.h"
 #include "linux_ipv6.h"
 #include "route6_lpm.h"
+#include "parser/parser.h"
 
 #define LPM6_CONF_MAX_RULES_DEF         1024
 #define LPM6_CONF_NUM_TBL8S_DEF         (1<<16)
 
-#define RT6_ARRAY_SIZE_MAX_SUPPORTED    (1<<32)
 #define RT6_ARRAY_SIZE_DEF              (1<<16)
 #define RT6_HASH_BUCKET_DEF             (1<<8)
 
@@ -488,4 +488,95 @@ int route6_lpm_init(void)
 int route6_lpm_term(void)
 {
     return route6_method_unregister(&rt6_lpm_method);
+}
+
+/* config file */
+static void rt6_lpm6_max_rules_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    uint32_t lpm6_max_rules = atoi(str);
+
+    if (lpm6_max_rules < 16 || lpm6_max_rules > 2147483647) {
+        RTE_LOG(WARNING, RT6, "invalid route6:lpm6_max_rules %s, "
+                "using default %d\n", str, LPM6_CONF_MAX_RULES_DEF);
+        g_lpm6_conf_max_rules = LPM6_CONF_MAX_RULES_DEF;
+    } else {
+        RTE_LOG(INFO, RT6, "route6:lpm6_max_rules = %d\n", lpm6_max_rules);
+        g_lpm6_conf_max_rules = lpm6_max_rules;
+    }
+
+    FREE_PTR(str);
+}
+
+static void rt6_lpm6_num_tbl8s_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    uint32_t lpm6_num_tbl8s = atoi(str);
+
+    if (lpm6_num_tbl8s < 16 || lpm6_num_tbl8s > 2147483647) {
+        RTE_LOG(WARNING, RT6, "invalid route6:lpm6_num_tbl8s %s, "
+                "using default %d\n", str, LPM6_CONF_NUM_TBL8S_DEF);
+        g_lpm6_conf_num_tbl8s = LPM6_CONF_NUM_TBL8S_DEF;
+    } else {
+        RTE_LOG(INFO, RT6, "route6:lpm6_num_tbl8s = %d\n", lpm6_num_tbl8s);
+        g_lpm6_conf_num_tbl8s = lpm6_num_tbl8s;
+    }
+
+    FREE_PTR(str);
+}
+
+static void rt6_array_size_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    uint32_t array_size = atoi(str);
+
+    if (array_size < 16 || array_size > 2147483647) {
+        RTE_LOG(WARNING, RT6, "invalid route6:array_size %s, "
+                "using default %d\n", str, RT6_ARRAY_SIZE_DEF);
+        g_rt6_array_size = RT6_ARRAY_SIZE_DEF;
+    } else {
+        RTE_LOG(INFO, RT6, "route6:array_size = %d\n", array_size);
+        g_rt6_array_size = array_size;
+    }
+
+    FREE_PTR(str);
+}
+
+static void rt6_hash_bucket_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    uint32_t hash_buckets = atoi(str);
+
+    if (hash_buckets < 16 || hash_buckets > 2147483647) {
+        RTE_LOG(WARNING, RT6, "invalid route6:hash_bucket %s, "
+                "using default %d\n", str, RT6_HASH_BUCKET_DEF);
+        g_rt6_hash_bucket = RT6_HASH_BUCKET_DEF;
+    } else {
+        RTE_LOG(INFO, RT6, "route6:hash_bucket = %d\n", hash_buckets);
+        g_rt6_hash_bucket = hash_buckets;
+    }
+
+    FREE_PTR(str);
+}
+
+void route6_lpm_keyword_value_init(void)
+{
+    if (dpvs_state_get() == DPVS_STATE_INIT) {
+        /* KW_TYPE_INIT keyword */
+        g_lpm6_conf_max_rules = LPM6_CONF_MAX_RULES_DEF;
+        g_lpm6_conf_num_tbl8s = LPM6_CONF_NUM_TBL8S_DEF;
+        g_rt6_array_size = RT6_ARRAY_SIZE_DEF;
+        g_rt6_hash_bucket = RT6_HASH_BUCKET_DEF;
+    }
+}
+
+void install_rt6_lpm_keywords(void)
+{
+    install_keyword("lpm", NULL, KW_TYPE_INIT);
+    install_sublevel();
+    install_keyword("lpm6_max_rules", rt6_lpm6_max_rules_handler, KW_TYPE_INIT);
+    install_keyword("lpm6_num_tbl8s", rt6_lpm6_num_tbl8s_handler, KW_TYPE_INIT);
+    install_keyword("rt6_array_size", rt6_array_size_handler, KW_TYPE_INIT);
+    install_keyword("rt6_hash_bucket", rt6_hash_bucket_handler, KW_TYPE_INIT);
+    install_sublevel_end();
 }

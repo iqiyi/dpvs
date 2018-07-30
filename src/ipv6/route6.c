@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
@@ -23,6 +21,7 @@
 #include "ctrl.h"
 #include "route6_lpm.h"
 #include "route6_hlist.h"
+#include "parser/parser.h"
 
 static struct route6_method *g_rt6_method = NULL;
 static char g_rt6_name[RT6_METHOD_NAME_SZ] = "hlist";
@@ -212,6 +211,7 @@ static bool rt6_conf_check(const struct dp_vs_route6_conf *rt6_cfg)
     return true;
 }
 
+#ifdef DPVS_ROUTE6_DEBUG
 static void rt6_test(const struct dp_vs_route6_conf *rt6_cfg)
 {
     struct route6 *rt6_input, *rt6_output;
@@ -249,6 +249,7 @@ static void rt6_test(const struct dp_vs_route6_conf *rt6_cfg)
             rt6_input_prefix, rt6_input ? rt6_input->rt6_dev->name : "xx",
             rt6_output_prefix, rt6_output ? rt6_output->rt6_dev->name : "xx");
 }
+#endif
 
 static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
 {
@@ -283,8 +284,10 @@ static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
         case SOCKOPT_SET_ROUTE6_ADD_DEL:
             return rt6_add_del(&rt6_cfg);
         case SOCKOPT_SET_ROUTE6_FLUSH:
+#ifdef DPVS_ROUTE6_DEBUG
             RTE_LOG(INFO, RT6, "test route6 lookup using flush!\n");
             rt6_test(&rt6_cfg);
+#endif
             return EDPVS_NOTSUPP;
         default:
             return EDPVS_NOTSUPP;
@@ -396,6 +399,40 @@ int route6_term(void)
     }
 
     return EDPVS_OK;
+}
+
+/* config file */
+static void rt6_method_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    assert(str);
+    if (!strcmp(str, "hlist") || !strcmp(str, "lpm")) {
+        RTE_LOG(INFO, RT6, "route6:method = %s\n", str);
+        snprintf(g_rt6_name, sizeof(g_rt6_name), "%s", str);
+    } else {
+        RTE_LOG(WARNING, RT6, "invalid route6:method %s, using default %s\n",
+                str, "hlist");
+        snprintf(g_rt6_name, sizeof(g_rt6_name), "%s", "hlist");
+    }
+
+    FREE_PTR(str);
+}
+
+void route6_keyword_value_init(void)
+{
+    if (dpvs_state_get() == DPVS_STATE_INIT) {
+        /* KW_TYPE_INIT keyword */
+        snprintf(g_rt6_name, sizeof(g_rt6_name), "%s", "hlist");
+    }
+
+    route6_lpm_keyword_value_init();
+}
+
+void install_route6_keywords(void)
+{
+    install_keyword_root("route6", NULL);
+    install_keyword("method", rt6_method_handler, KW_TYPE_INIT);
+    install_rt6_lpm_keywords();
 }
 
 /* neighbour codes should not be here ! test only, remove it later. */
