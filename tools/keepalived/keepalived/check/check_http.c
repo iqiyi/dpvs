@@ -71,13 +71,16 @@ free_http_get_check(void *data)
 void
 dump_http_get_check(void *data)
 {
+	if (!data)
+		return;
 	http_checker_t *http_get_chk = CHECKER_DATA(data);
 
 	if (http_get_chk->proto == PROTO_HTTP)
 		log_message(LOG_INFO, "   Keepalive method = HTTP_GET");
 	else
 		log_message(LOG_INFO, "   Keepalive method = SSL_GET");
-	dump_conn_opts (CHECKER_GET_CO());
+	if (CHECKER_CO(data))
+		dump_conn_opts(CHECKER_CO(data));
 	log_message(LOG_INFO, "   Nb get retry = %d", http_get_chk->nb_get_retry);
 	log_message(LOG_INFO, "   Delay before retry = %lu",
 	       http_get_chk->delay_before_retry/TIMER_HZ);
