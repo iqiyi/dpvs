@@ -659,7 +659,7 @@ int neigh_output(int af, union inet_addr *nexhop,
                   since neighbour will not be confirmed
                   and it will be released late*/
                 rte_pktmbuf_free(m);
-                RTE_LOG(ERR, NEIGHBOUR, "[%s] arp_unres_queue is full, drop packet\n", __func__);
+                RTE_LOG(ERR, NEIGHBOUR, "[%s] neigh_unres_queue is full, drop packet\n", __func__);
                 return EDPVS_DROP;
             }
             m_buf = rte_zmalloc("neigh_new_mbuf",
@@ -685,9 +685,14 @@ int neigh_output(int af, union inet_addr *nexhop,
             neigh_fill_mac(neighbour, m, NULL, port);
             netif_xmit(m, neighbour->port);
 
+            /* 
+             * state should change before send mbuf
+             * PROBE state will not send multicast, just send unicast
+             * then state_confirm can be a loop
+             */
             if (neighbour->state == DPVS_NUD_S_PROBE) {
-                neigh_state_confirm(neighbour);
                 neigh_entry_state_trans(neighbour, 0);
+                neigh_state_confirm(neighbour);
             }
 
             return EDPVS_OK;

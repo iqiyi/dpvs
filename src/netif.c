@@ -3354,6 +3354,13 @@ int netif_port_start(struct netif_port *port)
     if (port->type == PORT_TYPE_BOND_MASTER)
         update_bond_macaddr(port);
 
+    /* add in6_addr multicast address */
+    ret = idev_add_mcast_init(port->in_ptr);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(INFO, NETIF, "multicast address add failed for device %s\n", port->name);
+        return ret;
+    }
+
     return EDPVS_OK;
 }
 
