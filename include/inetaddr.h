@@ -111,9 +111,13 @@ static inline void inet_addr_ifa_put(struct inet_ifaddr *ifa)
     rte_atomic32_dec(&ifa->refcnt);
 }
 
+bool inet_chk_mcast_addr(int af, struct netif_port *dev,
+                        const union inet_addr *group,
+                        const union inet_addr *src);
+
 void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa);
 
-int idev_add_mcast_init(struct inet_device *idev);
+int idev_add_mcast_init(struct netif_port *dev);
 
 int inet_addr_init(void);
 int inet_addr_term(void);
