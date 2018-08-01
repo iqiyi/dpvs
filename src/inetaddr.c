@@ -394,38 +394,56 @@ static void inet_ifaddr_dad_start(struct inet_ifaddr *ifa)
  * should not be init in 'inetaddr_init';
  * because multicast address should be added after port_start
  */
-int idev_add_mcast_init(struct inet_device *idev)
+int idev_add_mcast_init(struct netif_port *dev)
 {
+    struct inet_device *idev;
     struct ether_addr eaddr_nodes, eaddr_routers;
-    union inet_addr allnodes, allrouters;
+    union inet_addr all_nodes, all_routers;
     int err = 0;
+
+    idev = dev_get_idev(dev);
 
     memset(&eaddr_nodes, 0, sizeof(eaddr_nodes));
     memset(&eaddr_routers, 0, sizeof(eaddr_routers));
 
-    memcpy(&allnodes, &in6addr_linklocal_allnodes, sizeof(allnodes));
-    memcpy(&allrouters, &in6addr_linklocal_allrouters, sizeof(allrouters));
+    memcpy(&all_nodes, &in6addr_linklocal_allnodes, sizeof(all_nodes));
+    memcpy(&all_routers, &in6addr_linklocal_allrouters, sizeof(all_routers));
 
-    ipv6_mac_mult(&allnodes.in6, &eaddr_nodes);
-    ipv6_mac_mult(&allrouters.in6, &eaddr_routers);
+    ipv6_mac_mult(&all_nodes.in6, &eaddr_nodes);
+    ipv6_mac_mult(&all_routers.in6, &eaddr_routers);
 
-    err = idev_mc_add(AF_INET6, idev, &allnodes);
+    rte_rwlock_write_lock(&in_addr_lock);
+    err = idev_mc_add(AF_INET6, idev, &all_nodes);
     if (err != EDPVS_OK)
-        return err;
+        goto errout;
     err = netif_mc_add(idev->dev, &eaddr_nodes);
     if (err != EDPVS_OK)
-        return err;
-    err = idev_mc_add(AF_INET6, idev, &allrouters);
+        goto free_idev_nodes;
+    err = idev_mc_add(AF_INET6, idev, &all_routers);
     if (err != EDPVS_OK)
-        return err;
+        goto free_netif_nodes;
     err = netif_mc_add(idev->dev, &eaddr_routers);
     if (err != EDPVS_OK)
-        return err;
+        goto free_idev_routers;
 
-    /*test!!*/
+    rte_rwlock_write_unlock(&in_addr_lock);
+    idev_put(idev);
+
+    /*TODO:delete me!!*/
     ipv6_addr_init();
 
     return EDPVS_OK;
+
+free_idev_routers:
+    idev_mc_del(AF_INET6, idev, &all_routers);
+free_netif_nodes:
+    netif_mc_del(idev->dev, &eaddr_nodes);
+free_idev_nodes:
+    idev_mc_del(AF_INET6, idev, &all_nodes);
+errout:
+    rte_rwlock_write_unlock(&in_addr_lock);
+    idev_put(idev);
+    return err;
 }
 
 static int ifa_expire(void *arg)
@@ -787,6 +805,40 @@ out:
     if (idev)
         idev_put(idev);
     return ifa;
+}
+
+/* support ipv6 only, refer linux:ipv6_chk_mcast_addr */
+bool inet_chk_mcast_addr(int af, struct netif_port *dev,
+                         const union inet_addr *group,
+                         const union inet_addr *src)
+{
+    struct inet_device *idev = NULL;
+    struct inet_ifmcaddr *imc;
+    int ret = false;
+
+    if (af != AF_INET6)
+        return true;
+    
+    idev = dev_get_idev(dev);
+
+    if (idev) {
+        rte_rwlock_read_lock(&in_addr_lock);
+
+        imc = __imc_lookup(af, idev, group);
+        if (imc){
+            if (src && !ipv6_addr_any(&src->in6)) {
+            /* TODO: check source-specific multicast (SSM) if @src is assigned */
+                ret = true;
+            } else {
+                ret = true;
+            }
+        }
+        
+        rte_rwlock_read_unlock(&in_addr_lock);
+        idev_put(idev);
+    }
+
+    return ret;
 }
 
 /**

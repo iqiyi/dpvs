@@ -122,28 +122,6 @@ static void ip6_conf_disable(vector_t tokens)
     FREE_PTR(str);
 }
 
-/* refer linux:ipv6_chk_mcast_addr */
-static bool ip6_chk_mcast_addr(struct netif_port *dev,
-                               const struct in6_addr *group,
-                               const struct in6_addr *src)
-{
-    /*
-     * TODO:
-     * 1. check inetaddr module for multicast group joined.
-     * 2. check source-specific multicast (SSM) if @src is assigned.
-     */
-
-    /*
-     * XXX: test only, not correct, remove them.
-     */
-    if (ipv6_addr_is_ll_all_nodes(group) ||
-        ipv6_addr_is_ll_all_routers(group) ||
-        ipv6_addr_is_solict_mult(group))
-        return true;
-
-    return false;
-}
-
 /* refer linux:ip6_input_finish() */
 static int ip6_local_in_fin(struct rte_mbuf *mbuf)
 {
@@ -204,8 +182,9 @@ resubmit_final:
 
         /* check mcast, if failed, kni may like it. */
         if (ipv6_addr_is_multicast(&hdr->ip6_dst) &&
-            !ip6_chk_mcast_addr(netif_port_get(mbuf->port),
-                                &hdr->ip6_dst, &hdr->ip6_src)) {
+            !inet_chk_mcast_addr(AF_INET6, netif_port_get(mbuf->port),
+                                 (union inet_addr *)&hdr->ip6_dst, 
+                                 (union inet_addr *)&hdr->ip6_src)) {
             rte_rwlock_read_unlock(&inet6_prot_lock);
             goto kni;
         }
@@ -261,7 +240,8 @@ static int ip6_mc_local_in(struct rte_mbuf *mbuf)
 
     IP6_UPD_PO_STATS(inmcast, mbuf->pkt_len);
 
-    if (ip6_chk_mcast_addr(netif_port_get(mbuf->port), &iph->ip6_dst, NULL))
+    if (inet_chk_mcast_addr(AF_INET6, netif_port_get(mbuf->port), 
+                            (union inet_addr *)&iph->ip6_dst, NULL))
         return ip6_local_in(mbuf);
     else {
         route6_put(rt);
