@@ -700,7 +700,8 @@ int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6)
     hdr->ip6_src    = fl6->fl6_saddr;
     hdr->ip6_dst    = fl6->fl6_daddr;
 
-    if (ipv6_addr_any(&hdr->ip6_src)) {
+    if (ipv6_addr_any(&hdr->ip6_src) &&
+        hdr->ip6_nxt != IPPROTO_ICMPV6) {
         union inet_addr saddr;
 
         inet_addr_select(AF_INET6, rt->rt6_dev, (void *)&fl6->fl6_daddr,

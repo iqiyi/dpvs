@@ -24,6 +24,7 @@
 #include <netinet/in.h>
 #include <netinet/icmp6.h>
 #include <netinet/ip6.h>
+#include <linux/if_addr.h>
 
 #include "conf/neigh.h"
 #include "neigh.h"
@@ -34,9 +35,30 @@
 
 #define NDISC_OPT_SPACE(len) (((len)+2+7)&~7)
 
-#define IN6ADDR_LINKLOCAL_ALLNODES_INIT \
-                { { { 0xff,2,0,0,0,0,0,0,0,0,0,0,0,0,0,1 } } }
-const struct in6_addr in6addr_linklocal_allnodes = IN6ADDR_LINKLOCAL_ALLNODES_INIT;
+struct nd_msg {
+    struct icmp6_hdr    icmph;
+    struct in6_addr    target;
+    uint8_t            opt[0];
+};
+
+/*
+ * netinet/icmp6.h define ND_OPT by '#define', ND_OPT_MAX is not defined.
+ * kernel define ND_OPT_ARRAY_MAX by enum, just define 256 here.
+ */
+#define __ND_OPT_ARRAY_MAX 256
+
+struct ndisc_options {
+    struct nd_opt_hdr *nd_opt_array[__ND_OPT_ARRAY_MAX]; 
+    struct nd_opt_hdr *nd_useropts;
+    struct nd_opt_hdr *nd_useropts_end;
+};
+
+#define nd_opts_src_lladdr      nd_opt_array[ND_OPT_SOURCE_LINKADDR]
+#define nd_opts_tgt_lladdr      nd_opt_array[ND_OPT_TARGET_LINKADDR]
+#define nd_opts_pi              nd_opt_array[ND_OPT_PREFIX_INFORMATION]
+#define nd_opts_pi_end          nd_opt_array[0]  //__ND_OPT_PREFIX_INFO_END
+#define nd_opts_rh              nd_opt_array[ND_OPT_REDIRECTED_HEADER]
+#define nd_opts_mtu             nd_opt_array[ND_OPT_MTU]
 
 /* ipv6 neighbour */
 static inline uint8_t *ndisc_opt_addr_data(struct nd_opt_hdr *p, 
@@ -340,16 +362,24 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
         RTE_LOG(ERR, NEIGHBOUR, "[%s] RECVNs: dpvs is not the target!\n", __func__);
         return EDPVS_KNICONTINUE;
     }
-    inet_addr_ifa_put(ifa);
 
     /* 
      * dad response src_addr should be link local, daddr should be multi ff02::1
      * optimistic addr not support
      */
     if (dad) {
+        if (ifa->flags & (IFA_F_TENTATIVE | IFA_F_OPTIMISTIC)) {
+            RTE_LOG(ERR, NEIGHBOUR, "ICMPv6 NS: someone try to solicit our address.\n");
+            inet_ifaddr_dad_failure(ifa);
+            inet_addr_ifa_put(ifa);
+            return EDPVS_KNICONTINUE;
+        }
         ndisc_send_na(dev, &in6addr_linklocal_allnodes, &msg->target, 0, 1, 1);
-        return EDPVS_DROP;
+        inet_addr_ifa_put(ifa);
+        return EDPVS_KNICONTINUE;
     }
+
+    inet_addr_ifa_put(ifa);
 
     /* update/create neighbour */
     hashkey = neigh_hashkey((union inet_addr *)saddr, dev);
@@ -418,8 +448,10 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
 
     ifa = inet_addr_ifa_get(AF_INET6, dev, (union inet_addr *)&msg->target);
     if (ifa) {
-        /* delete? */
         RTE_LOG(ERR, NEIGHBOUR, "ICMPv6 NA: someone advertises our address.\n");
+        if (ifa->flags & (IFA_F_TENTATIVE | IFA_F_OPTIMISTIC)) {
+            inet_ifaddr_dad_failure(ifa);
+        }
         inet_addr_ifa_put(ifa);
         return EDPVS_KNICONTINUE;
     }

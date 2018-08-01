@@ -251,9 +251,6 @@ int main(int argc, char *argv[])
                     dev->name);
     }
 
-    /*mult_mac shoule be set after port is up. test, delete me later!*/
-    ipv6_addr_init();
-
     /* print port-queue-lcore relation */
     netif_print_lcore_conf(pql_conf_buf, &pql_conf_buf_len, true, 0);
     RTE_LOG(INFO, DPVS, "\nport-queue-lcore relation array: \n%s\n",

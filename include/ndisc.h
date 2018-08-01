@@ -20,31 +20,6 @@
 
 #include "neigh.h"
 
-struct nd_msg {
-    struct icmp6_hdr    icmph;
-    struct in6_addr    target;
-    uint8_t            opt[0];
-};
-
-/*
- * netinet/icmp6.h define ND_OPT by '#define', ND_OPT_MAX is not defined.
- * kernel define ND_OPT_ARRAY_MAX by enum, just define 256 here.
- */
-#define __ND_OPT_ARRAY_MAX 256
-
-struct ndisc_options {
-    struct nd_opt_hdr *nd_opt_array[__ND_OPT_ARRAY_MAX]; 
-    struct nd_opt_hdr *nd_useropts;
-    struct nd_opt_hdr *nd_useropts_end;
-};
-
-#define nd_opts_src_lladdr      nd_opt_array[ND_OPT_SOURCE_LINKADDR]
-#define nd_opts_tgt_lladdr      nd_opt_array[ND_OPT_TARGET_LINKADDR]
-#define nd_opts_pi              nd_opt_array[ND_OPT_PREFIX_INFORMATION]
-#define nd_opts_pi_end          nd_opt_array[0]  //__ND_OPT_PREFIX_INFO_END
-#define nd_opts_rh              nd_opt_array[ND_OPT_REDIRECTED_HEADER]
-#define nd_opts_mtu             nd_opt_array[ND_OPT_MTU]
-
 int ndisc_rcv(struct rte_mbuf *mbuf, 
               struct netif_port *dev);
 
