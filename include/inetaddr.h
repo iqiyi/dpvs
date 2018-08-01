@@ -35,16 +35,13 @@ struct inet_device {
 };
 
 /*
- * use no refcnt and timer, release me by inet_ifaddr
+ * no timer, release me by inet_ifaddr
  */
-struct inet_ifmcaddr6 {
+struct inet_ifmcaddr {
     struct list_head        d_list;
     struct inet_device      *idev;
-    struct in6_addr         addr;
+    union  inet_addr         addr;
     uint32_t                flags;
-    /* user will not hold ifmcaddr, just read it now.
-     * refcnt is not used yet. 
-     * if other module hold, enable me*/
     rte_atomic32_t          refcnt;
 };
 
@@ -113,6 +110,10 @@ static inline void inet_addr_ifa_put(struct inet_ifaddr *ifa)
 {
     rte_atomic32_dec(&ifa->refcnt);
 }
+
+void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa);
+
+int idev_add_mcast_init(struct inet_device *idev);
 
 int inet_addr_init(void);
 int inet_addr_term(void);

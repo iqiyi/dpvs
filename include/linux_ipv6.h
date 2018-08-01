@@ -103,6 +103,14 @@
  */
 #define IPV6_ADDR_SCOPE_TYPE(scope)	((scope) << 16)
 
+#define IN6ADDR_LINKLOCAL_ALLNODES_INIT	\
+		{ { { 0xff,2,0,0,0,0,0,0,0,0,0,0,0,0,0,1 } } }
+#define IN6ADDR_LINKLOCAL_ALLROUTERS_INIT \
+		{ { { 0xff,2,0,0,0,0,0,0,0,0,0,0,0,0,0,2 } } }
+
+static const struct in6_addr in6addr_linklocal_allnodes = IN6ADDR_LINKLOCAL_ALLNODES_INIT;
+static const struct in6_addr in6addr_linklocal_allrouters = IN6ADDR_LINKLOCAL_ALLROUTERS_INIT;
+
 static inline unsigned int ipv6_addr_scope2type(unsigned int scope)
 {
 	switch (scope) {
