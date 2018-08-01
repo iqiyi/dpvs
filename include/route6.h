@@ -23,7 +23,7 @@
 
 #include "flow.h"
 
-//#define DPVS_RT6_DEBUG
+//#define DPVS_ROUTE6_DEBUG
 #define RTE_LOGTYPE_RT6     RTE_LOGTYPE_USER1
 
 struct rt6_prefix {

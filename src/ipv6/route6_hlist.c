@@ -23,50 +23,87 @@
  *      that routes deletion is frequent, LPM6 is not recommended!
  */
 
+#include <assert.h>
 #include "route6.h"
 #include "route6_hlist.h"
 #include "linux_ipv6.h"
 
-#define RT6_LOCAL_TABLE_BITS        8
-#define RT6_LOCAL_TABLE_SIZE        (1 << RT6_LOCAL_TABLE_BITS)
-#define RT6_LOCAL_TABLE_MASK        (RT6_LOCAL_TABLE_SIZE - 1)
+#define RT6_HLIST_MAX_BUCKET_BITS   10
+#define RT6_HLIST_MAX_BUCKETS       (1U<<RT6_HLIST_MAX_BUCKET_BITS)
 
-#define this_rt6_hlist              (RTE_PER_LCORE(rt6_hlist_lcore))
-#define this_rt6_local              (this_rt6_hlist.rt6_local)
-#define this_rt6_net                (this_rt6_hlist.rt6_net)
-#define this_rt6_nroutes            (this_rt6_hlist.nroutes)
+#define this_rt6_htable     (RTE_PER_LCORE(dpvs_rt6_htable).htable)
+#define this_rt6_nroutes    (RTE_PER_LCORE(dpvs_rt6_htable).nroutes)
 
-#define g_nroutes                   (this_rt6_hlist.nroutes)
+#define g_nroutes           this_rt6_nroutes
 
-struct route6_hlist {
-    uint32_t nroutes;
-    struct list_head rt6_local[RT6_LOCAL_TABLE_SIZE];
-    struct list_head rt6_net;
+struct rt6_hlist
+{
+    int plen;
+    int nroutes;
+    int nbuckets;               /* never change after init */
+    struct list_head node;      /* list node of htable */
+    struct list_head hlist[0];
 };
 
-static RTE_DEFINE_PER_LCORE(struct route6_hlist, rt6_hlist_lcore);
+struct rt6_htable
+{
+    int nroutes;
+    struct list_head htable;    /* list head of rt6_hlist */
+};
+
+static RTE_DEFINE_PER_LCORE(struct rt6_htable, dpvs_rt6_htable);
+
 
 static int rt6_hlist_setup_lcore(void *arg)
 {
-    int i;
-
-    for (i = 0; i < RT6_LOCAL_TABLE_SIZE; i++)
-        INIT_LIST_HEAD(&this_rt6_local[i]);
-
-    INIT_LIST_HEAD(&this_rt6_net);
-    g_nroutes = 0;
-
+    this_rt6_nroutes = 0;
+    INIT_LIST_HEAD(&this_rt6_htable);
     return EDPVS_OK;
 }
 
 static int rt6_hlist_destroy_lcore(void *arg)
 {
+    int i;
+    struct rt6_hlist *hlist, *hnext;
+    struct route6 *rt6, *rnext;
+
+    list_for_each_entry_safe(hlist, hnext, &this_rt6_htable, node)
+    {
+        for (i = 0; i < hlist->nbuckets; i++) {
+            list_for_each_entry_safe(rt6, rnext, &hlist->hlist[i], hnode) {
+                rte_free(rt6);
+                hlist->nroutes--;
+                this_rt6_nroutes--;
+            }
+        }
+        assert(hlist->nroutes == 0);
+        rte_free(hlist);
+    }
+
+    assert(this_rt6_nroutes == 0);
     return EDPVS_OK;
 }
 
 static uint32_t rt6_hlist_count(void)
 {
     return g_nroutes;
+}
+
+static int rt6_hlist_buckets(int plen)
+{
+    /* caller should ensure 0 <= plen <= 128 */
+    if (plen < RT6_HLIST_MAX_BUCKET_BITS)
+        return (1U << plen);
+    else
+        return RT6_HLIST_MAX_BUCKETS;
+}
+
+static inline int rt6_hlist_hashkey(const struct in6_addr *addr, int plen, int nbuckets)
+{
+    struct in6_addr pfx;
+
+    ipv6_addr_prefix(&pfx, addr, plen);
+    return rte_jhash_32b((const uint32_t *)addr, 4, 0) % nbuckets;
 }
 
 static inline bool rt6_match(const struct route6 *rt6, const struct dp_vs_route6_conf *cf)
@@ -89,102 +126,148 @@ static inline bool rt6_match(const struct route6 *rt6, const struct dp_vs_route6
     return true;
 }
 
-static inline int rt6_local_hash_key(const struct in6_addr *addr)
+static struct route6 *__rt6_hlist_get(const struct dp_vs_route6_conf *cf,
+        struct rt6_hlist **phlist)
 {
-    return rte_jhash_32b((const uint32_t *)addr, 4, 0) & RT6_LOCAL_TABLE_MASK;
-}
-
-static struct route6 *rt6_hlist_get(const struct dp_vs_route6_conf *cf)
-{
+    int hashkey;
+    struct rt6_hlist *hlist;
     struct route6 *rt6;
 
-    if (!cf)
-        return NULL;
-
-    if (cf->dst.plen == 128) {
-        int hashkey = rt6_local_hash_key(&cf->dst.addr);
-        list_for_each_entry(rt6, &this_rt6_local[hashkey], hnode) {
-            if (rt6_match(rt6, cf))
+    list_for_each_entry(hlist, &this_rt6_htable, node) {
+        if (hlist->plen > cf->dst.plen)
+            continue;
+        if (hlist->plen < cf->dst.plen)
+            break;
+        hashkey = rt6_hlist_hashkey(&cf->dst.addr, hlist->plen, hlist->nbuckets);
+        list_for_each_entry(rt6, &hlist->hlist[hashkey], hnode) {
+            if (rt6_match(rt6, cf)) {
+                if (phlist)
+                    *phlist = hlist;
                 return rt6;
-        }
-    } else {
-        list_for_each_entry(rt6, &this_rt6_net, hnode) {
-            if (rt6_match(rt6, cf))
-                return rt6;
+            }
         }
     }
 
     return NULL;
 }
 
-static int rt6_hlist_add_local(struct route6 *rt6_entry)
+static inline struct route6 *rt6_hlist_get(const struct dp_vs_route6_conf *cf)
 {
-    int hashkey = rt6_local_hash_key(&rt6_entry->rt6_dst.addr);
-    list_add_tail(&rt6_entry->hnode, &this_rt6_local[hashkey]);
-
-    this_rt6_nroutes++;
-
-    return EDPVS_OK;
-}
-
-static int rt6_hlist_add_net(struct route6 *rt6_entry)
-{
-    struct route6 *rt6 = NULL;
-    bool insert = false;
-
-    list_for_each_entry(rt6, &this_rt6_net, hnode) {
-        if (rt6->rt6_dst.plen < rt6_entry->rt6_dst.plen) {
-            insert = true;
-            break;
-        } else if (rt6->rt6_dst.plen == rt6_entry->rt6_dst.plen) {
-            if (ipv6_addr_cmp(&rt6->rt6_dst.addr, &rt6_entry->rt6_dst.addr) > 0) {
-                insert = true;
-                break;
-            }
-        }
-    }
-
-    if (insert)
-        __list_add(&rt6_entry->hnode, rt6->hnode.prev, &rt6->hnode);
-    else
-        list_add_tail(&rt6_entry->hnode, &this_rt6_net);
-
-    this_rt6_nroutes++;
-
-    return EDPVS_OK;
+    return __rt6_hlist_get(cf, NULL);
 }
 
 static int rt6_hlist_add_lcore(const struct dp_vs_route6_conf *cf)
 {
-    struct route6 *entry;
+    struct rt6_hlist *hlist = NULL;
+    struct route6 *rt6;
+    int hashkey;
+    bool hlist_exist = false;
+#ifdef DPVS_ROUTE6_DEBUG
+    char buf[64];
+#endif
 
     if (rt6_hlist_get(cf))
         return EDPVS_EXIST;
 
-    entry = rte_malloc_socket("rt6_entry", sizeof(struct route6), 0, rte_socket_id());
-    if (unlikely(!entry))
+    list_for_each_entry(hlist, &this_rt6_htable, node) {
+        if (hlist->plen <= cf->dst.plen) {
+            if (hlist->plen == cf->dst.plen)
+                hlist_exist = true;
+            break;
+        }
+    }
+
+    if (!hlist_exist) { /* hlist for this prefix not exist, create it! */
+        int i, nbuckets, size;
+        struct rt6_hlist *new_hlist;
+
+        nbuckets = rt6_hlist_buckets(cf->dst.plen);
+        size = sizeof(struct rt6_hlist) + nbuckets * sizeof(struct list_head);
+        new_hlist = rte_zmalloc_socket("rt6_hlist", size, 0, rte_socket_id());
+        if (unlikely(!new_hlist)) {
+            RTE_LOG(ERR, RT6, "[%d] %s: fail to alloc rt6_hlist\n",
+                    rte_lcore_id(), __func__);
+            return EDPVS_NOMEM;
+        }
+
+        new_hlist->plen = cf->dst.plen;
+        new_hlist->nbuckets = nbuckets;
+        new_hlist->nroutes = 0;
+        for (i = 0; i < nbuckets; i++)
+            INIT_LIST_HEAD(&new_hlist->hlist[i]);
+
+        /* add new_hlist to plen-sorted htable */
+        __list_add(&new_hlist->node, hlist->node.prev, &hlist->node);
+
+#ifdef DPVS_ROUTE6_DEBUG
+        RTE_LOG(DEBUG, RT6, "[%d] %s: new rt6_hlist: plen=%d, nbuckets=%d\n",
+                rte_lcore_id(), __func__, new_hlist->plen, new_hlist->nbuckets);
+#endif
+
+        hlist = new_hlist; /* replace current hlist with new_hlist */
+    }
+
+    /* create route6 entry and hash it into current hlist */
+    rt6 = rte_zmalloc_socket("rt6_entry", sizeof(struct route6), 0, rte_socket_id());
+    if (unlikely(!rt6)) {
+        RTE_LOG(ERR, RT6, "[%d] %s: fail to alloc rt6_entry!\n",
+                rte_lcore_id(), __func__);
+        if (hlist->nroutes == 0) {
+            list_del(&hlist->node);
+            rte_free(hlist);
+        }
         return EDPVS_NOMEM;
+    }
 
-    rt6_fill_with_cfg(entry, cf);
+    rt6_fill_with_cfg(rt6, cf);
 
-    if (cf->dst.plen == 128)
-        return rt6_hlist_add_local(entry);
-    else
-        return rt6_hlist_add_net(entry);
+    hashkey = rt6_hlist_hashkey(&cf->dst.addr, cf->dst.plen, hlist->nbuckets);
+    list_add_tail(&rt6->hnode, &hlist->hlist[hashkey]);
+    hlist->nroutes++;
+    this_rt6_nroutes++;
+
+#ifdef DPVS_ROUTE6_DEBUG
+    dump_rt6_prefix(&rt6->rt6_dst, buf, sizeof(buf));
+    RTE_LOG(DEBUG, RT6, "[%d] %s: new route6 node: %s->%s plen=%d, hashkey=%d/%d\n",
+            rte_lcore_id(), __func__, buf, cf->ifname, hlist->plen,
+            hashkey, hlist->nbuckets);
+#endif
+
+    return EDPVS_OK;
 }
 
 static int rt6_hlist_del_lcore(const struct dp_vs_route6_conf *cf)
 {
-    struct route6 *rt6_entry;
+    struct route6 *rt6;
+    struct rt6_hlist *hlist = NULL;
+#ifdef DPVS_ROUTE6_DEBUG
+    char buf[64];
+#endif
 
-    rt6_entry = rt6_hlist_get(cf);
-    if (!rt6_entry)
+    rt6 = __rt6_hlist_get(cf, &hlist);
+    if (!rt6)
         return EDPVS_NOTEXIST;
 
-    list_del(&rt6_entry->hnode);
-    rte_free(rt6_entry);
+#ifdef DPVS_ROUTE6_DEBUG
+    dump_rt6_prefix(&rt6->rt6_dst, buf, sizeof(buf));
+    RTE_LOG(DEBUG, RT6, "[%d] %s: del route6 node: %s->%s\n",
+            rte_lcore_id(), __func__, buf, cf->ifname);
+#endif
+    list_del(&rt6->hnode);
+    rte_free(rt6);
 
+    assert(hlist != NULL);
+    hlist->nroutes--;
     this_rt6_nroutes--;
+
+    if (hlist->nroutes == 0) {
+#ifdef DPVS_ROUTE6_DEBUG
+        RTE_LOG(DEBUG, RT6, "[%d] %s: del rt6_hlist: plen=%d, nbuckets=%d\n",
+                rte_lcore_id(), __func__, hlist->plen, hlist->nbuckets);
+#endif
+        list_del(&hlist->node);
+        rte_free(hlist);
+    }
 
     return EDPVS_OK;
 }
@@ -214,20 +297,16 @@ static inline bool
 
 static struct route6 *rt6_hlist_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
-    struct route6 *rt6_entry;
+    struct rt6_hlist *hlist;
+    struct route6 *rt6;
     int hashkey;
 
-    /* search local table */
-    hashkey = rt6_local_hash_key(&fl6->fl6_daddr);
-    list_for_each_entry(rt6_entry, &this_rt6_local[hashkey], hnode) {
-        if (rt6_hlist_flow_match(rt6_entry, fl6))
-            return rt6_entry;
-    }
-
-    /* search net list */
-    list_for_each_entry(rt6_entry, &this_rt6_net, hnode) {
-        if (rt6_hlist_flow_match(rt6_entry, fl6))
-            return rt6_entry;
+    list_for_each_entry(hlist, &this_rt6_htable, node) {
+        hashkey = rt6_hlist_hashkey(&fl6->fl6_daddr, hlist->plen, hlist->nbuckets);
+        list_for_each_entry(rt6, &hlist->hlist[hashkey], hnode) {
+            if (rt6_hlist_flow_match(rt6, fl6))
+                return rt6;
+        }
     }
 
     /* miss */
@@ -248,6 +327,7 @@ static struct dp_vs_route6_conf_array*
         rt6_hlist_dump(const struct dp_vs_route6_conf *cf, size_t *nbytes)
 {
     int i, off;
+    struct rt6_hlist *hlist;
     struct route6 *entry;
     struct dp_vs_route6_conf_array *rt6_arr;
     struct netif_port *dev = NULL;
@@ -262,29 +342,25 @@ static struct dp_vs_route6_conf_array*
     }
 
     *nbytes = sizeof(struct dp_vs_route6_conf_array) +
-        g_nroutes * sizeof(struct dp_vs_route6_conf);
+            g_nroutes * sizeof(struct dp_vs_route6_conf);
     rt6_arr = rte_zmalloc_socket("rt6_sockopt_get", *nbytes, 0, rte_socket_id());
     if (unlikely(!rt6_arr))
         return NULL;
 
     off = 0;
-    for (i = 0; i < RT6_LOCAL_TABLE_SIZE; i++) {
-        list_for_each_entry(entry, &this_rt6_local[i], hnode) {
-            if (off > g_nroutes)
-                break;
-            if (dev && dev->id != entry->rt6_dev->id)
-                continue;
-            rt6_fill_cfg(&rt6_arr->routes[off++], entry);
+    list_for_each_entry(hlist, &this_rt6_htable, node) {
+        for (i = 0; i < hlist->nbuckets; i++) {
+            list_for_each_entry(entry, &hlist->hlist[i], hnode) {
+                if (off >= g_nroutes)
+                    goto out;
+                if (dev && dev->id != entry->rt6_dev->id)
+                    continue;
+                rt6_fill_cfg(&rt6_arr->routes[off++], entry);
+            }
         }
     }
-    list_for_each_entry(entry, &this_rt6_net, hnode) {
-        if (off > g_nroutes)
-            break;
-        if (dev && dev->id != entry->rt6_dev->id)
-            continue;
-        rt6_fill_cfg(&rt6_arr->routes[off++], entry);
-    }
 
+out:
     if (off < g_nroutes)
         *nbytes = sizeof(struct dp_vs_route6_conf_array) +
             off * sizeof(struct dp_vs_route6_conf);
