@@ -23,9 +23,12 @@
  */
 #ifndef __DPVS_FLOW_H__
 #define __DPVS_FLOW_H__
+
+#ifdef __DPVS__
 #include "common.h"
 #include "netif.h"
 #include "inet.h"
+#endif
 
 /* linux:include/uapi/route.h */
 #define RTF_UP          0x0001      /* route usable                 */
@@ -46,6 +49,12 @@
 #define RTF_DEFAULT     0x1000
 #define RTF_KNI         0X2000
 
+struct rt6_prefix {
+    struct in6_addr     addr;
+    int                 plen;
+};
+
+#ifdef __DPVS__
 /* common flow info of upper layer (l4) */
 union flow_ul {
     struct {
@@ -112,4 +121,5 @@ struct flow6 {
 #define fl6_dport       __fl_ul.ports.dport
 };
 
+#endif /* __DPVS__ */
 #endif /* __DPVS_FLOW_H__ */

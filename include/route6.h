@@ -22,14 +22,11 @@
 #define __DPVS_ROUTE6_H__
 
 #include "flow.h"
+#include "conf/route6.h"
 
 //#define DPVS_ROUTE6_DEBUG
-#define RTE_LOGTYPE_RT6     RTE_LOGTYPE_USER1
-
-struct rt6_prefix {
-    struct in6_addr     addr;
-    int                 plen;
-};
+#define RTE_LOGTYPE_RT6         RTE_LOGTYPE_USER1
+#define RT6_METHOD_NAME_SZ      32
 
 struct route6 {
     struct rt6_prefix   rt6_dst;
@@ -66,8 +63,6 @@ static inline int dump_rt6_prefix(const struct rt6_prefix *rt6_p, char *buf, int
     return rlen;
 }
 
-#include "conf/route6.h"
-#define RT6_METHOD_NAME_SZ      32
 struct route6_method {
     char name[RT6_METHOD_NAME_SZ];
     struct list_head lnode;
@@ -88,29 +83,31 @@ int route6_method_register(struct route6_method *rt6_mtd);
 int route6_method_unregister(struct route6_method *rt6_mtd);
 
 static inline void rt6_fill_with_cfg(struct route6 *rt6,
-        const struct dp_vs_route6_conf *cf) {
+        const struct dp_vs_route6_conf *cf)
+{
     memset(rt6, 0, sizeof(struct route6));
 
-    memcpy(&rt6->rt6_dst, &cf->dst, sizeof(struct rt6_prefix));
-    memcpy(&rt6->rt6_src, &cf->src, sizeof(struct rt6_prefix));
-    memcpy(&rt6->rt6_prefsrc, &cf->prefsrc, sizeof(struct rt6_prefix));
+    rt6->rt6_dst = cf->dst;
+    rt6->rt6_src = cf->src;
+    rt6->rt6_prefsrc = cf->prefsrc;
     rt6->rt6_dev = netif_port_get_by_name(cf->ifname);
-    memcpy(&rt6->rt6_gateway, &cf->gateway, sizeof(rt6->rt6_gateway));
+    rt6->rt6_gateway = cf->gateway;
     rt6->rt6_mtu = cf->mtu;
     rt6->rt6_flags = cf->flags;
 }
 
 static inline void rt6_fill_cfg(struct dp_vs_route6_conf *cf,
-        const struct route6 *rt6) {
+        const struct route6 *rt6)
+{
     memset(cf, 0, sizeof(struct dp_vs_route6_conf));
 
     cf->af = AF_INET6;
-    memcpy(&cf->dst, &rt6->rt6_dst, sizeof(struct rt6_prefix));
-    memcpy(&cf->src, &rt6->rt6_src, sizeof(struct rt6_prefix));
-    memcpy(&cf->prefsrc, &rt6->rt6_prefsrc, sizeof(struct rt6_prefix));
+    cf->dst = rt6->rt6_dst;
+    cf->src = rt6->rt6_src;
+    cf->prefsrc = rt6->rt6_prefsrc;
 
     strncpy(cf->ifname, rt6->rt6_dev->name, sizeof(cf->ifname));
-    memcpy(&cf->gateway, &rt6->rt6_gateway, sizeof(cf->gateway));
+    cf->gateway = rt6->rt6_gateway;
     cf->mtu = rt6->rt6_mtu;
     cf->flags = rt6->rt6_flags;
 }
