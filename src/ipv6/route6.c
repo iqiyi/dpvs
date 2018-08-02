@@ -14,33 +14,6 @@
 
 static struct route6 routes[6] = {};
 
-struct neigh {
-    int                 af;
-    union inet_addr     ia;
-    struct ether_addr   ea;
-};
-
-struct neigh neigh_tab[4] = {};
-
-static int ether_addr_pton(const char *ea, struct ether_addr *buf)
-{
-    unsigned int ea_buf[6];
-
-    if (sscanf(ea, "%02x:%02x:%02x:%02x:%02x:%02x",
-           &ea_buf[0], &ea_buf[1], &ea_buf[2],
-           &ea_buf[3], &ea_buf[4], &ea_buf[5]) != 6)
-        return -1;
-
-    buf->addr_bytes[0] = ea_buf[0];
-    buf->addr_bytes[1] = ea_buf[1];
-    buf->addr_bytes[2] = ea_buf[2];
-    buf->addr_bytes[3] = ea_buf[3];
-    buf->addr_bytes[4] = ea_buf[4];
-    buf->addr_bytes[5] = ea_buf[5];
-
-    return 0;
-}
-
 static struct route6 *rt6_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
     int i;
@@ -63,15 +36,11 @@ static struct route6 *rt6_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
 
 struct route6 *route6_input(struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
-    if (ipv6_addr_is_multicast(&fl6->fl6_daddr))
-        return &routes[0];
     return rt6_lookup(mbuf, fl6);
 }
 
 struct route6 *route6_output(struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
-    if (ipv6_addr_is_multicast(&fl6->fl6_daddr))
-        return &routes[1];
     return rt6_lookup(mbuf, fl6);
 }
 
@@ -86,14 +55,14 @@ int route6_init(void)
     struct neigh *neigh;
 
     rt = &routes[0];
-    inet_pton(AF_INET6, "2001:db8:0:f101::2", &rt->rt6_dst.addr);
+    inet_pton(AF_INET6, "2001:db8::1", &rt->rt6_dst.addr);
     rt->rt6_dst.plen = 128;
     rt->rt6_dev = netif_port_get_by_name("dpdk0");
     rt->rt6_mtu = 1500;
     rt->rt6_flags = RTF_LOCALIN | RTF_HOST;
 
     rt = &routes[1];
-    inet_pton(AF_INET6, "2001:db8:0:f101::", &rt->rt6_dst.addr);
+    inet_pton(AF_INET6, "2001:db8::", &rt->rt6_dst.addr);
     rt->rt6_dst.plen = 64;
     rt->rt6_dev = netif_port_get_by_name("dpdk0");
     rt->rt6_mtu = 1500;
@@ -154,7 +123,7 @@ int ipv6_addr_init(void)
 {
       /*addr hardcode*/
     union inet_addr addr;
-    inet_pton(AF_INET6, "2001:db8:0:f101::2", &addr);
+    inet_pton(AF_INET6, "2001:db8:1::1", &addr);
     
     inet_addr_add(AF_INET6, routes[0].rt6_dev, &addr, 64, NULL,
                   0, 0 ,0, 0);
