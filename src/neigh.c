@@ -655,9 +655,11 @@ int neigh_output(int af, union inet_addr *nexhop,
         if ((neighbour->state == DPVS_NUD_S_NONE) ||
            (neighbour->state == DPVS_NUD_S_SEND)) {
             if (neighbour->que_num > arp_unres_qlen) {
-                /*don't need arp request now, 
-                  since neighbour will not be confirmed
-                  and it will be released late*/
+                /*
+                 * don't need arp request now, 
+                 * since neighbour will not be confirmed
+                 * and it will be released late
+                 */
                 rte_pktmbuf_free(m);
                 RTE_LOG(ERR, NEIGHBOUR, "[%s] neigh_unres_queue is full, drop packet\n", __func__);
                 return EDPVS_DROP;
