@@ -512,7 +512,8 @@ static int route6_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
 }
 
 static int route_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
-                        struct dpip_conf *conf) {
+                        struct dpip_conf *conf)
+{
     switch (conf->af) {
         case AF_UNSPEC:
         case AF_INET:

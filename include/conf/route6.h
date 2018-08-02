@@ -19,20 +19,7 @@
 #ifndef __DPVS_ROUTE6_CONF_H__
 #define __DPVS_ROUTE6_CONF_H__
 
-/* copied from "flow.h" */
-#ifndef __DPVS_FLOW_H__
-#define RTF_FORWARD     0x0400
-#define RTF_LOCALIN     0x0800
-#define RTF_DEFAULT     0x1000
-#define RTF_KNI         0X2000
-#endif
-
-#ifndef __DPVS_ROUTE6_H__
-struct rt6_prefix {
-    struct in6_addr     addr;
-    int                 plen;
-};
-#endif
+#include "flow.h"
 
 enum {
     /* set */
