@@ -27,7 +27,11 @@
 #include "ctrl.h"
 #include "sa_pool.h"
 #include "inetaddr.h"
+#include "neigh.h"
+#include "netif_addr.h"
 #include "conf/inetaddr.h"
+#include "route6.h"
+#include "ndisc.h"
 
 #define IFA
 #define RTE_LOGTYPE_IFA             RTE_LOGTYPE_USER1
@@ -35,6 +39,12 @@
 
 #define INET_ADDR_HSIZE_SHIFT       8
 #define INET_ADDR_HSIZE             (1U << INET_ADDR_HSIZE_SHIFT)
+
+enum ifaddr_timer_t
+{
+    INET_NONE,
+    INET_DAD
+};
 
 static struct list_head     in_addr_tab[INET_ADDR_HSIZE];
 static rte_rwlock_t         in_addr_lock;
@@ -91,13 +101,13 @@ static void ifa_set_lifetime(struct inet_ifaddr *ifa,
 
 static struct inet_ifaddr *__ifa_lookup(struct inet_device *idev, 
                                         const union inet_addr *addr, 
-                                        uint8_t plen)
+                                        uint8_t plen, int af)
 {
     struct inet_ifaddr *ifa;
 
     list_for_each_entry(ifa, &idev->ifa_list, d_list) {
-        if ((!plen || ifa->plen == plen)
-                && inet_addr_equal(idev->af, &ifa->addr, addr)) {
+        if ((!plen || ifa->plen == plen) && ifa->af == af
+             && inet_addr_equal(ifa->af, &ifa->addr, addr)) {
             return ifa;
         }
     }
@@ -130,11 +140,11 @@ static inline void ___ifa_remove(struct inet_ifaddr *ifa)
 
 /* make lookup and remove atmomic, also cancel the timer */
 static int __ifa_remove(struct inet_device *idev, const union inet_addr *addr, 
-                        uint8_t plen, struct inet_ifaddr **ifa)
+                        uint8_t plen, struct inet_ifaddr **ifa, int af)
 {
     struct inet_ifaddr *ent;
 
-    if ((ent = __ifa_lookup(idev, addr, plen)) == NULL)
+    if ((ent = __ifa_lookup(idev, addr, plen, af)) == NULL)
         return EDPVS_NOTEXIST;
 
     if (rte_atomic32_read(&ent->refcnt) > 2)
@@ -152,6 +162,10 @@ static int ifa_add_route(struct inet_ifaddr *ifa)
     int err;
     union inet_addr net;
 
+    /*FIXME,support ipv6*/
+    if (ifa->af == AF_INET6)
+        return EDPVS_OK;
+
     err = route_add(&ifa->addr.in, 32, RTF_LOCALIN, 
                     NULL, ifa->idev->dev, NULL, 0, 0);
     /* may already added by same IP with diff plen */
@@ -161,7 +175,7 @@ static int ifa_add_route(struct inet_ifaddr *ifa)
     if (ifa->plen == 32)
         return EDPVS_OK;
 
-    err = inet_addr_net(ifa->idev->af, &ifa->addr, &ifa->mask, &net);
+    err = inet_addr_net(ifa->af, &ifa->addr, &ifa->mask, &net);
     if (err != EDPVS_OK)
         goto errout;
 
@@ -192,7 +206,7 @@ static int ifa_del_route(struct inet_ifaddr *ifa)
     if (ifa->plen == 32)
         return EDPVS_OK;
 
-    err = inet_addr_net(ifa->idev->af, &ifa->addr, &ifa->mask, &net);
+    err = inet_addr_net(ifa->af, &ifa->addr, &ifa->mask, &net);
     if (err != EDPVS_OK)
         RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
 
@@ -202,6 +216,234 @@ static int ifa_del_route(struct inet_ifaddr *ifa)
         RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
 
     return EDPVS_OK;
+}
+
+static struct inet_ifmcaddr *__imc_lookup( int af, const struct inet_device *idev, 
+                                           const union inet_addr *maddr)
+{
+    struct inet_ifmcaddr *imc;
+
+    list_for_each_entry(imc, &idev->ifm_list, d_list) {
+        if (inet_addr_equal(af, &imc->addr, maddr)) {
+            return imc;
+        }
+    }
+
+    return NULL;
+}
+
+static int idev_mc_add(int af, struct inet_device *idev, 
+                       const union inet_addr *maddr)
+{
+    struct inet_ifmcaddr  *imc;
+
+    imc = __imc_lookup(af, idev, maddr);
+    if (imc) {
+        rte_atomic32_inc(&imc->refcnt);
+        return EDPVS_OK;
+    }
+
+    imc = rte_calloc(NULL, 1, sizeof(struct inet_ifmcaddr), RTE_CACHE_LINE_SIZE);
+    if (!imc) {
+        return EDPVS_NOMEM;
+    }
+
+    imc->idev = idev;
+    memcpy(&imc->addr, maddr, sizeof(*maddr));
+    list_add(&imc->d_list, &idev->ifm_list);
+    rte_atomic32_set(&imc->refcnt, 1);
+
+    return EDPVS_OK;
+}
+
+static int idev_mc_del(int af, struct inet_device *idev, 
+                      const union inet_addr *maddr)
+{
+    struct inet_ifmcaddr *imc;
+
+    imc = __imc_lookup(af, idev, maddr);
+    if (!imc) {
+        return EDPVS_NOTEXIST;
+    }
+
+    rte_atomic32_dec(&imc->refcnt);
+    if (rte_atomic32_read(&imc->refcnt) < 1) {
+        list_del(&imc->d_list);
+        rte_free(imc);
+    }
+    return EDPVS_OK;
+}
+
+/* support ipv6 only, and not support source filter */
+static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add)
+{
+    union inet_addr iaddr;
+    struct ether_addr eaddr;
+    int err = 0;
+
+    if (ifa->af != AF_INET6)
+        return EDPVS_OK;
+
+    memset(&iaddr, 0, sizeof(iaddr));
+    memset(&eaddr, 0, sizeof(eaddr));
+
+    addrconf_addr_solict_mult(&ifa->addr.in6, &iaddr.in6);
+    ipv6_mac_mult(&iaddr.in6, &eaddr);
+
+    if (add) {
+        err = idev_mc_add(ifa->af, ifa->idev, &iaddr);
+        if (err)
+            return err;
+
+        err = netif_mc_add(ifa->idev->dev, &eaddr);
+        if (err) {
+            /* rollback */
+            idev_mc_del(ifa->af, ifa->idev, &iaddr);
+            return err;
+        }
+    } else {
+        err = idev_mc_del(ifa->af, ifa->idev, &iaddr);
+        if (err)
+            return err;
+
+        err = netif_mc_del(ifa->idev->dev, &eaddr);
+        if (err) {
+            /* rollback */
+            idev_mc_add(ifa->af, ifa->idev, &iaddr);
+            return err;
+        }
+    }
+
+    return err;
+}
+
+static int inet_ifaddr_dad_completed(void *arg)
+{
+    struct inet_ifaddr *ifa = arg;
+
+    rte_rwlock_write_lock(&in_addr_lock);
+    ifa->flags &= ~(IFA_F_TENTATIVE|IFA_F_OPTIMISTIC|IFA_F_DADFAILED);
+    rte_rwlock_write_unlock(&in_addr_lock);
+
+    return DTIMER_STOP;
+}
+
+/* change timer callback, refer to 'addrconf_mod_timer' */
+static void inet_ifaddr_mod_timer(struct inet_ifaddr *ifa, 
+                                  enum ifaddr_timer_t what,
+                                  struct timeval *when)
+{
+    dpvs_timer_cancel(&ifa->timer, true);
+
+    switch (what) {
+    case INET_DAD:
+        dpvs_timer_sched(&ifa->timer, when, inet_ifaddr_dad_completed, 
+                                                           ifa, true);
+        break;
+    /* TODO: other timer support */
+    default:
+        break;
+    }   
+}
+
+static void inet_ifaddr_dad_stop(struct inet_ifaddr *ifa, int dad_failed)
+{
+    rte_rwlock_write_lock(&in_addr_lock);
+    if (ifa->flags & IFA_F_PERMANENT) {
+        if (dad_failed && ifa->flags & IFA_F_TENTATIVE)
+            ifa->flags |= IFA_F_DADFAILED;
+        dpvs_timer_cancel(&ifa->timer, true);
+        rte_rwlock_write_unlock(&in_addr_lock);
+    } else if (ifa->flags & IFA_F_TEMPORARY) {
+        /* TODO: support privacy addr */
+        RTE_LOG(ERR, IFA, "%s: Not support privacy addr\n", __func__);
+        rte_rwlock_write_unlock(&in_addr_lock);
+    } else {
+        inet_addr_del(AF_INET6, ifa->idev->dev, &ifa->addr, ifa->plen);
+        rte_rwlock_write_unlock(&in_addr_lock);
+    }
+}
+
+/* recv DAD: change ifa's state */
+void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa)
+{
+    inet_ifaddr_dad_stop(ifa, 1);
+}
+
+/* call me by lock */
+static void inet_ifaddr_dad_start(struct inet_ifaddr *ifa)
+{
+    struct timeval tv;
+
+    if (ifa->flags & IFA_F_NODAD ||
+        !(ifa->flags & IFA_F_TENTATIVE)) {
+        ifa->flags &= ~(IFA_F_TENTATIVE|IFA_F_OPTIMISTIC|IFA_F_DADFAILED);
+        return;
+    }
+
+    tv.tv_sec  = 3;
+    tv.tv_usec = 0;
+
+    ifa->flags |= IFA_F_TENTATIVE | IFA_F_OPTIMISTIC;
+    inet_ifaddr_mod_timer(ifa, INET_DAD, &tv);
+    ndisc_send_dad(ifa->idev->dev, &ifa->addr.in6);
+}
+
+/* 
+ * no need to rollback, dpvs can not start successfully; 
+ * should not be init in 'inetaddr_init';
+ * because multicast address should be added after port_start
+ */
+int idev_add_mcast_init(struct netif_port *dev)
+{
+    struct inet_device *idev;
+    struct ether_addr eaddr_nodes, eaddr_routers;
+    union inet_addr all_nodes, all_routers;
+    int err = 0;
+
+    idev = dev_get_idev(dev);
+
+    memset(&eaddr_nodes, 0, sizeof(eaddr_nodes));
+    memset(&eaddr_routers, 0, sizeof(eaddr_routers));
+
+    memcpy(&all_nodes, &in6addr_linklocal_allnodes, sizeof(all_nodes));
+    memcpy(&all_routers, &in6addr_linklocal_allrouters, sizeof(all_routers));
+
+    ipv6_mac_mult(&all_nodes.in6, &eaddr_nodes);
+    ipv6_mac_mult(&all_routers.in6, &eaddr_routers);
+
+    rte_rwlock_write_lock(&in_addr_lock);
+    err = idev_mc_add(AF_INET6, idev, &all_nodes);
+    if (err != EDPVS_OK)
+        goto errout;
+    err = netif_mc_add(idev->dev, &eaddr_nodes);
+    if (err != EDPVS_OK)
+        goto free_idev_nodes;
+    err = idev_mc_add(AF_INET6, idev, &all_routers);
+    if (err != EDPVS_OK)
+        goto free_netif_nodes;
+    err = netif_mc_add(idev->dev, &eaddr_routers);
+    if (err != EDPVS_OK)
+        goto free_idev_routers;
+
+    rte_rwlock_write_unlock(&in_addr_lock);
+    idev_put(idev);
+
+    /*TODO:delete me!!*/
+    ipv6_addr_init();
+
+    return EDPVS_OK;
+
+free_idev_routers:
+    idev_mc_del(AF_INET6, idev, &all_routers);
+free_netif_nodes:
+    netif_mc_del(idev->dev, &eaddr_nodes);
+free_idev_nodes:
+    idev_mc_del(AF_INET6, idev, &all_nodes);
+errout:
+    rte_rwlock_write_unlock(&in_addr_lock);
+    idev_put(idev);
+    return err;
 }
 
 static int ifa_expire(void *arg)
@@ -231,6 +473,7 @@ static int ifa_expire(void *arg)
     dpvs_timer_cancel(&ifa->timer, true);
     if (ifa->flags & IFA_F_SAPOOL)
         sa_pool_destroy(ifa);
+    ifa_add_del_mcast(ifa, false);
     ifa_del_route(ifa);
     idev_put(ifa->idev);
     rte_atomic32_dec(&ifa->idev->ifa_cnt);
@@ -261,7 +504,7 @@ static int ifa_add_set(int af, const struct netif_port *dev,
 
     rte_rwlock_write_lock(&in_addr_lock);
 
-    ifa = __ifa_lookup(idev, addr, plen);
+    ifa = __ifa_lookup(idev, addr, plen, af);
     if (ifa && create) {
         err = EDPVS_EXIST;
         goto errout;
@@ -277,6 +520,7 @@ static int ifa_add_set(int af, const struct netif_port *dev,
             goto errout;
         }
 
+        ifa->af   = af;
         ifa->idev = idev;
         ifa->addr = *addr;
         ifa->plen = plen;
@@ -285,10 +529,15 @@ static int ifa_add_set(int af, const struct netif_port *dev,
         dpvs_time_now(&ifa->cstemp, true);
         rte_atomic32_init(&ifa->refcnt);
 
+        /* set mult*/
+        err = ifa_add_del_mcast(ifa, true);
+        if (err != EDPVS_OK)
+            goto free_ifa;
+
         /* set routes for local and network */
         err = ifa_add_route(ifa);
         if (err != EDPVS_OK)
-            goto free_ifa;
+            goto del_mc;
 
         err = __ifa_insert(idev, ifa);
         if (err != EDPVS_OK)
@@ -330,6 +579,16 @@ static int ifa_add_set(int af, const struct netif_port *dev,
         }
     }
 
+    /* TODO: support privacy addr, don't need it now */
+    if (af == AF_INET6) {
+        assert(ifa->flags & IFA_F_PERMANENT);
+    }
+
+    if ((af == AF_INET6) && (ifa->flags & IFA_F_PERMANENT)) {
+        ifa->flags |= IFA_F_TENTATIVE|IFA_F_OPTIMISTIC;
+        inet_ifaddr_dad_start(ifa);
+    }
+
     rte_rwlock_write_unlock(&in_addr_lock);
     idev_put(idev);
     return EDPVS_OK;
@@ -338,6 +597,8 @@ rem_ifa:
     ___ifa_remove(ifa);
 del_route:
     ifa_del_route(ifa);
+del_mc:
+    ifa_add_del_mcast(ifa, false);
 free_ifa:
     rte_free(ifa);
 errout:
@@ -381,11 +642,12 @@ int inet_addr_del(int af, struct netif_port *dev,
         return EDPVS_RESOURCE;
 
     rte_rwlock_write_lock(&in_addr_lock);
-    err = __ifa_remove(idev, addr, plen, &ifa);
+    err = __ifa_remove(idev, addr, plen, &ifa, af);
     if (err == EDPVS_OK) {
         dpvs_timer_cancel(&ifa->timer, true);
         if (ifa->flags & IFA_F_SAPOOL)
             sa_pool_destroy(ifa);
+        ifa_add_del_mcast(ifa, false);
         ifa_del_route(ifa);
         idev_put(ifa->idev);
         rte_free(ifa);
@@ -429,6 +691,7 @@ int inet_addr_flush(int af, struct netif_port *dev)
         dpvs_timer_cancel(&ifa->timer, true);
         if (ifa->flags & IFA_F_SAPOOL)
             sa_pool_destroy(ifa);
+        ifa_add_del_mcast(ifa, false);
         ifa_del_route(ifa);
         idev_put(ifa->idev);
         rte_free(ifa);
@@ -463,11 +726,11 @@ struct netif_port *inet_addr_get_iface(int af, union inet_addr *addr)
     struct netif_port *dev;
 
 #ifdef INET_ADDR_LOCK
-	rte_rwlock_read_lock(&in_addr_lock);
+    rte_rwlock_read_lock(&in_addr_lock);
 #endif
-	dev = __inet_addr_get_iface(af, addr);
+    dev = __inet_addr_get_iface(af, addr);
 #ifdef INET_ADDR_LOCK
-	rte_rwlock_read_unlock(&in_addr_lock);
+    rte_rwlock_read_unlock(&in_addr_lock);
 #endif
 
     return dev;
@@ -484,7 +747,6 @@ void inet_addr_select(int af, const struct netif_port *dev,
         addr->in.s_addr = htonl(INADDR_ANY);
     else {
         addr->in6 = in6addr_any;
-        return; /* not support IPv6 now */
     }
 
     if (!idev)
@@ -514,36 +776,69 @@ void inet_addr_select(int af, const struct netif_port *dev,
 struct inet_ifaddr *inet_addr_ifa_get(int af, const struct netif_port *dev,
                                       union inet_addr *addr)
 {
-	struct inet_ifaddr *ifa = NULL;
-	struct inet_device *idev = NULL;
+    struct inet_ifaddr *ifa = NULL;
+    struct inet_device *idev = NULL;
 
-	assert(af == AF_INET && addr);
-
+    assert(addr);
 #ifdef INET_ADDR_LOCK
-	rte_rwlock_write_lock(&in_addr_lock);
+    rte_rwlock_write_lock(&in_addr_lock);
 #endif
 
-	if (!dev) {
-		dev = __inet_addr_get_iface(AF_INET, addr);
-		if (!dev)
-			goto out;
-	}
+    if (!dev) {
+        dev = __inet_addr_get_iface(af, addr);
+        if (!dev)
+            goto out;
+    }
 
-	idev = dev_get_idev(dev);
-	assert(idev);
+    idev = dev_get_idev(dev);
+    assert(idev);
 
-	ifa = __ifa_lookup(idev, addr, 0);
-	if (!ifa)
-		goto out;
+    ifa = __ifa_lookup(idev, addr, 0, af);
+    if (!ifa)
+        goto out;
 
-	rte_atomic32_inc(&ifa->refcnt);
+    rte_atomic32_inc(&ifa->refcnt);
 out:
 #ifdef INET_ADDR_LOCK
-	rte_rwlock_write_unlock(&in_addr_lock);
+    rte_rwlock_write_unlock(&in_addr_lock);
 #endif
-	if (idev)
-		idev_put(idev);
-	return ifa;
+    if (idev)
+        idev_put(idev);
+    return ifa;
+}
+
+/* support ipv6 only, refer linux:ipv6_chk_mcast_addr */
+bool inet_chk_mcast_addr(int af, struct netif_port *dev,
+                         const union inet_addr *group,
+                         const union inet_addr *src)
+{
+    struct inet_device *idev = NULL;
+    struct inet_ifmcaddr *imc;
+    int ret = false;
+
+    if (af != AF_INET6)
+        return true;
+    
+    idev = dev_get_idev(dev);
+
+    if (idev) {
+        rte_rwlock_read_lock(&in_addr_lock);
+
+        imc = __imc_lookup(af, idev, group);
+        if (imc){
+            if (src && !ipv6_addr_any(&src->in6)) {
+            /* TODO: check source-specific multicast (SSM) if @src is assigned */
+                ret = true;
+            } else {
+                ret = true;
+            }
+        }
+        
+        rte_rwlock_read_unlock(&in_addr_lock);
+        idev_put(idev);
+    }
+
+    return ret;
 }
 
 /**
@@ -680,7 +975,7 @@ static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         list_for_each_entry(ifa, &idev->ifa_list, d_list) {
             if (off >= naddr)
                 break;
-            ifa_fill_param(idev->af, &array->addrs[off++], ifa);
+            ifa_fill_param(ifa->af, &array->addrs[off++], ifa);
         }
 
         idev_put(idev);

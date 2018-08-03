@@ -2666,8 +2666,8 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
         return NULL;
     }
     dev->in_ptr->dev = dev;
-    dev->in_ptr->af = AF_INET;
     INIT_LIST_HEAD(&dev->in_ptr->ifa_list);
+    INIT_LIST_HEAD(&dev->in_ptr->ifm_list);
 
     if (tc_init_dev(dev) != EDPVS_OK) {
         RTE_LOG(ERR, NETIF, "%s: fail to init TC\n", __func__);
@@ -2896,8 +2896,8 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
         return NULL;
     }
     port->in_ptr->dev = port;
-    port->in_ptr->af = AF_INET;
     INIT_LIST_HEAD(&port->in_ptr->ifa_list);
+    INIT_LIST_HEAD(&port->in_ptr->ifm_list);
 
     if (tc_init_dev(port) != EDPVS_OK) {
         RTE_LOG(ERR, NETIF, "%s: fail to init TC\n", __func__);
@@ -3348,6 +3348,13 @@ int netif_port_start(struct netif_port *port)
      * so we should update its macaddr after start. */
     if (port->type == PORT_TYPE_BOND_MASTER)
         update_bond_macaddr(port);
+
+    /* add in6_addr multicast address */
+    ret = idev_add_mcast_init(port);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(INFO, NETIF, "multicast address add failed for device %s\n", port->name);
+        return ret;
+    }
 
     return EDPVS_OK;
 }

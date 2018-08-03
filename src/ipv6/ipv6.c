@@ -33,6 +33,7 @@
 #include "ipv6.h"
 #include "route6.h"
 #include "parser/parser.h"
+#include "neigh.h"
 
 /*
  * IPv6 inet hooks
@@ -121,28 +122,6 @@ static void ip6_conf_disable(vector_t tokens)
     FREE_PTR(str);
 }
 
-/* refer linux:ipv6_chk_mcast_addr */
-static bool ip6_chk_mcast_addr(struct netif_port *dev,
-                               const struct in6_addr *group,
-                               const struct in6_addr *src)
-{
-    /*
-     * TODO:
-     * 1. check inetaddr module for multicast group joined.
-     * 2. check source-specific multicast (SSM) if @src is assigned.
-     */
-
-    /*
-     * XXX: test only, not correct, remove them.
-     */
-    if (ipv6_addr_is_ll_all_nodes(group) ||
-        ipv6_addr_is_ll_all_routers(group) ||
-        ipv6_addr_is_solict_mult(group))
-        return true;
-
-    return false;
-}
-
 /* refer linux:ip6_input_finish() */
 static int ip6_local_in_fin(struct rte_mbuf *mbuf)
 {
@@ -203,8 +182,9 @@ resubmit_final:
 
         /* check mcast, if failed, kni may like it. */
         if (ipv6_addr_is_multicast(&hdr->ip6_dst) &&
-            !ip6_chk_mcast_addr(netif_port_get(mbuf->port),
-                                &hdr->ip6_dst, &hdr->ip6_src)) {
+            !inet_chk_mcast_addr(AF_INET6, netif_port_get(mbuf->port),
+                                 (union inet_addr *)&hdr->ip6_dst, 
+                                 (union inet_addr *)&hdr->ip6_src)) {
             rte_rwlock_read_unlock(&inet6_prot_lock);
             goto kni;
         }
@@ -260,7 +240,8 @@ static int ip6_mc_local_in(struct rte_mbuf *mbuf)
 
     IP6_UPD_PO_STATS(inmcast, mbuf->pkt_len);
 
-    if (ip6_chk_mcast_addr(netif_port_get(mbuf->port), &iph->ip6_dst, NULL))
+    if (inet_chk_mcast_addr(AF_INET6, netif_port_get(mbuf->port), 
+                            (union inet_addr *)&iph->ip6_dst, NULL))
         return ip6_local_in(mbuf);
     else {
         route6_put(rt);
@@ -303,8 +284,9 @@ static int ip6_fragment(struct rte_mbuf *mbuf, uint32_t mtu,
 static int ip6_output_fin2(struct rte_mbuf *mbuf)
 {
     struct ip6_hdr *hdr = ip6_hdr(mbuf);
-    struct route6 *rt = mbuf->userdata;
+    struct route6 *rt = NULL;
     struct in6_addr *nexthop;
+    struct netif_port *dev;
     int err;
 
     if (ipv6_addr_is_multicast(&hdr->ip6_dst)) {
@@ -313,15 +295,21 @@ static int ip6_output_fin2(struct rte_mbuf *mbuf)
         if (IPV6_ADDR_MC_SCOPE(&hdr->ip6_dst) <= IPV6_ADDR_SCOPE_NODELOCAL) {
             IP6_INC_STATS(outdiscards);
             rte_pktmbuf_free(mbuf);
-            route6_put(rt);
             return EDPVS_INVAL;
         }
-    }
 
-    nexthop = ip6_rt_nexthop(rt, &hdr->ip6_dst);
+        dev = mbuf->userdata;
+        /* only support linklocal! */
+        nexthop = &hdr->ip6_dst;
+
+    } else {
+        rt = mbuf->userdata;
+        dev = rt->rt6_dev;
+        nexthop = ip6_rt_nexthop(rt, &hdr->ip6_dst);
+    }
     mbuf->packet_type = ETHER_TYPE_IPv6;
 
-    err = neigh_output(AF_INET6, (union inet_addr *)nexthop, mbuf, rt->rt6_dev);
+    err = neigh_output(AF_INET6, (union inet_addr *)nexthop, mbuf, dev);
     route6_put(rt);
 
     return err;
@@ -329,39 +317,60 @@ static int ip6_output_fin2(struct rte_mbuf *mbuf)
 
 static int ip6_output_fin(struct rte_mbuf *mbuf)
 {
-    struct route6 *rt = mbuf->userdata;
+    uint16_t mtu;
+    struct ip6_hdr *hdr = ip6_hdr(mbuf);
 
-    if (mbuf->pkt_len > rt->rt6_mtu)
-        return ip6_fragment(mbuf, rt->rt6_mtu, ip6_output_fin2);
+    if (ipv6_addr_is_multicast(&hdr->ip6_dst))
+        mtu = ((struct netif_port *)mbuf->userdata)->mtu;
+    else
+        mtu = ((struct route6 *)mbuf->userdata)->rt6_mtu;
+
+    if (mbuf->pkt_len > mtu)
+        return ip6_fragment(mbuf, mtu, ip6_output_fin2);
     else
         return ip6_output_fin2(mbuf);
 }
 
 static int ip6_output(struct rte_mbuf *mbuf)
 {
-    struct route6 *rt = mbuf->userdata;
-    assert(rt);
+    struct netif_port *dev;
+    struct route6 *rt = NULL;
+    struct ip6_hdr *hdr = ip6_hdr(mbuf);
+
+    if (ipv6_addr_is_multicast(&hdr->ip6_dst)) {
+        dev = mbuf->userdata;
+    } else {
+        rt = mbuf->userdata;
+        dev = rt->rt6_dev;
+    }
 
     IP6_UPD_PO_STATS(out, mbuf->pkt_len);
-    mbuf->port = rt->rt6_dev->id;
+    mbuf->port = dev->id;
 
     if (unlikely(conf_ipv6_disable)) {
         IP6_INC_STATS(outdiscards);
-        route6_put(rt);
+        if (rt)
+            route6_put(rt);
         rte_pktmbuf_free(mbuf);
         return EDPVS_OK;
     }
 
     return INET_HOOK(AF_INET6, INET_HOOK_POST_ROUTING, mbuf, NULL,
-                     rt->rt6_dev, ip6_output_fin);
+                     dev, ip6_output_fin);
 }
 
 static int ip6_local_out(struct rte_mbuf *mbuf)
 {
-    struct route6 *rt = mbuf->userdata;
+    struct netif_port *dev;
+    struct ip6_hdr *hdr = ip6_hdr(mbuf);
+
+    if (ipv6_addr_is_multicast(&hdr->ip6_dst))
+        dev = mbuf->userdata;
+    else
+        dev = ((struct route6 *)mbuf->userdata)->rt6_dev;
 
     return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf, NULL,
-                     rt->rt6_dev, ip6_output);
+                     dev, ip6_output);
 }
 
 static int ip6_forward_fin(struct rte_mbuf *mbuf)
@@ -655,8 +664,9 @@ int ipv6_term(void)
 
 int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
-    struct route6 *rt;
+    struct route6 *rt = NULL;
     struct ip6_hdr *hdr;
+    struct netif_port *dev;
 
     if (unlikely(!mbuf || !fl6 || ipv6_addr_any(&fl6->fl6_daddr))) {
         if (mbuf)
@@ -671,19 +681,34 @@ int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6)
         return EDPVS_NOROOM;
     }
 
-    /* route decision */
-    rt = route6_output(mbuf, fl6);
-    if (!rt) {
-        IP6_INC_STATS(outnoroutes);
-        rte_pktmbuf_free(mbuf);
-        return EDPVS_NOROUTE;
-    }
+    if (unlikely(ipv6_addr_is_multicast(&fl6->fl6_daddr))) {
+        /* only support linklocal now */
+        if (IPV6_ADDR_MC_SCOPE(&fl6->fl6_daddr) 
+            != IPV6_ADDR_SCOPE_LINKLOCAL) {
+            IP6_INC_STATS(outnoroutes);
+            rte_pktmbuf_free(mbuf);
+            return EDPVS_NOTSUPP;
+        }
+        assert(fl6->fl6_oif);
+        mbuf->userdata = (void *)fl6->fl6_oif;
+        dev = fl6->fl6_oif;
 
-    mbuf->userdata = (void *)rt;
+    } else {
+        /* route decision */
+        rt = route6_output(mbuf, fl6);
+        if (!rt) {
+            IP6_INC_STATS(outnoroutes);
+            rte_pktmbuf_free(mbuf);
+            return EDPVS_NOROUTE;
+        }
+        mbuf->userdata = (void *)rt;
+        dev = rt->rt6_dev;
+    }
 
     hdr = (void *)rte_pktmbuf_prepend(mbuf, sizeof(*hdr));
     if (unlikely(!hdr)) {
-        route6_put(rt);
+        if (rt)
+            route6_put(rt);
         rte_pktmbuf_free(mbuf);
         IP6_INC_STATS(outdiscards);
         return EDPVS_NOROOM;
@@ -699,10 +724,11 @@ int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6)
     hdr->ip6_src    = fl6->fl6_saddr;
     hdr->ip6_dst    = fl6->fl6_daddr;
 
-    if (ipv6_addr_any(&hdr->ip6_src)) {
+    if (ipv6_addr_any(&hdr->ip6_src) &&
+        hdr->ip6_nxt != IPPROTO_ICMPV6) {
         union inet_addr saddr;
 
-        inet_addr_select(AF_INET6, rt->rt6_dev, (void *)&fl6->fl6_daddr,
+        inet_addr_select(AF_INET6, dev, (void *)&fl6->fl6_daddr,
                          fl6->fl6_scope, &saddr);
         hdr->ip6_src = saddr.in6;
     }

@@ -20,6 +20,7 @@
 
 #include <arpa/inet.h>
 #include <net/if.h>
+#include "inet.h"
 
 enum {
     /* get */

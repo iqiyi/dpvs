@@ -10,35 +10,9 @@
 #include "netif.h"
 #include "ipv6.h"
 #include "route6.h"
+#include "inetaddr.h"
 
 static struct route6 routes[6] = {};
-
-struct neigh {
-    int                 af;
-    union inet_addr     ia;
-    struct ether_addr   ea;
-};
-
-struct neigh neigh_tab[4] = {};
-
-static int ether_addr_pton(const char *ea, struct ether_addr *buf)
-{
-    unsigned int ea_buf[6];
-
-    if (sscanf(ea, "%02x:%02x:%02x:%02x:%02x:%02x",
-           &ea_buf[0], &ea_buf[1], &ea_buf[2],
-           &ea_buf[3], &ea_buf[4], &ea_buf[5]) != 6)
-        return -1;
-
-    buf->addr_bytes[0] = ea_buf[0];
-    buf->addr_bytes[1] = ea_buf[1];
-    buf->addr_bytes[2] = ea_buf[2];
-    buf->addr_bytes[3] = ea_buf[3];
-    buf->addr_bytes[4] = ea_buf[4];
-    buf->addr_bytes[5] = ea_buf[5];
-
-    return 0;
-}
 
 static struct route6 *rt6_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
@@ -78,7 +52,6 @@ int route6_put(struct route6 *rt)
 int route6_init(void)
 {
     struct route6 *rt;
-    struct neigh *neigh;
 
     rt = &routes[0];
     inet_pton(AF_INET6, "2001:db8::1", &rt->rt6_dst.addr);
@@ -121,27 +94,19 @@ int route6_init(void)
     rt->rt6_dev = netif_port_get_by_name("dpdk0");
     rt->rt6_mtu = 1500;
 
-    neigh = &neigh_tab[0];
-    neigh->af = AF_INET6;
-    inet_pton(AF_INET6, "2001:db8::1", &neigh->ia);
-    ether_addr_pton("00:00:00:00:00:00", &neigh->ea);
-
-    neigh = &neigh_tab[1];
-    neigh->af = AF_INET6;
-    inet_pton(AF_INET6, "2001:db8:1::1", &neigh->ia);
-    ether_addr_pton("00:00:00:00:00:00", &neigh->ea);
-
-    neigh = &neigh_tab[2];
-    neigh->af = AF_INET6;
-    inet_pton(AF_INET6, "2001:db8::2", &neigh->ia);
-    ether_addr_pton("00:00:00:00:00:00", &neigh->ea);
-
-    neigh = &neigh_tab[3];
-    neigh->af = AF_INET6;
-    inet_pton(AF_INET6, "2001:db8:1::2", &neigh->ia);
-    ether_addr_pton("00:00:00:00:00:00", &neigh->ea);
-
     return EDPVS_OK;
+}
+
+/*test, remember delete me!!*/
+int ipv6_addr_init(void)
+{
+      /*addr hardcode*/
+    union inet_addr addr;
+    inet_pton(AF_INET6, "2001:db8:1::1", &addr);
+    
+    inet_addr_add(AF_INET6, routes[0].rt6_dev, &addr, 64, NULL,
+                  0, 0 ,0, 0);
+    return EDPVS_OK;	
 }
 
 int route6_term(void)
@@ -149,35 +114,3 @@ int route6_term(void)
     return EDPVS_OK;
 }
 
-/* neighbour codes should not be here ! test only, remove it later. */
-int neigh_output(int af, union inet_addr *nexthop, struct rte_mbuf *mbuf,
-                 struct netif_port *dev)
-{
-    struct ether_hdr *eh;
-    struct neigh *neigh = NULL;
-    int i;
-
-    eh = (void *)rte_pktmbuf_prepend(mbuf, sizeof(struct ether_hdr));
-    if (!eh) {
-        rte_pktmbuf_free(mbuf);
-        return EDPVS_NOROOM;
-    }
-
-    for (i = 0; i < NELEMS(neigh_tab); i++) {
-        if (inet_addr_equal(AF_INET6, nexthop, &neigh_tab[i].ia)) {
-            neigh = &neigh_tab[i];
-            break;
-        }
-    }
-    if (!neigh) {
-        fprintf(stderr, "%s: no neigh info\n", __func__);
-        rte_pktmbuf_free(mbuf);
-        return EDPVS_INVAL;
-    }
-
-    eh->d_addr = neigh->ea;
-    eh->s_addr = dev->addr;
-    eh->ether_type = htons(ETH_P_IPV6);
-
-    return netif_xmit(mbuf, dev);
-}

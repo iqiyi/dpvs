@@ -261,7 +261,6 @@ struct netif_port {
     struct list_head        list;                       /* device list node hashed by id */
     struct list_head        nlist;                      /* device list node hashed by name */
     struct inet_device      *in_ptr;
-    struct inet_device      *in6_ptr;
     struct netif_kni        kni;                        /* kni device */
     union netif_bond        *bond;                      /* bonding conf */
     struct vlan_info        *vlan_info;                 /* VLANs info for real device */
