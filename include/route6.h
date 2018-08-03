@@ -115,8 +115,4 @@ static inline void rt6_fill_cfg(struct dp_vs_route6_conf *cf,
 void install_route6_keywords(void);
 void route6_keyword_value_init(void);
 
-/* neighbour codes should not be here ! test only, remove it later. */
-int neigh_output(int af, union inet_addr *nexthop, struct rte_mbuf *mbuf,
-                 struct netif_port *dev);
-
 #endif /* __DPVS_ROUTE6_H__ */

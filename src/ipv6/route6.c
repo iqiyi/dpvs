@@ -434,20 +434,3 @@ void install_route6_keywords(void)
     install_keyword("method", rt6_method_handler, KW_TYPE_INIT);
     install_rt6_lpm_keywords();
 }
-
-/* neighbour codes should not be here ! test only, remove it later. */
-int neigh_output(int af, union inet_addr *nexthop, struct rte_mbuf *mbuf,
-                 struct netif_port *dev)
-{
-    struct ether_addr temp, *ea1, *ea2;
-
-    /* assume eth header is exist and just need swap src/dst */
-    ea1 = (void *)rte_pktmbuf_prepend(mbuf, sizeof(struct ether_hdr));
-    ea2 = ea1 + 1;
-
-    ether_addr_copy(ea1, &temp);
-    ether_addr_copy(ea2, ea1);
-    ether_addr_copy(&temp, ea2);
-
-    return netif_xmit(mbuf, dev);
-}
