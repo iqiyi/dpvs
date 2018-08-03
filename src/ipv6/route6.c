@@ -114,7 +114,7 @@ static int rt6_add_del(const struct dp_vs_route6_conf *cf)
     assert(cid == rte_get_master_lcore());
 
     /* for master */
-    switch(cf->ops) {
+    switch (cf->ops) {
         case RT6_OPS_ADD:
             if (rt6_get(cf) != NULL)
                 return EDPVS_EXIST;
@@ -188,9 +188,6 @@ static int rt6_msg_process_cb(struct dpvs_msg *msg)
 static bool rt6_conf_check(const struct dp_vs_route6_conf *rt6_cfg)
 {
     if (!rt6_cfg)
-        return false;
-
-    if (rt6_cfg->af != AF_INET6 && rt6_cfg->af != AF_UNSPEC)
         return false;
 
     if (rt6_cfg->ops < RT6_OPS_GET || rt6_cfg->ops > RT6_OPS_FLUSH)
@@ -295,7 +292,8 @@ static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
 }
 
 static int rt6_sockopt_get(sockoptid_t opt, const void *in, size_t inlen,
-        void **out, size_t *outlen) {
+        void **out, size_t *outlen)
+{
     *out = g_rt6_method->rt6_dump(in, outlen);
     if (*out == NULL)
         *outlen = 0;

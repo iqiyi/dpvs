@@ -16,13 +16,6 @@
  *
  */
 
-/* Notice:
- *      The DPDK LPM6 API 'rte_lpm6_delete' is very slow because
- *      it memset a big memory(several millions of bytes) within
- *      its implementation. If dpvs is used under the environment
- *      that routes deletion is frequent, LPM6 is not recommended!
- */
-
 #include <assert.h>
 #include "route6.h"
 #include "route6_hlist.h"
@@ -52,7 +45,6 @@ struct rt6_htable
 };
 
 static RTE_DEFINE_PER_LCORE(struct rt6_htable, dpvs_rt6_htable);
-
 
 static int rt6_hlist_setup_lcore(void *arg)
 {
@@ -273,7 +265,7 @@ static int rt6_hlist_del_lcore(const struct dp_vs_route6_conf *cf)
 }
 
 static inline bool
-    rt6_hlist_flow_match(const struct route6 *rt6, const struct flow6 *fl6)
+rt6_hlist_flow_match(const struct route6 *rt6, const struct flow6 *fl6)
 {
     if (rt6->rt6_dst.plen < 128) {
         if (!ipv6_prefix_equal(&fl6->fl6_daddr, &rt6->rt6_dst.addr, rt6->rt6_dst.plen))
@@ -309,7 +301,6 @@ static struct route6 *rt6_hlist_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
         }
     }
 
-    /* miss */
     return NULL;
 }
 

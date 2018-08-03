@@ -38,12 +38,11 @@ enum {
 };
 
 struct dp_vs_route6_conf {
-    int                 af;
     int                 ops;
     struct rt6_prefix   dst;
     struct rt6_prefix   src;
     struct rt6_prefix   prefsrc;
-    char                ifname[64];
+    char                ifname[IFNAMSIZ];
     struct in6_addr     gateway;
     uint32_t            mtu;
     uint32_t            flags;
