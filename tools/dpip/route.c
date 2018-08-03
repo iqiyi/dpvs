@@ -23,6 +23,7 @@
 #include "dpip.h"
 #include "conf/route.h"
 #include "conf/route6.h"
+#include "linux_ipv6.h"
 #include "sockopt.h"
 
 static void route_help(void)
@@ -114,12 +115,6 @@ static const char *flags_itoa(uint32_t flags)
     return flags_buf;
 }
 
-static inline bool ipv6_addr_any(const struct in6_addr *a)
-{
-    return (a->s6_addr32[0] | a->s6_addr32[1] |
-            a->s6_addr32[2] | a->s6_addr32[3]) == 0;
-}
-
 static void route4_dump(const struct dp_vs_route_conf *route)
 {
     char dst[64], via[64], src[64];
@@ -155,17 +150,17 @@ static void route6_dump(const struct dp_vs_route6_conf *rt6_cfg)
 
     if (ipv6_addr_any(&rt6_cfg->dst.addr) && rt6_cfg->dst.plen == 0) {
         snprintf(dst, sizeof(dst), "%s", "default");
-        printf("%s %s", af_itoa(rt6_cfg->af), dst);
+        printf("%s %s", af_itoa(AF_INET6), dst);
     } else {
-        inet_ntop(rt6_cfg->af, (union inet_addr*)&rt6_cfg->dst.addr, dst, sizeof(dst));
-        printf("%s %s/%d", af_itoa(rt6_cfg->af), dst, rt6_cfg->dst.plen);
+        inet_ntop(AF_INET6, (union inet_addr*)&rt6_cfg->dst.addr, dst, sizeof(dst));
+        printf("%s %s/%d", af_itoa(AF_INET6), dst, rt6_cfg->dst.plen);
     }
 
     if (!ipv6_addr_any(&rt6_cfg->gateway))
-        printf(" via %s", inet_ntop(rt6_cfg->af, (union inet_addr*)&rt6_cfg->gateway,
+        printf(" via %s", inet_ntop(AF_INET6, (union inet_addr*)&rt6_cfg->gateway,
                     gateway, sizeof(gateway)) ? gateway : "::");
     if (!ipv6_addr_any(&rt6_cfg->src.addr))
-        printf(" src %s", inet_ntop(rt6_cfg->af, (union inet_addr*)&rt6_cfg->src.addr,
+        printf(" src %s", inet_ntop(AF_INET6, (union inet_addr*)&rt6_cfg->src.addr,
                     src, sizeof(src)) ? src : "::");
     printf(" dev %s", rt6_cfg->ifname);
 
@@ -315,15 +310,15 @@ static int route4_parse_args(struct dpip_conf *conf,
 static int route6_parse_args(struct dpip_conf *conf, 
                             struct dp_vs_route6_conf *rt6_cfg)
 {
+    int af;
     char *prefix = NULL;
 
     memset(rt6_cfg, 0, sizeof(*rt6_cfg));
-    rt6_cfg->af = conf->af;
 
     while (conf->argc > 0) {
         if (strcmp(conf->argv[0], "via") == 0) {
             NEXTARG_CHECK(conf, "via");
-            if (inet_pton_try(&rt6_cfg->af, conf->argv[0],
+            if (inet_pton_try(&af, conf->argv[0],
                         (union inet_addr *)&rt6_cfg->gateway) <= 0)
                 return -1;
         } else if (strcmp(conf->argv[0], "dev") == 0) {
@@ -346,7 +341,7 @@ static int route6_parse_args(struct dpip_conf *conf,
                 rt6_cfg->flags |= RTF_FORWARD;
         } else if (strcmp(conf->argv[0], "src") == 0) {
             NEXTARG_CHECK(conf, "src");
-            if (inet_pton_try(&rt6_cfg->af, conf->argv[0],
+            if (inet_pton_try(&af, conf->argv[0],
                         (union inet_addr *)&rt6_cfg->src.addr) <= 0)
                 return -1;
         } else if (strcmp(conf->argv[0], "metric") == 0) {
@@ -385,8 +380,6 @@ static int route6_parse_args(struct dpip_conf *conf,
     /* PREFIX */
     if (strcmp(prefix, "default") == 0) {
         memset(&rt6_cfg->dst.addr, 0, sizeof(rt6_cfg->dst.addr));
-        if (rt6_cfg->af == AF_UNSPEC)
-            rt6_cfg->af = AF_INET6;
     } else {
         char *addr, *plen;
 
@@ -394,16 +387,11 @@ static int route6_parse_args(struct dpip_conf *conf,
         if ((plen = strchr(addr, '/')) != NULL)
             *plen++ = '\0';
 
-        if (inet_pton_try(&rt6_cfg->af, prefix,
+        if (inet_pton_try(&af, prefix,
                     (union inet_addr*)&rt6_cfg->dst.addr) <= 0)
             return -1;
 
         rt6_cfg->dst.plen = plen ? atoi(plen) : 0;
-    }
-
-    if (rt6_cfg->af != AF_INET6) {
-        fprintf(stderr, "invalid family.\n");
-        return -1;
     }
 
     if (!rt6_cfg->dst.plen && (strcmp(prefix, "default") != 0))

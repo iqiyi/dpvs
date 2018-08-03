@@ -21,6 +21,7 @@
 #ifndef __DPVS_ROUTE6_H__
 #define __DPVS_ROUTE6_H__
 
+#include <net/if.h>
 #include "flow.h"
 #include "conf/route6.h"
 
@@ -101,7 +102,6 @@ static inline void rt6_fill_cfg(struct dp_vs_route6_conf *cf,
 {
     memset(cf, 0, sizeof(struct dp_vs_route6_conf));
 
-    cf->af = AF_INET6;
     cf->dst = rt6->rt6_dst;
     cf->src = rt6->rt6_src;
     cf->prefsrc = rt6->rt6_prefsrc;
