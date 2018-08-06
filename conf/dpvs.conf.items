@@ -221,3 +221,13 @@ ipvs_defs {
 sa_pool {
     <init> pool_hash_size   16  <16, 1-128>
 }
+
+route6 {
+    <init> method       "hlist"     <"hlist"/"lpm">
+    lpm {
+        <init> lpm6_max_rules       1024    <1024, 16-2147483647>
+        <init> lpm6_num_tbl8s       65536   <65536, 16-2147483647>
+        <init> rt6_array_size       65536   <65536, 16-2147483647>
+        <init> rt6_hash_bucket      256     <256, 2-2147483647>
+    }
+}
