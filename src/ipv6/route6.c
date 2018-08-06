@@ -271,46 +271,6 @@ static bool rt6_conf_check(const struct dp_vs_route6_conf *rt6_cfg)
     return true;
 }
 
-#ifdef DPVS_ROUTE6_DEBUG
-static void rt6_test(const struct dp_vs_route6_conf *rt6_cfg)
-{
-    struct route6 *rt6_input, *rt6_output;
-    struct flow6 fl6;
-    char dst[64], src[64];
-    char rt6_input_prefix[64], rt6_output_prefix[64];
-
-    memset(dst, 0, sizeof(dst));
-    memset(src, 0, sizeof(src));
-    memset(rt6_input_prefix, 0, sizeof(rt6_input_prefix));
-    memset(rt6_output_prefix, 0, sizeof(rt6_output_prefix));
-
-    memcpy(&fl6.fl6_daddr, &rt6_cfg->dst.addr, sizeof(struct in6_addr));
-    memcpy(&fl6.fl6_saddr, &rt6_cfg->src.addr, sizeof(struct in6_addr));
-    fl6.fl6_oif = netif_port_get_by_name(rt6_cfg->ifname);
-
-    inet_ntop(AF_INET6, &fl6.fl6_daddr, dst, sizeof(dst));
-    inet_ntop(AF_INET6, &fl6.fl6_saddr, src, sizeof(src));
-
-    rt6_input = route6_input(NULL, &fl6);
-    if (rt6_input)
-        dump_rt6_prefix(&rt6_input->rt6_dst, rt6_input_prefix, sizeof(rt6_input_prefix));
-    else
-        snprintf(rt6_input_prefix, sizeof(rt6_input_prefix), "%s", "miss");
-
-    rt6_output = route6_output(NULL, &fl6);
-    if (rt6_output)
-        dump_rt6_prefix(&rt6_output->rt6_dst, rt6_output_prefix, sizeof(rt6_output_prefix));
-    else
-        snprintf(rt6_output_prefix, sizeof(rt6_output_prefix), "%s", "miss");
-
-    RTE_LOG(INFO, RT6, "[%d] fl6(daddr:%s, saddr: %s, oif=%s) -> "
-            "in(%s dev %s), out(%s dev %s)\n",
-            rte_lcore_id(), dst, src, fl6.fl6_oif->name,
-            rt6_input_prefix, rt6_input ? rt6_input->rt6_dev->name : "xx",
-            rt6_output_prefix, rt6_output ? rt6_output->rt6_dev->name : "xx");
-}
-#endif
-
 static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
 {
     struct in6_addr addr6;
@@ -344,10 +304,6 @@ static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
         case SOCKOPT_SET_ROUTE6_ADD_DEL:
             return rt6_add_del(&rt6_cfg);
         case SOCKOPT_SET_ROUTE6_FLUSH:
-#ifdef DPVS_ROUTE6_DEBUG
-            RTE_LOG(INFO, RT6, "test route6 lookup using flush!\n");
-            rt6_test(&rt6_cfg);
-#endif
             return EDPVS_NOTSUPP;
         default:
             return EDPVS_NOTSUPP;
