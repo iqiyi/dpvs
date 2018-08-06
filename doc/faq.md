@@ -171,7 +171,7 @@ There're several ways:
 * `/etc/dpvs.conf`
 
 You can modify `dpvs.conf`, and refer `conf/xxx.sample`. Some parameters are configurable during
- run-time (on-fly), while others are configurable in initialization stage only. Pls use `kill -SIGHUP <DPVS-PID>` to reload the former on-fly kind of parameters in `dpvs.conf`.
+ run-time (on-fly), while others are configurable in initialization stage only. Refer to `conf/dpvs.conf.items` for all available parameters and corresponding type, default value and supported value range. Pls use `kill -SIGHUP <DPVS-PID>` to reload the former on-fly kind of parameters in `dpvs.conf`.
 
 * `ipvsadm`, `keepalived`, `quagga`/`ospfd`/`bgpd`
 
