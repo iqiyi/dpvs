@@ -68,7 +68,7 @@ To address the issue director crash or getting upgraded, some implementation int
 
 As I know, some L4 LB implemented "session sharing" or "session synchronization", they are configuring same LIPs for each LB director. And each LIP is confgured for one CPU core. Both cases are quite different for DPVS implementation and deployment.
 
-On the other hand, for the high availability of Real Servers, DPVS laverage `keepalived` for health check on RS, both TCP/UDP services can be checked, you can also write your own checking scripts. For more info about health-check, pls refer `LVS`'s document.
+On the other hand, for the high availability of Real Servers, DPVS leverage `keepalived` for health check on RS, both TCP/UDP services can be checked, you can also write your own checking scripts. For more info about health-check, pls refer `LVS`'s document.
 
 <a id="toa" />
 
@@ -104,7 +104,7 @@ Yes, it do support UDP. In order to get real client IP/port in FullNAT mode, you
 
 No, since connection table is per-lcore (per-CPU), and RSS/fdir are used for FNAT. By default RSS mode is TCP and fdir also use L4 info `<lip, lport>`. Consider IP fragment do not have L4 info, it need reassemble first and re-schedule the pkt to **correct** lcore, which the 5-tuple flow (connection) belongs to.
 
-IMay be someday in the future, we will support "pkt re-schedule" on lcores or use L3 (IP) info only for `RSS`/`FDIR`, then we may support fragment. But even we support fragment, it may hurt the performance (reassemble, re-schedule effort) or security.
+May be someday in the future, we will support "pkt re-schedule" on lcores or use L3 (IP) info only for `RSS`/`FDIR`, then we may support fragment. But even we support fragment, it may hurt the performance (reassemble, re-schedule effort) or security.
 
 Actually, IPv4 fragment is not recommended, while IPv6 even not support fragment by fixed header, and do not allow re-fragment on middle-boxes. The applications, especially for the datagram-oriented apps, like UDP-apps, should perform PMTU discover algorithm to avoid fragment. TCP is sending sliced *segments*, notifying MSS to peer side and *PMTU discover* is built-in, TCP-app should not need worry about fragment.
 
@@ -112,7 +112,7 @@ Actually, IPv4 fragment is not recommended, while IPv6 even not support fragment
 
 ### How to launch DPVS on Virtual Machine ?
 
-Pls refer the `doc/tutorial.md`, there's an exmaple to run DPVS on `Ubuntu`. Basically, you may need reduce memory usage. And for VM's NIC, `fdir` is not supported, so if you want to config FullNAT/SNAT mode, you have to configure **only one** worker (cpu), and another CPU core for master.
+Pls refer the `doc/tutorial.md`, there's an exmaple to run DPVS on `Ubuntu`. Basically, you may need to reduce memory usage. And for VM's NIC, `fdir` is not supported, so if you want to config FullNAT/SNAT mode, you have to configure **only one** worker (cpu), and another CPU core for master.
 
 <a id="monitor" />
 
@@ -130,7 +130,7 @@ For example, to get the throughput for each VIP/RS, you can use `ipvsadm -ln --s
 
 Note `--rate` option of `ipvsadm` is not supported.
 
-It may need write scripts to parse the outputs or integrated with your local admin-system.
+It may need to write scripts to parse the outputs or integrated with your local admin-system.
 
 <a id="support" />
 
