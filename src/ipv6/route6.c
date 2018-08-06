@@ -23,9 +23,21 @@
 #include "route6_hlist.h"
 #include "parser/parser.h"
 
+#define this_rt6_dustbin        (RTE_PER_LCORE(rt6_dbin))
+#define RT6_RECYCLE_TIME_DEF    10
+
 static struct route6_method *g_rt6_method = NULL;
 static char g_rt6_name[RT6_METHOD_NAME_SZ] = "hlist";
 struct list_head g_rt6_list;
+
+/* route6 recycle list */
+struct rt6_dustbin {
+    struct list_head routes;
+    struct dpvs_timer tm;
+};
+
+static int g_rt6_recycle_time = RT6_RECYCLE_TIME_DEF;
+static RTE_DEFINE_PER_LCORE(struct rt6_dustbin, rt6_dbin);
 
 int route6_method_register(struct route6_method *rt6_mtd)
 {
@@ -62,13 +74,64 @@ static struct route6_method *rt6_method_get(const char *name)
     return NULL;
 }
 
+static int rt6_recycle(void *arg)
+{
+    struct route6 *rt6, *next;
+#ifdef DPVS_ROUTE6_DEBUG
+    char buf[64];
+#endif
+    list_for_each_entry_safe(rt6, next, &this_rt6_dustbin.routes, hnode) {
+        if (rte_atomic32_read(&rt6->refcnt) <= 1) {
+            list_del(&rt6->hnode);
+#ifdef DPVS_ROUTE6_DEBUG
+            dump_rt6_prefix(&rt6->rt6_dst, buf, sizeof(buf));
+            RTE_LOG(DEBUG, RT6, "[%d] %s: delete dustbin route %s->%s\n", rte_lcore_id(),
+                    __func__, buf, rt6->rt6_dev ? rt6->rt6_dev->name : "");
+#endif
+            rte_free(rt6);
+        }
+    }
+
+    return EDPVS_OK;
+}
+
+void route6_free(struct route6 *rt6)
+{
+    if (unlikely(rte_atomic32_read(&rt6->refcnt) > 1))
+        list_add_tail(&rt6->hnode, &this_rt6_dustbin.routes);
+    else
+        rte_free(rt6);
+}
+
 static int rt6_setup_lcore(void *arg)
 {
+    int err;
+    bool global;
+    struct timeval tv;
+
+    tv.tv_sec = g_rt6_recycle_time,
+    tv.tv_usec = 0,
+    global = (rte_lcore_id() == rte_get_master_lcore());
+
+    INIT_LIST_HEAD(&this_rt6_dustbin.routes);
+    err = dpvs_timer_sched_period(&this_rt6_dustbin.tm, &tv, rt6_recycle, NULL, global);
+    if (err != EDPVS_OK)
+        return err;
+
     return g_rt6_method->rt6_setup_lcore(arg);
 }
 
 static int rt6_destroy_lcore(void *arg)
 {
+    struct route6 *rt6, *next;
+
+    list_for_each_entry_safe(rt6, next, &this_rt6_dustbin.routes, hnode) {
+        if (rte_atomic32_read(&rt6->refcnt) <= 1) { /* need judge refcnt here? */
+            list_del(&rt6->hnode);
+            rte_free(rt6);
+        }
+    }
+
     return g_rt6_method->rt6_destroy_lcore(arg);
 }
 
@@ -84,7 +147,7 @@ struct route6 *route6_output(struct rte_mbuf *mbuf, struct flow6 *fl6)
 
 int route6_put(struct route6 *rt)
 {
-    //rte_atomic32_dec(&rt->refcnt);;
+    rte_atomic32_dec(&rt->refcnt);
     return EDPVS_OK;
 }
 

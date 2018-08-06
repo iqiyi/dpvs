@@ -63,7 +63,8 @@ static int rt6_hlist_destroy_lcore(void *arg)
     {
         for (i = 0; i < hlist->nbuckets; i++) {
             list_for_each_entry_safe(rt6, rnext, &hlist->hlist[i], hnode) {
-                rte_free(rt6);
+                list_del(&rt6->hnode);
+                route6_free(rt6);
                 hlist->nroutes--;
                 this_rt6_nroutes--;
             }
@@ -212,6 +213,7 @@ static int rt6_hlist_add_lcore(const struct dp_vs_route6_conf *cf)
     }
 
     rt6_fill_with_cfg(rt6, cf);
+    rte_atomic32_set(&rt6->refcnt, 1);
 
     hashkey = rt6_hlist_hashkey(&cf->dst.addr, cf->dst.plen, hlist->nbuckets);
     list_add_tail(&rt6->hnode, &hlist->hlist[hashkey]);
@@ -246,7 +248,7 @@ static int rt6_hlist_del_lcore(const struct dp_vs_route6_conf *cf)
             rte_lcore_id(), __func__, buf, cf->ifname);
 #endif
     list_del(&rt6->hnode);
-    rte_free(rt6);
+    route6_free(rt6);
 
     assert(hlist != NULL);
     hlist->nroutes--;
@@ -296,8 +298,10 @@ static struct route6 *rt6_hlist_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
     list_for_each_entry(hlist, &this_rt6_htable, node) {
         hashkey = rt6_hlist_hashkey(&fl6->fl6_daddr, hlist->plen, hlist->nbuckets);
         list_for_each_entry(rt6, &hlist->hlist[hashkey], hnode) {
-            if (rt6_hlist_flow_match(rt6, fl6))
+            if (rt6_hlist_flow_match(rt6, fl6)) {
+                rte_atomic32_inc(&rt6->refcnt);
                 return rt6;
+            }
         }
     }
 
