@@ -167,11 +167,13 @@ rt6_hash_fail:
 static int rt6_lpm_destroy_lcore(void *arg)
 {
     int i;
-    struct route6 *hnode;
+    struct route6 *entry;
 
     for (i = 0; i < g_rt6_hash_bucket; i++) {
-        list_for_each_entry(hnode, &this_rt6_hash[i], hnode)
-            rte_free(hnode);
+        list_for_each_entry(entry, &this_rt6_hash[i], hnode) {
+            list_del(&entry->hnode);
+            route6_free(entry);
+        }
     }
 
     if (this_rt6_array) {
@@ -202,7 +204,6 @@ static struct route6 *rt6_lpm_lookup(const struct in6_addr *addr)
 
     assert(idx >= 0 && idx < g_rt6_array_size);
     rt6 = this_rt6_array->entries[idx];
-    //rte_atomic32_inc(&rt6->refcnt);
 
     return rt6;
 }
@@ -222,6 +223,7 @@ static struct route6 *rt6_lpm_input(struct rte_mbuf *mbuf, struct flow6 *fl6)
             && !ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr))
         goto miss;
 
+    rte_atomic32_inc(&rt6->refcnt);
     return rt6;
 
 miss:
@@ -245,6 +247,7 @@ static struct route6 *rt6_lpm_output(struct rte_mbuf *mbuf, struct flow6 *fl6)
                 && !ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr))
         goto miss;
 
+    rte_atomic32_inc(&rt6->refcnt);
     return rt6;
 
 miss:
@@ -271,7 +274,10 @@ static struct route6* rt6_lpm_get(const struct dp_vs_route6_conf *rt6_cfg)
         }
     }
 
-    return this_rt6_default;
+    if (rt6_cfg->dst.plen == 0 && ipv6_addr_any(&rt6_cfg->dst.addr))
+        return this_rt6_default;
+
+    return NULL;
 }
 
 static int rt6_add_lcore_default(const struct dp_vs_route6_conf *rt6_cfg)
@@ -287,6 +293,7 @@ static int rt6_add_lcore_default(const struct dp_vs_route6_conf *rt6_cfg)
 
     /* 'rt6_cfg' has been verified by 'rt6_default' */
     rt6_fill_with_cfg(entry, rt6_cfg);
+    rte_atomic32_set(&entry->refcnt, 1);
     this_rt6_default = entry;
 
 #ifdef DPVS_RT6_DEBUG
@@ -304,7 +311,7 @@ static int rt6_del_lcore_default(const struct dp_vs_route6_conf *rt6_cfg)
         return EDPVS_NOTEXIST;
 
     /* 'rt6_cfg' has been verified by 'rt6_default' */
-    rte_free(this_rt6_default);
+    route6_free(this_rt6_default);
     this_rt6_default = NULL;
 
 #ifdef DPVS_RT6_DEBUG
@@ -337,6 +344,7 @@ static int rt6_lpm_add_lcore(const struct dp_vs_route6_conf *rt6_cfg)
         goto rt6_add_fail;
     }
     rt6_fill_with_cfg(entry, rt6_cfg);
+    rte_atomic32_set(&entry->refcnt, 1);
 
     ret = rte_lpm6_add(this_lpm6_struct, (uint8_t*)&entry->rt6_dst.addr,
             (uint8_t)entry->rt6_dst.plen, idx);
@@ -345,7 +353,6 @@ static int rt6_lpm_add_lcore(const struct dp_vs_route6_conf *rt6_cfg)
         goto rt6_lpm_fail;
     }
 
-    //rte_atomic32_set(&entry->refcnt, 1);
     entry->arr_idx = idx;
     this_rt6_array->num++;
     this_rt6_array->cursor = idx;
@@ -410,7 +417,7 @@ static int rt6_lpm_del_lcore(const struct dp_vs_route6_conf *rt6_cfg)
             list_del(&entry->hnode);
             this_rt6_array->entries[entry->arr_idx] = NULL;
             this_rt6_array->num--;
-            rte_free(entry);
+            route6_free(entry);
             /* no further search */
             break;
         }

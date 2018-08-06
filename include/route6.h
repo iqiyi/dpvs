@@ -41,7 +41,7 @@ struct route6 {
     /* private members */
     uint32_t            arr_idx;    /* lpm6 array index */
     struct list_head    hnode;      /* hash list node */
-    //rte_atomic32_t    refcnt;     /* no needed for per-lcore routes */
+    rte_atomic32_t      refcnt;
 };
 
 struct route6 *route6_input(struct rte_mbuf *mbuf, struct flow6 *fl6);
@@ -50,6 +50,9 @@ int route6_put(struct route6 *rt);
 
 int route6_init(void);
 int route6_term(void);
+
+/* for route6_xxx.c only */
+void route6_free(struct route6*);
 
 static inline int dump_rt6_prefix(const struct rt6_prefix *rt6_p, char *buf, int len)
 {
