@@ -44,6 +44,8 @@ enum {
     (((tm_spec).tv_sec % 100) * 1000000 + \
      ((tm_spec).tv_nsec / 1000))
 
+#define IPV6_HDR_LEN 40
+
 /* now IPv4 only */
 struct tcpopt_addr {
     uint8_t opcode;
@@ -85,7 +87,7 @@ struct tcp_state {
 
 struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf);
 void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th);
-void tcp6_send_csum(struct ipv6_hdr *ip6h, struct tcphdr *th);
+void tcp6_send_csum(struct ipv6_hdr *iph, struct tcphdr *th);
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir);
 void install_proto_tcp_keywords(void);
 void tcp_keyword_value_init(void);
