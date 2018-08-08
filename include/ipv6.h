@@ -83,7 +83,8 @@ int ipv6_unregister_protocol(struct inet6_protocol *prot,
 
 int ipv6_stats_cpu(struct inet_stats *stats);
 
-void ipv6_conf_install(void);
+void install_ipv6_keywords(void);
+void ipv6_keyword_value_init(void);
 
 /* control plane */
 int ipv6_ctrl_init(void);

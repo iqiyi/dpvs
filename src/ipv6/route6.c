@@ -25,6 +25,8 @@
 
 #define this_rt6_dustbin        (RTE_PER_LCORE(rt6_dbin))
 #define RT6_RECYCLE_TIME_DEF    10
+#define RT6_RECYCLE_TIME_MAX    36000
+#define RT6_RECYCLE_TIME_MIN    1
 
 static struct route6_method *g_rt6_method = NULL;
 static char g_rt6_name[RT6_METHOD_NAME_SZ] = "hlist";
@@ -435,19 +437,43 @@ static void rt6_method_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
+static void rt6_recycle_time_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    int recycle_time;
+
+    assert(str);
+    recycle_time = atoi(str);
+    if (recycle_time > RT6_RECYCLE_TIME_MAX || recycle_time < RT6_RECYCLE_TIME_MIN) {
+        RTE_LOG(WARNING, RT6, "invalid ipv6:route:recycle_time %s, using default %d\n",
+                str, RT6_RECYCLE_TIME_DEF);
+        g_rt6_recycle_time = RT6_RECYCLE_TIME_DEF;
+    } else {
+        RTE_LOG(INFO, RT6, "ipv6:route:recycle_time = %d\n", recycle_time);
+        g_rt6_recycle_time = recycle_time;
+    }
+
+    FREE_PTR(str);
+}
+
 void route6_keyword_value_init(void)
 {
     if (dpvs_state_get() == DPVS_STATE_INIT) {
         /* KW_TYPE_INIT keyword */
         snprintf(g_rt6_name, sizeof(g_rt6_name), "%s", "hlist");
     }
+    /* KW_TYPE_NORMAL keyword */
+    g_rt6_recycle_time = RT6_RECYCLE_TIME_DEF;
 
     route6_lpm_keyword_value_init();
 }
 
 void install_route6_keywords(void)
 {
-    install_keyword_root("route6", NULL);
+    install_keyword("route6", NULL, KW_TYPE_NORMAL);
+    install_sublevel();
     install_keyword("method", rt6_method_handler, KW_TYPE_INIT);
+    install_keyword("recycle_time", rt6_recycle_time_handler, KW_TYPE_NORMAL);
     install_rt6_lpm_keywords();
+    install_sublevel_end();
 }

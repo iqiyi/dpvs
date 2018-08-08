@@ -137,12 +137,29 @@ neigh_defs {
 
 ! dpvs ipv4 config
 ipv4_defs {
+    forwarding                 off      <off, on/off>
     <init> default_ttl         64       <64, 0-255>
     fragment {
         <init> bucket_number   4096     <4096, 32-65536>
         <init> bucket_entries  16       <16, 1-256>
         <init> max_entries     409600   <4096, 32-65536>
         <init> ttl             1        <1, 1-255>
+    }
+}
+
+! dpvs ipv6 config
+ipv6_defs {
+    disable                 off         <off, on/off>
+    forwarding              off         <off, on/off>
+    route6 {
+        <init> method       "hlist"     <"hlist"/"lpm">
+        recycle_time        10          <10, 1-36000>
+        lpm {
+            <init> lpm6_max_rules       1024    <1024, 16-2147483647>
+            <init> lpm6_num_tbl8s       65536   <65536, 16-2147483647>
+            <init> rt6_array_size       65536   <65536, 16-2147483647>
+            <init> rt6_hash_bucket      256     <256, 2-2147483647>
+        }
     }
 }
 
@@ -222,12 +239,3 @@ sa_pool {
     <init> pool_hash_size   16  <16, 1-128>
 }
 
-route6 {
-    <init> method       "hlist"     <"hlist"/"lpm">
-    lpm {
-        <init> lpm6_max_rules       1024    <1024, 16-2147483647>
-        <init> lpm6_num_tbl8s       65536   <65536, 16-2147483647>
-        <init> rt6_array_size       65536   <65536, 16-2147483647>
-        <init> rt6_hash_bucket      256     <256, 2-2147483647>
-    }
-}
