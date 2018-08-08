@@ -22,7 +22,9 @@
 #define __LINUX_IPV6_H__
 #include <stdbool.h>
 #include <netinet/in.h>
+#include <linux/if_addr.h>
 #include "common.h"
+#include "inetaddr.h"
 
 #define IPV6_MAXPLEN		65535
 #define IPV6_MIN_MTU        1280
@@ -76,6 +78,8 @@
 
 #define IPV6_ADDR_MAPPED	0x1000U
 
+#define IPV6_ADDR_RESERVED	0x2000U	/* reserved address space */
+
 /*
  *	Addr scopes
  */
@@ -97,6 +101,43 @@
 	((a)->s6_addr[1] & 0x20)
 #define IPV6_ADDR_MC_FLAG_RENDEZVOUS(a)	\
 	((a)->s6_addr[1] & 0x40)
+
+/*
+ * choose an appropriate source address (RFC3484)
+ */
+enum {
+	IPV6_SADDR_RULE_INIT = 0,
+	IPV6_SADDR_RULE_LOCAL,
+	IPV6_SADDR_RULE_SCOPE,
+	IPV6_SADDR_RULE_PREFERRED,
+#ifdef CONFIG_IPV6_MIP6
+	IPV6_SADDR_RULE_HOA,
+#endif
+	IPV6_SADDR_RULE_OIF,
+	IPV6_SADDR_RULE_LABEL,
+#ifdef CONFIG_IPV6_PRIVACY
+	IPV6_SADDR_RULE_PRIVACY,
+#endif
+	IPV6_SADDR_RULE_ORCHID,
+	IPV6_SADDR_RULE_PREFIX,
+	IPV6_SADDR_RULE_MAX
+};
+
+/* struct help for src select */
+struct ipv6_saddr_score {
+    int                rule;
+    int                addr_type;
+    struct inet_ifaddr *ifa;
+    bool               scorebits[IPV6_SADDR_RULE_MAX];
+    int                scopedist;
+    int                matchlen;
+};
+
+struct ipv6_saddr_dst {
+    const struct in6_addr  *addr;
+    struct inet_device     *idev;
+    int                    scope;
+};
 
 /**
  * from linux:net/ipv6/addrconf_core.c
@@ -367,6 +408,223 @@ static inline bool ipv6_addr_is_solict_mult(const struct in6_addr *addr)
 		addr->s6_addr32[1] |
 		(addr->s6_addr32[2] ^ htonl(0x00000001)) |
 		(addr->s6_addr[12] ^ 0xff)) == 0;
+}
+
+static inline int fls(int x)
+{
+	int r = 32;
+ 
+	if (!x)
+		return 0;
+	if (!(x & 0xffff0000u)) {
+		x <<= 16;
+		r -= 16;
+	}
+	if (!(x & 0xff000000u)) {
+		x <<= 8;
+		r -= 8;
+	}
+	if (!(x & 0xf0000000u)) {
+		x <<= 4;
+		r -= 4;
+	}
+	if (!(x & 0xc0000000u)) {
+		x <<= 2;
+		r -= 2;
+	}
+	if (!(x & 0x80000000u)) {
+		x <<= 1;
+		r -= 1;
+	}
+	return r;
+}
+
+static inline int __ipv6_addr_diff(const void *token1, const void *token2, int addrlen)
+{
+	const __be32 *a1 = token1, *a2 = token2;
+	int i;
+
+	addrlen >>= 2;
+
+	for (i = 0; i < addrlen; i++) {
+		__be32 xb = a1[i] ^ a2[i];
+		if (xb)
+			return i * 32 + 32 - fls(ntohl(xb));
+	}
+
+	/*
+	 *	we should *never* get to this point since that 
+	 *	would mean the addrs are equal
+	 *
+	 *	However, we do get to it 8) And exacly, when
+	 *	addresses are equal 8)
+	 *
+	 *	ip route add 1111::/128 via ...
+	 *	ip route add 1111::/64 via ...
+	 *	and we are here.
+	 *
+	 *	Ideally, this function should stop comparison
+	 *	at prefix length. It does not, but it is still OK,
+	 *	if returned value is greater than prefix length.
+	 *					--ANK (980803)
+	 */
+	return (addrlen << 5);
+}
+
+static inline int ipv6_addr_diff(const struct in6_addr *a1, const struct in6_addr *a2)
+{
+	return __ipv6_addr_diff(a1, a2, sizeof(struct in6_addr));
+}
+
+static inline int ipv6_saddr_preferred(int type)
+{
+	if (type & (IPV6_ADDR_MAPPED|IPV6_ADDR_COMPATv4|
+		    IPV6_ADDR_LOOPBACK|IPV6_ADDR_RESERVED))
+		return 1;
+	return 0;
+}
+
+/*functions below were edited from addrconf.c*/
+
+/*
+ * 1. Prefer same address. (i.e. destination is local machine)
+ * 2. Prefer appropriate scope. (i.e. smallest scope shared with the destination) 
+ * 3. Avoid deprecated addresses. 
+ * 4. Prefer home addresses. (not support here!)
+ * 5. Prefer outgoing interface. (i.e. prefer an address on the interface we’re sending out of) 
+ * 6. Prefer matching label. (not support here!)
+ * 7. Prefer public addresses. (not support here)
+ * 8. Use longest matching prefix.
+ */
+static inline int ipv6_get_saddr_eval(struct ipv6_saddr_score *score,
+                                      struct ipv6_saddr_dst *dst,
+                                      int i)
+{
+    int ret; 
+
+    if (i <= score->rule) {
+        switch (i) {
+            case IPV6_SADDR_RULE_SCOPE:
+                ret = score->scopedist;
+                break;
+            case IPV6_SADDR_RULE_PREFIX:
+                ret = score->matchlen;
+                break;
+            default:
+                ret = score->scorebits[i];
+        }    
+        goto out; 
+    }    
+
+    switch (i) {
+    case IPV6_SADDR_RULE_INIT:
+        /* Rule 0: remember if hiscore is not ready yet */
+        ret = !!score->ifa;
+        break;
+    case IPV6_SADDR_RULE_LOCAL:
+        /* Rule 1: Prefer same address */
+        ret = ipv6_addr_equal(&score->ifa->addr.in6, dst->addr);
+        break;
+    case IPV6_SADDR_RULE_SCOPE:
+        /* Rule 2: Prefer appropriate scope */
+        ret = __ipv6_addr_src_scope(score->addr_type);
+        if (ret >= dst->scope)
+            ret = -ret;
+        else
+            ret -= 128;
+        score->scopedist = ret;
+        break;
+    case IPV6_SADDR_RULE_PREFERRED:
+        /* Rule 3: Avoid deprecated and optimistic addresses */
+        ret = ipv6_saddr_preferred(score->addr_type) ||
+              !(score->ifa->flags & (IFA_F_DEPRECATED|IFA_F_OPTIMISTIC));
+        break;
+    case IPV6_SADDR_RULE_OIF:
+        /* Rule 5: Prefer outgoing interface */
+        ret = (!dst->idev || dst->idev == score->ifa->idev);
+        break;
+    case IPV6_SADDR_RULE_ORCHID:
+        /* Rule 8-: Prefer ORCHID vs ORCHID or
+         * non-ORCHID vs non-ORCHID
+         */
+        ret = !(ipv6_addr_orchid(&score->ifa->addr.in6) ^
+            ipv6_addr_orchid(dst->addr));
+        break;
+    case IPV6_SADDR_RULE_PREFIX:
+        /* Rule 8: Use longest matching prefix */
+        score->matchlen = ret = ipv6_addr_diff(&score->ifa->addr.in6,
+                                dst->addr);
+        break;
+    default:
+        ret = 0;
+    }
+
+    if (ret)
+        score->scorebits[i] = 1;
+    score->rule = i;
+
+out:
+    return ret;
+}
+
+/* call me by lock */
+static inline int ipv6_addr_select(struct inet_device *idev,
+                                   const union inet_addr *daddr, 
+                                   union inet_addr *saddr)
+{
+    struct ipv6_saddr_score scores[2]; 
+    struct ipv6_saddr_score *score = &scores[0], *hiscore = &scores[1];
+    struct ipv6_saddr_dst dst;
+    int dst_type;
+    struct inet_ifaddr *ifa;
+    int i;
+
+    dst_type  = __ipv6_addr_type(&daddr->in6);
+    dst.addr  = &daddr->in6;
+    dst.idev  = idev;
+    dst.scope = __ipv6_addr_src_scope(dst_type);
+
+    hiscore->rule = -1;
+    hiscore->ifa  = NULL;
+
+    list_for_each_entry(ifa, &idev->ifa_list, d_list) {
+
+        if (ifa->flags & IFA_F_TENTATIVE)
+            continue;
+
+        score->ifa = ifa;
+        score->addr_type = __ipv6_addr_type(&score->ifa->addr.in6);
+
+        if (unlikely(score->addr_type == IPV6_ADDR_ANY ||
+                     score->addr_type & IPV6_ADDR_MULTICAST))
+            continue;
+
+        score->rule = -1;
+        memset(score->scorebits, 0, sizeof(bool) * IPV6_SADDR_RULE_MAX);
+
+        for (i = 0; i < IPV6_SADDR_RULE_MAX; i++) {
+            int minihiscore, miniscore;
+
+            minihiscore = ipv6_get_saddr_eval(hiscore, &dst, i);
+            miniscore = ipv6_get_saddr_eval(score, &dst, i);
+
+            if (minihiscore > miniscore) {
+                break;
+            } else if (minihiscore < miniscore) {
+                struct ipv6_saddr_score *temscore;
+                temscore = score;
+                score = hiscore;
+                hiscore = temscore;
+                break;
+            }
+        }
+    }
+
+    if (!hiscore->ifa)
+        return EDPVS_NOTEXIST;
+
+    *saddr = hiscore->ifa->addr;
+    return EDPVS_OK;
 }
 
 #endif /* __LINUX_IPV6_H__ */
