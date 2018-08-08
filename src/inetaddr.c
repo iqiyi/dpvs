@@ -740,29 +740,36 @@ void inet_addr_select(int af, const struct netif_port *dev,
     struct inet_device *idev = dev_get_idev(dev);
     struct inet_ifaddr *ifa;
 
-    if (af == AF_INET)
-        addr->in.s_addr = htonl(INADDR_ANY);
-    else {
-        addr->in6 = in6addr_any;
-    }
-
-    if (!idev)
+    if (!addr || !idev)
         return;
+
+    if (af == AF_INET) {
+        addr->in.s_addr = htonl(INADDR_ANY);
+    } else if (af == AF_INET6) {
+        addr->in6 = in6addr_any;
+    } else {
+        return;
+    }
 
     rte_rwlock_read_lock(&in_addr_lock);
     /* for each primary address */
-    list_for_each_entry(ifa, &idev->ifa_list, d_list) {
-        if (ifa->flags & IFA_F_SECONDARY)
-            continue;
-        if (ifa->scope > scope)
-            continue;
-        if (!dst || inet_addr_same_net(af, ifa->plen, dst, &ifa->addr)) {
-            *addr = ifa->addr;
-            break;
-        }
+    if (af == AF_INET) {
+        list_for_each_entry(ifa, &idev->ifa_list, d_list) {
+            if ((ifa->flags & IFA_F_SECONDARY) || 
+                (ifa->flags & IFA_F_TENTATIVE))
+                continue;
+            if (ifa->scope > scope)
+                continue;
+            if (!dst || inet_addr_same_net(af, ifa->plen, dst, &ifa->addr)) {
+                *addr = ifa->addr;
+                break;
+            }
 
-        /* save it and may have better choise later */
-        *addr = ifa->addr;
+            /* save it and may have better choise later */
+            *addr = ifa->addr;
+        }
+    } else if (af == AF_INET6) {
+        ipv6_addr_select(idev, dst, addr);
     }
 
     /* should we use other interface's address ? */
@@ -931,7 +938,9 @@ static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     if (opt != SOCKOPT_GET_IFADDR_SHOW)
         return EDPVS_NOTSUPP;
 
-    if (param->af != AF_INET && param->af != AF_UNSPEC)
+    if (param->af != AF_INET && 
+        param->af != AF_UNSPEC &&
+        param->af != AF_INET6)
         return EDPVS_NOTSUPP;
 
     if (strlen(param->ifname)) {
@@ -981,7 +990,7 @@ static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             list_for_each_entry(ifa, &in_addr_tab[hash], h_list) {
                 if (off >= naddr)
                     break;
-                ifa_fill_param(AF_INET, &array->addrs[off++], ifa);
+                ifa_fill_param(ifa->af, &array->addrs[off++], ifa);
             }
         }
     }

@@ -29,8 +29,11 @@ static void addr_help(void)
     fprintf(stderr, 
             "Usage:\n"
             "    dpip addr show [ dev STRING ]\n"
+            "    dpip -6 addr show [ dev STRING ]\n"
             "    dpip addr { add | set } IFADDR dev STRING [LIFETIME] [ SCOPE ] [FLAGS]\n"
+            "    dpip -6 addr { add | set } IFADDR dev STRING [LIFETIME] [ SCOPE ] [FLAGS]\n"
             "    dpip addr del IFADDR dev STRING\n"
+            "    dpip -6 addr del IFADDR dev STRING\n"
             "    dpip addr flush dev STRING\n"
             "    dpip addr help\n"
             "Parameters:\n"
