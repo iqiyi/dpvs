@@ -48,9 +48,9 @@ void
 dump_tcp_check(void *data)
 {
 	log_message(LOG_INFO, "   Keepalive method = TCP_CHECK");
-	if (!data)
+	if (!data || !CHECKER_CO(data))
 		return;
-	dump_conn_opts (CHECKER_GET_CO());
+	dump_conn_opts(CHECKER_CO(data));
 }
 
 void
