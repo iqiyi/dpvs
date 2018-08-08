@@ -429,9 +429,6 @@ int idev_add_mcast_init(struct netif_port *dev)
     rte_rwlock_write_unlock(&in_addr_lock);
     idev_put(idev);
 
-    /*TODO:delete me!!*/
-    ipv6_addr_init();
-
     return EDPVS_OK;
 
 free_idev_routers:
