@@ -168,12 +168,23 @@ neigh_defs {
 
 ! dpvs ipv4 config
 ipv4_defs {
+    forwarding                 off
     <init> default_ttl         64
     fragment {
         <init> bucket_number   4096
         <init> bucket_entries  16
         <init> max_entries     4096
         <init> ttl             1
+    }
+}
+
+! dpvs ipv6 config
+ipv6_defs {
+    disable                     off
+    forwarding                  off
+    route6 {
+        <init> method           "hlist"
+        recycle_time            10
     }
 }
 

@@ -101,7 +101,9 @@ static void ip6_conf_forward(vector_t tokens)
     else if (strcasecmp(str, "off") == 0)
         conf_ipv6_forwarding = false;
     else
-        RTE_LOG(WARNING, IPV6, "%s: bad config %s\n", __func__, str);
+        RTE_LOG(WARNING, IPV6, "invalid ipv6:forwarding %s\n", str);
+
+    RTE_LOG(INFO, IPV6, "ipv6:forwarding = %s\n", conf_ipv6_forwarding ? "on" : "off");
 
     FREE_PTR(str);
 }
@@ -117,7 +119,9 @@ static void ip6_conf_disable(vector_t tokens)
     else if (strcasecmp(str, "off") == 0)
         conf_ipv6_disable = false;
     else
-        RTE_LOG(WARNING, IPV6, "%s: bad config %s\n", __func__, str);
+        RTE_LOG(WARNING, IPV6, "invalid ipv6:disable %s\n", str);
+
+    RTE_LOG(INFO, IPV6, "ipv6:disable = %s", conf_ipv6_disable ? "on" : "off");
 
     FREE_PTR(str);
 }
@@ -779,9 +783,23 @@ int ipv6_stats_cpu(struct inet_stats *stats)
 /*
  * configure file
  */
-void ipv6_conf_install(void)
+void ipv6_keyword_value_init(void)
 {
-    install_keyword_root("ipv6", NULL);
+    if (dpvs_state_get() == DPVS_STATE_INIT) {
+        /* KW_TYPE_INIT keyword */
+    }
+    /* KW_TYPE NORMAL keyword */
+    conf_ipv6_forwarding = false;
+    conf_ipv6_forwarding = false;
+
+    route6_keyword_value_init();
+}
+
+void install_ipv6_keywords(void)
+{
+    install_keyword_root("ipv6_defs", NULL);
     install_keyword("forwarding", ip6_conf_forward, KW_TYPE_NORMAL);
     install_keyword("disable", ip6_conf_disable, KW_TYPE_NORMAL);
+
+    install_route6_keywords();
 }
