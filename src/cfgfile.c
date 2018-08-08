@@ -33,7 +33,6 @@
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
 #include "ipvs/synproxy.h"
-#include "route6.h"
 
 typedef void (*sighandler_t)(int);
 
@@ -54,7 +53,7 @@ static void keyword_value_init(void)
     tcp_keyword_value_init();
     synproxy_keyword_value_init();
 
-    route6_keyword_value_init();
+    ipv6_keyword_value_init();
 }
 
 static vector_t install_keywords(void)
@@ -88,8 +87,7 @@ static vector_t install_keywords(void)
     install_proto_udp_keywords();
     install_sublevel_end();
 
-    ipv6_conf_install();
-    install_route6_keywords();
+    install_ipv6_keywords();
 
     return g_keywords;
 }

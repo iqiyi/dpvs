@@ -54,7 +54,7 @@ static void ipv4_default_ttl_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
-static void ipv4_forward_handler(vector_t tokens)
+static void ipv4_forwarding_handler(vector_t tokens)
 {
     char *str = set_value(tokens);
     assert(str);
@@ -62,6 +62,11 @@ static void ipv4_forward_handler(vector_t tokens)
         ipv4_forward_switch = true;
     else if (strcasecmp(str, "off") == 0)
         ipv4_forward_switch = false;
+    else
+        RTE_LOG(WARNING, IPV4, "invalid ipv4:forwarding %s\n", str);
+
+    RTE_LOG(INFO, IPV4, "ipv4:forwarding = %s\n", ipv4_forward_switch ? "on" : "off");
+
     FREE_PTR(str);
 }
 
@@ -72,13 +77,14 @@ void ipv4_keyword_value_init(void)
         inet_def_ttl = INET_DEF_TTL;
     }
     /* KW_TYPE_NORMAL keyword */
+    ipv4_forward_switch = false;
 }
 
 void install_ipv4_keywords(void)
 {
     install_keyword_root("ipv4_defs", NULL);
     install_keyword("default_ttl", ipv4_default_ttl_handler, KW_TYPE_INIT);
-    install_keyword("ipv4_forward", ipv4_forward_handler, KW_TYPE_INIT);
+    install_keyword("forwarding", ipv4_forwarding_handler, KW_TYPE_NORMAL);
 }
 
 static const struct inet_protocol *inet_prots[INET_MAX_PROTS];
