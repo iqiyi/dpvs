@@ -41,6 +41,23 @@ struct rt6_dustbin {
 static int g_rt6_recycle_time = RT6_RECYCLE_TIME_DEF;
 static RTE_DEFINE_PER_LCORE(struct rt6_dustbin, rt6_dbin);
 
+static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
+{
+    struct in6_addr addr6;
+
+    ipv6_addr_prefix(&addr6, &rt6_p->addr, rt6_p->plen);
+    memcpy(&rt6_p->addr, &addr6, sizeof(addr6));
+}
+
+static void rt6_cfg_zero_prefix_tail(const struct dp_vs_route6_conf *src,
+        struct dp_vs_route6_conf *dst)
+{
+    memcpy(dst, src, sizeof(*dst));
+
+    rt6_zero_prefix_tail(&dst->dst);
+    /* do not change dst->src, dst->prefsrc */
+}
+
 int route6_method_register(struct route6_method *rt6_mtd)
 {
     struct route6_method *rnode;
@@ -222,6 +239,45 @@ slave_fail:
     return err;
 }
 
+static int __route6_add_del(struct in6_addr *dest, int plen, uint32_t flags,
+               struct in6_addr *gw, struct netif_port *dev,
+               struct in6_addr *src, uint32_t mtu, bool add)
+{
+    struct dp_vs_route6_conf cf;
+
+    memset(&cf, 0, sizeof(cf));
+    if (add)
+        cf.ops  = RT6_OPS_ADD;
+    else
+        cf.ops  = RT6_OPS_DEL;
+    cf.dst.addr = *dest;
+    cf.dst.plen = plen;
+    cf.flags    = flags;
+    cf.gateway  = *gw;
+    snprintf(cf.ifname, sizeof(cf.ifname), "%s", dev->name);
+    cf.src.addr = *src;
+    cf.src.plen = plen;
+    cf.mtu      = mtu;
+
+    rt6_zero_prefix_tail(&cf.dst);
+
+    return rt6_add_del(&cf);
+}
+
+int route6_add(struct in6_addr *dest, int plen, uint32_t flags,
+               struct in6_addr *gw, struct netif_port *dev,
+               struct in6_addr *src, uint32_t mtu)
+{
+    return __route6_add_del(dest, plen, flags, gw, dev, src, mtu, true);
+}
+
+int route6_del(struct in6_addr *dest, int plen, uint32_t flags,
+               struct in6_addr *gw, struct netif_port *dev,
+               struct in6_addr *src, uint32_t mtu)
+{
+    return __route6_add_del(dest, plen, flags, gw, dev, src, mtu, false);
+}
+
 static int rt6_msg_process_cb(struct dpvs_msg *msg)
 {
     struct dp_vs_route6_conf *cf;
@@ -271,23 +327,6 @@ static bool rt6_conf_check(const struct dp_vs_route6_conf *rt6_cfg)
         return false;
 
     return true;
-}
-
-static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
-{
-    struct in6_addr addr6;
-
-    ipv6_addr_prefix(&addr6, &rt6_p->addr, rt6_p->plen);
-    memcpy(&rt6_p->addr, &addr6, sizeof(addr6));
-}
-
-static void rt6_cfg_zero_prefix_tail(const struct dp_vs_route6_conf *src,
-        struct dp_vs_route6_conf *dst)
-{
-    memcpy(dst, src, sizeof(*dst));
-
-    rt6_zero_prefix_tail(&dst->dst);
-    /* do not change dst->src, dst->prefsrc */
 }
 
 static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
