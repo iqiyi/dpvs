@@ -790,7 +790,7 @@ void ipv6_keyword_value_init(void)
     }
     /* KW_TYPE NORMAL keyword */
     conf_ipv6_forwarding = false;
-    conf_ipv6_forwarding = false;
+    conf_ipv6_disable = false;
 
     route6_keyword_value_init();
 }
