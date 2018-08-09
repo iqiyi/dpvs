@@ -25,6 +25,8 @@
 
 #define this_rt6_dustbin        (RTE_PER_LCORE(rt6_dbin))
 #define RT6_RECYCLE_TIME_DEF    10
+#define RT6_RECYCLE_TIME_MAX    36000
+#define RT6_RECYCLE_TIME_MIN    1
 
 static struct route6_method *g_rt6_method = NULL;
 static char g_rt6_name[RT6_METHOD_NAME_SZ] = "hlist";
@@ -38,6 +40,23 @@ struct rt6_dustbin {
 
 static int g_rt6_recycle_time = RT6_RECYCLE_TIME_DEF;
 static RTE_DEFINE_PER_LCORE(struct rt6_dustbin, rt6_dbin);
+
+static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
+{
+    struct in6_addr addr6;
+
+    ipv6_addr_prefix(&addr6, &rt6_p->addr, rt6_p->plen);
+    memcpy(&rt6_p->addr, &addr6, sizeof(addr6));
+}
+
+static void rt6_cfg_zero_prefix_tail(const struct dp_vs_route6_conf *src,
+        struct dp_vs_route6_conf *dst)
+{
+    memcpy(dst, src, sizeof(*dst));
+
+    rt6_zero_prefix_tail(&dst->dst);
+    /* do not change dst->src, dst->prefsrc */
+}
 
 int route6_method_register(struct route6_method *rt6_mtd)
 {
@@ -220,6 +239,45 @@ slave_fail:
     return err;
 }
 
+static int __route6_add_del(struct in6_addr *dest, int plen, uint32_t flags,
+               struct in6_addr *gw, struct netif_port *dev,
+               struct in6_addr *src, uint32_t mtu, bool add)
+{
+    struct dp_vs_route6_conf cf;
+
+    memset(&cf, 0, sizeof(cf));
+    if (add)
+        cf.ops  = RT6_OPS_ADD;
+    else
+        cf.ops  = RT6_OPS_DEL;
+    cf.dst.addr = *dest;
+    cf.dst.plen = plen;
+    cf.flags    = flags;
+    cf.gateway  = *gw;
+    snprintf(cf.ifname, sizeof(cf.ifname), "%s", dev->name);
+    cf.src.addr = *src;
+    cf.src.plen = plen;
+    cf.mtu      = mtu;
+
+    rt6_zero_prefix_tail(&cf.dst);
+
+    return rt6_add_del(&cf);
+}
+
+int route6_add(struct in6_addr *dest, int plen, uint32_t flags,
+               struct in6_addr *gw, struct netif_port *dev,
+               struct in6_addr *src, uint32_t mtu)
+{
+    return __route6_add_del(dest, plen, flags, gw, dev, src, mtu, true);
+}
+
+int route6_del(struct in6_addr *dest, int plen, uint32_t flags,
+               struct in6_addr *gw, struct netif_port *dev,
+               struct in6_addr *src, uint32_t mtu)
+{
+    return __route6_add_del(dest, plen, flags, gw, dev, src, mtu, false);
+}
+
 static int rt6_msg_process_cb(struct dpvs_msg *msg)
 {
     struct dp_vs_route6_conf *cf;
@@ -269,23 +327,6 @@ static bool rt6_conf_check(const struct dp_vs_route6_conf *rt6_cfg)
         return false;
 
     return true;
-}
-
-static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
-{
-    struct in6_addr addr6;
-
-    ipv6_addr_prefix(&addr6, &rt6_p->addr, rt6_p->plen);
-    memcpy(&rt6_p->addr, &addr6, sizeof(addr6));
-}
-
-static void rt6_cfg_zero_prefix_tail(const struct dp_vs_route6_conf *src,
-        struct dp_vs_route6_conf *dst)
-{
-    memcpy(dst, src, sizeof(*dst));
-
-    rt6_zero_prefix_tail(&dst->dst);
-    /* do not change dst->src, dst->prefsrc */
 }
 
 static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
@@ -435,19 +476,43 @@ static void rt6_method_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
+static void rt6_recycle_time_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    int recycle_time;
+
+    assert(str);
+    recycle_time = atoi(str);
+    if (recycle_time > RT6_RECYCLE_TIME_MAX || recycle_time < RT6_RECYCLE_TIME_MIN) {
+        RTE_LOG(WARNING, RT6, "invalid ipv6:route:recycle_time %s, using default %d\n",
+                str, RT6_RECYCLE_TIME_DEF);
+        g_rt6_recycle_time = RT6_RECYCLE_TIME_DEF;
+    } else {
+        RTE_LOG(INFO, RT6, "ipv6:route:recycle_time = %d\n", recycle_time);
+        g_rt6_recycle_time = recycle_time;
+    }
+
+    FREE_PTR(str);
+}
+
 void route6_keyword_value_init(void)
 {
     if (dpvs_state_get() == DPVS_STATE_INIT) {
         /* KW_TYPE_INIT keyword */
         snprintf(g_rt6_name, sizeof(g_rt6_name), "%s", "hlist");
     }
+    /* KW_TYPE_NORMAL keyword */
+    g_rt6_recycle_time = RT6_RECYCLE_TIME_DEF;
 
     route6_lpm_keyword_value_init();
 }
 
 void install_route6_keywords(void)
 {
-    install_keyword_root("route6", NULL);
+    install_keyword("route6", NULL, KW_TYPE_NORMAL);
+    install_sublevel();
     install_keyword("method", rt6_method_handler, KW_TYPE_INIT);
+    install_keyword("recycle_time", rt6_recycle_time_handler, KW_TYPE_NORMAL);
     install_rt6_lpm_keywords();
+    install_sublevel_end();
 }
