@@ -444,6 +444,9 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
             RTE_LOG(ERR, NEIGHBOUR, "ICMPv6 NA: invalid link-layer address length.\n");
             return EDPVS_DROP;
         }
+    } else {
+        /* ingnore mbuf without opt */
+        return EDPVS_KNICONTINUE;
     }
 
     ifa = inet_addr_ifa_get(AF_INET6, dev, (union inet_addr *)&msg->target);
@@ -482,20 +485,24 @@ int ndisc_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
     int ret;
     struct ip6_hdr *ipv6_hdr = mbuf->userdata;
 
-    if (mbuf_may_pull(mbuf, sizeof(struct icmp6_hdr)) != 0)
-        return EDPVS_NOMEM;
+    if (mbuf_may_pull(mbuf, sizeof(struct icmp6_hdr)) != 0) {
+        ret = EDPVS_NOMEM;
+        goto free;
+    }
 
     msg = (struct nd_msg *)rte_pktmbuf_mtod(mbuf, struct nd_msg *);
 
     if (ipv6_hdr->ip6_hlim != 255) {
         RTE_LOG(ERR, NEIGHBOUR, "[%s] invalid hop-limit\n", __func__);
-        return EDPVS_INVAL;
+        ret = EDPVS_INVAL;
+        goto free;
     }
 
     if (msg->icmph.icmp6_code != 0) {
         RTE_LOG(ERR, NEIGHBOUR, "[%s] invalid ICMPv6_code:%d\n", __func__,
                 msg->icmph.icmp6_code);
-        return EDPVS_INVAL;
+        ret = EDPVS_INVAL;
+        goto free;
     }
 
     switch (msg->icmph.icmp6_type) {
@@ -518,6 +525,14 @@ int ndisc_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
         break;
     }
 
+    /* ipv6 handler should consume mbuf */
+    if (ret != EDPVS_KNICONTINUE)
+        goto free;
+
+    return EDPVS_KNICONTINUE;
+
+free:
+    rte_pktmbuf_free(mbuf);
     return ret;
 }
 

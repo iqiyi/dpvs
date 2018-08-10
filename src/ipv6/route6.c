@@ -239,9 +239,9 @@ slave_fail:
     return err;
 }
 
-static int __route6_add_del(struct in6_addr *dest, int plen, uint32_t flags,
-               struct in6_addr *gw, struct netif_port *dev,
-               struct in6_addr *src, uint32_t mtu, bool add)
+static int __route6_add_del(const struct in6_addr *dest, int plen, uint32_t flags,
+                            const struct in6_addr *gw, struct netif_port *dev,
+                            const struct in6_addr *src, uint32_t mtu, bool add)
 {
     struct dp_vs_route6_conf cf;
 
@@ -264,16 +264,16 @@ static int __route6_add_del(struct in6_addr *dest, int plen, uint32_t flags,
     return rt6_add_del(&cf);
 }
 
-int route6_add(struct in6_addr *dest, int plen, uint32_t flags,
-               struct in6_addr *gw, struct netif_port *dev,
-               struct in6_addr *src, uint32_t mtu)
+int route6_add(const struct in6_addr *dest, int plen, uint32_t flags,
+               const struct in6_addr *gw, struct netif_port *dev,
+               const struct in6_addr *src, uint32_t mtu)
 {
     return __route6_add_del(dest, plen, flags, gw, dev, src, mtu, true);
 }
 
-int route6_del(struct in6_addr *dest, int plen, uint32_t flags,
-               struct in6_addr *gw, struct netif_port *dev,
-               struct in6_addr *src, uint32_t mtu)
+int route6_del(const struct in6_addr *dest, int plen, uint32_t flags,
+               const struct in6_addr *gw, struct netif_port *dev,
+               const struct in6_addr *src, uint32_t mtu)
 {
     return __route6_add_del(dest, plen, flags, gw, dev, src, mtu, false);
 }
