@@ -135,13 +135,13 @@ struct ipv6_saddr_score {
     int                scopedist;
     int                matchlen;
 };
-#endif
 
 struct ipv6_saddr_dst {
     const struct in6_addr  *addr;
     struct inet_device     *idev;
     int                    scope;
 };
+#endif
 
 /**
  * from linux:net/ipv6/addrconf_core.c

@@ -142,7 +142,6 @@ static int ip6_local_in_fin(struct rte_mbuf *mbuf)
      */
     if (!ipv6_addr_is_multicast(&hdr->ip6_dst)) {
         struct route6 *rt = mbuf->userdata;
-
         if (rt) {
             route6_put(rt);
             mbuf->userdata = NULL;
@@ -310,11 +309,13 @@ static int ip6_output_fin2(struct rte_mbuf *mbuf)
         rt = mbuf->userdata;
         dev = rt->rt6_dev;
         nexthop = ip6_rt_nexthop(rt, &hdr->ip6_dst);
-        route6_put(rt);
     }
     mbuf->packet_type = ETHER_TYPE_IPv6;
 
     err = neigh_output(AF_INET6, (union inet_addr *)nexthop, mbuf, dev);
+
+    if (rt)
+        route6_put(rt);
 
     return err;
 }
