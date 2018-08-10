@@ -247,6 +247,7 @@ typedef int (*inet_hook_fn)(void *priv, struct rte_mbuf *mbuf,
 struct inet_hook_ops {
     inet_hook_fn        hook;
     unsigned int        hooknum;
+    int                 af;
     void                *priv;
     int                 priority;
 
@@ -285,8 +286,8 @@ int inet_addr_range_parse(int af, const char *param,
 int inet_addr_range_dump(int af, const struct inet_addr_range *range,
                          char *buf, size_t size);
 
-int inet_register_hooks(int af, struct inet_hook_ops *reg, size_t n);
-int inet_unregister_hooks(int af, struct inet_hook_ops *reg, size_t n);
+int inet_register_hooks(struct inet_hook_ops *reg, size_t n);
+int inet_unregister_hooks(struct inet_hook_ops *reg, size_t n);
 
 void inet_stats_add(struct inet_stats *stats, const struct inet_stats *diff);
 
