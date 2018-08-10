@@ -51,13 +51,13 @@ int route6_put(struct route6 *rt);
 int route6_init(void);
 int route6_term(void);
 
-int route6_add(struct in6_addr *dest, int plen, uint32_t flags,
-               struct in6_addr *gw, struct netif_port *dev,
-               struct in6_addr *src, uint32_t mtu);
+int route6_add(const struct in6_addr *dest, int plen, uint32_t flags,
+               const struct in6_addr *gw, struct netif_port *dev,
+               const struct in6_addr *src, uint32_t mtu);
 
-int route6_del(struct in6_addr *dest, int plen, uint32_t flags,
-               struct in6_addr *gw, struct netif_port *dev,
-               struct in6_addr *src, uint32_t mtu);
+int route6_del(const struct in6_addr *dest, int plen, uint32_t flags,
+               const struct in6_addr *gw, struct netif_port *dev,
+               const struct in6_addr *src, uint32_t mtu);
 
 /* for route6_xxx.c only */
 void route6_free(struct route6*);
