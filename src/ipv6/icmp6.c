@@ -1,7 +1,5 @@
 /* just for testing IPv6, not real ICMPv6 implementation. */
 #include <assert.h>
-#include <netinet/icmp6.h>
-#include <netinet/ip6.h>
 #include "ipv6.h"
 #include "icmp6.h"
 #include "ndisc.h"

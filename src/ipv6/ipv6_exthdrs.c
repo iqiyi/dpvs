@@ -126,3 +126,9 @@ int ipv6_parse_hopopts(struct rte_mbuf *mbuf)
     /* TODO */
     return EDPVS_OK;
 }
+
+int ip6_skip_exthdr(const struct rte_mbuf *mbuf, int start, uint8_t *nexthdrp)
+{
+    /* TODO */
+    return sizeof(struct ip6_hdr);
+}
