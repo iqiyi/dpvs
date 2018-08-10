@@ -131,7 +131,6 @@ static int ip6_local_in_fin(struct rte_mbuf *mbuf)
 {
     uint8_t nexthdr;
     int (*handler)(struct rte_mbuf *mbuf) = NULL;
-    struct route6 *rt = mbuf->userdata;
     bool is_final, have_final = false;
     const struct inet6_protocol *prot;
     struct ip6_hdr *hdr = ip6_hdr(mbuf);
@@ -141,9 +140,13 @@ static int ip6_local_in_fin(struct rte_mbuf *mbuf)
      * release route info saved in @userdata
      * and set it to IPv6 fixed header for upper layer.
      */
-    if (rt) {
-        route6_put(rt);
-        mbuf->userdata = NULL;
+    if (!ipv6_addr_is_multicast(&hdr->ip6_dst)) {
+        struct route6 *rt = mbuf->userdata;
+
+        if (rt) {
+            route6_put(rt);
+            mbuf->userdata = NULL;
+        }
     }
 
     mbuf->userdata = (void *)hdr;
@@ -240,17 +243,14 @@ static int ip6_local_in(struct rte_mbuf *mbuf)
 static int ip6_mc_local_in(struct rte_mbuf *mbuf)
 {
     struct ip6_hdr *iph = ip6_hdr(mbuf);
-    struct route6 *rt = mbuf->userdata;
 
     IP6_UPD_PO_STATS(inmcast, mbuf->pkt_len);
 
     if (inet_chk_mcast_addr(AF_INET6, netif_port_get(mbuf->port), 
                             (union inet_addr *)&iph->ip6_dst, NULL))
         return ip6_local_in(mbuf);
-    else {
-        route6_put(rt);
+    else
         return EDPVS_KNICONTINUE; /* not drop */
-    }
 }
 
 static inline struct in6_addr *ip6_rt_nexthop(struct route6 *rt,
@@ -310,11 +310,11 @@ static int ip6_output_fin2(struct rte_mbuf *mbuf)
         rt = mbuf->userdata;
         dev = rt->rt6_dev;
         nexthop = ip6_rt_nexthop(rt, &hdr->ip6_dst);
+        route6_put(rt);
     }
     mbuf->packet_type = ETHER_TYPE_IPv6;
 
     err = neigh_output(AF_INET6, (union inet_addr *)nexthop, mbuf, dev);
-    route6_put(rt);
 
     return err;
 }
@@ -468,6 +468,9 @@ static int ip6_rcv_fin(struct rte_mbuf *mbuf)
     eth_type_t etype = mbuf->packet_type;
     struct ip6_hdr *iph = ip6_hdr(mbuf);
 
+    if (ipv6_addr_type(&iph->ip6_dst) & IPV6_ADDR_MULTICAST)
+        return ip6_mc_local_in(mbuf);
+
     rt = ip6_route_input(mbuf);
     if (!rt) {
         IP6_INC_STATS(innoroutes);
@@ -483,8 +486,6 @@ static int ip6_rcv_fin(struct rte_mbuf *mbuf)
 
     if (rt->rt6_flags & RTF_LOCALIN) {
         return ip6_local_in(mbuf);
-    } else if (ipv6_addr_type(&iph->ip6_dst) & IPV6_ADDR_MULTICAST) {
-        return ip6_mc_local_in(mbuf);
     } else if (rt->rt6_flags & RTF_FORWARD) {
         /* pass multi-/broad-cast to kni */
         if (etype != ETH_PKT_HOST)

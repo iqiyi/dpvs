@@ -24,7 +24,9 @@
 #include <netinet/in.h>
 #include <linux/if_addr.h>
 #include "common.h"
+#ifdef __DPVS__
 #include "inetaddr.h"
+#endif
 
 #define IPV6_MAXPLEN		65535
 #define IPV6_MIN_MTU        1280
@@ -123,6 +125,7 @@ enum {
 	IPV6_SADDR_RULE_MAX
 };
 
+#ifdef __DPVS__
 /* struct help for src select */
 struct ipv6_saddr_score {
     int                rule;
@@ -132,6 +135,7 @@ struct ipv6_saddr_score {
     int                scopedist;
     int                matchlen;
 };
+#endif
 
 struct ipv6_saddr_dst {
     const struct in6_addr  *addr;
@@ -484,6 +488,7 @@ static inline int ipv6_saddr_preferred(int type)
 	return 0;
 }
 
+#ifdef __DPVS__
 /*functions below were edited from addrconf.c*/
 
 /*
@@ -626,5 +631,6 @@ static inline int ipv6_addr_select(struct inet_device *idev,
     *saddr = hiscore->ifa->addr;
     return EDPVS_OK;
 }
+#endif
 
 #endif /* __LINUX_IPV6_H__ */
