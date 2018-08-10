@@ -157,14 +157,10 @@ static int __ifa_remove(struct inet_device *idev, const union inet_addr *addr,
     return EDPVS_OK;
 }
 
-static int ifa_add_route(struct inet_ifaddr *ifa)
+static int __ifa_add_route4(struct inet_ifaddr *ifa)
 {
     int err;
     union inet_addr net;
-
-    /*FIXME,support ipv6*/
-    if (ifa->af == AF_INET6)
-        return EDPVS_OK;
 
     err = route_add(&ifa->addr.in, 32, RTF_LOCALIN, 
                     NULL, ifa->idev->dev, NULL, 0, 0);
@@ -193,7 +189,50 @@ errout:
     return err;
 }
 
-static int ifa_del_route(struct inet_ifaddr *ifa)
+static int __ifa_add_route6(struct inet_ifaddr *ifa)
+{
+    int err;
+    struct in6_addr net;
+
+    err = route6_add(&ifa->addr.in6, 128, RTF_LOCALIN,
+                     &in6addr_any, ifa->idev->dev, 
+                     &in6addr_any, ifa->idev->dev->mtu);
+
+    if (err != EDPVS_OK && err != EDPVS_EXIST)
+        return err;
+
+    if (ifa->plen == 128)
+        return EDPVS_OK;
+
+    ipv6_addr_prefix(&net, &ifa->addr.in6, ifa->plen);
+
+    err = route6_add(&net, ifa->plen, RTF_FORWARD,
+                     &in6addr_any, ifa->idev->dev,
+                     &in6addr_any, ifa->idev->dev->mtu);
+
+    if (err != EDPVS_OK && err != EDPVS_EXIST)
+        goto errout;
+
+    return EDPVS_OK;
+
+errout:
+    route6_del(&ifa->addr.in6, 128, RTF_LOCALIN,
+               &in6addr_any, ifa->idev->dev,
+               &in6addr_any, ifa->idev->dev->mtu);
+    return err;
+}
+
+static int ifa_add_route(struct inet_ifaddr *ifa)
+{
+    if (ifa->af == AF_INET)
+        return __ifa_add_route4(ifa);
+    else if(ifa->af == AF_INET6)
+        return __ifa_add_route6(ifa);
+    else
+        return EDPVS_NOTSUPP;
+}
+
+static int __ifa_del_route4(struct inet_ifaddr *ifa)
 {
     int err;
     union inet_addr net;
@@ -216,6 +255,41 @@ static int ifa_del_route(struct inet_ifaddr *ifa)
         RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
 
     return EDPVS_OK;
+}
+
+static int __ifa_del_route6(struct inet_ifaddr *ifa)
+{
+    int err;
+    struct in6_addr net;
+
+    err = route6_del(&ifa->addr.in6, 128, RTF_LOCALIN,
+                     &in6addr_any, ifa->idev->dev, 
+                     &in6addr_any, ifa->idev->dev->mtu);
+    if (err != EDPVS_OK && err != EDPVS_NOTEXIST)
+        RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
+
+    if (ifa->plen == 128)
+        return EDPVS_OK;
+
+    ipv6_addr_prefix(&net, &ifa->addr.in6, ifa->plen);
+
+    err = route6_del(&net, ifa->plen, RTF_FORWARD,
+                     &in6addr_any, ifa->idev->dev,
+                     &in6addr_any, ifa->idev->dev->mtu);
+    if (err != EDPVS_OK && err != EDPVS_NOTEXIST)
+        RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
+
+    return EDPVS_OK;
+}
+
+static int ifa_del_route(struct inet_ifaddr *ifa)
+{
+    if (ifa->af == AF_INET)
+        return __ifa_del_route4(ifa);
+    else if(ifa->af == AF_INET6)
+        return __ifa_del_route6(ifa);
+    else
+        return EDPVS_NOTSUPP;
 }
 
 static struct inet_ifmcaddr *__imc_lookup( int af, const struct inet_device *idev, 
@@ -522,7 +596,10 @@ static int ifa_add_set(int af, const struct netif_port *dev,
         ifa->addr = *addr;
         ifa->plen = plen;
         ifa->flags = flags;
-        inet_plen_to_mask(af, plen, &ifa->mask);
+
+        if (af == AF_INET)
+            inet_plen_to_mask(af, plen, &ifa->mask);
+
         dpvs_time_now(&ifa->cstemp, true);
         rte_atomic32_init(&ifa->refcnt);
 
