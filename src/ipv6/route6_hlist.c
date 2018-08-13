@@ -96,7 +96,7 @@ static inline int rt6_hlist_hashkey(const struct in6_addr *addr, int plen, int n
     struct in6_addr pfx;
 
     ipv6_addr_prefix(&pfx, addr, plen);
-    return rte_jhash_32b((const uint32_t *)addr, 4, 0) % nbuckets;
+    return rte_jhash_32b((const uint32_t *)&pfx, 4, 0) % nbuckets;
 }
 
 static inline bool rt6_match(const struct route6 *rt6, const struct dp_vs_route6_conf *cf)
