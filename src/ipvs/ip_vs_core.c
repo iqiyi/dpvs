@@ -177,10 +177,9 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
                                        struct rte_mbuf *mbuf)
 {
     int err;
-    bool sapool_type = 0;
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
-    struct sockaddr_in daddr, saddr;
+    struct sockaddr_storage daddr, saddr;
 
     if (unlikely(iph->proto == IPPROTO_ICMP)) {
         struct icmphdr *ich, _icmph;
@@ -215,34 +214,49 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
          * that may confict for diff hosts,
          * and using dest->port is worse choice. */
         if (iph->af == AF_INET) {
-            memset(&daddr, 0, sizeof(daddr));
-            daddr.sin_family = AF_INET;
-            daddr.sin_addr = iph->daddr.in;
-            daddr.sin_port = ports[1];
-            memset(&saddr, 0, sizeof(saddr));
-            saddr.sin_family = AF_INET;
-            saddr.sin_addr = dest->addr.in;
-            saddr.sin_port = 0;
+            struct sockaddr_in *daddr4 = (struct sockaddr_in *)&daddr;
+            struct sockaddr_in *saddr4 = (struct sockaddr_in *)&saddr;
 
-            err = sa_fetch(NULL, &daddr, &saddr);
+            memset(&daddr, 0, sizeof(daddr));
+            daddr4->sin_family = AF_INET;
+            daddr4->sin_addr = iph->daddr.in;
+            daddr4->sin_port = ports[1];
+
+            memset(&saddr, 0, sizeof(saddr));
+            saddr4->sin_family = AF_INET;
+            saddr4->sin_addr = dest->addr.in;
+            saddr4->sin_port = 0;
+
+            err = sa_fetch(AF_INET, NULL, &daddr, &saddr);
             if (err != 0)
                 return NULL;
-
-            dp_vs_conn_fill_param(iph->af, iph->proto,
-                                  &iph->daddr, &dest->addr,
-                                  ports[1], saddr.sin_port,
-                                  0, &param);
-            sapool_type = AF_INET;
+            dp_vs_conn_fill_param(AF_INET, iph->proto, &iph->daddr, &dest->addr,
+                    ports[1], saddr4->sin_port, 0, &param);
         } else { /* AF_INET6 */
-            /* TODO:  rely on sapool for ipv6 */
-            return NULL;
+            struct sockaddr_in6 *daddr6 = (struct sockaddr_in6 *)&daddr;
+            struct sockaddr_in6 *saddr6 = (struct sockaddr_in6 *)&saddr;
+
+            memset(&daddr, 0, sizeof(daddr));
+            daddr6->sin6_family = AF_INET6;
+            daddr6->sin6_addr = iph->daddr.in6;
+            daddr6->sin6_port = ports[1];
+
+            memset(&saddr, 0, sizeof(saddr));
+            saddr6->sin6_family = AF_INET6;
+            saddr6->sin6_addr = dest->addr.in6;
+            saddr6->sin6_port = 0;
+
+            err = sa_fetch(AF_INET6, NULL, &daddr, &saddr);
+            if (err != 0)
+                return NULL;
+            dp_vs_conn_fill_param(AF_INET6, iph->proto, &iph->daddr, &dest->addr,
+                    ports[1], saddr6->sin6_port, 0, &param);
         }
     }
 
     conn = dp_vs_conn_new(mbuf, &param, dest, 0);
     if (!conn) {
-        if (sapool_type == AF_INET)
-            sa_release(NULL, &daddr, &saddr);
+        sa_release(NULL, &daddr, &saddr);
         return NULL;
     }
 

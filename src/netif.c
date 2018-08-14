@@ -3543,16 +3543,15 @@ static struct rte_eth_conf default_port_conf = {
                 .src_ip         = 0x00000000,
                 .dst_ip         = 0xFFFFFFFF,
             },
+            .ipv6_mask          = {
+                .src_ip         = { 0, 0, 0, 0},
+                .dst_ip         = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF },
+            },
             .src_port_mask      = 0x0000,
 
             /* to be changed according to slave lcore number in use */
-#if RTE_VERSION >= 0x10040010 //VERSION_NUM(16, 4, 0, 16), dpdk-16.04
             .dst_port_mask      = 0x00F8,
-#else
-            /* alert!!! port mask is host byte order while
-             * filter is network byte order */
-            .dst_port_mask      = 0xF800, // previous dpdk version
-#endif
+
             .mac_addr_byte_mask = 0x00,
             .tunnel_type_mask   = 0,
             .tunnel_id_mask     = 0,
