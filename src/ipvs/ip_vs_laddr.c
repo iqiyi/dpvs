@@ -198,7 +198,8 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
         ssin.sin_family = svc->af;
         ssin.sin_addr = laddr->addr.in;
 
-        if (sa_fetch(laddr->iface, &dsin, &ssin) != EDPVS_OK) {
+        if (sa_fetch(svc->af, laddr->iface, (struct sockaddr_storage *)&dsin,
+                    (struct sockaddr_storage *)&ssin) != EDPVS_OK) {
             char buf[64];
             if (inet_ntop(conn->af, &laddr->addr, buf, sizeof(buf)) == NULL)
                 snprintf(buf, sizeof(buf), "::");
@@ -256,7 +257,8 @@ int dp_vs_laddr_unbind(struct dp_vs_conn *conn)
     ssin.sin_family = conn->af;
     ssin.sin_addr = conn->laddr.in;
     ssin.sin_port = conn->lport;
-    sa_release(conn->local->iface, &dsin, &ssin);
+    sa_release(conn->local->iface, (struct sockaddr_storage *)&dsin,
+               (struct sockaddr_storage *)&ssin);
 
     rte_atomic32_dec(&conn->local->conn_counts);
 
