@@ -336,7 +336,7 @@ static int ip6_output_fin(struct rte_mbuf *mbuf)
         return ip6_output_fin2(mbuf);
 }
 
-static int ip6_output(struct rte_mbuf *mbuf)
+int ip6_output(struct rte_mbuf *mbuf)
 {
     struct netif_port *dev;
     struct route6 *rt = NULL;

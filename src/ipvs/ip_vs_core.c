@@ -17,6 +17,7 @@
  */
 #include <assert.h>
 #include <netinet/ip_icmp.h>
+#include <netinet/icmp6.h>
 #include "common.h"
 #include "ipv4.h"
 #include "ipv6.h"
@@ -34,6 +35,7 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/blklst.h"
 #include "ipvs/proto_udp.h"
+#include "route6.h"
 
 static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
                                    struct dp_vs_iphdr *iph)
@@ -341,8 +343,8 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
 
 /* return verdict INET_XXX */
 static int xmit_outbound(struct rte_mbuf *mbuf, 
-                          struct dp_vs_proto *prot, 
-                          struct dp_vs_conn *conn)
+                         struct dp_vs_proto *prot, 
+                         struct dp_vs_conn *conn)
 {
     int err;
     assert(mbuf && prot && conn);
@@ -368,8 +370,8 @@ static int xmit_outbound(struct rte_mbuf *mbuf,
 
 /* return verdict INET_XXX */
 static int xmit_inbound(struct rte_mbuf *mbuf,
-                          struct dp_vs_proto *prot,
-                          struct dp_vs_conn *conn)
+                        struct dp_vs_proto *prot,
+                        struct dp_vs_conn *conn)
 {
     int err;
     assert(mbuf && prot && conn);
@@ -404,9 +406,9 @@ static int xmit_inbound(struct rte_mbuf *mbuf,
 }
 
 /* mbuf should be consumed here. */
-static int xmit_outbound_icmp(struct rte_mbuf *mbuf, 
-                              struct dp_vs_proto *prot, 
-                              struct dp_vs_conn *conn)
+static int __xmit_outbound_icmp4(struct rte_mbuf *mbuf,
+                                 struct dp_vs_proto *prot,
+                                 struct dp_vs_conn *conn)
 {
     struct flow4 fl4;
     struct route_entry *rt = NULL;
@@ -456,9 +458,70 @@ static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
 }
 
 /* mbuf should be consumed here. */
-static int xmit_inbound_icmp(struct rte_mbuf *mbuf, 
-                             struct dp_vs_proto *prot, 
-                             struct dp_vs_conn *conn)
+static int __xmit_outbound_icmp6(struct rte_mbuf *mbuf,
+                                 struct dp_vs_proto *prot,
+                                 struct dp_vs_conn *conn)
+{
+    struct flow6 fl6;
+    struct route6 *rt6 = NULL;
+
+    /* no translation needed for DR/TUN. */
+    if (conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
+        if (!conn->packet_out_xmit) {
+            RTE_LOG(WARNING, IPVS, "%s: missing packet_out_xmit\n", __func__);
+            rte_pktmbuf_free(mbuf);
+            return EDPVS_NOTSUPP;
+        }
+
+        return conn->packet_out_xmit(prot, conn, mbuf);
+    }
+
+    memset(&fl6, 0, sizeof(struct flow6));
+    fl6.fl6_daddr = conn->caddr.in6;
+    fl6.fl6_saddr = conn->vaddr.in6;
+    rt6 = route6_output(mbuf, &fl6);
+    if (!rt6) {
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_NOROUTE;
+    }
+
+    if (mbuf->pkt_len > rt6->rt6_mtu) {
+        route6_put(rt6);
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(rt6->rt6_mtu));
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_FRAG;
+    }
+
+    if (unlikely(mbuf->userdata != NULL))
+        route6_put((struct route6 *)mbuf->userdata);
+    mbuf->userdata = rt6;
+
+    /* translation for outer L3, ICMP, and inner L3 and L4 */
+    dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_OUTBOUND);
+
+    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt6->rt6_dev, ip6_output);
+}
+
+static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
+                              struct dp_vs_proto *prot,
+                              struct dp_vs_conn *conn)
+{
+    int af = conn->af;
+
+    assert(af == AF_INET || af == AF_INET6);
+    if (af == AF_INET)
+        return __xmit_outbound_icmp4(mbuf, prot, conn);
+    else
+        return __xmit_outbound_icmp6(mbuf, prot, conn);
+}
+
+/* mbuf should be consumed here. */
+static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
+                                  struct dp_vs_proto *prot,
+                                  struct dp_vs_conn *conn)
 {
     struct flow4 fl4;
     struct route_entry *rt = NULL;
@@ -507,8 +570,71 @@ static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
                      NULL, rt->port, ipv4_output);
 }
 
+
+/* mbuf should be consumed here. */
+static int __xmit_inbound_icmp6(struct rte_mbuf *mbuf,
+                                struct dp_vs_proto *prot,
+                                struct dp_vs_conn *conn)
+{
+    struct flow6 fl6;
+    struct route6 *rt6 = NULL;
+
+    /* no translation needed for DR/TUN. */
+    if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
+        if (!conn->packet_xmit) {
+            RTE_LOG(WARNING, IPVS, "%s: missing packet_xmit\n", __func__);
+            rte_pktmbuf_free(mbuf);
+            return EDPVS_NOTSUPP;
+        }
+
+        return conn->packet_xmit(prot, conn, mbuf);
+    }
+
+    memset(&fl6, 0, sizeof(struct flow6));
+    fl6.fl6_daddr = conn->daddr.in6;
+    fl6.fl6_saddr = conn->laddr.in6;
+    rt6 = route6_output(mbuf, &fl6);
+    if (!rt6) {
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_NOROUTE;
+    }
+
+    if (mbuf->pkt_len > rt6->rt6_mtu) {
+        route6_put(rt6);
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(rt6->rt6_mtu));
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_FRAG;
+    }
+
+    if (unlikely(mbuf->userdata != NULL))
+        route6_put((struct route6 *)mbuf->userdata);
+    mbuf->userdata = rt6;
+
+    /* translation for outer L3, ICMP, and inner L3 and L4 */
+    dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_INBOUND);
+
+    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt6->rt6_dev, ip6_output);
+}
+
+static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
+                             struct dp_vs_proto *prot,
+                             struct dp_vs_conn *conn)
+{
+    int af = conn->af;
+
+    assert(af == AF_INET || af == AF_INET6);
+
+    if (af == AF_INET)
+        return __xmit_inbound_icmp4(mbuf, prot, conn);
+    else
+        return __xmit_inbound_icmp6(mbuf, prot, conn);
+}
+
 /* return verdict INET_XXX */
-static int __dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
+static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
 {
     struct icmphdr *ich, _icmph;
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
@@ -586,6 +712,9 @@ static int __dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
     }
 
+    // re-fetch IP header and Icmp address
+    iph = ip4_hdr(mbuf);
+    ich = (struct icmphdr*)((void*)iph + ip4_hdrlen(mbuf));
     if (rte_raw_cksum(ich, mbuf->pkt_len - ip4_hdrlen(mbuf)) != 0xffff) {
         RTE_LOG(DEBUG, IPVS, "%s: bad checksum\n", __func__);
         dp_vs_conn_put_no_reset(conn);
@@ -615,8 +744,126 @@ static int __dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
 /* return verdict INET_XXX */
 static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
 {
-    /* TODO */
-    return INET_ACCEPT;
+    struct icmp6_hdr *ic6h, _icmp6h;
+    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+    struct ip6_hdr *cip6h, _cip6h;
+    struct dp_vs_iphdr dcip6h;
+    struct dp_vs_proto *prot;
+    struct dp_vs_conn *conn;
+    int off, ic6h_off, dir, err;
+    bool drop = false;
+    uint8_t nexthdr = ip6h->ip6_nxt;
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    char src_addr_buff[64], dst_addr_buff[64];
+#endif
+
+    *related = 0; /* not related until found matching conn */
+
+    // don't suppurt frag now
+    if (unlikely(ip6_is_frag(ip6h))) {
+        RTE_LOG(WARNING, IPVS, "%s: ip packet is frag.\n", __func__);
+        return INET_DROP;
+    }
+
+    off = sizeof(struct ip6_hdr);
+    off = ip6_skip_exthdr(mbuf, off, &nexthdr);
+    if (off < 0 || nexthdr != IPPROTO_ICMPV6) {
+        RTE_LOG(WARNING, IPVS, "%s: off or nexthdr is illegal. off is %d, nexthdr is %u.\n",
+                __func__, off, nexthdr);
+        return INET_DROP;
+    }
+
+    ic6h_off = off;
+    ic6h = mbuf_header_pointer(mbuf, off, sizeof(_icmp6h), &_icmp6h);
+    if (unlikely(!ic6h))
+        return INET_DROP;
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    inet_ntop(AF_INET6, &ic6h->ip6_src, src_addr_buff, sizeof(src_addr_buff));
+    inet_ntop(AF_INET6, &ic6h->ip6_dst, dst_addr_buff, sizeof(dst_addr_buff));
+    RTE_LOG(DEBUG, IPVS, "ICMP6 (%d,%d) %s->%s\n",
+            ic6h->icmp6_type, ntohs(icmp6h_id(ic6h)), src_addr_buff, dst_addr_buff);
+#endif
+
+    /* support these related error types only,
+     * others either not support or not related.
+     */
+    if (ic6h->icmp6_type != ICMP6_DST_UNREACH
+            && ic6h->icmp6_type != ICMP6_PACKET_TOO_BIG
+            && ic6h->icmp6_type != ICMP6_TIME_EXCEEDED)
+        return INET_ACCEPT;
+
+    /* inner (contained) IP header */
+    off += sizeof(struct icmp6_hdr);
+    cip6h = mbuf_header_pointer(mbuf, off, sizeof(_cip6h), &_cip6h);
+    if (unlikely(!cip6h))
+        return INET_ACCEPT;
+
+    if (unlikely(ip6_is_frag(cip6h))) {
+        RTE_LOG(WARNING, IPVS, "%s: frag needed.\n", __func__);
+        return INET_ACCEPT;
+    }
+
+    /*
+     * lookup conn with inner IP pkt.
+     * it need to move mbuf.data_off to inner IP pkt,
+     * and restore it later. although it looks strange.
+     */
+    rte_pktmbuf_adj(mbuf, off);
+    if (mbuf_may_pull(mbuf, sizeof(struct ip6_hdr)) != 0)
+        return INET_DROP;
+    dp_vs_fill_iphdr(AF_INET6, mbuf, &dcip6h);
+
+    prot = dp_vs_proto_lookup(dcip6h.proto);
+    if (!prot)
+        return INET_ACCEPT;
+
+    conn = prot->conn_lookup(prot, &dcip6h, mbuf, &dir, true, &drop);
+    if (!conn)
+        return INET_ACCEPT;
+
+    /* recover mbuf.data_off to outer IP header. */
+    rte_pktmbuf_prepend(mbuf, off);
+
+    /* so the ICMP is related to existing conn */
+    *related = 1;
+
+    if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0) {
+        RTE_LOG(WARNING, IPVS, "%s: may_pull icmp error\n", __func__);
+        dp_vs_conn_put_no_reset(conn);
+        return INET_DROP;
+    }
+
+    /*
+     * check checksum
+     * re-fetch IP header and Icmp address
+     */
+    ip6h = ip6_hdr(mbuf);
+    ic6h = (struct icmp6_hdr *)((void*)(ip6h) + ic6h_off);
+    if (icmp6_csum(ip6h, ic6h) != 0xffff) {
+        RTE_LOG(DEBUG, IPVS, "%s: bad checksum\n", __func__);
+        dp_vs_conn_put_no_reset(conn);
+        return INET_DROP;
+    }
+
+    if (dp_vs_stats_in(conn, mbuf)) {
+        dp_vs_conn_put(conn);
+        return INET_DROP;
+    }
+    /* note
+     * 1. the direction of inner IP pkt is reversed with ICMP pkt.
+     * 2. but we use (@reverse == true) for prot->conn_lookup()
+     * as a result, @dir is same with icmp packet. */
+    if (dir == DPVS_CONN_DIR_INBOUND)
+        err = xmit_inbound_icmp(mbuf, prot, conn);
+    else
+        err = xmit_outbound_icmp(mbuf, prot, conn);
+    if (err != EDPVS_OK)
+        RTE_LOG(WARNING, IPVS, "%s: xmit icmp error: %s\n", 
+                __func__, dpvs_strerror(err));
+
+    dp_vs_conn_put_no_reset(conn);
+    return INET_STOLEN;
 }
 
 static int dp_vs_in_icmp(int af, struct rte_mbuf *mbuf, int *related)
@@ -624,7 +871,7 @@ static int dp_vs_in_icmp(int af, struct rte_mbuf *mbuf, int *related)
     *related = 0;
     switch (af) {
     case AF_INET:
-        return __dp_vs_in_icmp(mbuf, related);
+        return __dp_vs_in_icmp4(mbuf, related);
     case AF_INET6:
         return __dp_vs_in_icmp6(mbuf, related);
     }

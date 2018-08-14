@@ -42,6 +42,11 @@ static inline struct ip6_hdr *ip6_hdr(const struct rte_mbuf *mbuf)
     return rte_pktmbuf_mtod(mbuf, struct ip6_hdr *);
 }
 
+static inline bool ip6_is_frag(struct ip6_hdr *ip6h)
+{
+    return (ip6h->ip6_nxt == IPPROTO_FRAGMENT);
+}
+
 enum {
     INET6_PROTO_F_NONE      = 0x01,
     INET6_PROTO_F_FINAL     = 0x02,
@@ -67,6 +72,11 @@ struct inet6_protocol {
     int             (*handler)(struct rte_mbuf *mbuf);
     unsigned int    flags;
 };
+
+int ip6_skip_exthdr(const struct rte_mbuf *imbuf, int start,
+                    __u8 *nexthdrp);
+
+int ip6_output(struct rte_mbuf *mbuf);
 
 int ipv6_init(void);
 int ipv6_term(void);
