@@ -256,12 +256,17 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
 {
     uint32_t mtu;
     struct tcpopt_addr *toa;
+    struct tcpopt_ip4_addr *toa_ip4;
+    struct tcpopt_ip6_addr *toa_ip6;
+    uint32_t tcp_opt_len;
+
     uint8_t *p, *q, *tail;
     struct route_entry *rt;
 
-    if (unlikely(conn->af != AF_INET))
+    if (unlikely(conn->af != AF_INET && conn->af != AF_INET6))
         return EDPVS_NOTSUPP;
 
+    tcp_opt_len = conn->af == AF_INET ? TCP_OLEN_IP4_ADDR : TCP_OLEN_IP6_ADDR;
     /*
      * check if we can add the new option
      */
@@ -275,14 +280,16 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
         return EDPVS_NOROUTE;
     }
 
-    if (unlikely(mbuf->pkt_len > (mtu - sizeof(struct tcpopt_addr)))) {
-        RTE_LOG(DEBUG, IPVS, "add toa: need fragment.\n");
+    if (unlikely(mbuf->pkt_len > (mtu - tcp_opt_len))) {
+        RTE_LOG(DEBUG, IPVS, "add toa: need fragment, tcp opt len : %u.\n",
+                tcp_opt_len);
         return EDPVS_FRAG;
     }
 
     /* maximum TCP header is 60, and 40 for options */
-    if (unlikely((60 - (tcph->doff << 2)) < sizeof(struct tcpopt_addr))) {
-        RTE_LOG(DEBUG, IPVS, "add toa: no TCP header room.\n");
+    if (unlikely((60 - (tcph->doff << 2)) < tcp_opt_len)) {
+        RTE_LOG(DEBUG, IPVS, "add toa: no TCP header room, tcp opt len : %u.\n",
+                tcp_opt_len);
         return EDPVS_NOROOM;
     }
 
@@ -290,9 +297,10 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
      * have to pull all bits in segments for later operation. */
     if (unlikely(mbuf_may_pull(mbuf, mbuf->pkt_len) != 0))
         return EDPVS_INVPKT;
-    tail = (uint8_t *)rte_pktmbuf_append(mbuf, sizeof(struct tcpopt_addr));
+    tail = (uint8_t *)rte_pktmbuf_append(mbuf, tcp_opt_len);
     if (unlikely(!tail)) {
-        RTE_LOG(DEBUG, IPVS, "add toa: no mbuf tail room.\n");
+        RTE_LOG(DEBUG, IPVS, "add toa: no mbuf tail room, tcp opt len : %u.\n",
+                tcp_opt_len);
         return EDPVS_NOROOM;
     }
 
@@ -304,7 +312,7 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
      * @p is last data byte,
      * @q is new position of last data byte */
     p = tail - 1;
-    q = p + sizeof(struct tcpopt_addr);
+    q = p + tcp_opt_len;
     while (p >= ((uint8_t *)tcph + sizeof(struct tcphdr))) {
         *q = *p;
         p--, q--;
@@ -313,16 +321,25 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     /* insert toa right after TCP basic header */
     toa = (struct tcpopt_addr *)(tcph + 1);
     toa->opcode = TCP_OPT_ADDR;
-    toa->opsize = TCP_OLEN_ADDR;
+    toa->opsize = tcp_opt_len;
     toa->port = conn->cport;
-    toa->addr = conn->caddr.in.s_addr;
+
+    if (conn->af == AF_INET) {
+        toa_ip4 = (struct tcpopt_ip4_addr *)(tcph + 1);
+        toa_ip4->addr = conn->caddr.in;
+    }
+    else {
+        toa_ip6 = (struct tcpopt_ip6_addr *)(tcph + 1);
+        toa_ip6->addr = conn->caddr.in6;
+    }
+
 
     /* reset tcp header length */
-    tcph->doff += sizeof(struct tcpopt_addr) >> 2;
+    tcph->doff += tcp_opt_len >> 2;
     /* reset ip header total length */
     ip4_hdr(mbuf)->total_length = 
         htons(ntohs(ip4_hdr(mbuf)->total_length) 
-                + sizeof(struct tcpopt_addr));
+                + tcp_opt_len);
 
     /* tcp csum will be recalc later, 
      * so as IP hdr csum since iph.tot_len has been chagned. */
@@ -349,10 +366,16 @@ static void tcp_out_save_seq(struct rte_mbuf *mbuf,
     conn->rs_end_ack = th->ack_seq;
 }
 
-static void tcp_out_adjust_mss(struct tcphdr *tcph)
+static void tcp_out_adjust_mss(int af, struct tcphdr *tcph)
 {
     unsigned char *ptr;
     int length;
+
+    if (unlikely(af != AF_INET && af != AF_INET6)) {
+        RTE_LOG(DEBUG, IPVS, "adjust mss: unknow af, af : %d.\n",
+                af);
+        return ;
+    }
 
     ptr = (unsigned char *)(tcph + 1);
     length = (tcph->doff << 2) - sizeof(struct tcphdr);
@@ -376,7 +399,7 @@ static void tcp_out_adjust_mss(struct tcphdr *tcph)
             if ((opcode == TCP_OPT_MSS) && (opsize == TCP_OLEN_MSS)) {
                 uint16_t in_mss = ntohs(*(__be16 *) ptr);
 
-                in_mss -= TCP_OLEN_ADDR;
+                in_mss -= (af == AF_INET ? TCP_OLEN_IP4_ADDR : TCP_OLEN_IP6_ADDR);
 
                 /* set mss, 16bit */
                 *((uint16_t *) ptr) = htons(in_mss);
@@ -690,7 +713,7 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
     th->dest    = conn->cport;
 
     if (th->syn && th->ack)
-        tcp_out_adjust_mss(th);
+        tcp_out_adjust_mss(AF_INET, th);
 
     /* adjust ACK/SACK from RS since inbound SEQ is changed */
     if (tcp_out_adjust_seq(conn, th) != EDPVS_OK)
