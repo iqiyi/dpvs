@@ -24,6 +24,69 @@
 #include <netinet/ip6.h>
 #include "ipv6.h"
 
+static int ip6_ext_hdr(__u8 nexthdr)
+{
+    /*
+     * find out if nexthdr is an extension header or a protocol
+     */
+    return ( (nexthdr == NEXTHDR_HOP)   ||
+         (nexthdr == NEXTHDR_ROUTING)   ||
+         (nexthdr == NEXTHDR_FRAGMENT)  ||
+         (nexthdr == NEXTHDR_AUTH)  ||
+         (nexthdr == NEXTHDR_NONE)  ||
+         (nexthdr == NEXTHDR_DEST) );
+}
+
+/*
+ * The helper function return upper proto offset of mbuf, including ip6_hdr
+ * and exthdrs.
+ *
+ * @mbuf: packet message buffer
+ * @start: start point of ext header, basically sizeof(struct ip6_hdr)
+ * @nexthdrp: pointer to next header
+ *  when passed in, it was from the 'ip6_nxt' field of ipv6 basic header
+ *  when returned, it points to the 'ip6_nxt' field from last extension header
+ *
+ * @return skip length of packet header, including ext headers
+ */
+int ip6_skip_exthdr(const struct rte_mbuf *imbuf, int start, __u8 *nexthdrp)
+{
+    __u8 nexthdr = *nexthdrp;
+
+    while (ip6_ext_hdr(nexthdr)) {
+        struct ip6_ext _hdr, *hp;
+        int hdrlen;
+
+        if (nexthdr == NEXTHDR_NONE)
+            return -1;
+        hp = mbuf_header_pointer(imbuf, start, sizeof(_hdr), &_hdr);
+        if (hp == NULL)
+            return -1;
+        if (nexthdr == NEXTHDR_FRAGMENT) {
+            __be16 _frag_off, *fp;
+            fp = mbuf_header_pointer(imbuf,
+                        start + offsetof(struct ip6_frag, ip6f_offlg),
+                        sizeof(_frag_off),
+                        &_frag_off);
+            if (fp == NULL)
+                return -1;
+
+            if (ntohs(*fp) & ~0x7)
+                break;
+            hdrlen = 8;
+        } else if (nexthdr == NEXTHDR_AUTH)
+            hdrlen = (hp->ip6e_len + 2)<<2;
+        else
+            hdrlen = ((hp)->ip6e_len + 1) << 3;
+
+        nexthdr = hp->ip6e_nxt;
+        start += hdrlen;
+    }
+
+    *nexthdrp = nexthdr;
+    return start;
+}
+
 /*
  * it's a dummy ext-header handler to parse next header
  * and ext-hdr-length only.
@@ -125,22 +188,4 @@ int ipv6_parse_hopopts(struct rte_mbuf *mbuf)
 {
     /* TODO */
     return EDPVS_OK;
-}
-
-/*
- * The helper function return upper proto offset of mbuf, including ip6_hdr
- * and exthdrs.
- *
- * @mbuf: packet message buffer
- * @start: start point of ext header, basically sizeof(struct ip6_hdr)
- * @nexthdrp: pointer to next header
- *  when passed in, it was from the 'ip6_nxt' field of ipv6 basic header
- *  when returned, it points to the 'ip6_nxt' field from last extension header
- *
- * @return skip length of packet header, including ext headers
- */
-int ip6_skip_exthdr(const struct rte_mbuf *mbuf, int start, uint8_t *nexthdrp)
-{
-    /* TODO */
-    return sizeof(struct ip6_hdr);
 }
