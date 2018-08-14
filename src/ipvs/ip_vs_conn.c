@@ -451,7 +451,8 @@ static int conn_expire(void *priv)
             saddr.sin_addr = conn->vaddr.in;
             saddr.sin_port = conn->vport;
 
-            sa_release(conn->out_dev, &daddr, &saddr);
+            sa_release(conn->out_dev, (struct sockaddr_storage *)&daddr,
+                      (struct sockaddr_storage *)&saddr);
         }
 
         conn_unbind_dest(conn);
@@ -536,7 +537,8 @@ static void conn_flush(void)
                     saddr.sin_family = AF_INET;
                     saddr.sin_addr = conn->vaddr.in;
                     saddr.sin_port = conn->vport;
-                    sa_release(conn->out_dev, &daddr, &saddr);
+                    sa_release(conn->out_dev, (struct sockaddr_storage *)&daddr,
+                              (struct sockaddr_storage *)&saddr);
                 }
 
                 conn_unbind_dest(conn);
