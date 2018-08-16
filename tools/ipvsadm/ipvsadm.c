@@ -1224,9 +1224,9 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 
     sockpair->af = af;
 	sockpair->proto = proto;
-    sockpair->sip = sip.s_addr;
+    memcpy(&sockpair->sip, &sip, sizeof(sockpair->sip));
     sockpair->sport = ntohs(sport);
-    sockpair->tip = tip.s_addr;
+    memcpy(&sockpair->tip, &tip, sizeof(sockpair->tip));
     sockpair->tport = ntohs(tport);
 
     return 1;
@@ -1504,7 +1504,6 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 {
 	char *cname, *vname, *lname, *dname;
 	char proto_str[8], time_str[8];
-	union inet_addr addr;
 
 	if (conn_entry->proto == IPPROTO_TCP)
 		snprintf(proto_str, sizeof(proto_str), "%s", "tcp");
@@ -1517,21 +1516,17 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 
 	snprintf(time_str, sizeof(time_str), "%ds", conn_entry->timeout);
 
-	addr.in.s_addr = conn_entry->caddr;
-	if (!(cname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->cport),
-					conn_entry->proto, format)))
+	if (!(cname = addrport_to_anyname(conn_entry->af, &conn_entry->caddr,
+                    ntohs(conn_entry->cport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->vaddr;
-	if (!(vname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->vport),
-					conn_entry->proto, format)))
+	if (!(vname = addrport_to_anyname(conn_entry->af, &conn_entry->vaddr,
+                    ntohs(conn_entry->vport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->laddr;
-	if (!(lname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->lport),
-					conn_entry->proto, format)))
+	if (!(lname = addrport_to_anyname(conn_entry->af, &conn_entry->laddr,
+                    ntohs(conn_entry->lport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->daddr;
-	if (!(dname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->dport),
-					conn_entry->proto, format)))
+	if (!(dname = addrport_to_anyname(conn_entry->af, &conn_entry->daddr,
+                    ntohs(conn_entry->dport), conn_entry->proto, format)))
 		goto exit;
 
 	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
