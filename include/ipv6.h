@@ -32,6 +32,14 @@
 
 #define IPV6
 #define RTE_LOGTYPE_IPV6    RTE_LOGTYPE_USER1
+#define IPV6_HDR_FIXED_LEN  40
+
+/*
+ * get ip6 header length
+ */
+static inline int ip6_hdrlen(const struct rte_mbuf *mbuf) {
+    return sizeof(struct ip6_hdr);
+}
 
 /*
  * helper functions
