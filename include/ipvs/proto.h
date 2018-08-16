@@ -24,6 +24,8 @@
 #include "ipvs/conn.h"
 
 struct dp_vs_conn;
+#define IPV6_ADDR_LEN_IN_BYTES 16
+#define IPV4_ADDR_LEN_IN_BYTES 4
 
 struct dp_vs_proto {
     char                    *name;
