@@ -35,12 +35,19 @@
 #define IPOPT_UOA	(31|IPOPT_CONTROL)
 #define IPOLEN_UOA	sizeof(struct ipopt_uoa)
 
-/* UOA IP option */
+/* 
+ * UOA IP option
+ * @op_code: operation code
+ * @op_len: option length
+ * @op_port: 
+ * @op_addr:
+ * op_addr[0] was used for ipv4
+ */
 struct ipopt_uoa {
 	__u8	op_code;
 	__u8	op_len;
 	__be16  op_port;
-	__be32  op_addr;
+	__be32  op_addr[4];
 } __attribute__((__packed__));
 
 /* per-cpu statistics */
@@ -124,8 +131,9 @@ struct uoa_param_map {
  *  :                           Options                            :
  *  +---------------+---------------+---------------+--------------+
  *
- *  Ver.	Version, now 0x1 (1).
- *  Rsvd.	Reserved bits, must be zero.
+ *  Ve.     Version, now 0x1 (1) for ipv4 address
+ *                       0x2 (2) for ipv6 address
+ *  Rsvd.   Reserved bits, must be zero.
  *  Protocol    Next level protocol, e.g., IPPROTO_UDP.
  *  Length	Length of fixed header and options, not include payloads.
  *  Options	Compatible with IPv4 options, including IPOPT_UOA.

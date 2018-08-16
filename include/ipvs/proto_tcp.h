@@ -44,8 +44,6 @@ enum {
     (((tm_spec).tv_sec % 100) * 1000000 + \
      ((tm_spec).tv_nsec / 1000))
 
-#define IPV6_HDR_LEN 40
-
 /* now IPv4 only */
 struct tcpopt_addr {
     uint8_t opcode;
