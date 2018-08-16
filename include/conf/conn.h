@@ -52,26 +52,26 @@ struct ip_vs_sockpair {
     uint16_t proto;
     __be16 sport;
     __be16 tport;
-    __be32 sip;
-    __be32 tip;
+    union inet_addr sip;
+    union inet_addr tip;
 };
 
 typedef struct ip_vs_sockpair ipvs_sockpair_t;
 
 struct ip_vs_conn_entry {
-    uint16_t   af;
-    uint16_t   proto;
-    __be32      caddr;
-    __be32      vaddr;
-    __be32      laddr;
-    __be32      daddr;
-    uint16_t   cport;
-    uint16_t   vport;
-    uint16_t   lport;
-    uint16_t   dport;
-    uint32_t   timeout;
-    uint8_t    lcoreid;
-    char        state[16];
+    uint16_t            af;
+    uint16_t            proto;
+    union inet_addr     caddr;
+    union inet_addr     vaddr;
+    union inet_addr     laddr;
+    union inet_addr     daddr;
+    uint16_t            cport;
+    uint16_t            vport;
+    uint16_t            lport;
+    uint16_t            dport;
+    uint32_t            timeout;
+    uint8_t             lcoreid;
+    char                state[16];
 };
 typedef struct ip_vs_conn_entry ipvs_conn_entry_t;
 
