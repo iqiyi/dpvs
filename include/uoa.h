@@ -39,9 +39,8 @@
  * UOA IP option
  * @op_code: operation code
  * @op_len: option length
- * @op_port: 
- * @op_addr:
- * op_addr[0] was used for ipv4
+ * @op_port: port number
+ * @op_addr: ipv4/v6 address
  */
 struct ipopt_uoa {
 	__u8	op_code;
@@ -49,6 +48,7 @@ struct ipopt_uoa {
 	__be16  op_port;
 	__be32  op_addr[4];
 } __attribute__((__packed__));
+#define op_ipv4_addr op_addr[0]
 
 /* per-cpu statistics */
 struct uoa_cpu_stats {
