@@ -270,7 +270,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
         memcpy(uoa->op_addr, &((struct ip6_hdr *)oiph)->ip6_src, 
                                                     IPV6_ADDR_LEN_IN_BYTES);
     } else {
-        uoa->op_addr[0] = ((struct iphdr *)oiph)->saddr;
+        uoa->op_ipv4_addr = ((struct iphdr *)oiph)->saddr;
     }
 
     /* udp header */
@@ -341,7 +341,7 @@ static int insert_ipopt_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     optuoa->op_code = IPOPT_UOA;
     optuoa->op_len  = IPOLEN_UOA;
     optuoa->op_port = uh->source;
-    optuoa->op_addr[0] = niph->saddr;
+    optuoa->op_ipv4_addr = niph->saddr;
 
     niph->ihl += IPOLEN_UOA / 4;
     niph->tot_len = htons(ntohs(niph->tot_len) + IPOLEN_UOA);
