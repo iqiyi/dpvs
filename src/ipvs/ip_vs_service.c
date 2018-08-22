@@ -47,8 +47,15 @@ static struct list_head dp_vs_svc_match_list;
 
 static inline unsigned dp_vs_svc_hashkey(int af, unsigned proto, const union inet_addr *addr)
 {
-    /* now IPv4 only */
-    uint32_t addr_fold = addr->in.s_addr;
+    uint32_t addr_fold;
+
+    addr_fold = inet_addr_fold(af, addr);
+
+    if (!addr_fold) {
+        RTE_LOG(DEBUG, SERVICE, "%s: IP proto not support.\n", __func__);
+        return 0;
+    }
+
     return (proto ^ rte_be_to_cpu_32(addr_fold)) & DP_VS_SVC_TAB_MASK;
 }
 
@@ -104,7 +111,8 @@ static int dp_vs_svc_unhash(struct dp_vs_service *svc)
 }
 
 struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol, 
-                                          const union inet_addr *vaddr, uint16_t vport)
+                                          const union inet_addr *vaddr, 
+                                          uint16_t vport)
 {
     unsigned hash;
     struct dp_vs_service *svc;
@@ -310,7 +318,7 @@ out:
 
 
 struct dp_vs_service *dp_vs_lookup_vip(int af, uint16_t protocol,
-                       const union inet_addr *vaddr)
+                                       const union inet_addr *vaddr)
 {
     struct dp_vs_service *svc;
     unsigned hash;
@@ -353,15 +361,15 @@ void __dp_vs_unbind_svc(struct dp_vs_dest *dest)
 }
 
 int dp_vs_add_service(struct dp_vs_service_conf *u, 
-                             struct dp_vs_service **svc_p)
+                      struct dp_vs_service **svc_p)
 {
     int ret = 0;
     int size;
     struct dp_vs_scheduler *sched = NULL;
     struct dp_vs_service *svc = NULL;
 
-    if (!u->fwmark && !u->addr.in.s_addr && !u->port &&
-            is_empty_match(&u->match)) {
+    if (!u->fwmark && inet_is_addr_any(u->af, &u->addr) 
+        && !u->port && is_empty_match(&u->match)) {
         RTE_LOG(ERR, SERVICE, "%s: adding empty servive\n", __func__);
         return EDPVS_INVAL;
     }
@@ -419,8 +427,8 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     ret = dp_vs_new_stats(&(svc->stats));
     if(ret)
         goto out_err;
-    if(svc->af == AF_INET)
-        dp_vs_num_services++;
+        
+    dp_vs_num_services++;
 
     rte_rwlock_write_lock(&__dp_vs_svc_lock);
     dp_vs_svc_hash(svc);
@@ -457,12 +465,10 @@ dp_vs_edit_service(struct dp_vs_service *svc, struct dp_vs_service_conf *u)
     }
     old_sched = sched;
 
-#ifdef CONFIG_IP_VS_IPV6
     if (u->af == AF_INET6 && (u->netmask < 1 || u->netmask > 128)) {
-        ret = -EINVAL;
+        ret = EDPVS_INVAL;
         goto out;
     }
-#endif
 
     rte_rwlock_write_lock(&__dp_vs_svc_lock);
 
@@ -511,12 +517,9 @@ dp_vs_edit_service(struct dp_vs_service *svc, struct dp_vs_service_conf *u)
         }
     }
 
-      out_unlock:
+out_unlock:
     rte_rwlock_write_unlock(&__dp_vs_svc_lock);
-#ifdef CONFIG_IP_VS_IPV6
-      out:
-#endif
-
+out:
     return ret;
 }
 
@@ -526,8 +529,7 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
     struct dp_vs_dest *dest, *nxt;
 
     /* Count only IPv4 services for old get/setsockopt interface */
-    if (svc->af == AF_INET)
-        dp_vs_num_services--;
+    dp_vs_num_services--;
 
     /* Unbind scheduler */
     dp_vs_unbind_scheduler(svc);
@@ -587,8 +589,9 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     struct dp_vs_match *m;
 
     memset(dst, 0, sizeof(*dst));
+    dst->af = src->af;
     dst->proto = src->proto;
-    dst->addr = src->addr.in.s_addr;
+    dst->addr = src->addr;
     dst->port = src->port;
     dst->fwmark = src->fwmark;
     snprintf(dst->sched_name, sizeof(dst->sched_name),
@@ -606,8 +609,8 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     if (!m)
         return err;
 
-    inet_addr_range_dump(AF_INET, &m->srange, dst->srange, sizeof(dst->srange));
-    inet_addr_range_dump(AF_INET, &m->drange, dst->drange, sizeof(dst->drange));
+    inet_addr_range_dump(src->af, &m->srange, dst->srange, sizeof(dst->srange));
+    inet_addr_range_dump(src->af, &m->drange, dst->drange, sizeof(dst->drange));
 
     snprintf(dst->iifname, sizeof(dst->iifname), "%s", m->iifname);
     snprintf(dst->oifname, sizeof(dst->oifname), "%s", m->oifname);
@@ -624,8 +627,6 @@ int dp_vs_get_service_entries(const struct dp_vs_get_services *get,
 
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         list_for_each_entry(svc, &dp_vs_svc_table[idx], s_list){
-            if (svc->af != AF_INET)
-                continue;
             if (count >= get->num_services)
                 goto out;
             ret = dp_vs_copy_service(&uptr->entrytable[count], svc);
@@ -637,9 +638,6 @@ int dp_vs_get_service_entries(const struct dp_vs_get_services *get,
 
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         list_for_each_entry(svc, &dp_vs_svc_fwm_table[idx], f_list) {
-            /* Only expose IPv4 entries to old interface */
-            if (svc->af != AF_INET)
-                continue;
             if (count >= get->num_services)
                 goto out;
             ret = dp_vs_copy_service(&uptr->entrytable[count], svc);
@@ -650,8 +648,6 @@ int dp_vs_get_service_entries(const struct dp_vs_get_services *get,
     }
 
     list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
-        if (svc->af != AF_INET)
-            continue;
         if (count >= get->num_services)
             goto out;
         ret = dp_vs_copy_service(&uptr->entrytable[count], svc);
@@ -773,9 +769,9 @@ int dp_vs_zero_all(void)
 static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
                                    struct dp_vs_service_user *user)
 {
-    conf->af = AF_INET;
+    conf->af = user->af;
     conf->protocol = user->proto;
-    conf->addr.in.s_addr = user->addr;
+    conf->addr = user->addr;
     conf->port = user->port;
     conf->fwmark = user->fwmark;
 
@@ -796,20 +792,21 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
 static void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
                                     struct dp_vs_dest_user *udest_compat)
 {
-    udest->addr.in.s_addr = udest_compat->addr;
-    udest->port = udest_compat->port;
-    udest->fwdmode = udest_compat->conn_flags;//make sure fwdmode and conn_flags are the same
+    udest->af         = udest_compat->af;
+    udest->addr       = udest_compat->addr;
+    udest->port       = udest_compat->port;
+    udest->fwdmode    = udest_compat->conn_flags;//make sure fwdmode and conn_flags are the same
     udest->conn_flags = udest_compat->conn_flags; 
-    udest->weight = udest_compat->weight;
-    udest->max_conn = udest_compat->max_conn;
-    udest->min_conn = udest_compat->min_conn;
+    udest->weight     = udest_compat->weight;
+    udest->max_conn   = udest_compat->max_conn;
+    udest->min_conn   = udest_compat->min_conn;
 }
 
 static int gratuitous_arp_send_vip(struct in_addr *vip)
 {
     struct route_entry *local_route;
-    local_route = route_out_local_lookup(vip->s_addr);
 
+    local_route = route_out_local_lookup(vip->s_addr);
     if(local_route){
         neigh_gratuitous_arp(&local_route->dest, local_route->port);
         route4_put(local_route);
@@ -835,8 +832,8 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     }
     if (opt == DPVS_SO_SET_FLUSH)
         return dp_vs_flush();
-    memcpy(arg, user, len);
 
+    memcpy(arg, user, len);
     usvc_compat = (struct dp_vs_service_user *)arg;
     udest_compat = (struct dp_vs_dest_user *)(usvc_compat + 1);
     
@@ -845,7 +842,8 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
         return ret;
     
     if (opt == DPVS_SO_SET_ZERO) {
-        if(!usvc.fwmark && !usvc.addr.in.s_addr && !usvc.port &&
+        if(!inet_is_addr_any(usvc.af, &usvc.addr) && 
+           !usvc.fwmark && !usvc.port &&
            is_empty_match(&usvc.match)
           ) {
             return dp_vs_zero_all();
@@ -858,7 +856,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
         return EDPVS_INVAL;
     }
 
-    if (usvc.addr.in.s_addr || usvc.port)
+    if (!inet_is_addr_any(usvc.af, &usvc.addr) || usvc.port)
         svc = __dp_vs_service_get(usvc.af, usvc.protocol, 
                                   &usvc.addr, usvc.port);
     else if (usvc.fwmark)
@@ -945,7 +943,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
             {
                 struct dp_vs_get_services *get, *output;
                 int size;
-                get = (struct dp_vs_get_services*)user;
+                get = (struct dp_vs_get_services *)user;
                 size = sizeof(*get) + \
                        sizeof(struct dp_vs_service_entry) * (get->num_services);
                 //memcpy(&get, user, size);
@@ -969,11 +967,11 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 union inet_addr addr;
 
                 entry = (struct dp_vs_service_entry *)user;
-                addr.in.s_addr = entry->addr;
+                addr = entry->addr;
                 if(entry->fwmark)
                     svc = __dp_vs_svc_fwm_get(AF_INET, entry->fwmark);
-                else if (entry->addr || entry->port)
-                    svc = __dp_vs_service_get(AF_INET, entry->proto,
+                else if (!inet_is_addr_any(entry->af, &entry->addr) || entry->port)
+                    svc = __dp_vs_service_get(entry->af, entry->proto,
                                               &addr, entry->port);
                 else {
                     struct dp_vs_match match;
@@ -1018,16 +1016,16 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     *outlen = 0;
                     return EDPVS_INVAL;
                 }
-                addr.in.s_addr = get->addr;
+                addr = get->addr;
                 output = rte_zmalloc("get_services", size, 0);
                 if (unlikely(NULL == output))
                     return EDPVS_NOMEM;
                 memcpy(output, get, size);
 
                 if(get->fwmark)
-                    svc = __dp_vs_svc_fwm_get(AF_INET, get->fwmark);
-                else if (addr.in.s_addr || get->port)
-                    svc = __dp_vs_service_get(AF_INET, get->proto, &addr,
+                    svc = __dp_vs_svc_fwm_get(get->af, get->fwmark);
+                else if (!inet_is_addr_any(get->af, &addr) || get->port)
+                    svc = __dp_vs_service_get(get->af, get->proto, &addr,
                                               get->port);
                 else {
                     struct dp_vs_match match;
