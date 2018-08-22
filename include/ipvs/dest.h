@@ -17,9 +17,7 @@
  */
 #ifndef __DPVS_DEST_H__
 #define __DPVS_DEST_H__
-#include "common.h"
-#include "list.h"
-#include "dpdk.h"
+
 #include "ipvs/service.h"
 
 /* must consistent with IP_VS_CONN_F_XXX (libipvs-2.6/ip_vs.h) */
@@ -39,6 +37,10 @@ enum {
     DPVS_DEST_F_OVERLOAD        = 0x1<<1,
 };
 
+#ifdef __DPVS__
+#include "common.h"
+#include "list.h"
+#include "dpdk.h"
 
 struct dp_vs_dest {
     struct list_head    n_list;     /* for the dests in the service */
@@ -78,34 +80,37 @@ struct dp_vs_dest {
     unsigned            conn_timeout; /* conn timeout copied from svc*/
     unsigned            limit_proportion; /* limit copied from svc*/ 
 } __rte_cache_aligned;
+#endif
 
 struct dp_vs_dest_conf {
     /* destination server address */
-    union inet_addr addr;
-    uint16_t port;
+    int                af;
+    union inet_addr    addr;
+    uint16_t           port;
 
     enum dpvs_fwd_mode fwdmode;
     /* real server options */
-    unsigned conn_flags;    /* connection flags */
-    int weight;     /* destination weight */
+    unsigned           conn_flags;    /* connection flags */
+    int                weight;     /* destination weight */
 
     /* thresholds for active connections */
-    uint32_t max_conn;    /* upper threshold */
-    uint32_t min_conn;    /* lower threshold */
+    uint32_t           max_conn;    /* upper threshold */
+    uint32_t           min_conn;    /* lower threshold */
 };
 
 struct dp_vs_dest_entry {
-    uint32_t addr;        /* destination address */
-    uint16_t port;
-    unsigned conn_flags;    /* connection flags */
-    int weight;     /* destination weight */
+    int             af;
+    union inet_addr addr;        /* destination address */
+    uint16_t        port;
+    unsigned        conn_flags;    /* connection flags */
+    int             weight;     /* destination weight */
 
-    uint32_t max_conn;  /* upper threshold */
-    uint32_t min_conn;  /* lower threshold */
+    uint32_t        max_conn;  /* upper threshold */
+    uint32_t        min_conn;  /* lower threshold */
 
-    uint32_t actconns;  /* active connections */
-    uint32_t inactconns;   /* inactive connections */
-    uint32_t persistconns; /* persistent connections */
+    uint32_t        actconns;  /* active connections */
+    uint32_t        inactconns;   /* inactive connections */
+    uint32_t        persistconns; /* persistent connections */
 
     /* statistics */
     struct dp_vs_stats stats;
@@ -113,10 +118,11 @@ struct dp_vs_dest_entry {
 
 struct dp_vs_get_dests {
     /* which service: user fills in these */
-    uint16_t    proto;
-    uint32_t    addr;        /* virtual address */
-    uint16_t    port;
-    uint32_t    fwmark;       /* firwall mark of service */
+    int              af;
+    uint16_t         proto;
+    union inet_addr  addr;        /* virtual address */
+    uint16_t         port;
+    uint32_t         fwmark;       /* firwall mark of service */
 
     /* number of real servers */
     unsigned int num_dests;
@@ -131,17 +137,18 @@ struct dp_vs_get_dests {
 };
 
 struct dp_vs_dest_user{
-    uint32_t addr;
-    uint16_t port;
+    int             af;
+    union inet_addr addr;
+    uint16_t        port;
 
-    unsigned conn_flags;
-    int weight;
+    unsigned        conn_flags;
+    int             weight;
 
-    uint32_t max_conn;
-    uint32_t min_conn;
+    uint32_t        max_conn;
+    uint32_t        min_conn;
 };
 
-
+#ifdef __DPVS__
 int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
                                               struct dp_vs_dest **dest_p);
 
@@ -175,5 +182,6 @@ int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
 int dp_vs_dest_init(void);
 
 int dp_vs_dest_term(void);
+#endif
 
 #endif /* __DPVS_DEST_H__ */
