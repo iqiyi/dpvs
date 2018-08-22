@@ -34,7 +34,7 @@ static int dp_vs_rr_update_svc(struct dp_vs_service *svc)
  * Round-Robin Scheduling
  */
 static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
-                        const struct rte_mbuf *mbuf)
+                                            const struct rte_mbuf *mbuf)
 {
     struct list_head *p, *q;
     struct dp_vs_dest *dest;

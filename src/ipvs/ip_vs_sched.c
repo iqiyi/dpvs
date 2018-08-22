@@ -36,7 +36,7 @@ static rte_rwlock_t __dp_vs_sched_lock;
  *  Bind a service with a scheduler
  */
 int dp_vs_bind_scheduler(struct dp_vs_service *svc,
-             struct dp_vs_scheduler *scheduler)
+                         struct dp_vs_scheduler *scheduler)
 {
     int ret;
 
