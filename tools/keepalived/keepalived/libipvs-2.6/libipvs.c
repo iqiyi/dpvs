@@ -109,55 +109,6 @@ typedef struct dpvs_servicedest_s {
 	X->persistconns     = Y->persistconns;			\
 	memcpy(&X->stats, &Y->stats, sizeof(X->stats));}
 
-#if 0
-/*
- * support ipv6
- * notice: kernel/original keepalived used lots of struct to send svc message; 
- * we just need to covert svc struct as include/ipvs/service.h here
- */
-void dpvs_service_copy_2_user(const ipvs_service_t *ipvs_user, 
-				struct *dp_vs_service_user *dpvs_user)
-{
-	dpvs_user->af               = ipvs_user->af;
-	dpvs_user->proto            = ipvs_user->protocol;
-	memcpy(dpvs_user->addr, ipvs_user->addr, sizeof(union nf_inet_addr));
-	dpvs_user->port             = ipvs_user->port;
-	dpvs_user->fwmark           = ipvs_user->fwmark;
-	snprintf(dpvs_user->sched_name, IP_VS_SCHEDNAME_MAXLEN, "%s", ipvs_user->sched_name);
-	dpvs_user->flags            = ipvs_user->flags;
-	dpvs_user->timeout          = ipvs_user->timeout;
-	dpvs_user->conn_timeout     = ipvs_user->conn_timeout;
-	dpvs_user->netmask          = ipvs_user->netmask;
-	dpvs_user->bps              = ipvs_user->bps;
-	dpvs_user->limit_proportion = ipvs_user->limit_proportion;
-	snprintf(dpvs_user->srange, sizeof(dpvs_user->srange), "%s", ipvs_user->srange);
-	snprintf(dpvs_user->drange, sizeof(dpvs_user->drange), "%s", ipvs_user->drange);
-	snprintf(dpvs_user->iifname, sizeof(dpvs_user->iifname), "%s", ipvs_user->iifname);
-	snprintf(dpvs_user->oifname, sizeof(dpvs_user->oifname), "%s", ipvs_user->oifname);
-}
-
-void dpvs_service_copy_2_entry(const ipvs_service_entry_t *ipvs_entry, 
-				struct dp_vs_service_entry *dpvs_entry)
-{
-	dpvs_entry->af  = ipvs_entry->af;
-	dpvs_entry->proto  = ipvs_entry->protocol;
-	memcpy(dpvs_entry->addr, ipvs_entry->addr, sizeof(union nf_inet_addr));
-	dpvs_entry->fwmark = ipvs_entry->fwmark;
-	snprintf(dpvs_entry->sched_name, IP_VS_SCHEDNAME_MAXLEN, "%s", ipvs_entry->sched_name);
-	dpvs_entry->flags  = ipvs_entry->flags;
-	dpvs_entry->timeout = ipvs_entry->timeout;
-	dpvs_entry->conn_timeout = ipvs_entry->conn_timeout;
-	dpvs_entry->netmask = ipvs_entry->netmask;
-	dpvs_entry->bps = ipvs_entry->bps;
-	dpvs_entry->limit_proportion = ipvs_entry->limit_proportion;
-	dpvs_entry->num_dests = ipvs_entry->num_dests;
-	dpvs_entry->num_laddrs = ipvs_entry->num_laddrs;
-	memcpy(dpvs_entry->dpvs_stats, ipvs_entry->dpvs_stats, sizeof(struct dp_vs_stats));
-	snprintf(dpvs_entry->srange, sizeof(dpvs_entry->srange), "%s", ipvs_entry->srange);
-	snprintf(dpvs_user->drange, sizeof(dpvs_user->drange), "%s", ipvs_user->drange);
-}
-#endif
-
 void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t *user);
 
 int ipvs_init(void)
