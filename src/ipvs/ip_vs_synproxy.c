@@ -345,10 +345,10 @@ static uint16_t const msstab[] = {
  */
 static uint32_t
 syn_proxy_cookie_v4_init_sequence(struct rte_mbuf *mbuf,
+                                  const struct tcphdr *th,
                                   struct dp_vs_synproxy_opt *opts)
 {
     const struct iphdr *iph = (struct iphdr*)ip4_hdr(mbuf);
-    const struct tcphdr *th = tcp_hdr(mbuf);
     int mssind;
     const uint16_t mss = opts->mss_clamp;
     uint32_t data;
@@ -368,12 +368,12 @@ syn_proxy_cookie_v4_init_sequence(struct rte_mbuf *mbuf,
             rte_atomic32_read(&g_minute_count), data);
 }
 
-__rte_unused static uint32_t
+static uint32_t
 syn_proxy_cookie_v6_init_sequence(struct rte_mbuf *mbuf,
+                                  const struct tcphdr *th,
                                   struct dp_vs_synproxy_opt *opts)
 {
     const struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-    const struct tcphdr *th = tcp_hdr(mbuf);
     int mssind;
     const uint16_t mss = opts->mss_clamp;
     uint32_t data;
@@ -578,24 +578,19 @@ static void syn_proxy_parse_set_opts(struct rte_mbuf *mbuf, struct tcphdr *th,
  * 5) compute iphdr and tcp check (HW xmit checksum offload not support for syn).
  */
 static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
-        struct dp_vs_synproxy_opt *opt)
+                                 struct tcphdr *th,
+                                 struct dp_vs_synproxy_opt *opt)
 {
     uint32_t isn;
     uint16_t tmpport;
-    struct tcphdr *th;
     int iphlen;
 
     if (AF_INET6 == af)
-        /* FIXME: count exthdrs length? */
         iphlen = sizeof(struct ip6_hdr);
     else
         iphlen = ip4_hdrlen(mbuf);
 
-    th = tcp_hdr(mbuf);
-    if (!th)
-        return;
-
-    if (mbuf_may_pull(mbuf, iphlen + (th->doff<< 2)) != 0)
+    if (mbuf_may_pull(mbuf, iphlen + (th->doff << 2)) != 0)
         return;
 
     /* deal with tcp options */
@@ -603,9 +598,9 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
 
     /* get cookie */
     if (AF_INET6 == af)
-        isn = syn_proxy_cookie_v6_init_sequence(mbuf, opt);
+        isn = syn_proxy_cookie_v6_init_sequence(mbuf, th, opt);
     else
-        isn = syn_proxy_cookie_v4_init_sequence(mbuf, opt);
+        isn = syn_proxy_cookie_v4_init_sequence(mbuf, th, opt);
 
     /* set syn-ack flag */
     ((uint8_t *)th)[13] = 0x12;
@@ -711,7 +706,6 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
             goto syn_rcv_out;
         }
-
     } else {
         if (svc)
             dp_vs_service_put(svc);
@@ -738,7 +732,7 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
 
     /* reuse mbuf */
-    syn_proxy_reuse_mbuf(af, mbuf, &tcp_opt);
+    syn_proxy_reuse_mbuf(af, mbuf, th, &tcp_opt);
 
     /* set L2 header and send the packet out
      * It is noted that "ipv4_xmit" should not used here,
