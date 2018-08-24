@@ -369,6 +369,7 @@ static int conn_expire(void *priv)
     struct dp_vs_synproxy_ack_pakcet *ack_mbuf, *t_ack_mbuf;
     struct rte_mempool *pool;
     assert(conn);
+    assert(conn->af == AF_INET || conn->af == AF_INET6);
 
     /* set proper timeout */
     unsigned conn_timeout = 0;
@@ -434,8 +435,6 @@ static int conn_expire(void *priv)
     /* refcnt == 1 means we are the only referer.
      * no one is using the conn and it's timed out. */
     if (rte_atomic32_read(&conn->refcnt) == 1) {
-        struct dp_vs_proto *proto = dp_vs_proto_lookup(conn->proto);
-
         if (conn->flags & DPVS_CONN_F_TEMPLATE)
             dpvs_timer_cancel(&conn->timer, true);
         else
@@ -445,8 +444,8 @@ static int conn_expire(void *priv)
         if (conn->control)
             dp_vs_control_del(conn);
 
-        if (proto && proto->conn_expire)
-            proto->conn_expire(proto, conn);
+        if (pp && pp->conn_expire)
+            pp->conn_expire(pp, conn);
 
         if (conn->dest->fwdmode == DPVS_FWD_MODE_SNAT
                 && conn->proto != IPPROTO_ICMP
@@ -465,7 +464,7 @@ static int conn_expire(void *priv)
                 saddr4->sin_family = AF_INET;
                 saddr4->sin_addr = conn->vaddr.in;
                 saddr4->sin_port = conn->vport;
-            } else if (AF_INET6 == conn->af) {
+            } else { /* AF_INET6 */
                 struct sockaddr_in6 *daddr6 = (struct sockaddr_in6 *)&daddr;
                 struct sockaddr_in6 *saddr6 = (struct sockaddr_in6 *)&saddr;
 
@@ -476,9 +475,6 @@ static int conn_expire(void *priv)
                 saddr6->sin6_family = AF_INET6;
                 saddr6->sin6_addr = conn->vaddr.in6;
                 saddr6->sin6_port = conn->vport;
-            } else {
-                RTE_LOG(WARNING, IPVS, "%s: conn address family %d "
-                        "not supported!\n", __func__, conn->af);
             }
             sa_release(conn->out_dev, (struct sockaddr_storage *)&daddr,
                     (struct sockaddr_storage *)&saddr);
@@ -607,9 +603,10 @@ static void conn_flush(void)
 #endif
 }
 
-struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
-                                   struct dp_vs_conn_param *param,
-                                   struct dp_vs_dest *dest, uint32_t flags)
+struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
+                                  const struct dp_vs_iphdr *iph,
+                                  struct dp_vs_conn_param *param,
+                                  struct dp_vs_dest *dest, uint32_t flags)
 {
     struct dp_vs_conn *new;
     struct conn_tuple_hash *t;
@@ -634,25 +631,16 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
                     param->proto == IPPROTO_ICMPV6)) {
             rport = param->vport;
         } else {
-            if (AF_INET == param->af)
-                ports = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf),
-                        sizeof(_ports), _ports);
-            else if (AF_INET6 == param->af)
-                ports = mbuf_header_pointer(mbuf, sizeof(struct ip6_hdr),
-                        sizeof(_ports), _ports); /* options are removed by dp_vs_in6 */
-            else {
-                RTE_LOG(WARNING, IPVS, "%s: address family %d not supported\n",
-                        __func__, param->af);
-                goto errout;
-            }
+            ports = mbuf_header_pointer(mbuf, iph->len, sizeof(_ports), _ports);
             if (unlikely(!ports)) {
                 RTE_LOG(WARNING, IPVS, "%s: no memory\n", __func__);
                 goto errout;
             }
             rport = ports[0];
         }
-    } else
+    } else {
         rport = dest->port;
+    }
 
     /* init inbound conn tuple hash */
     t = &tuplehash_in(new);
@@ -671,9 +659,9 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     t->af       = param->af;
     t->proto    = param->proto;
     if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
-        t->saddr.in.s_addr    = ip4_hdr(mbuf)->src_addr;
+        t->saddr = iph->saddr;
     else
-        t->saddr    = dest->addr;
+        t->saddr = dest->addr;
     t->sport    = rport;
     t->daddr    = *param->caddr;    /* non-FNAT */
     t->dport    = param->cport;     /* non-FNAT */
@@ -688,10 +676,11 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     new->vport  = param->vport;
     new->laddr  = *param->caddr;    /* non-FNAT */
     new->lport  = param->cport;     /* non-FNAT */
-    if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
-        new->daddr.in.s_addr  = ip4_hdr(mbuf)->src_addr;
-    else
+    if (dest->fwdmode == DPVS_FWD_MODE_SNAT) {
+        new->daddr  = iph->saddr;
+    } else {
         new->daddr  = dest->addr;
+    }
     new->dport  = rport;
 
     /* neighbour confirm cache */
@@ -750,11 +739,7 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
         struct dp_vs_synproxy_ack_pakcet *ack_mbuf;
         struct dp_vs_proto *pp;
 
-        if (AF_INET == new->af)
-            th = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf), sizeof(_tcph), &_tcph);
-        else if (AF_INET6 == new->af)
-            th = mbuf_header_pointer(mbuf, sizeof(struct ip6_hdr),
-                    sizeof(_tcph), &_tcph);
+        th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
         if (!th) {
             RTE_LOG(ERR, IPVS, "%s: get tcphdr failed\n", __func__);
             goto unbind_laddr;

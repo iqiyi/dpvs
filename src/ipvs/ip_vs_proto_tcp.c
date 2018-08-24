@@ -99,16 +99,17 @@ static uint32_t tcp_secret;
 inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
 {
     int len;
-    unsigned char version;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    unsigned char version, *verp;
 
-    version = (iph->version_ihl >> 4) & 0xf;
+    verp = rte_pktmbuf_mtod(mbuf, unsigned char*);
+    version = (*verp >> 4) & 0xf;
+
     if (4 == version) {
         len = ip4_hdrlen(mbuf);
-
     } else if (6 == version) {
         struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-        len = ip6_skip_exthdr(mbuf, mbuf->l3_len, &ip6h->ip6_nxt);
+        uint8_t ip6nxt = ip6h->ip6_nxt;
+        len = ip6_skip_exthdr(mbuf, mbuf->l3_len, &ip6nxt);
         if (len < 0)
             return NULL;
         len += sizeof(struct ip6_hdr);
