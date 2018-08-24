@@ -47,9 +47,10 @@ static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
         iph->daddr.in.s_addr = ip4h->dst_addr;
     } else if (af == AF_INET6) {
         struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+        uint8_t ip6nxt = ip6h->ip6_nxt;
         iph->af         = AF_INET6;
-        iph->len        = ip6_skip_exthdr(mbuf, mbuf->l3_len, &ip6h->ip6_nxt);
-        iph->proto      = ip6h->ip6_nxt;
+        iph->len        = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+        iph->proto      = ip6nxt;
         iph->saddr.in6  = ip6h->ip6_src;
         iph->daddr.in6  = ip6h->ip6_dst;
     } else {
@@ -116,7 +117,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
             dp_vs_conn_fill_param(iph->af, iph->proto, &snet, &iph->daddr,
                     0, ports[1], 0, &param);
 
-            ct = dp_vs_conn_new(mbuf, &param, dest, conn_flags | DPVS_CONN_F_TEMPLATE);
+            ct = dp_vs_conn_new(mbuf, iph, &param, dest, conn_flags | DPVS_CONN_F_TEMPLATE);
             if(unlikely(NULL == ct))
                 return NULL;
 
@@ -140,7 +141,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
             dp_vs_conn_fill_param(iph->af, iph->proto, &snet, &iph->daddr,
                     0, 0, 0, &param);
 
-            ct = dp_vs_conn_new(mbuf, &param, dest, conn_flags | DPVS_CONN_F_TEMPLATE);
+            ct = dp_vs_conn_new(mbuf, iph, &param, dest, conn_flags | DPVS_CONN_F_TEMPLATE);
             if(unlikely(NULL == ct))
                 return NULL;
 
@@ -156,7 +157,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
     dp_vs_conn_fill_param(iph->af, iph->proto, &iph->saddr, &iph->daddr,
             ports[0], ports[1], dport, &param);
 
-    conn = dp_vs_conn_new(mbuf, &param, dest, conn_flags);
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest, conn_flags);
     if (unlikely(NULL == conn)) {
         dp_vs_conn_put(ct);
         return NULL;
@@ -254,7 +255,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
         }
     }
 
-    conn = dp_vs_conn_new(mbuf, &param, dest, 0);
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest, 0);
     if (!conn) {
         sa_release(NULL, &daddr, &saddr);
         return NULL;
@@ -329,7 +330,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                               ports[0], ports[1], 0, &param);
     }
 
-    conn = dp_vs_conn_new(mbuf, &param, dest,
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest,
             is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
     if (!conn)
         return NULL;
