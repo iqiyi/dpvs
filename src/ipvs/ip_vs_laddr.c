@@ -98,6 +98,7 @@
 
 /* laddr is configured with service instead of lcore */
 struct dp_vs_laddr {
+    int                     af;
     struct list_head        list;       /* svc->laddr_list elem */
     union inet_addr         addr;
     rte_atomic32_t          refcnt;
@@ -190,18 +191,18 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
         }
 
         memset(&dsin, 0, sizeof(struct sockaddr_in));
-        dsin.sin_family = svc->af;
+        dsin.sin_family = laddr->af;
         dsin.sin_addr = conn->daddr.in;
         dsin.sin_port = conn->dport;
 
         memset(&ssin, 0, sizeof(struct sockaddr_in));
-        ssin.sin_family = svc->af;
+        ssin.sin_family = laddr->af;
         ssin.sin_addr = laddr->addr.in;
 
-        if (sa_fetch(svc->af, laddr->iface, (struct sockaddr_storage *)&dsin,
+        if (sa_fetch(laddr->af, laddr->iface, (struct sockaddr_storage *)&dsin,
                     (struct sockaddr_storage *)&ssin) != EDPVS_OK) {
             char buf[64];
-            if (inet_ntop(conn->af, &laddr->addr, buf, sizeof(buf)) == NULL)
+            if (inet_ntop(laddr->af, &laddr->addr, buf, sizeof(buf)) == NULL)
                 snprintf(buf, sizeof(buf), "::");
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
@@ -267,7 +268,8 @@ int dp_vs_laddr_unbind(struct dp_vs_conn *conn)
     return EDPVS_OK;
 }
 
-int dp_vs_laddr_add(struct dp_vs_service *svc, const union inet_addr *addr, 
+int dp_vs_laddr_add(struct dp_vs_service *svc,
+                    int af, const union inet_addr *addr,
                     const char *ifname)
 {
     struct dp_vs_laddr *new, *curr;
@@ -280,6 +282,7 @@ int dp_vs_laddr_add(struct dp_vs_service *svc, const union inet_addr *addr,
     if (!new)
         return EDPVS_NOMEM;
 
+    new->af = af;
     new->addr = *addr;
     rte_atomic32_init(&new->refcnt);
     rte_atomic32_init(&new->conn_counts);
@@ -293,7 +296,7 @@ int dp_vs_laddr_add(struct dp_vs_service *svc, const union inet_addr *addr,
 
     rte_rwlock_write_lock(&svc->laddr_lock);
     list_for_each_entry(curr, &svc->laddr_list, list) {
-        if (inet_addr_equal(svc->af, &curr->addr, &new->addr)) {
+        if (af == curr->af && inet_addr_equal(af, &curr->addr, &new->addr)) {
             rte_rwlock_write_unlock(&svc->laddr_lock);
             rte_free(new);
             return EDPVS_EXIST;
@@ -307,7 +310,7 @@ int dp_vs_laddr_add(struct dp_vs_service *svc, const union inet_addr *addr,
     return EDPVS_OK;
 }
 
-int dp_vs_laddr_del(struct dp_vs_service *svc, const union inet_addr *addr)
+int dp_vs_laddr_del(struct dp_vs_service *svc, int af, const union inet_addr *addr)
 {
     struct dp_vs_laddr *laddr, *next;
     int err = EDPVS_NOTEXIST;
@@ -317,7 +320,7 @@ int dp_vs_laddr_del(struct dp_vs_service *svc, const union inet_addr *addr)
 
     rte_rwlock_write_lock(&svc->laddr_lock);
     list_for_each_entry_safe(laddr, next, &svc->laddr_list, list) {
-        if (!inet_addr_equal(svc->af, &laddr->addr, addr))
+        if (!((af == laddr->af) && inet_addr_equal(af, &laddr->addr, addr)))
             continue;
 
         /* found */
@@ -368,6 +371,7 @@ static int dp_vs_laddr_getall(struct dp_vs_service *svc,
         i = 0;
         list_for_each_entry(laddr, &svc->laddr_list, list) {
             assert(i < *naddr);
+            (*addrs)[i].af = laddr->af;
             (*addrs)[i].addr = laddr->addr;
             (*addrs)[i].nconns = rte_atomic32_read(&laddr->conn_counts);
             i++;
@@ -398,7 +402,7 @@ int dp_vs_laddr_flush(struct dp_vs_service *svc)
         } else {
             char buf[64];
 
-            if (inet_ntop(svc->af, &laddr->addr, buf, sizeof(buf)) == NULL)
+            if (inet_ntop(laddr->af, &laddr->addr, buf, sizeof(buf)) == NULL)
                 snprintf(buf, sizeof(buf), "::");
 
             RTE_LOG(DEBUG, IPVS, "%s: laddr %s is in use.\n", __func__, buf);
@@ -436,10 +440,11 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     switch (opt) {
     case SOCKOPT_SET_LADDR_ADD:
-        err = dp_vs_laddr_add(svc, &laddr_conf->laddr, laddr_conf->ifname);
+        err = dp_vs_laddr_add(svc, laddr_conf->af, &laddr_conf->laddr,
+                laddr_conf->ifname);
         break;
     case SOCKOPT_SET_LADDR_DEL:
-        err = dp_vs_laddr_del(svc, &laddr_conf->laddr);
+        err = dp_vs_laddr_del(svc, laddr_conf->af, &laddr_conf->laddr);
         break;
     case SOCKOPT_SET_LADDR_FLUSH:
         err = dp_vs_laddr_flush(svc);
@@ -499,6 +504,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
         laddrs->nladdrs = naddr;
         for (i = 0; i < naddr; i++) {
+            laddrs->laddrs[i].af = addrs[i].af;
             laddrs->laddrs[i].addr = addrs[i].addr;
             /* TODO: nport_conflict & nconns */
             laddrs->laddrs[i].nport_conflict = 0;
