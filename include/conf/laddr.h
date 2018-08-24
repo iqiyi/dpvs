@@ -35,6 +35,7 @@ enum {
 };
 
 struct dp_vs_laddr_entry {
+    int af;
     union inet_addr addr;
     uint64_t    nport_conflict;
     uint32_t    nconns;

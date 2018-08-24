@@ -1944,11 +1944,11 @@ static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 {
 	char	pbuf[32];
 
-	sprintf(pbuf , "%u.%u.%u.%u" , PRINT_NIP(entry->addr.ip));
+	inet_ntop(entry->af, pbuf, (char *)&entry->addr, sizeof(pbuf));
 	
-	printf("%-20s %-8s %-20s %-10lu %-10u\n" , 
-		"" , 
-		"" , 
+	printf("%-20s %-8s %-20s %-10lu %-10u\n",
+		"",
+		"",
 		pbuf,
 		entry->port_conflict,
 		entry->conn_counts);
