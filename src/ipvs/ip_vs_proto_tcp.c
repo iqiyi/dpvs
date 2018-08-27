@@ -20,6 +20,7 @@
 #include "common.h"
 #include "dpdk.h"
 #include "ipv4.h"
+#include "ipv6.h"
 #include "neigh.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/proto.h"
@@ -97,19 +98,41 @@ static uint32_t tcp_secret;
 /* if tcp header will be modified mbuf_header_pointer() cannot be used. */
 inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
 {
-    int ip4hlen = ip4_hdrlen(mbuf);
+    int len;
+    unsigned char version, *verp;
+
+    verp = rte_pktmbuf_mtod(mbuf, unsigned char*);
+    version = (*verp >> 4) & 0xf;
+
+    if (4 == version) {
+        len = ip4_hdrlen(mbuf);
+    } else if (6 == version) {
+        struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+        uint8_t ip6nxt = ip6h->ip6_nxt;
+        len = ip6_skip_exthdr(mbuf, mbuf->l3_len, &ip6nxt);
+        if (len < 0)
+            return NULL;
+    } else {
+        return NULL;
+    }
 
     /* do not support frags */
-    if (unlikely(mbuf->data_len < ip4hlen + sizeof(struct tcphdr)))
+    if (unlikely(mbuf->data_len < len + sizeof(struct tcphdr)))
         return NULL;
 
-    return rte_pktmbuf_mtod_offset(mbuf, struct tcphdr *, ip4hlen);
+    return rte_pktmbuf_mtod_offset(mbuf, struct tcphdr *, len);
 }
 
 inline void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th)
 {
     th->check = 0;
     th->check = rte_ipv4_udptcp_cksum(iph, th);
+}
+
+inline void tcp6_send_csum(struct ipv6_hdr *ip6h, struct tcphdr *th)
+{
+    th->check = 0;
+    th->check = rte_ipv6_udptcp_cksum(ip6h, th);
 }
 
 static inline uint32_t seq_scale(uint32_t seq)
