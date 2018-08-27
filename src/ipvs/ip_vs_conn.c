@@ -103,7 +103,7 @@ static inline uint32_t conn_hashkey(int af,
         vect[0] = ((uint32_t)sport) << 16 | (uint32_t)dport;
         memcpy(&vect[1], &saddr->in6, 16);
         memcpy(&vect[5], &daddr->in6, 16);
-        return rte_jhash_32b(vect, 9, af) & DPVS_CONN_TAB_MASK;
+        return rte_jhash_32b(vect, 9, dp_vs_conn_rnd) & DPVS_CONN_TAB_MASK;
     }
 
     RTE_LOG(WARNING, IPVS, "%s: hashing unsupported protocol %d\n", __func__, af);
@@ -1108,10 +1108,10 @@ static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
     snprintf(entry->state, sizeof(entry->state), "%s",
             get_conn_state_name(conn->proto, conn->state));
     if (AF_INET == conn->af) {
-        entry->caddr.in.s_addr = conn->caddr.in.s_addr;
-        entry->vaddr.in.s_addr = conn->vaddr.in.s_addr;
-        entry->laddr.in.s_addr = conn->laddr.in.s_addr;
-        entry->daddr.in.s_addr = conn->daddr.in.s_addr;
+        entry->caddr.in = conn->caddr.in;
+        entry->vaddr.in = conn->vaddr.in;
+        entry->laddr.in = conn->laddr.in;
+        entry->daddr.in = conn->daddr.in;
     } else if (AF_INET6 == conn->af) {
         entry->caddr.in6 = conn->caddr.in6;
         entry->vaddr.in6 = conn->vaddr.in6;
