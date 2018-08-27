@@ -24,9 +24,9 @@
 int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc);
 int dp_vs_laddr_unbind(struct dp_vs_conn *conn);
 
-int dp_vs_laddr_add(struct dp_vs_service *svc, const union inet_addr *addr, 
+int dp_vs_laddr_add(struct dp_vs_service *svc, int af, const union inet_addr *addr,
                     const char *ifname);
-int dp_vs_laddr_del(struct dp_vs_service *svc, const union inet_addr *addr);
+int dp_vs_laddr_del(struct dp_vs_service *svc, int af, const union inet_addr *addr);
 int dp_vs_laddr_flush(struct dp_vs_service *svc);
 
 int dp_vs_laddr_init(void);

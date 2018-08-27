@@ -263,13 +263,15 @@ repeat:
     }
 }
 
-int inet_register_hooks(int af, struct inet_hook_ops *reg, size_t n)
+int inet_register_hooks(struct inet_hook_ops *reg, size_t n)
 {
+    int af;
     size_t i, err;
     struct list_head *hook_list;
     assert(reg);
 
     for (i = 0; i < n; i++) {
+        af = reg[i].af;
         if (reg[i].hooknum >= INET_HOOK_NUMHOOKS || !reg[i].hook) {
             err = EDPVS_INVAL;
             goto rollback;
@@ -287,18 +289,20 @@ int inet_register_hooks(int af, struct inet_hook_ops *reg, size_t n)
     return EDPVS_OK;
 
 rollback:
-    inet_unregister_hooks(af, reg, n);
+    inet_unregister_hooks(reg, n);
     return err;
 }
 
-int inet_unregister_hooks(int af, struct inet_hook_ops *reg, size_t n)
+int inet_unregister_hooks(struct inet_hook_ops *reg, size_t n)
 {
+    int af;
     size_t i;
     struct inet_hook_ops *elem, *next;
     struct list_head *hook_list;
     assert(reg);
 
     for (i = 0; i < n; i++) {
+        af = reg[i].af;
         if (reg[i].hooknum >= INET_HOOK_NUMHOOKS) {
             RTE_LOG(WARNING, INET, "%s: bad hook number\n", __func__);
             continue; /* return error ? */
