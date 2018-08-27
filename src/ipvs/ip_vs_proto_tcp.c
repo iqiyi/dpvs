@@ -112,7 +112,6 @@ inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
         len = ip6_skip_exthdr(mbuf, mbuf->l3_len, &ip6nxt);
         if (len < 0)
             return NULL;
-        len += sizeof(struct ip6_hdr);
     } else {
         return NULL;
     }
