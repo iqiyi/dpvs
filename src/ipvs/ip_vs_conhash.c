@@ -37,8 +37,11 @@ static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
     char *quic_data;
     uint32_t quic_len;
 
-    if (af == AF_INET6)
-        udphoff = sizeof(struct ip6_hdr);
+    if (af == AF_INET6) {
+        struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+        uint8_t ip6nxt = ip6h->ip6_nxt;
+        udphoff = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+    }
     else
         udphoff = ip4_hdrlen(mbuf);
     
