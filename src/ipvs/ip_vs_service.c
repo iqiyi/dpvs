@@ -946,15 +946,14 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 get = (struct dp_vs_get_services *)user;
                 size = sizeof(*get) + \
                        sizeof(struct dp_vs_service_entry) * (get->num_services);
-                //memcpy(&get, user, size);
-                if(len != size){
+                if(len != sizeof(*get)){
                     *outlen = 0; 
                     return EDPVS_INVAL;
                 }
-                output = rte_zmalloc("get_services", len, 0);
+                output = rte_zmalloc("get_services", size, 0);
                 if (unlikely(NULL == output))
                     return EDPVS_NOMEM;
-                memcpy(output, get, size);
+                memcpy(output, get, sizeof(*get));
                 ret = dp_vs_get_service_entries(get, output);
                 *out = output;
                 *outlen = size;
@@ -1012,7 +1011,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 int size;
                 get = (struct dp_vs_get_dests *)user;
                 size = sizeof(*get) + sizeof(struct dp_vs_dest_entry) * get->num_dests;
-                if(len != size){
+                if(len != sizeof(*get)){
                     *outlen = 0;
                     return EDPVS_INVAL;
                 }
@@ -1020,7 +1019,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 output = rte_zmalloc("get_services", size, 0);
                 if (unlikely(NULL == output))
                     return EDPVS_NOMEM;
-                memcpy(output, get, size);
+                memcpy(output, get, sizeof(*get));
 
                 if(get->fwmark)
                     svc = __dp_vs_svc_fwm_get(get->af, get->fwmark);

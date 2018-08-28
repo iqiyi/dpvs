@@ -474,7 +474,7 @@ struct ip_vs_get_services *ipvs_get_services(void)
 	struct dp_vs_get_services *dpvs_get, *dpvs_get_rcv;
 	struct dp_vs_service_entry *dpvs_entry;
 	struct ip_vs_service_entry *ipvs_entry;
-	size_t len, len_rcv;
+	size_t len = 0, len_rcv = 0;
 	int i;
 
 	len = sizeof(struct ip_vs_get_services) +
@@ -482,14 +482,12 @@ struct ip_vs_get_services *ipvs_get_services(void)
 	if (!(get = calloc(len, 1)))
 		return NULL;
 
-	len = sizeof(struct dp_vs_get_services) + 
-		sizeof(struct dp_vs_service_entry) * ipvs_info.num_services;
+	len = sizeof(struct dp_vs_get_services);
 	if (!(dpvs_get = calloc(len, 1))) {
 		free(get);
 		return NULL;
 	}
 	dpvs_get->num_services = ipvs_info.num_services;
-	len_rcv = len;
 	
 	if (dpvs_getsockopt(DPVS_SO_GET_SERVICES, dpvs_get, len, (void **)&dpvs_get_rcv, &len_rcv)) {
 		free(get);
@@ -497,7 +495,7 @@ struct ip_vs_get_services *ipvs_get_services(void)
 		return NULL;
 	}
 
-	get->num_services = ipvs_info.num_services;
+	get->num_services = dpvs_get_rcv->num_services;
 	for (i = 0; i < dpvs_get_rcv->num_services; i++) {
 		ipvs_entry = &get->entrytable[i];
 		dpvs_entry = &dpvs_get_rcv->entrytable[i];
@@ -697,7 +695,7 @@ struct ip_vs_get_dests *ipvs_get_dests(ipvs_service_entry_t *svc)
 	struct dp_vs_get_dests *dpvs_dests, *dpvs_dests_rcv;
 	struct ip_vs_dest_entry *ipvs_entry;
 	struct dp_vs_dest_entry *dpvs_entry;
-	size_t len, len_rcv;
+	size_t len = 0, len_rcv = 0;
 	int i;
 
 	len = sizeof(struct ip_vs_get_dests) + 
@@ -705,8 +703,7 @@ struct ip_vs_get_dests *ipvs_get_dests(ipvs_service_entry_t *svc)
 	if (!(d = calloc(len, 1)))
 		return NULL;
 
-	len = sizeof(struct dp_vs_get_dests) +
-		sizeof(struct dp_vs_dest_entry) * svc->num_dests;
+	len = sizeof(struct dp_vs_get_dests);
 	if (!(dpvs_dests = calloc(len, 1))) {
 		free(d);
 		return NULL;
