@@ -630,8 +630,10 @@ int neigh_resolve_output(struct in_addr *nexhop, struct rte_mbuf *m,
     unsigned int hashkey;
     uint32_t nexhop_addr = nexhop->s_addr;
 
-    if (port->flag & NETIF_PORT_FLAG_NO_ARP)
+    if (port->flag & NETIF_PORT_FLAG_NO_ARP){
+	rte_pktmbuf_prepend(m, (uint16_t)sizeof(struct ether_hdr));
         return netif_xmit(m, port);
+    }
 
     hashkey = neigh_hashkey(nexhop_addr, port);
     neighbour = neigh_lookup_entry(&nexhop_addr, port, hashkey);
