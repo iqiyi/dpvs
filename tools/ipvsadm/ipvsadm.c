@@ -1510,6 +1510,8 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 		snprintf(proto_str, sizeof(proto_str), "%s", "tcp");
 	else if (conn_entry->proto == IPPROTO_UDP)
 		snprintf(proto_str, sizeof(proto_str), "%s", "udp");
+	else if (conn_entry->proto == IPPROTO_ICMP)
+		snprintf(proto_str, sizeof(proto_str), "%s", "icmp");
 	else
 		snprintf(proto_str, sizeof(proto_str), "%s", "--");
 

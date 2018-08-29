@@ -490,7 +490,9 @@ static void conn_flush(void)
                 dpvs_timer_cancel(&conn->timer, false);
 
             rte_atomic32_inc(&conn->refcnt);
-            if (rte_atomic32_read(&conn->refcnt) == 2) {
+            if (rte_atomic32_read(&conn->refcnt) != 2) {
+                rte_atomic32_dec(&conn->refcnt);
+            } else {
                 conn_unhash(conn);
 
                 if (conn->dest->fwdmode == DPVS_FWD_MODE_SNAT &&
@@ -516,7 +518,6 @@ static void conn_flush(void)
                 rte_mempool_put(conn->connpool, conn);
                 this_conn_count--;
             }
-            rte_atomic32_dec(&conn->refcnt);
         }
     }
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
