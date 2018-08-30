@@ -361,4 +361,5 @@ static inline char *eth_addr_dump(const struct ether_addr *ea,
     return buf;
 }
 
+portid_t netif_port_num(void);
 #endif /* __DPVS_NETIF_H__ */
