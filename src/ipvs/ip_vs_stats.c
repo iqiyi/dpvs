@@ -217,6 +217,9 @@ int dp_vs_stats_in(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
         dest->stats[cid].inbytes += mbuf->pkt_len;
     }
 
+    rte_atomic64_inc(&conn->stats.inpkts);
+    rte_atomic64_add(&conn->stats.inbytes, mbuf->pkt_len);
+
     this_dpvs_stats.inpkts++;
     this_dpvs_stats.inbytes += mbuf->pkt_len;
     return EDPVS_OK;
@@ -240,6 +243,9 @@ int dp_vs_stats_out(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
         dest->stats[cid].outpkts++;
         dest->stats[cid].outbytes += mbuf->pkt_len;
     }
+
+    rte_atomic64_inc(&conn->stats.outpkts);
+    rte_atomic64_add(&conn->stats.outbytes, mbuf->pkt_len);
 
     this_dpvs_stats.outpkts++;
     this_dpvs_stats.outbytes += mbuf->pkt_len;

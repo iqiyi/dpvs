@@ -190,6 +190,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     dest = svc->scheduler->schedule(svc, mbuf);
     if (!dest) {
         RTE_LOG(WARNING, IPVS, "%s: no dest found.\n", __func__);
+        dp_vs_mbuf_dump("found dest failed.", iph->af, mbuf);
         return NULL;
     }
         
@@ -224,8 +225,10 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
             saddr.sin_port = 0;
 
             err = sa_fetch(NULL, &daddr, &saddr);
-            if (err != 0)
+            if (err != 0) {
+                dp_vs_mbuf_dump("sa_fetch failed.", iph->af, mbuf);
                 return NULL;
+            }
 
             dp_vs_conn_fill_param(iph->af, iph->proto,
                                   &iph->daddr, &dest->addr,
@@ -258,6 +261,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     if (!conn) {
         if (dest->fwdmode == DPVS_FWD_MODE_SNAT && iph->proto != IPPROTO_ICMP)
             sa_release(NULL, &daddr, &saddr);
+        dp_vs_mbuf_dump("create conn failed.", iph->af, mbuf);
         return NULL;
     }
 

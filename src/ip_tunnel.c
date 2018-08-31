@@ -42,6 +42,11 @@ static rte_rwlock_t         ip_tunnel_lock;
 
 static struct list_head     ip_tunnel_ops_list;
 
+/*for icmp process*/
+static struct rte_ring *icmp_ring;
+#define TUNNEL_ICMP_PROC_CORE_ID (1)
+#define TUNNEL_ICMP_RING_SIZE 2048
+
 static int tunnel_register_ops(struct ip_tunnel_ops *new)
 {
     struct ip_tunnel_ops *ops;
@@ -160,6 +165,9 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
 
     assert(tab && ops && par);
     params = *par; /* may modified */
+
+    if (netif_port_num() >= NETIF_MAX_PORTS)
+        return NULL;
 
     /* set ifname template if not assigned. */
     if (!strlen(params.ifname))
@@ -626,6 +634,9 @@ int ip_tunnel_init(void)
     if (err != EDPVS_OK)
         goto so_fail;
 
+    if ((err = ip_tunnel_icmp_ring_init()) != EDPVS_OK)
+        goto so_fail;
+    
     /*
      * init all ipv4 tunnels.
      */
@@ -758,6 +769,9 @@ int ip_tunnel_rcv(struct ip_tunnel *tnl, struct ip_tunnel_pktinfo *tpi,
 {
     const struct ip_tunnel_param *params = &tnl->params;
     assert(tnl && mbuf);
+    struct ipv4_hdr *iph;
+    struct netif_port *port;
+    struct ether_addr dev_addr;
 
     if ((!(tpi->flags & TUNNEL_F_CSUM) &&  (params->i_flags & TUNNEL_F_CSUM)) ||
          ((tpi->flags & TUNNEL_F_CSUM) && !(params->i_flags & TUNNEL_F_CSUM))) {
@@ -772,9 +786,21 @@ int ip_tunnel_rcv(struct ip_tunnel *tnl, struct ip_tunnel_pktinfo *tpi,
         tnl->i_seqno = ntohl(tpi->seq) + 1;
     }
 
-    mbuf->port = tnl->dev->id;
+    if (mbuf_may_pull(mbuf, sizeof(struct ipv4_hdr)) != 0)
+        goto drop;
 
-    return netif_rcv(tnl->dev, htons(ETH_P_IP), mbuf);
+    mbuf->port = tnl->dev->id;
+    port = netif_port_get(mbuf->port);
+    if (port) {
+        rte_memcpy(&dev_addr, &port->addr, sizeof(dev_addr));
+    }
+
+    iph = ip4_hdr(mbuf);
+    if (iph->next_proto_id == IPPROTO_ICMP) {
+        return ip_tunnel_ipv4_icmp_rcv(mbuf, &dev_addr);
+    } else {
+        return netif_rcv(tnl->dev, htons(ETH_P_IP), mbuf);
+    }
 
 drop:
     rte_pktmbuf_free(mbuf);
@@ -926,3 +952,73 @@ int ip_tunnel_get_promisc(struct netif_port *dev, bool *promisc)
         return EDPVS_OK;
     }
 }
+
+/* Under the snat+gre senceario, icmp will have problems of 
+   inconsistency of receiving and sending ports.
+   The specific solution：
+   （1）All ICMP messages received from tunnel are sent to the 1 core for processing.
+   （2）The RSS of the external network port is configured as TCP/UDP */
+int ip_tunnel_icmp_ring_init(void)
+{
+    char name_buf[RTE_RING_NAMESIZE];
+    int socket_id;
+
+    socket_id = rte_socket_id();
+    snprintf(name_buf, RTE_RING_NAMESIZE, "icmp_ring_c%d", TUNNEL_ICMP_PROC_CORE_ID);
+    icmp_ring = rte_ring_create(name_buf, TUNNEL_ICMP_RING_SIZE, socket_id, RING_F_SC_DEQ);
+
+    if (icmp_ring == NULL)
+        rte_panic("create icmp ring:%s failed!\n", name_buf);
+    return EDPVS_OK;
+}
+
+void ip_tunnel_process_icmp_ring(struct netif_queue_conf *qconf, lcoreid_t cid)
+{
+    struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
+    uint16_t nb_rb;
+
+    if (TUNNEL_ICMP_PROC_CORE_ID != cid)
+        return;
+
+    nb_rb = rte_ring_dequeue_burst(icmp_ring, (void**)mbufs, NETIF_MAX_PKT_BURST, NULL);
+
+    if (nb_rb > 0) {
+        process_tunnel_icmp_packets(qconf, mbufs, cid, nb_rb, 1);
+    }
+
+    return;
+}
+
+int ip_tunnel_ipv4_icmp_rcv(struct rte_mbuf *mbuf, struct ether_addr *dev_addr)
+{
+    int ret = 0;
+    struct ether_hdr *eth;
+
+    if (unlikely(mbuf_may_pull(mbuf, mbuf->pkt_len) != 0))
+        goto drop;
+
+    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr));
+    if (eth == NULL)
+        goto drop;
+
+    rte_memcpy(&(eth->d_addr), dev_addr, sizeof(eth->d_addr));
+    eth->ether_type = htons(ETHER_TYPE_IPv4);
+
+    ret = rte_ring_enqueue(icmp_ring, mbuf);
+    if (unlikely(-EDQUOT == ret)) {
+        RTE_LOG(WARNING, TUNNEL, "%s: icmp ring of lcore %d quota exceeded\n",
+                __func__, rte_lcore_id());
+    }
+    else if (ret < 0) {
+        RTE_LOG(WARNING, TUNNEL, "%s: icmp ring of lcore %d enqueue failed\n",
+                __func__, rte_lcore_id());
+        rte_pktmbuf_free(mbuf);
+    }
+
+    return EDPVS_OK;
+
+drop:
+    rte_pktmbuf_free(mbuf);
+    return EDPVS_DROP;    
+}
+
