@@ -22,9 +22,12 @@
 #include "list.h"
 #include "dpdk.h"
 #include "timer.h"
+#include "inet.h"
+#include "ipv4.h"
 #include "ipvs/conn.h"
 #include "ipvs/proto.h"
 #include "ipvs/service.h"
+#include "sys_time.h"
 
 enum {
     DPVS_CONN_DIR_INBOUND = 0,
@@ -64,8 +67,10 @@ struct conn_tuple_hash {
 } __rte_cache_aligned;
 
 struct dp_vs_conn_stats {
-    rte_atomic64_t      inpkt;
+    rte_atomic64_t      inpkts;
     rte_atomic64_t      inbytes;
+    rte_atomic64_t      outpkts;
+    rte_atomic64_t      outbytes;
 } __rte_cache_aligned;
 
 struct dp_vs_fdir_filt;
@@ -142,6 +147,7 @@ struct dp_vs_conn {
     /* controll members */
     struct dp_vs_conn *control;         /* master who controlls me */
     rte_atomic32_t n_control;           /* number of connections controlled by me*/
+    uint64_t ctime;                     /* create time */
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
