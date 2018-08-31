@@ -361,5 +361,7 @@ static inline char *eth_addr_dump(const struct ether_addr *ea,
     return buf;
 }
 
+void process_tunnel_icmp_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
+                      lcoreid_t cid, uint16_t count, bool pretetch);
 portid_t netif_port_num(void);
 #endif /* __DPVS_NETIF_H__ */
