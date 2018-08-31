@@ -151,5 +151,8 @@ int ipip_term(void);
 int gre_init(void);
 int gre_term(void);
 
+void ip_tunnel_process_icmp_ring(struct netif_queue_conf *qconf, lcoreid_t cid);
+void install_ip_tunnel_keywords(void);
+
 #endif /* __DPVS__ */
 #endif /* __DPVS_TUNNEL_H__ */

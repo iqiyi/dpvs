@@ -25,6 +25,7 @@
 #include "timer.h"
 #include "neigh.h"
 #include "ipv4.h"
+#include "ip_tunnel.h"
 #include "ipv4_frag.h"
 #include "ctrl.h"
 #include "sa_pool.h"
@@ -66,6 +67,8 @@ static vector_t install_keywords(void)
 
     install_ipv4_keywords();
     install_ip4_frag_keywords();
+
+    install_ip_tunnel_keywords();
 
     install_control_keywords();
 

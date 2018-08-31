@@ -37,6 +37,7 @@
 #include "timer.h"
 #include "parser/parser.h"
 #include "neigh.h"
+#include "ip_tunnel.h"
 
 #include <rte_arp.h>
 #include <netinet/in.h>
@@ -2267,6 +2268,11 @@ static void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbu
     }
 }
 
+void lcore_process_tunnel_icmp_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
+                                      lcoreid_t cid, uint16_t count)
+{
+    lcore_process_packets(qconf, mbufs, cid, count, 1);
+}
 
 static void lcore_process_arp_ring(struct netif_queue_conf *qconf, lcoreid_t cid)
 {
@@ -2298,6 +2304,7 @@ static void lcore_job_recv_fwd(void *arg)
             qconf = &lcore_conf[lcore2index[cid]].pqs[i].rxqs[j];
 
             lcore_process_arp_ring(qconf, cid);
+            ip_tunnel_process_icmp_ring(qconf, cid);
             qconf->len = netif_rx_burst(pid, qconf);
 
             lcore_stats_burst(&lcore_stats[cid], qconf->len);

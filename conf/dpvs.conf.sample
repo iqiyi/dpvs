@@ -227,6 +227,11 @@ ipv4_defs {
     }
 }
 
+! dpvs tunnel config
+tunnel_defs {
+    forward_icmp_use_first_core
+}
+
 ! control plane config
 ctrl_defs {
     lcore_msg {

@@ -30,6 +30,7 @@
 #include "icmp.h"
 #include "ctrl.h"
 #include "ip_tunnel.h"
+#include "parser/parser.h"
 
 #define TUNNEL
 #define RTE_LOGTYPE_TUNNEL  RTE_LOGTYPE_USER1
@@ -41,6 +42,101 @@
 static rte_rwlock_t         ip_tunnel_lock;
 
 static struct list_head     ip_tunnel_ops_list;
+
+/**
+ * Under the snat+gre senceario, icmp will have problems of
+ * inconsistency of receiving and sending ports.
+ * The specific solution：
+ * 1.All ICMP messages received from tunnel are sent to the 1 core for processing.
+ * 2.The RSS of the external network port is configured as TCP/UDP
+ */
+static struct rte_ring *icmp_ring = NULL;
+#define TUNNEL_ICMP_PROC_CORE_ID (1)
+#define TUNNEL_ICMP_RING_SIZE 2048
+static bool forward_icmp_use_first_core = false;
+
+static void ip_tunnel_icmp_forward_handler(vector_t tokens)
+{
+    RTE_LOG(INFO, TUNNEL, "forward icmp message through the first core \n");
+    forward_icmp_use_first_core = true;
+}
+
+void install_ip_tunnel_keywords(void)
+{
+    install_keyword_root("tunnel_defs", NULL);
+    install_keyword("forward_icmp_use_first_core", ip_tunnel_icmp_forward_handler, KW_TYPE_INIT);
+}
+
+static int ip_tunnel_icmp_ring_init(void)
+{
+    char name_buf[RTE_RING_NAMESIZE];
+    int socket_id;
+
+    socket_id = rte_socket_id();
+    snprintf(name_buf, RTE_RING_NAMESIZE, "icmp_ring_c%d", TUNNEL_ICMP_PROC_CORE_ID);
+    icmp_ring = rte_ring_create(name_buf, TUNNEL_ICMP_RING_SIZE, socket_id, RING_F_SC_DEQ);
+
+    if (icmp_ring == NULL) {
+        rte_panic("create icmp ring:%s failed!\n", name_buf);
+        return EDPVS_NOMEM;
+    }
+
+    return EDPVS_OK;
+}
+
+static bool ip_tunnel_forward_icmp_first_core(void)
+{
+    return forward_icmp_use_first_core;
+}
+
+void ip_tunnel_process_icmp_ring(struct netif_queue_conf *qconf, lcoreid_t cid)
+{
+    struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
+    uint16_t nb_rb;
+
+    if (!ip_tunnel_forward_icmp_first_core() ||
+        TUNNEL_ICMP_PROC_CORE_ID != cid)
+        return;
+
+    nb_rb = rte_ring_dequeue_burst(icmp_ring, (void**)mbufs, NETIF_MAX_PKT_BURST, NULL);
+    if (nb_rb > 0)
+        lcore_process_tunnel_icmp_packets(qconf, mbufs, cid, nb_rb);
+
+    return;
+}
+
+static int ip_tunnel_ipv4_icmp_rcv(struct rte_mbuf *mbuf, struct ether_addr *dev_addr)
+{
+    int ret = 0;
+    struct ether_hdr *eth;
+
+    if (unlikely(mbuf_may_pull(mbuf, mbuf->pkt_len) != 0))
+        goto drop;
+
+    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr));
+    if (eth == NULL)
+        goto drop;
+
+    rte_memcpy(&(eth->d_addr), dev_addr, sizeof(eth->d_addr));
+    eth->ether_type = htons(ETHER_TYPE_IPv4);
+
+    ret = rte_ring_enqueue(icmp_ring, mbuf);
+    if (unlikely(-EDQUOT == ret)) {
+        RTE_LOG(WARNING, TUNNEL, "%s: icmp ring of lcore %d quota exceeded\n",
+                __func__, rte_lcore_id());
+        goto drop;
+    } else if (ret < 0) {
+        RTE_LOG(WARNING, TUNNEL, "%s: icmp ring of lcore %d enqueue failed\n",
+                __func__, rte_lcore_id());
+        goto drop;
+    }
+
+    return EDPVS_OK;
+
+drop:
+    rte_pktmbuf_free(mbuf);
+    return EDPVS_DROP;
+}
 
 static int tunnel_register_ops(struct ip_tunnel_ops *new)
 {
@@ -636,8 +732,13 @@ int ip_tunnel_init(void)
     if ((err = gre_init()) != EDPVS_OK)
         goto gre_fail;
 
+    if ((err = ip_tunnel_icmp_ring_init()) != EDPVS_OK)
+        goto icmp_ring_fail;
+
     return EDPVS_OK;
 
+icmp_ring_fail:
+    gre_term();
 gre_fail:
     ipip_term();
 ipip_fail:
@@ -758,6 +859,9 @@ int ip_tunnel_rcv(struct ip_tunnel *tnl, struct ip_tunnel_pktinfo *tpi,
 {
     const struct ip_tunnel_param *params = &tnl->params;
     assert(tnl && mbuf);
+    struct ipv4_hdr *iph;
+    struct netif_port *port;
+    struct ether_addr dev_addr;
 
     if ((!(tpi->flags & TUNNEL_F_CSUM) &&  (params->i_flags & TUNNEL_F_CSUM)) ||
          ((tpi->flags & TUNNEL_F_CSUM) && !(params->i_flags & TUNNEL_F_CSUM))) {
@@ -773,6 +877,19 @@ int ip_tunnel_rcv(struct ip_tunnel *tnl, struct ip_tunnel_pktinfo *tpi,
     }
 
     mbuf->port = tnl->dev->id;
+
+    if (ip_tunnel_forward_icmp_first_core()) {
+        port = netif_port_get(mbuf->port);
+        if (port)
+            rte_memcpy(&dev_addr, &port->addr, sizeof(dev_addr));
+
+        if (mbuf_may_pull(mbuf, sizeof(struct ipv4_hdr)) != 0)
+            goto drop;
+
+        iph = ip4_hdr(mbuf);
+        if ((iph->next_proto_id == IPPROTO_ICMP))
+            return ip_tunnel_ipv4_icmp_rcv(mbuf, &dev_addr);
+    }
 
     return netif_rcv(tnl->dev, htons(ETH_P_IP), mbuf);
 
@@ -926,3 +1043,4 @@ int ip_tunnel_get_promisc(struct netif_port *dev, bool *promisc)
         return EDPVS_OK;
     }
 }
+
