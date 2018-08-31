@@ -367,6 +367,7 @@ static ipvs_dest_t *drule;
 static ipvs_daemon_t *daemonrule;
 static ipvs_laddr_t *laddr_rule;
 static ipvs_blklst_t *blklst_rule;
+static ipvs_tunnel_t *tunnel_rule;
 
 /* Initialization helpers */
 int
@@ -386,6 +387,8 @@ ipvs_start(void)
 	daemonrule = (ipvs_daemon_t *) MALLOC(sizeof(ipvs_daemon_t));
 	laddr_rule = (ipvs_laddr_t *) MALLOC(sizeof(ipvs_laddr_t));
 	blklst_rule = (ipvs_blklst_t *) MALLOC(sizeof(ipvs_blklst_t));
+	tunnel_rule = (ipvs_tunnel_t *) MALLOC(sizeof(ipvs_tunnel_t));
+
 	return IPVS_SUCCESS;
 }
 
@@ -398,6 +401,8 @@ ipvs_stop(void)
 	FREE(daemonrule);
 	FREE(laddr_rule);
 	FREE(blklst_rule);
+	FREE(tunnel_rule);
+
 	ipvs_close();
 }
 
@@ -448,6 +453,12 @@ ipvs_talk(int cmd)
 			if ((result = ipvs_update_dest(srule, drule)) &&
 			    (result == EDPVS_NOTEXIST))
 				result = ipvs_add_dest(srule, drule);
+			break;
+		case IP_VS_SO_SET_ADDTUNNEL:
+			result = ipvs_add_tunnel(tunnel_rule);
+			break;
+		case IP_VS_SO_SET_DELTUNNEL:
+			result = ipvs_del_tunnel(tunnel_rule);
 			break;
 	}
 
@@ -946,6 +957,20 @@ ipvs_blklst_cmd(int cmd, list vs_group, virtual_server_t * vs)
                 }
         }
         return IPVS_SUCCESS;
+}
+
+int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry)
+{
+    memset(tunnel_rule, 0, sizeof(ipvs_tunnel_t));
+    strncpy(tunnel_rule->ifname, entry->ifname, sizeof(tunnel_rule->ifname));
+    strncpy(tunnel_rule->kind, entry->kind, sizeof(tunnel_rule->kind));
+    strncpy(tunnel_rule->link, entry->link, sizeof(tunnel_rule->link));
+
+    tunnel_rule->laddr.ip = inet_sockaddrip4(&entry->local);
+    tunnel_rule->raddr.ip = inet_sockaddrip4(&entry->remote);
+    ipvs_talk(cmd);
+
+    return IPVS_SUCCESS;
 }
 
 /* Set/Remove a RS or a local/deny address group from a VS */
