@@ -2609,6 +2609,11 @@ static inline portid_t netif_port_id_alloc(void)
     return port_id_end++;
 }
 
+portid_t netif_port_count(void)
+{
+    return port_id_end;
+}
+
 struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
                                unsigned int nrxq, unsigned int ntxq,
                                void (*setup)(struct netif_port *))

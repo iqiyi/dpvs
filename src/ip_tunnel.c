@@ -161,6 +161,12 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     assert(tab && ops && par);
     params = *par; /* may modified */
 
+    if (netif_port_count() >= NETIF_MAX_PORTS) {
+        RTE_LOG(ERR, TUNNEL, "%s: exceeding specification limits(%d)",
+            __func__, NETIF_MAX_PORTS);
+        return NULL;
+    }
+
     /* set ifname template if not assigned. */
     if (!strlen(params.ifname))
         snprintf(params.ifname, IFNAMSIZ, "%s%%d", ops->kind);
