@@ -33,6 +33,7 @@
 #include "ipvs/ipvs.h"
 #include "cfgfile.h"
 #include "ip_tunnel.h"
+#include "sys_time.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
@@ -166,6 +167,7 @@ int main(int argc, char *argv[])
 
     gettimeofday(&tv, NULL);
     srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
+    sys_start_time();
 
     if (get_numa_nodes() > DPVS_MAX_SOCKET) {
         fprintf(stderr, "DPVS_MAX_SOCKET is smaller than system numa nodes!\n");
