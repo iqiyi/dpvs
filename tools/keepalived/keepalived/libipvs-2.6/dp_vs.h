@@ -7,6 +7,7 @@
 #include "conf/laddr.h"
 #include "conf/blklst.h"
 #include "conf/conn.h"
+#include "ip_tunnel.h"
 
 enum{
     DPVS_SO_SET_FLUSH = 200,

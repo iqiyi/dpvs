@@ -120,6 +120,19 @@ typedef struct _blklst_addr_group {
         list range;
 } blklst_addr_group;
 
+typedef struct _tunnel_entry {
+        struct sockaddr_storage remote;
+        struct sockaddr_storage local;
+        char   kind[TNLKINDSIZ];
+        char   ifname[IFNAMSIZ];
+        char   link[IFNAMSIZ];
+} tunnel_entry;
+
+typedef struct _tunnel_group {
+        char *gname;
+        list tunnel_entry;
+} tunnel_group;
+
 /* Virtual Server group definition */
 typedef struct _virtual_server_group_entry {
 	struct sockaddr_storage		addr;
@@ -189,6 +202,7 @@ typedef struct _check_data {
 	list				vs;
 	list laddr_group;
 	list blklst_group;
+	list tunnel_group;
 } check_data_t;
 
 /* inline stuff */
@@ -317,4 +331,6 @@ extern char *format_vs (virtual_server_t *);
 extern void alloc_blklst_group(char *);
 extern void alloc_blklst_entry(vector_t *);
 
+extern void alloc_tunnel_entry(char *name);
+extern void alloc_tunnel(char *gname);
 #endif
