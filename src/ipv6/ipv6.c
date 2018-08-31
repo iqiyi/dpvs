@@ -805,3 +805,15 @@ void install_ipv6_keywords(void)
 
     install_route6_keywords();
 }
+
+/*
+ * ip6_hdrlen: get ip6 header length, including extension header length
+ */
+int ip6_hdrlen(const struct rte_mbuf *mbuf) {
+    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+    uint8_t ip6nxt = ip6h->ip6_nxt;
+    int ip6_hdrlen = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+
+    /* ip6_skip_exthdr may return -1 */
+    return (ip6_hdrlen >= 0) ? ip6_hdrlen : sizeof(struct ip6_hdr);
+}

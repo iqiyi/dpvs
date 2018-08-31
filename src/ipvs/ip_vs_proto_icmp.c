@@ -74,15 +74,21 @@ static int icmp_conn_sched(struct dp_vs_proto *proto,
                            struct dp_vs_conn **conn,
                            int *verdict)
 {
-    /* cast to struct icmphdr * or struct icmp6_hdr * before used  */
-    void *ich = NULL, *_icmph = NULL;
+    void *ich = NULL;
     struct dp_vs_service *svc;
     int af = iph->af;
-    int icmphdr_len = (af == AF_INET6) ?
-                    sizeof(struct icmp6_hdr) : sizeof(struct icmphdr);
     assert(proto && iph && mbuf && conn && verdict);
 
-    ich = mbuf_header_pointer(mbuf, iph->len, icmphdr_len, _icmph);
+    if (AF_INET6 == af) {
+        struct icmp6_hdr _icmph6;
+        ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph6),
+                                                  (void *)&_icmph6);
+    } else {
+        struct icmphdr _icmph;
+        ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph),
+                                                  (void *)&_icmph);
+    }
+
     if (unlikely(!ich)) {
         *verdict = INET_DROP;
         return EDPVS_INVPKT;
@@ -156,10 +162,8 @@ static bool icmp6_invert_type(uint8_t *type, uint8_t orig) {
 
 static bool is_icmp_reply(uint8_t type)
 {
-    if (type == ICMP_ECHOREPLY
-                || type == ICMP_TIMESTAMPREPLY
-                || type == ICMP_INFO_REPLY
-                || type == ICMP_ADDRESSREPLY)
+    if (type == ICMP_ECHOREPLY  || type == ICMP_TIMESTAMPREPLY ||
+        type == ICMP_INFO_REPLY || type == ICMP_ADDRESSREPLY)
       return true;
     else
       return false;
@@ -177,23 +181,21 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
                                            struct rte_mbuf *mbuf, int *direct, 
                                            bool reverse, bool *drop)
 {
-    /* cast to struct icmphdr * or struct icmp6_hdr * before used  */
-    void *ich = NULL, *_icmph = NULL;
+    void *ich = NULL;
     __be16 sport, dport; /* dummy ports */
     uint8_t type;
     int af = iph->af;
     /* true icmp type/code, used for v4/v6 */
     uint8_t icmp_type = 0;
     uint8_t icmp_code = 0;
-    int icmphdr_len = (af == AF_INET6) ?
-                    sizeof(struct icmp6_hdr) : sizeof(struct icmphdr);
     assert(proto && iph && mbuf);
 
-    ich = mbuf_header_pointer(mbuf, iph->len, icmphdr_len, _icmph);
-    if (unlikely(!ich))
-        return NULL;
-
-    if (af == AF_INET6) {
+    if (AF_INET6 == af) {
+        struct icmp6_hdr _icmph6;
+        ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph6),
+                                                  (void *)&_icmph6);
+        if (unlikely(!ich))
+            return NULL;
         /* icmp v6 */
         icmp_type = ((struct icmp6_hdr *)ich)->icmp6_type;
         icmp_code = ((struct icmp6_hdr *)ich)->icmp6_code;
@@ -207,6 +209,11 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
             return NULL;
         }
     } else {
+        struct icmphdr _icmph;
+        ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph),
+                                                  (void *)&_icmph);
+        if (unlikely(!ich))
+            return NULL;
         /* icmp v4 */
         icmp_type = ((struct icmphdr *)ich)->type;
         icmp_code = ((struct icmphdr *)ich)->code;

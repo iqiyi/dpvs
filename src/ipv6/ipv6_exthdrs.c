@@ -130,7 +130,15 @@ int ipv6_parse_hopopts(struct rte_mbuf *mbuf)
 /*
  * The helper function return upper proto offset of mbuf, including ip6_hdr
  * and exthdrs.
- * */
+ *
+ * @mbuf: packet message buffer
+ * @start: start point of ext header, basically sizeof(struct ip6_hdr)
+ * @nexthdrp: pointer to next header
+ *  when passed in, it was from the 'ip6_nxt' field of ipv6 basic header
+ *  when returned, it points to the 'ip6_nxt' field from last extension header
+ *
+ * @return skip length of packet header, including ext headers
+ */
 int ip6_skip_exthdr(const struct rte_mbuf *mbuf, int start, uint8_t *nexthdrp)
 {
     /* TODO */
