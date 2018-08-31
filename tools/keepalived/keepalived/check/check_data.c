@@ -217,6 +217,88 @@ alloc_blklst_entry(vector_t *strvec)
                 log_message(LOG_INFO, "invalid: blacklist IP address range %d", new->range);
 }
 
+/* IP address pool group facility functions */
+static void
+free_addrpool_group(void *data)
+{
+    addr_pool_group *addrpool_group = data;
+    FREE_PTR(addrpool_group->gname);
+    free_list(addrpool_group->addr_ip);
+    free_list(addrpool_group->range);
+    FREE(addrpool_group);
+}
+
+static void
+dump_addrpool_group(void *data)
+{
+    addr_pool_group *addrpool_group = data;
+
+    log_message(LOG_INFO, "IP address pool = %s", addrpool_group->gname);
+    dump_list(addrpool_group->addr_ip);
+    dump_list(addrpool_group->range);
+}
+
+static void
+free_addrpool_entry(void *data)
+{
+    FREE(data);
+}
+
+static void
+dump_addrpool_entry(void *data)
+{
+    addr_pool_entry *addrpool_entry = data;
+
+    if (addrpool_entry->range)
+        log_message(LOG_INFO, "   IP Range = %s-%d, weight = %d",
+            inet_sockaddrtos(&addrpool_entry->addr),
+            addrpool_entry->range, addrpool_entry->weight);
+    else
+        log_message(LOG_INFO, "   IP = %s, weight = %d",
+            inet_sockaddrtos(&addrpool_entry->addr), addrpool_entry->weight);
+}
+
+void
+alloc_ip_addrpool_group(char *gname)
+{
+    int size = strlen(gname);
+    addr_pool_group *new;
+
+    new = (addr_pool_group *) MALLOC(sizeof(addr_pool_group));
+    new->gname = (char *) MALLOC(size + 1);
+    memcpy(new->gname, gname, size);
+    new->addr_ip = alloc_list(free_addrpool_entry, dump_addrpool_entry);
+    new->range = alloc_list(free_addrpool_entry, dump_addrpool_entry);
+
+    if (check_data->addrpool_group)
+        list_add(check_data->addrpool_group, new);
+}
+
+void
+alloc_addrpool_entry(vector_t *strvec)
+{
+    addr_pool_group *addrpool_group = LIST_TAIL_DATA(check_data->addrpool_group);
+    addr_pool_entry *new;
+
+    new = (addr_pool_entry *) MALLOC(sizeof(addr_pool_entry));
+
+    new->range = inet_stor(vector_slot(strvec, 0));
+    inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
+
+    if (vector_size(strvec) >= 2) {
+        new->weight = atoi(vector_slot(strvec, 1));
+    } else {
+        new->weight = SNAT_ADDR_POOL_DEF_WEIGHT;
+    }
+
+    if (!new->range)
+        list_add(addrpool_group->addr_ip, new);
+    else if ( (0 < new->range) && (new->range < 255) )
+        list_add(addrpool_group->range, new);
+    else
+        log_message(LOG_INFO, "invalid: IP address pool range %d", new->range);
+}
+
 /* Virtual server group facility functions */
 static void
 free_vsg(void *data)
@@ -309,6 +391,7 @@ free_vs(void *data)
 	FREE_PTR(vs->quorum_down);
 	FREE_PTR(vs->local_addr_gname);
 	FREE_PTR(vs->blklst_addr_gname);
+	FREE_PTR(vs->addrpool_gname);
 	FREE_PTR(vs->vip_bind_dev);
 	FREE(vs);
 }
@@ -401,6 +484,8 @@ dump_vs(void *data)
 		log_message(LOG_INFO, " LOCAL_ADDR GROUP = %s", vs->local_addr_gname);
         if (vs->blklst_addr_gname)
                 log_message(LOG_INFO, " BLACK_LIST GROUP = %s", vs->blklst_addr_gname);
+	if (vs->addrpool_gname)
+		log_message(LOG_INFO, " Addrpoll group = %s", vs->addrpool_gname);
 	if (vs->vip_bind_dev)
 		log_message(LOG_INFO, " vip_bind_dev = %s", vs->vip_bind_dev);
 }
@@ -440,6 +525,7 @@ alloc_vs(char *ip, char *port)
 	new->quorum_state = UP;
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
+	new->addrpool_gname = NULL;
 	new->vip_bind_dev = NULL;
 	new->hash_target = 0;
 	memset(new->srange, 0, 256);
@@ -515,6 +601,78 @@ alloc_rs(char *ip, char *port)
 	list_add(vs->rs, new);
 }
 
+static addr_pool_group *
+get_addrpool_group_by_name(char *gname, list l)
+{
+    element e;
+    addr_pool_group *apool_group;
+
+    if (LIST_ISEMPTY(l))
+        return NULL;
+
+    for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+        apool_group = ELEMENT_DATA(e);
+        if (!strcmp(apool_group->gname, gname))
+            return apool_group;
+    }
+    return NULL;
+}
+
+static void
+addrpool_entry_to_rs(addr_pool_entry *apool_entry, virtual_server_t *vs)
+{
+    real_server_t *new;
+
+    new = (real_server_t *) MALLOC(sizeof(real_server_t));
+
+    new->addr = apool_entry->addr;
+    new->weight = apool_entry->weight;
+    new->iweight = new->weight;
+    new->failed_checkers = alloc_list(free_failed_checkers, NULL);
+
+    if (LIST_ISEMPTY(vs->rs))
+        vs->rs = alloc_list(free_rs, dump_rs);
+    list_add(vs->rs, new);
+}
+
+static int
+addrpool_group_to_rs(addr_pool_group *apool_group, virtual_server_t * vs)
+{
+    addr_pool_entry *apool_entry;
+    list l;
+    element e;
+
+    l = apool_group->addr_ip;
+    if (LIST_ISEMPTY(l)) {
+        log_message(LOG_INFO, "Address pool %s ip list is empty.", vs->addrpool_gname);
+        return 0;
+    }
+
+    for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+        apool_entry = ELEMENT_DATA(e);
+        addrpool_entry_to_rs(apool_entry, vs);
+    }
+
+    return 1;
+}
+
+int addrpool_to_rs(virtual_server_t * vs)
+{
+    addr_pool_group *apool_group = get_addrpool_group_by_name(vs->addrpool_gname,
+                                                    check_data->addrpool_group);
+    if (!apool_group) {
+        log_message(LOG_ERR, "No address pool %s", vs->addrpool_gname);
+        return 0;
+    }
+
+    if (IP_VS_CONN_F_SNAT != vs->loadbalancing_kind) {
+        log_message(LOG_ERR, "Address pool %s vaild only in snat mode", vs->addrpool_gname);
+        return 0;
+    }
+
+    return addrpool_group_to_rs(apool_group, vs);
+}
+
 /* data facility functions */
 check_data_t *
 alloc_check_data(void)
@@ -526,6 +684,7 @@ alloc_check_data(void)
 	new->vs_group = alloc_list(free_vsg, dump_vsg);
 	new->laddr_group = alloc_list(free_laddr_group, dump_laddr_group);
 	new->blklst_group = alloc_list(free_blklst_group, dump_blklst_group);
+	new->addrpool_group = alloc_list(free_addrpool_group, dump_addrpool_group);
 
 	return new;
 }
@@ -539,6 +698,7 @@ free_check_data(check_data_t *data)
 	free_list(data->vs_group);
 	free_list(data->laddr_group);
 	free_list(data->blklst_group);
+	free_list(data->addrpool_group);
 	FREE(data);
 }
 
@@ -559,6 +719,8 @@ dump_check_data(check_data_t *data)
 			dump_list(data->blklst_group);
 		if (!LIST_ISEMPTY(data->vs_group))
 			dump_list(data->vs_group);
+		if (!LIST_ISEMPTY(data->addrpool_group))
+			dump_list(data->addrpool_group);
 		dump_list(data->vs);
 	}
 	dump_checkers_queue();

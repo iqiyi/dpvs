@@ -232,6 +232,9 @@ init_services(void)
 
 	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
 		vs = ELEMENT_DATA(e);
+		if (vs->addrpool_gname)
+			if (!addrpool_to_rs(vs))
+				return 0;
 		if (!init_service_vs(vs))
 			return 0;
 	}

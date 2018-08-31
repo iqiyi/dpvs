@@ -56,6 +56,8 @@ typedef unsigned int checker_id_t;
 #define MAX_LIMIT_PROPORTION_LENGTH     5
 #define KEEPALIVED_DEFAULT_DELAY	(60 * TIMER_HZ) 
 
+#define SNAT_ADDR_POOL_DEF_WEIGHT (1)
+
 /* SSL specific data */
 typedef struct _ssl_data {
 	int				enable;
@@ -120,6 +122,18 @@ typedef struct _blklst_addr_group {
         list range;
 } blklst_addr_group;
 
+typedef struct _addr_pool_entry {
+        struct sockaddr_storage addr;
+        uint8_t range;
+        uint8_t weight;
+} addr_pool_entry;
+
+typedef struct _addr_pool_group {
+        char *gname;
+        list addr_ip;
+        list range;
+} addr_pool_group;
+
 /* Virtual Server group definition */
 typedef struct _virtual_server_group_entry {
 	struct sockaddr_storage		addr;
@@ -169,6 +183,7 @@ typedef struct _virtual_server {
 	char				*local_addr_gname;		/* local ip address group name */
 	char				*vip_bind_dev;		/* the interface name,vip bindto */
 	char				*blklst_addr_gname;	/* black list ip group name */
+	char 				*addrpool_gname;
 
 	char				srange[256];
 	char				drange[256];
@@ -189,6 +204,7 @@ typedef struct _check_data {
 	list				vs;
 	list laddr_group;
 	list blklst_group;
+	list addrpool_group;
 } check_data_t;
 
 /* inline stuff */
@@ -280,6 +296,9 @@ static inline int inaddr_equal(sa_family_t family, void *addr1, void *addr2)
 			 (((X)->blklst_addr_gname && (Y)->blklst_addr_gname &&		\
 			   !strcmp((X)->blklst_addr_gname, (Y)->blklst_addr_gname)) ||	\
 			 (!(X)->blklst_addr_gname && !(Y)->blklst_addr_gname))		&&\
+			 (((X)->addrpool_gname && (Y)->addrpool_gname &&		\
+			   !strcmp((X)->addrpool_gname, (Y)->addrpool_gname)) ||	\
+			 (!(X)->addrpool_gname && !(Y)->addrpool_gname))		&&\
 			 !strcmp((X)->srange, (Y)->srange)				&&\
 			 !strcmp((X)->drange, (Y)->drange)				&&\
 			 !strcmp((X)->iifname, (Y)->iifname)				&&\
@@ -316,5 +335,9 @@ extern void dump_check_data(check_data_t *);
 extern char *format_vs (virtual_server_t *);
 extern void alloc_blklst_group(char *);
 extern void alloc_blklst_entry(vector_t *);
+
+extern void alloc_addrpool_entry(vector_t *strvec);
+extern void alloc_ip_addrpool_group(char *gname);
+extern int addrpool_to_rs(virtual_server_t * vs);
 
 #endif

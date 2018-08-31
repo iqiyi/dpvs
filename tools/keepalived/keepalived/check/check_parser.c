@@ -333,6 +333,21 @@ blklst_gname_handler(vector_t *strvec)
 	vs->blklst_addr_gname = set_value(strvec);
 }
 
+/* IP address pool parser */
+static void
+ip_addrpool_handler(vector_t *strvec)
+{
+	alloc_ip_addrpool_group(vector_slot(strvec, 1));
+	alloc_value_block(strvec, alloc_addrpool_entry);
+}
+
+static void
+addrpool_gname_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    vs->addrpool_gname = set_value(strvec);
+}
+
 static void
 bps_handler(vector_t *strvec)
 {
@@ -434,6 +449,9 @@ check_init_keywords(void)
 	/* blacklist IP */
 	install_keyword_root("deny_address_group", &blklst_group_handler);
 
+	/* IP address pool */
+	install_keyword_root("snat_address_pool", &ip_addrpool_handler);
+
 	/* Virtual server mapping */
 	install_keyword_root("virtual_server_group", &vsg_handler);
 	install_keyword_root("virtual_server", &vs_handler);
@@ -486,6 +504,7 @@ check_init_keywords(void)
 
 	install_keyword("laddr_group_name", &laddr_gname_handler);
 	install_keyword("daddr_group_name", &blklst_gname_handler);
+	install_keyword("snat_addr_pool_name", &addrpool_gname_handler);
 	install_keyword("syn_proxy", &syn_proxy_handler);
 	install_keyword("vip_bind_dev", &bind_dev_handler);
 
