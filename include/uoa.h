@@ -31,24 +31,27 @@
 #include <endian.h>
 #endif
 
+#include "ipvs/proto.h"
+
 /* avoid IANA ip options */
-#define IPOPT_UOA	(31|IPOPT_CONTROL)
-#define IPOLEN_UOA	sizeof(struct ipopt_uoa)
+#define IPOPT_UOA        (31 | IPOPT_CONTROL)
+#define IPOLEN_UOA_IPV4  (sizeof(struct ipopt_uoa) + IPV4_ADDR_LEN_IN_BYTES)
+#define IPOLEN_UOA_IPV6  (sizeof(struct ipopt_uoa) + IPV6_ADDR_LEN_IN_BYTES)
 
 /* 
  * UOA IP option
  * @op_code: operation code
- * @op_len: option length
+ * @op_len:  length of struct ipopt_uoa + real op_addr (v4/v6) length
+ *           i.e. IPOLEN_UOA_IPV4 or IPOLEN_UOA_IPV6
  * @op_port: port number
- * @op_addr: ipv4/v6 address
+ * @op_addr: real ipv4 or ipv6 address following it
  */
 struct ipopt_uoa {
 	__u8	op_code;
 	__u8	op_len;
 	__be16  op_port;
-	__be32  op_addr[4];
+	__u8    op_addr[0];
 } __attribute__((__packed__));
-#define op_ipv4_addr op_addr[0]
 
 /* per-cpu statistics */
 struct uoa_cpu_stats {
@@ -131,8 +134,8 @@ struct uoa_param_map {
  *  :                           Options                            :
  *  +---------------+---------------+---------------+--------------+
  *
- *  Ve.     Version, now 0x1 (1) for ipv4 address
- *                       0x2 (2) for ipv6 address
+ *  Ve.     Version, now 0x1 (1) for ipv4 address family, OPPHDR_IPV4
+ *                       0x2 (2) for ipv6 address family, OPPHDR_IPV6
  *  Rsvd.   Reserved bits, must be zero.
  *  Protocol    Next level protocol, e.g., IPPROTO_UDP.
  *  Length	Length of fixed header and options, not include payloads.
@@ -140,6 +143,9 @@ struct uoa_param_map {
  */
 
 #define IPPROTO_OPT	0xf8 /* 248 */
+
+#define OPPHDR_IPV6 0x02
+#define OPPHDR_IPV4 0x01
 
 /* OPtion Protocol header */
 struct opphdr {
