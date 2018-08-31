@@ -151,5 +151,8 @@ int ipip_term(void);
 int gre_init(void);
 int gre_term(void);
 
+int ip_tunnel_icmp_ring_init(void);
+int ip_tunnel_ipv4_icmp_rcv(struct rte_mbuf *mbuf, struct ether_addr *dev_addr);
+void ip_tunnel_process_icmp_ring(struct netif_queue_conf *qconf, lcoreid_t cid);
 #endif /* __DPVS__ */
 #endif /* __DPVS_TUNNEL_H__ */
