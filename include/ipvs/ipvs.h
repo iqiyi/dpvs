@@ -24,6 +24,7 @@
 #ifndef IPVS
 #define IPVS
 #define RTE_LOGTYPE_IPVS    RTE_LOGTYPE_USER1
+#define RTE_LOGTYPE_DPVS    RTE_LOGTYPE_USER1
 #endif
 
 #define IPVS_TIMEOUT_MIN    0

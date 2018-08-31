@@ -22,9 +22,12 @@
 #include "list.h"
 #include "dpdk.h"
 #include "timer.h"
+#include "inet.h"
+#include "ipv4.h"
 #include "ipvs/conn.h"
 #include "ipvs/proto.h"
 #include "ipvs/service.h"
+#include "sys_time.h"
 
 enum {
     DPVS_CONN_DIR_INBOUND = 0,
@@ -64,8 +67,10 @@ struct conn_tuple_hash {
 } __rte_cache_aligned;
 
 struct dp_vs_conn_stats {
-    rte_atomic64_t      inpkt;
+    rte_atomic64_t      inpkts;
     rte_atomic64_t      inbytes;
+    rte_atomic64_t      outpkts;
+    rte_atomic64_t      outbytes;
 } __rte_cache_aligned;
 
 struct dp_vs_fdir_filt;
@@ -121,7 +126,6 @@ struct dp_vs_conn {
 
     /* statistics */
     struct dp_vs_conn_stats stats;
-
     /* synproxy related members */
     struct dp_vs_seq syn_proxy_seq;     /* seq used in synproxy */
     struct list_head ack_mbuf;          /* ack mbuf saved in step2 */
@@ -142,6 +146,8 @@ struct dp_vs_conn {
     /* controll members */
     struct dp_vs_conn *control;         /* master who controlls me */
     rte_atomic32_t n_control;           /* number of connections controlled by me*/
+
+    time_t ctime;                    /* create time */
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
@@ -264,4 +270,25 @@ static inline void dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn 
     rte_atomic32_inc(&ctl_conn->n_control);
 }
 
+static inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf)
+{
+    char cbuf[64], vbuf[64];
+    struct ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
+    union inet_addr saddr, daddr;
+    __be16 _ports[2], *ports;
+
+    saddr.in.s_addr = iph->src_addr;
+    daddr.in.s_addr = iph->dst_addr;
+    ports = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf), sizeof(_ports), _ports);
+    if (!ports)
+        return;
+
+    RTE_LOG(DEBUG, DPVS, "[%s]%s: %s "
+        "%s %s:%u to %s:%u\n", sys_localtime_str(),
+        __func__, msg ? msg : "", inet_proto_name(iph->next_proto_id),
+        inet_ntop(af, &saddr, cbuf, sizeof(cbuf)),
+        ntohs(ports[0]),
+        inet_ntop(af, &daddr, vbuf, sizeof(vbuf)),
+        ntohs(ports[1]));
+}
 #endif /* __DPVS_CONN_H__ */

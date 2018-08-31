@@ -301,6 +301,8 @@ struct dp_vs_service *dp_vs_service_lookup(int af, uint16_t protocol,
 
 out:
     rte_rwlock_read_unlock(&__dp_vs_svc_lock);
+    if (!svc && mbuf)
+        dp_vs_mbuf_dump("found service failed.", af, mbuf);
     return svc;
 }
 
