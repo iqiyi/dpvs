@@ -95,5 +95,7 @@ int ipv6_exthdrs_init(void);
 void ipv6_exthdrs_term(void);
 int ipv6_parse_hopopts(struct rte_mbuf *mbuf);
 int ip6_skip_exthdr(const struct rte_mbuf *mbuf, int start, uint8_t *nexthdrp);
+/* get ipv6 header length, including extension header length. */
+int ip6_hdrlen(const struct rte_mbuf *mbuf);
 
 #endif /* __DPVS_IPV6_H__ */
