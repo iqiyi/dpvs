@@ -404,6 +404,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		  NULL, NULL },
 		{ "icmp-service", 'q', POPT_ARG_STRING, &optarg, 'q',
 		  NULL, NULL },
+		{ "all-service", 'K', POPT_ARG_STRING, &optarg, 'K',
+		  NULL, NULL },
 		{ "fwmark-service", 'f', POPT_ARG_STRING, &optarg, 'f',
 		  NULL, NULL },
 		{ "scheduler", 's', POPT_ARG_STRING, &optarg, 's', NULL, NULL },
@@ -548,13 +550,16 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		case 't':
 		case 'u':
 		case 'q':
+		case 'K':
 			set_option(options, OPT_SERVICE);
             if (c == 't')
                 ce->svc.protocol = IPPROTO_TCP;
             else if (c == 'u')
                 ce->svc.protocol = IPPROTO_UDP;
-            else
+            else if (c == 'q')
                 ce->svc.protocol = IPPROTO_ICMP;
+            else
+                ce->svc.protocol = IPPROTO_IP;
 
 			parse = parse_service(optarg, &ce->svc);
 			if (!(parse & SERVICE_ADDR))
@@ -1234,7 +1239,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 /*
  * comma separated parameters list, all fields is used to match packets.
  *
- *   proto      := tcp | udp | icmp
+ *   proto      := tcp | udp | icmp | all
  *   src-range  := RANGE
  *   dst-range  := RANGE
  *   iif        := IFNAME
@@ -1271,6 +1276,8 @@ static int parse_match(const char *buf, ipvs_service_t *svc)
                 svc->protocol = IPPROTO_UDP;
             else if (strcmp(val, "icmp") == 0)
                 svc->protocol = IPPROTO_ICMP;
+            else if (strcmp(val, "all") == 0)
+                svc->protocol = IPPROTO_IP; // support TCP/UDP/ICMP
             else
                 return -1;
         } else if (strcmp(key, "src-range") == 0) {
@@ -1735,7 +1742,9 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 						  se->protocol, format)))
 			fail(2, "addrport_to_anyname: %s", strerror(errno));
 		if (format & FMT_RULE) {
-            if (se->protocol == IPPROTO_TCP)
+        if (se->protocol == IPPROTO_IP)
+                proto = "-K";
+            else if (se->protocol == IPPROTO_TCP)
                 proto = "-t";
             else if (se->protocol == IPPROTO_UDP)
                 proto = "-u";
@@ -1744,7 +1753,9 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 
 			sprintf(svc_name, "%s %s", proto, vname);
         } else {
-            if (se->protocol == IPPROTO_TCP)
+            if (se->protocol == IPPROTO_IP)
+                proto = "ALL";
+            else if (se->protocol == IPPROTO_TCP)
                 proto = "TCP";
             else if (se->protocol == IPPROTO_UDP)
                 proto = "UDP";
@@ -1759,7 +1770,9 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 	} else { /* match */
         char *proto;
 
-        if (se->protocol == IPPROTO_TCP)
+        if (se->protocol == IPPROTO_IP)
+            proto = "all";
+        else if (se->protocol == IPPROTO_TCP)
             proto = "tcp";
         else if (se->protocol == IPPROTO_UDP)
             proto = "udp";
