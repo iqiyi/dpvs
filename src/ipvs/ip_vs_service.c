@@ -103,6 +103,39 @@ static int dp_vs_svc_unhash(struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
+static inline bool
+__dp_vs_svc_proto_equal(uint8_t proto, struct dp_vs_service *svc)
+{
+#define IS_SUPPORTED_PROTOS(proto) \
+    (((proto) == IPPROTO_TCP) || \
+     ((proto) == IPPROTO_UDP) || \
+     ((proto) == IPPROTO_ICMP))
+    return (proto == svc->proto ||
+            (svc->proto == IPPROTO_IP && IS_SUPPORTED_PROTOS(proto)) ||
+            (proto == IPPROTO_IP && IS_SUPPORTED_PROTOS(svc->proto)));
+}
+
+static struct dp_vs_service*
+__dp_vs_service_get_list(int af, uint16_t protocol,
+                         const union inet_addr *vaddr, uint16_t vport)
+{
+    int idx = 0;
+    struct dp_vs_service *svc;
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+        list_for_each_entry(svc, &dp_vs_svc_table[idx], s_list){
+            if ((svc->af == af)
+            && inet_addr_equal(af, &svc->addr, vaddr)
+            && (svc->port == vport)
+            && __dp_vs_svc_proto_equal(protocol, svc)) {
+                rte_atomic32_inc(&svc->usecnt);
+                return svc;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol, 
                                           const union inet_addr *vaddr, uint16_t vport)
 {
@@ -114,13 +147,13 @@ struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol,
         if ((svc->af == af)
             && inet_addr_equal(af, &svc->addr, vaddr)
             && (svc->port == vport)
-            && (svc->proto == protocol)) {
+            && __dp_vs_svc_proto_equal(protocol, svc)) {
                 rte_atomic32_inc(&svc->usecnt);
                 return svc;
             }
     }
 
-    return NULL;
+    return __dp_vs_service_get_list(af, protocol, vaddr, vport);
 }
 
 struct dp_vs_service *__dp_vs_svc_fwm_get(int af, uint32_t fwmark)
@@ -215,7 +248,7 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
         idev = netif_port_get_by_name(m->iifname);
         odev = netif_port_get_by_name(m->oifname);
 
-        if (svc->af == af && svc->proto == iph->next_proto_id &&
+        if (svc->af == af && __dp_vs_svc_proto_equal(iph->next_proto_id, svc) &&
             __svc_in_range(af, &saddr, ports[0], &m->srange) &&
             __svc_in_range(af, &daddr, ports[1], &m->drange) &&
             (!idev || idev->id == mbuf->port) &&
@@ -265,7 +298,7 @@ __dp_vs_svc_match_find(int af, uint8_t proto, const struct dp_vs_match *match)
 
     list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
         assert(svc->match);
-        if (af == svc->af && proto == svc->proto &&
+        if (af == svc->af && __dp_vs_svc_proto_equal(proto, svc) &&
             memcmp(match, svc->match, sizeof(struct dp_vs_match)) == 0)
         {
             rte_atomic32_inc(&svc->usecnt);
@@ -317,7 +350,7 @@ struct dp_vs_service *dp_vs_lookup_vip(int af, uint16_t protocol,
     list_for_each_entry(svc, &dp_vs_svc_table[hash], s_list) {
         if ((svc->af == af)
             && inet_addr_equal(af, &svc->addr, vaddr)
-            && (svc->proto == protocol)) {
+            && __dp_vs_svc_proto_equal(protocol, svc)) {
             /* HIT */
             rte_rwlock_read_unlock(&__dp_vs_svc_lock);
             return svc;
@@ -849,7 +882,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     }
 
     if (usvc.protocol != IPPROTO_TCP && usvc.protocol != IPPROTO_UDP &&
-        usvc.protocol != IPPROTO_ICMP) {
+        usvc.protocol != IPPROTO_ICMP && usvc.protocol != IPPROTO_IP) {
         RTE_LOG(ERR, SERVICE, "%s: protocol not support.\n", __func__);
         return EDPVS_INVAL;
     }

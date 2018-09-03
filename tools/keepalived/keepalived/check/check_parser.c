@@ -160,6 +160,8 @@ proto_handler(vector_t *strvec)
 		vs->service_type = IPPROTO_UDP;
 	else if(!strcmp(str, "ICMP"))
 		vs->service_type = IPPROTO_ICMP;
+	else if(!strcmp(str, "ALL"))
+		vs->service_type = IPPROTO_IP;
 	else
 		vs->service_type = IPPROTO_TCP; /*default*/
 }
