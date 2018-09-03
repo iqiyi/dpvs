@@ -312,6 +312,23 @@ free_vs(void *data)
 	FREE_PTR(vs->vip_bind_dev);
 	FREE(vs);
 }
+
+const char* service_type2str(int service_type)
+{
+	switch (service_type) {
+		case IPPROTO_IP:
+			return "ALL";
+		case IPPROTO_ICMP:
+			return "ICMP";
+		case IPPROTO_UDP:
+			return "UDP";
+		case IPPROTO_TCP:
+			return "TCP";
+	}
+
+	return "unknown";
+}
+
 static void
 dump_vs(void *data)
 {
@@ -342,8 +359,7 @@ dump_vs(void *data)
         if (atoi(vs->limit_proportion) > 0 && atoi(vs->limit_proportion) < 100)
                 log_message(LOG_INFO, "   limit proportion = %s",
                         vs->limit_proportion);
-	log_message(LOG_INFO, "   protocol = %s",
-	       (vs->service_type == IPPROTO_TCP) ? "TCP" : "UDP");
+	log_message(LOG_INFO, "   protocol = %s", service_type2str(vs->service_type));
 	log_message(LOG_INFO, "   alpha is %s, omega is %s",
 		    vs->alpha ? "ON" : "OFF", vs->omega ? "ON" : "OFF");
 	log_message(LOG_INFO, "   SYN proxy is %s", 
