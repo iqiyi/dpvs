@@ -292,6 +292,8 @@ void ndisc_solicit(struct neighbour_entry *neigh,
     struct netif_port *dev = neigh->port;
     struct in6_addr *target = &neigh->ip_addr.in6;
 
+/* notice: here is a simple solicit, only send multicast */
+/*
     if (neigh->state == DPVS_NUD_S_PROBE || 
         neigh->state == DPVS_NUD_S_DELAY) {
         ndisc_send_ns(dev, target, target, saddr);
@@ -299,6 +301,9 @@ void ndisc_solicit(struct neighbour_entry *neigh,
         addrconf_addr_solict_mult(target, &mcaddr);
         ndisc_send_ns(dev, target, &mcaddr, saddr);
     }
+*/
+    addrconf_addr_solict_mult(target, &mcaddr);
+    ndisc_send_ns(dev, target, &mcaddr, saddr);
 }
 
 static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
@@ -337,6 +342,12 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
         return EDPVS_DROP;
     }
 
+    ifa = inet_addr_ifa_get(AF_INET6, dev, (union inet_addr *)&msg->target);
+    if (!ifa) {
+        RTE_LOG(ERR, NEIGHBOUR, "[%s] RECVNs: dpvs is not the target!\n", __func__);
+        return EDPVS_KNICONTINUE;
+    }
+
     if (ndopts.nd_opts_src_lladdr) {
         lladdr = ndisc_opt_addr_data(ndopts.nd_opts_src_lladdr, dev);
         if (!lladdr) {
@@ -353,15 +364,12 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
                                                                              __func__);
             return EDPVS_DROP;
         }
+    } else {
+        /* ingnore mbuf without opt */
+        return EDPVS_KNICONTINUE;
     }
 
     inc = ipv6_addr_is_multicast(daddr);
-
-    ifa = inet_addr_ifa_get(AF_INET6, dev, (union inet_addr *)&msg->target);
-    if (!ifa) {
-        RTE_LOG(ERR, NEIGHBOUR, "[%s] RECVNs: dpvs is not the target!\n", __func__);
-        return EDPVS_KNICONTINUE;
-    }
 
     /* 
      * dad response src_addr should be link local, daddr should be multi ff02::1
@@ -382,11 +390,12 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
     inet_addr_ifa_put(ifa);
 
     /* update/create neighbour */
-    hashkey = neigh_hashkey((union inet_addr *)saddr, dev);
+    hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)saddr, dev);
     neigh = neigh_lookup_entry(AF_INET6, (union inet_addr *)saddr, dev, hashkey);
     if (neigh && !(neigh->flag & NEIGHBOUR_STATIC)) {
-        neigh_edit(neigh, (struct ether_addr *)lladdr, hashkey);
+        neigh_edit(neigh, (struct ether_addr *)lladdr);
         neigh_entry_state_trans(neigh, 1);
+        neigh_sync_core(neigh, 1, NEIGH_ENTRY);
     } else {
         neigh = neigh_add_table(AF_INET6, (union inet_addr *)saddr, 
                       (struct ether_addr *)lladdr, dev, hashkey, 0);
@@ -395,6 +404,7 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
             return EDPVS_NOMEM;
         }
         neigh_entry_state_trans(neigh, 1);
+        neigh_sync_core(neigh, 1, NEIGH_ENTRY);
     }
     neigh_send_mbuf_cach(neigh);
     
@@ -438,6 +448,17 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
         return EDPVS_DROP;
     }
 
+
+    ifa = inet_addr_ifa_get(AF_INET6, dev, (union inet_addr *)&msg->target);
+    if (ifa) {
+        RTE_LOG(ERR, NEIGHBOUR, "ICMPv6 NA: someone advertises our address.\n");
+        if (ifa->flags & (IFA_F_TENTATIVE | IFA_F_OPTIMISTIC)) {
+            inet_ifaddr_dad_failure(ifa);
+        }   
+        inet_addr_ifa_put(ifa);
+        return EDPVS_KNICONTINUE;
+    }   
+
     if (ndopts.nd_opts_tgt_lladdr) {
         lladdr = ndisc_opt_addr_data(ndopts.nd_opts_tgt_lladdr, dev);
         if (!lladdr) {
@@ -449,22 +470,13 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
         return EDPVS_KNICONTINUE;
     }
 
-    ifa = inet_addr_ifa_get(AF_INET6, dev, (union inet_addr *)&msg->target);
-    if (ifa) {
-        RTE_LOG(ERR, NEIGHBOUR, "ICMPv6 NA: someone advertises our address.\n");
-        if (ifa->flags & (IFA_F_TENTATIVE | IFA_F_OPTIMISTIC)) {
-            inet_ifaddr_dad_failure(ifa);
-        }
-        inet_addr_ifa_put(ifa);
-        return EDPVS_KNICONTINUE;
-    }
-
     /* notice: override flag ignored */
-    hashkey = neigh_hashkey((union inet_addr *)saddr, dev);
+    hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)saddr, dev);
     neigh = neigh_lookup_entry(AF_INET6, (union inet_addr *)&msg->target, dev, hashkey);
     if (neigh && !(neigh->flag & NEIGHBOUR_STATIC)) {
-        neigh_edit(neigh, (struct ether_addr *)lladdr, hashkey);
+        neigh_edit(neigh, (struct ether_addr *)lladdr);
         neigh_entry_state_trans(neigh, 1);
+        neigh_sync_core(neigh, 1, NEIGH_ENTRY);
     } else {
         neigh = neigh_add_table(AF_INET6, (union inet_addr *)saddr,
                        (struct ether_addr *)lladdr, dev, hashkey, 0);
@@ -473,6 +485,7 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
            return EDPVS_NOMEM;
         }
         neigh_entry_state_trans(neigh, 1);
+        neigh_sync_core(neigh, 1, NEIGH_ENTRY);
     }
     neigh_send_mbuf_cach(neigh);
 

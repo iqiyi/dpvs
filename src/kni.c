@@ -29,7 +29,6 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/socket.h>
-#include <linux/if.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include "common.h"

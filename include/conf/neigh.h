@@ -41,17 +41,18 @@ enum {
 };
 
 struct dp_vs_neigh_conf {
-    int af;
-    uint8_t flag;
-    uint32_t state;
-    union inet_addr ip_addr;
+    int               af;
+    uint8_t           flag;
+    uint32_t          state;
+    union inet_addr   ip_addr;
     struct ether_addr eth_addr;
-    uint32_t que_num;
-    char ifname[IFNAMSIZ];
+    uint32_t          que_num;
+    char              ifname[IFNAMSIZ];
+    uint8_t           cid;
 }__attribute__((__packed__));
 
 struct dp_vs_neigh_conf_array {
-    int  n_neigh;
+    int  neigh_nums;
     struct dp_vs_neigh_conf addrs[0];
 }__attribute__((__packed__));
 

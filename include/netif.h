@@ -17,6 +17,7 @@
  */
 #ifndef __DPVS_NETIF_H__
 #define __DPVS_NETIF_H__
+#include <net/if.h>
 #include "list.h"
 #include "dpdk.h"
 #include "inetaddr.h"
@@ -168,7 +169,6 @@ typedef enum {
 } eth_type_t;
 
 /************************ data type for NIC ****************************/
-#define DEVICE_NAME_MAX_LEN 32
 typedef enum {
     PORT_TYPE_GENERAL,
     PORT_TYPE_BOND_MASTER,
@@ -179,7 +179,7 @@ typedef enum {
 } port_type_t;
 
 struct netif_kni {
-    char name[DEVICE_NAME_MAX_LEN];
+    char name[IFNAMSIZ];
     struct rte_kni *kni;
     struct ether_addr addr;
     struct dpvs_timer kni_rtnl_timer;
@@ -240,7 +240,7 @@ struct netif_hw_addr_list {
 };
 
 struct netif_port {
-    char                    name[DEVICE_NAME_MAX_LEN];  /* device name */
+    char                    name[IFNAMSIZ];  /* device name */
     portid_t                id;                         /* device id */
     port_type_t             type;                       /* device type */
     uint16_t                flag;                       /* device flag */

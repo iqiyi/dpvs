@@ -18,6 +18,7 @@
 #ifndef __NETIF_CONF_H__
 #define __NETIF_CONF_H__
 #include <linux/if_ether.h>
+#include <net/if.h>
 
 #define NETIF_MAX_PORTS     4096
 
@@ -25,7 +26,6 @@
  * All types defined here must be the same as in dpdk.h,
  * error would occur otherwise */
 
-#define DEVICE_NAME_MAX_LEN             32
 #define RTE_ETHDEV_QUEUE_STAT_CNTRS     16
 #define NETIF_MAX_BOND_SLAVES           32
 
@@ -92,7 +92,7 @@ typedef struct netif_lcore_stats_get
 struct port_id_name
 {
     portid_t id;
-    char name[DEVICE_NAME_MAX_LEN];
+    char name[IFNAMSIZ];
 } __attribute__((__packed__));
 
 /* all nics in use */
