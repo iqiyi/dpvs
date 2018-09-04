@@ -631,14 +631,9 @@ int neigh_output(int af, union inet_addr *nexhop,
             neigh_fill_mac(neighbour, m, NULL, port);
             netif_xmit(m, neighbour->port);
 
-            /* 
-             * state should change before send mbuf
-             * PROBE state will not send multicast, just send unicast
-             * then state_confirm can be a loop
-             */
             if (neighbour->state == DPVS_NUD_S_PROBE) {
-                neigh_entry_state_trans(neighbour, 0);
                 neigh_state_confirm(neighbour);
+                neigh_entry_state_trans(neighbour, 0);
             }
 
             return EDPVS_OK;
