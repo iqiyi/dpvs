@@ -3829,7 +3829,7 @@ int netif_lcore_start(void)
  */
 static int obtain_dpdk_bond_name(char *dst, const char *ori, size_t size)
 {
-    char str[DEVICE_NAME_MAX_LEN];
+    char str[IFNAMSIZ];
     unsigned num;
 
     if (!ori || sscanf(ori, "%[_a-zA-Z]%u", str, &num) != 2)
@@ -3896,8 +3896,8 @@ int netif_virtual_devices_add(void)
             return EDPVS_INVAL;
         }
 
-        char dummy_name[DEVICE_NAME_MAX_LEN] = {'\0'};
-        int rc = obtain_dpdk_bond_name(dummy_name, bond_cfg->name, DEVICE_NAME_MAX_LEN);
+        char dummy_name[IFNAMSIZ] = {'\0'};
+        int rc = obtain_dpdk_bond_name(dummy_name, bond_cfg->name, IFNAMSIZ);
         if (rc != EDPVS_OK) {
             RTE_LOG(ERR, NETIF, "%s: wrong bond device name in config file %s\n",
                     __func__, bond_cfg->name);
