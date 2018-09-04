@@ -64,13 +64,20 @@ struct neighbour_entry {
     uint8_t             flag;
 } __rte_cache_aligned;
 
+enum param_kind {
+    NEIGH_ENTRY,
+    NEIGH_PARAM
+};
+
 /* 
  * no matter which kind of ip_addr, just use 32 bit to hash
  * since neighbour table is not a large table
  */
-static inline unsigned int neigh_hashkey(const union inet_addr* ip_addr, 
+static inline unsigned int neigh_hashkey(int af,
+                                         const union inet_addr* ip_addr, 
                                          struct netif_port *port) {
-    return rte_be_to_cpu_32(*(uint32_t *)ip_addr) & NEIGH_TAB_MASK;
+    return rte_be_to_cpu_32(inet_addr_fold(af, ip_addr)) \
+                             & NEIGH_TAB_MASK;
 }
 
 void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx);
@@ -82,8 +89,7 @@ struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key,
 void neigh_send_mbuf_cach(struct neighbour_entry *neighbour);
 
 int neigh_edit(struct neighbour_entry *neighbour, 
-               struct ether_addr* eth_addr,
-               unsigned int hashkey);
+               struct ether_addr* eth_addr);
 
 int neigh_init(void);
 
@@ -98,7 +104,7 @@ int neigh_output(int af,
                  struct rte_mbuf *mbuf, 
                  struct netif_port *port);
 
-struct neighbour_entry *neigh_add_table(int af, union inet_addr *ipaddr, 
+struct neighbour_entry *neigh_add_table(int af, const union inet_addr *ipaddr, 
                                         const struct ether_addr *eth_addr,
                                         struct netif_port *port, 
                                         unsigned int hashkey, int flag);
@@ -110,6 +116,8 @@ int neigh_resolve_input(struct rte_mbuf *mbuf, struct netif_port *port);
 void neigh_process_ring(void *arg);
 
 void neigh_confirm(int af, union inet_addr *nexthop, struct netif_port *port);
+
+int neigh_sync_core(const void *param, bool add_del, enum param_kind kind);
 
 static inline void ipv6_mac_mult(const struct in6_addr *mult_target, 
                                  struct ether_addr *mult_eth)
