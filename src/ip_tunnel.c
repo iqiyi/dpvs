@@ -257,6 +257,12 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     assert(tab && ops && par);
     params = *par; /* may modified */
 
+    if (netif_port_count() >= NETIF_MAX_PORTS) {
+        RTE_LOG(ERR, TUNNEL, "%s: exceeding specification limits(%d)",
+            __func__, NETIF_MAX_PORTS);
+        return NULL;
+    }
+
     /* set ifname template if not assigned. */
     if (!strlen(params.ifname))
         snprintf(params.ifname, IFNAMSIZ, "%s%%d", ops->kind);
@@ -878,7 +884,8 @@ int ip_tunnel_rcv(struct ip_tunnel *tnl, struct ip_tunnel_pktinfo *tpi,
 
     mbuf->port = tnl->dev->id;
 
-    if (ip_tunnel_forward_icmp_first_core()) {
+    if (ip_tunnel_forward_icmp_first_core() &&
+        rte_lcore_id() != TUNNEL_ICMP_PROC_CORE_ID) {
         port = netif_port_get(mbuf->port);
         if (port)
             rte_memcpy(&dev_addr, &port->addr, sizeof(dev_addr));
