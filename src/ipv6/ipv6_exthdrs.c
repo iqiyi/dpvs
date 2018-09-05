@@ -75,7 +75,7 @@ int ip6_skip_exthdr(const struct rte_mbuf *imbuf, int start, __u8 *nexthdrp)
                 break;
             hdrlen = 8;
         } else if (nexthdr == NEXTHDR_AUTH)
-            hdrlen = (hp->ip6e_len + 2)<<2;
+            hdrlen = (hp->ip6e_len + 2) << 2;
         else
             hdrlen = ((hp)->ip6e_len + 1) << 3;
 

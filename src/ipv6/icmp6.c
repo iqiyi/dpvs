@@ -127,16 +127,15 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     struct ip6_hdr *iph = ip6_hdr(imbuf);
     eth_type_t etype = imbuf->packet_type; /* FIXME: use other field ? */
     struct in6_addr *saddr = NULL;
-    struct ip6_hdr shdr; /* IPv6 header for sending packet */
+    struct ip6_hdr shdr;                   /* IPv6 header for sending packet */
     struct rte_mbuf *mbuf;
     struct icmp6_hdr *ich;
     struct flow6 fl6;
     int room, err;
     int addr_type = 0;
-
-    bzero(&saddr, sizeof(saddr));
-
-    if (true /*iph->ip6_dst is local address*/) {
+    
+    if (inet_addr_ifa_get(AF_INET6, netif_port_get(imbuf->port), 
+                          (union inet_addr *)&iph->ip6_dst)) {
         saddr = &iph->ip6_dst;
     }
 
@@ -178,6 +177,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     memset(&shdr, 0, sizeof(struct ip6_hdr));
     memset(&fl6, 0, sizeof(fl6));
     shdr.ip6_nxt = IPPROTO_ICMPV6;
+    shdr.ip6_dst = fl6.fl6_daddr = iph->ip6_src;
 
     fl6.fl6_proto = IPPROTO_ICMPV6;
     fl6.fl6_oif = netif_port_get(imbuf->port);
@@ -185,11 +185,11 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
         shdr.ip6_src = fl6.fl6_saddr = *saddr;
     }
     else {
-        inet_pton(AF_INET6, "fe80::1234:56ff:feaa:bbcc", &shdr.ip6_src);
-        inet_pton(AF_INET6, "fe80::1234:56ff:feaa:bbcc", &fl6.fl6_saddr);
+        inet_addr_select(AF_INET6, fl6.fl6_oif,
+                         (union inet_addr *)&fl6.fl6_daddr, fl6.fl6_scope,
+                         (union inet_addr *)&fl6.fl6_saddr);
+        shdr.ip6_src = fl6.fl6_saddr;
     }
-
-    shdr.ip6_dst = fl6.fl6_daddr = iph->ip6_src;
 
     mbuf = rte_pktmbuf_alloc(fl6.fl6_oif->mbuf_pool);
     if (!mbuf) {
@@ -219,10 +219,10 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
         return;
     }
 
-    shdr.ip6_plen = room + sizeof(struct ip6_hdr);
-    icmp6_send_csum(&shdr, ich);
-
     mbuf_copy_bits(imbuf, 0, ich + 1, room);
+
+    shdr.ip6_plen = room + sizeof(struct icmp6_hdr);
+    icmp6_send_csum(&shdr, ich);
 
     if ((err = ipv6_xmit(mbuf, &fl6)) != EDPVS_OK) {
         RTE_LOG(DEBUG, ICMP6, "%s: ipv6_xmit: %s.\n",
@@ -251,20 +251,21 @@ static int icmp6_echo_reply(struct rte_mbuf *mbuf, struct ip6_hdr *iph,
 
     shdr.ip6_nxt = IPPROTO_ICMPV6;
     shdr.ip6_plen = htons(icmp_len);
+    shdr.ip6_dst = fl6.fl6_daddr = iph->ip6_src;
 
     fl6.fl6_proto = IPPROTO_ICMPV6;
     fl6.fl6_oif = netif_port_get(mbuf->port);
 
     if (!ipv6_addr_is_multicast(&iph->ip6_dst)) {
-        shdr.ip6_src = iph->ip6_dst; /**/
-        fl6.fl6_saddr = iph->ip6_dst;
+        shdr.ip6_src = fl6.fl6_saddr = iph->ip6_dst;
     }
     else {
-        inet_pton(AF_INET6, "fe80::1234:56ff:feaa:bbcc", &shdr.ip6_src);
-        inet_pton(AF_INET6, "fe80::1234:56ff:feaa:bbcc", &fl6.fl6_saddr);
+        inet_addr_select(AF_INET6, fl6.fl6_oif,
+                         (union inet_addr *)&fl6.fl6_daddr, fl6.fl6_scope,
+                         (union inet_addr *)&fl6.fl6_saddr);
+        shdr.ip6_src = fl6.fl6_saddr;
     }
 
-    shdr.ip6_dst = fl6.fl6_daddr = iph->ip6_src;
     icmp6_send_csum(&shdr, ich);
 
     return ipv6_xmit(mbuf, &fl6);
@@ -302,7 +303,7 @@ static int icmp6_rcv(struct rte_mbuf *mbuf)
         case ND_NEIGHBOR_SOLICIT:
         case ND_NEIGHBOR_ADVERT:
         case ND_REDIRECT:
-            //return ndisc_rcv(mbuf, netif_port_get(mbuf->port));
+            return ndisc_rcv(mbuf, netif_port_get(mbuf->port));
 
         default :
             return EDPVS_KNICONTINUE;
