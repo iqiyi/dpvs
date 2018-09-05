@@ -34,6 +34,7 @@
 #include "route6.h"
 #include "parser/parser.h"
 #include "neigh.h"
+#include "icmp6.h"
 
 /*
  * IPv6 inet hooks
@@ -405,7 +406,7 @@ static int ip6_forward(struct rte_mbuf *mbuf)
 
     if (hdr->ip6_hlim <= 1) {
         mbuf->port = rt->rt6_dev->id;
-        //icmpv6_send(mbuf, ICMPV6_TIME_EXCEED, ICMPV6_EXC_HOPLIMIT, 0);
+        icmp6_send(mbuf, ICMP6_TIME_EXCEEDED, ICMP6_TIME_EXCEED_TRANSIT, 0);
         IP6_INC_STATS(inhdrerrors);
         rte_pktmbuf_free(mbuf);
         return EDPVS_INVAL;
@@ -419,7 +420,8 @@ static int ip6_forward(struct rte_mbuf *mbuf)
         goto error;
 
     if (addrtype & IPV6_ADDR_LINKLOCAL) {
-        //icmpv6_send(mbuf, ICMPV6_DEST_UNREACH, ICMPV6_NOT_NEIGHBOUR, 0);
+        // don't exist ICMP6_NOT_NEIGHBOUR in netinet/icmp6.h, use ICMP6_DST_UNREACH_NOROUTE
+        icmp6_send(mbuf, ICMP6_DST_UNREACH, ICMP6_DST_UNREACH_NOROUTE, 0);
         goto error;
     }
 
@@ -430,7 +432,7 @@ static int ip6_forward(struct rte_mbuf *mbuf)
 
     if (mbuf->pkt_len > mtu) {
         mbuf->port = rt->rt6_dev->id;
-        //icmpv6_send(mbuf, ICMPV6_PKT_TOOBIG, 0, mtu);
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, mtu);
 
         IP6_INC_STATS(intoobigerrors);
         IP6_INC_STATS(fragfails);
