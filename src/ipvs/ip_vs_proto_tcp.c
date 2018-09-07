@@ -256,8 +256,6 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
 {
     uint32_t mtu;
     struct tcpopt_addr *toa;
-    struct tcpopt_ip4_addr *toa_ip4;
-    struct tcpopt_ip6_addr *toa_ip6;
     uint32_t tcp_opt_len;
 
     uint8_t *p, *q, *tail;
@@ -325,11 +323,11 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     toa->port = conn->cport;
 
     if (conn->af == AF_INET) {
-        toa_ip4 = (struct tcpopt_ip4_addr *)(tcph + 1);
+        struct tcpopt_ip4_addr *toa_ip4 = (struct tcpopt_ip4_addr *)(tcph + 1);
         toa_ip4->addr = conn->caddr.in;
     }
     else {
-        toa_ip6 = (struct tcpopt_ip6_addr *)(tcph + 1);
+        struct tcpopt_ip6_addr *toa_ip6 = (struct tcpopt_ip6_addr *)(tcph + 1);
         toa_ip6->addr = conn->caddr.in6;
     }
 
@@ -713,7 +711,7 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
     th->dest    = conn->cport;
 
     if (th->syn && th->ack)
-        tcp_out_adjust_mss(AF_INET, th);
+        tcp_out_adjust_mss(af, th);
 
     /* adjust ACK/SACK from RS since inbound SEQ is changed */
     if (tcp_out_adjust_seq(conn, th) != EDPVS_OK)
