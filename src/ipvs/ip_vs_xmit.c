@@ -32,30 +32,74 @@
 static bool fast_xmit_close = false;
 static bool xmit_ttl = false;
 
-static int dp_vs_fast_xmit_fnat(int af,
-                    struct dp_vs_proto *proto,
-                    struct dp_vs_conn *conn,
-                    struct rte_mbuf *mbuf)
+static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
+                                   struct dp_vs_conn *conn,
+                                   struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *ip4h;
-    struct ip6_hdr *ip6h;
+    struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
     struct ether_hdr *eth;
-    uint16_t packet_type;
+    uint16_t packet_type = ETHER_TYPE_IPv4;
     int err;
 
-    assert(af == conn->af);
+    if (unlikely(conn->in_dev == NULL))
+        return EDPVS_NOROUTE;
 
-    if (unlikely(af != AF_INET && af != AF_INET6))
+    if (unlikely(is_zero_ether_addr(&conn->in_dmac) ||
+                 is_zero_ether_addr(&conn->in_smac)))
         return EDPVS_NOTSUPP;
 
-    if (af == AF_INET) {
-        packet_type = ETHER_TYPE_IPv4;
+    /* pre-handler before translation */
+    if (proto->fnat_in_pre_handler) {
+        err = proto->fnat_in_pre_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            return err;
+
+        /* 
+         * re-fetch IP header
+         * the offset may changed during pre-handler
+         */
         ip4h = ip4_hdr(mbuf);
     }
-    else {
-        packet_type = ETHER_TYPE_IPv6;
-        ip6h = ip6_hdr(mbuf);
+
+    ip4h->hdr_checksum = 0;
+    ip4h->src_addr = conn->laddr.in.s_addr;
+    ip4h->dst_addr = conn->daddr.in.s_addr;
+
+    if(proto->fnat_in_handler) {
+        err = proto->fnat_in_handler(proto, conn, mbuf);
+        if(err != EDPVS_OK)
+            return err;
     }
+
+    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+        ip4h->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(ip4h);
+    }
+
+    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct ether_hdr));
+    ether_addr_copy(&conn->in_dmac, &eth->d_addr);
+    ether_addr_copy(&conn->in_smac, &eth->s_addr);
+    eth->ether_type = rte_cpu_to_be_16(packet_type);
+    mbuf->packet_type = packet_type;
+
+    err = netif_xmit(mbuf, conn->in_dev);
+    if (err != EDPVS_OK)
+        RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
+
+    /* must return OK since netif_xmit alway consume mbuf */
+    return EDPVS_OK;
+}
+
+static int __dp_vs_fast_xmit_fnat6(struct dp_vs_proto *proto,
+                                   struct dp_vs_conn *conn,
+                                   struct rte_mbuf *mbuf)
+{
+    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+    struct ether_hdr *eth;
+    uint16_t packet_type = ETHER_TYPE_IPv6;
+    int err;
 
     if (unlikely(conn->in_dev == NULL))
         return EDPVS_NOROUTE;
@@ -74,34 +118,16 @@ static int dp_vs_fast_xmit_fnat(int af,
          * re-fetch IP header
          * the offset may changed during pre-handler
          */
-        if (af == AF_INET)
-            ip4h = ip4_hdr(mbuf);
-        else
-            ip6h = ip6_hdr(mbuf);
+        ip6h = ip6_hdr(mbuf);
     }
 
-    if (af == AF_INET) {
-        ip4h->hdr_checksum = 0;
-        ip4h->src_addr = conn->laddr.in.s_addr;
-        ip4h->dst_addr = conn->daddr.in.s_addr;
-    }
-    else {
-        ip6h->ip6_src = conn->laddr.in6;
-        ip6h->ip6_dst = conn->daddr.in6;
-    }
-
+    ip6h->ip6_src = conn->laddr.in6;
+    ip6h->ip6_dst = conn->daddr.in6;
 
     if(proto->fnat_in_handler) {
         err = proto->fnat_in_handler(proto, conn, mbuf);
         if(err != EDPVS_OK)
             return err;
-    }
-    if (af == AF_INET) {
-        if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
-            ip4h->hdr_checksum = 0;
-        } else {
-            ip4_send_csum(ip4h);
-        }
     }
 
     eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
@@ -119,30 +145,83 @@ static int dp_vs_fast_xmit_fnat(int af,
     return EDPVS_OK;
 }
 
-static int dp_vs_fast_outxmit_fnat(int af,
-                          struct dp_vs_proto *proto,
-                          struct dp_vs_conn *conn,
-                          struct rte_mbuf *mbuf)
+static int dp_vs_fast_xmit_fnat(int af,
+                                struct dp_vs_proto *proto,
+                                struct dp_vs_conn *conn,
+                                struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *ip4h;
-    struct ip6_hdr *ip6h;
+    return af == AF_INET ? __dp_vs_fast_xmit_fnat4(proto, conn, mbuf)
+        : __dp_vs_fast_xmit_fnat6(proto, conn, mbuf);
+}
+
+static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
+                                      struct dp_vs_conn *conn,
+                                      struct rte_mbuf *mbuf)
+{
+    struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
     struct ether_hdr *eth;
-    uint16_t packet_type;
+    uint16_t packet_type = ETHER_TYPE_IPv4;
     int err;
 
-    assert(af == conn->af);
+    if (unlikely(conn->out_dev == NULL))
+        return EDPVS_NOROUTE;
 
-    if (unlikely(af != AF_INET && af != AF_INET6))
+    if (unlikely(is_zero_ether_addr(&conn->out_dmac) ||
+                 is_zero_ether_addr(&conn->out_smac)))
         return EDPVS_NOTSUPP;
 
-    if (af == AF_INET) {
-        packet_type = ETHER_TYPE_IPv4;
+    /* pre-handler before translation */
+    if (proto->fnat_out_pre_handler) {
+        err = proto->fnat_out_pre_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            return err;
+
+        /* 
+         * re-fetch IP header
+         * the offset may changed during pre-handler
+         */
         ip4h = ip4_hdr(mbuf);
     }
-    else {
-        packet_type = ETHER_TYPE_IPv6;
-        ip6h = ip6_hdr(mbuf);
+
+    ip4h->hdr_checksum = 0;
+    ip4h->src_addr = conn->vaddr.in.s_addr;
+
+
+    if(proto->fnat_out_handler) {
+        err = proto->fnat_out_handler(proto, conn, mbuf);
+        if(err != EDPVS_OK)
+            return err;
     }
+
+    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+        ip4h->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(ip4h);
+    }
+
+    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct ether_hdr));
+    ether_addr_copy(&conn->out_dmac, &eth->d_addr);
+    ether_addr_copy(&conn->out_smac, &eth->s_addr);
+    eth->ether_type = rte_cpu_to_be_16(packet_type);
+    mbuf->packet_type = packet_type;
+
+    err = netif_xmit(mbuf, conn->out_dev);
+    if (err != EDPVS_OK)
+        RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
+
+    /* must return OK since netif_xmit alway consume mbuf */
+    return EDPVS_OK;
+}
+
+static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
+                                      struct dp_vs_conn *conn,
+                                      struct rte_mbuf *mbuf)
+{
+    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+    struct ether_hdr *eth;
+    uint16_t packet_type = ETHER_TYPE_IPv6;
+    int err;
 
     if (unlikely(conn->out_dev == NULL))
         return EDPVS_NOROUTE;
@@ -161,34 +240,16 @@ static int dp_vs_fast_outxmit_fnat(int af,
          * re-fetch IP header
          * the offset may changed during pre-handler
          */
-        if (af == AF_INET)
-            ip4h = ip4_hdr(mbuf);
-        else
-            ip6h = ip6_hdr(mbuf);
+        ip6h = ip6_hdr(mbuf);
     }
 
-    if (af == AF_INET) {
-        ip4h->hdr_checksum = 0;
-        ip4h->src_addr = conn->vaddr.in.s_addr;
-        ip4h->dst_addr = conn->caddr.in.s_addr;
-    }
-    else {
-        ip6h->ip6_src = conn->laddr.in6;
-        ip6h->ip6_dst = conn->daddr.in6;
-    }
+    ip6h->ip6_src = conn->laddr.in6;
+    ip6h->ip6_dst = conn->daddr.in6;
 
     if(proto->fnat_out_handler) {
         err = proto->fnat_out_handler(proto, conn, mbuf);
         if(err != EDPVS_OK)
             return err;
-    }
-
-    if (af == AF_INET) {
-        if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
-            ip4h->hdr_checksum = 0;
-        } else {
-            ip4_send_csum(ip4h);
-        }
     }
 
     eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
@@ -197,7 +258,7 @@ static int dp_vs_fast_outxmit_fnat(int af,
     ether_addr_copy(&conn->out_smac, &eth->s_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
-    
+
     err = netif_xmit(mbuf, conn->out_dev);
     if (err != EDPVS_OK)
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
@@ -271,8 +332,8 @@ static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
  */
 static void dp_vs_conn_cache_rt(struct dp_vs_conn *conn, struct route_entry *rt, bool in)
 {
-    if ((in && conn->in_dev && (conn->in_nexthop.in.s_addr == htonl(INADDR_ANY))) ||
-        (!in && conn->out_dev && (conn->out_nexthop.in.s_addr == htonl(INADDR_ANY))))
+    if ((in && conn->in_dev && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))) ||
+        (!in && conn->out_dev && (conn->out_nexthop.in.s_addr != htonl(INADDR_ANY))))
         return;
 
     if (in) {
@@ -295,8 +356,8 @@ static void dp_vs_conn_cache_rt(struct dp_vs_conn *conn, struct route_entry *rt,
 
 static void dp_vs_conn_cache_rt6(struct dp_vs_conn *conn, struct route6 *rt, bool in)
 {
-    if ((in && conn->in_dev && ipv6_addr_any(&conn->in_nexthop.in6)) ||
-        (!in && conn->out_dev && ipv6_addr_any(&conn->out_nexthop.in6)))
+    if ((in && conn->in_dev && !ipv6_addr_any(&conn->in_nexthop.in6)) ||
+        (!in && conn->out_dev && !ipv6_addr_any(&conn->out_nexthop.in6)))
         return;
 
     if (in) {
@@ -352,7 +413,6 @@ static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
         err = EDPVS_NOROUTE;
         goto errout;
     }
-
 
     /*
      * didn't cache the pointer to rt
@@ -458,7 +518,6 @@ static int __dp_vs_xmit_fnat6(struct dp_vs_proto *proto,
         err = EDPVS_NOROUTE;
         goto errout;
     }
-
 
     /*
      * didn't cache the pointer to rt6
@@ -830,9 +889,8 @@ static void __dp_vs_xmit_icmp6(struct rte_mbuf *mbuf,
                                struct dp_vs_conn *conn, int dir)
 {
     struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-    struct icmp6_hdr *icmp6h;  //(struct icmphdr *)
-                               //((unsigned char *)ip4_hdr(mbuf) + ip4_hdrlen(mbuf));
-    struct ip6_hdr *cip6h; //(struct ipv4_hdr *)(icmph + 1);
+    struct icmp6_hdr *icmp6h;
+    struct ip6_hdr *cip6h;
     int fullnat = (conn->dest->fwdmode == DPVS_FWD_MODE_FNAT);
     uint8_t nexthdr = ip6h->ip6_nxt;
     int offset = sizeof(*ip6h);
@@ -1031,11 +1089,7 @@ static int __dp_vs_xmit_dr6(struct dp_vs_proto *proto,
     }
 
     mbuf->packet_type = ETHER_TYPE_IPv6;
-     err = 0; // need delete
-    /*
-     * TODO: add ipv6 neighour support
-     * err = neigh_resolve_output(&conn->daddr.in, mbuf, rt->port);
-     */
+    err = neigh_output(AF_INET6, (union inet_addr *)&conn->daddr.in6, mbuf, rt6->rt6_dev);
     route6_put(rt6);
     return err;
 
