@@ -133,7 +133,7 @@ dp_vs_conhash_assign(struct dp_vs_service *svc)
 
 static void node_fini(struct node_s *node)
 {
-    if (node)
+    if (!node)
         return;
 
     if (node->data) {
