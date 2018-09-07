@@ -73,15 +73,11 @@ struct inet6_protocol {
     unsigned int    flags;
 };
 
-int ip6_skip_exthdr(const struct rte_mbuf *imbuf, int start,
-                    __u8 *nexthdrp);
-
-int ip6_output(struct rte_mbuf *mbuf);
-
 int ipv6_init(void);
 int ipv6_term(void);
 
 int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6);
+int ip6_output(struct rte_mbuf *mbuf);
 
 int ipv6_register_hooks(struct inet_hook_ops *ops, size_t n);
 int ipv6_unregister_hooks(struct inet_hook_ops *ops, size_t n);
@@ -104,7 +100,8 @@ int ipv6_ctrl_term(void);
 int ipv6_exthdrs_init(void);
 void ipv6_exthdrs_term(void);
 int ipv6_parse_hopopts(struct rte_mbuf *mbuf);
-int ip6_skip_exthdr(const struct rte_mbuf *mbuf, int start, uint8_t *nexthdrp);
+int ip6_skip_exthdr(const struct rte_mbuf *imbuf, int start,
+                    __u8 *nexthdrp);
 /* get ipv6 header length, including extension header length. */
 int ip6_hdrlen(const struct rte_mbuf *mbuf);
 

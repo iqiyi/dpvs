@@ -420,8 +420,7 @@ static int ip6_forward(struct rte_mbuf *mbuf)
         goto error;
 
     if (addrtype & IPV6_ADDR_LINKLOCAL) {
-        // don't exist ICMP6_NOT_NEIGHBOUR in netinet/icmp6.h, use ICMP6_DST_UNREACH_NOROUTE
-        icmp6_send(mbuf, ICMP6_DST_UNREACH, ICMP6_DST_UNREACH_NOROUTE, 0);
+        icmp6_send(mbuf, ICMP6_DST_UNREACH, ICMP6_DST_UNREACH_BEYONDSCOPE, 0);
         goto error;
     }
 
