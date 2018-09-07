@@ -141,6 +141,10 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
 
     addr_type = ipv6_addr_type(&iph->ip6_dst);
 
+    /*
+     * when the original ipv6 dst is l2/l3 mcast, just deal ICMP6_PACKET_TOO_BIG and
+     * ICMP6_PARAM_PROB's unrecognize IPv6 option.
+     */
     if (addr_type & IPV6_ADDR_MULTICAST ||  etype != ETH_PKT_HOST) {
         if (type != ICMP6_PACKET_TOO_BIG &&
             !(type == ICMP6_PARAM_PROB &&
@@ -155,6 +159,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
         saddr = NULL;
     }
 
+    addr_type = ipv6_addr_type(&iph->ip6_src);
     /*
      *  Must not send error if the source does not uniquely
      *  identify a single node (RFC2463 Section 2.4).
@@ -167,7 +172,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     }
 
     /*
-     *  Never answer to a ICMP packet.
+     *  In icmp6_send, never answer to a ICMP packet except the type of ICMP6_INFOMSG_MASK.
      */
     if (icmp6_is_ineligible(imbuf)) {
         RTE_LOG(DEBUG, ICMP6, "icmpv6_send: no reply to icmp error\n");
@@ -183,8 +188,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     fl6.fl6_oif = netif_port_get(imbuf->port);
     if (saddr) {
         shdr.ip6_src = fl6.fl6_saddr = *saddr;
-    }
-    else {
+    } else {
         inet_addr_select(AF_INET6, fl6.fl6_oif,
                          (union inet_addr *)&fl6.fl6_daddr, fl6.fl6_scope,
                          (union inet_addr *)&fl6.fl6_saddr);
@@ -258,8 +262,7 @@ static int icmp6_echo_reply(struct rte_mbuf *mbuf, struct ip6_hdr *iph,
 
     if (!ipv6_addr_is_multicast(&iph->ip6_dst)) {
         shdr.ip6_src = fl6.fl6_saddr = iph->ip6_dst;
-    }
-    else {
+    } else {
         inet_addr_select(AF_INET6, fl6.fl6_oif,
                          (union inet_addr *)&fl6.fl6_daddr, fl6.fl6_scope,
                          (union inet_addr *)&fl6.fl6_saddr);
