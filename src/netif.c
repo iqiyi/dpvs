@@ -2120,11 +2120,7 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
                 mbuf_clone = rte_pktmbuf_clone(mbuf, mbuf_pool);
                 if (mbuf_clone) {
                     int ret = rte_ring_enqueue(arp_ring[i], mbuf_clone);
-                    if (unlikely(-EDQUOT == ret)) {
-                        RTE_LOG(WARNING, NETIF, "%s: arp ring of lcore %d quota exceeded\n",
-                                __func__, i);
-                    }
-                    else if (ret < 0) {
+                    if (ret < 0) {
                         RTE_LOG(WARNING, NETIF, "%s: arp ring of lcore %d enqueue failed\n",
                                 __func__, i);
                         rte_pktmbuf_free(mbuf_clone);

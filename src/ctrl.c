@@ -368,16 +368,8 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
     /* two lcores will be using the msg now, increase its refcnt */
     rte_atomic16_inc(&msg->refcnt);
     res = rte_ring_enqueue(msg_ring[cid], msg);
-    if (unlikely(-EDQUOT == res)) {
-        RTE_LOG(WARNING, MSGMGR, "%s: msg ring of lcore %d quota exceeded\n",
-                __func__, cid);
-    } else if (unlikely(-ENOBUFS == res)) {
+    if (unlikely(-ENOBUFS == res)) {
         RTE_LOG(ERR, MSGMGR, "%s: msg ring of lcore %d is full\n", __func__, res);
-        add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        rte_atomic16_dec(&msg->refcnt); /* not enqueued, free manually */
-        return EDPVS_DPDKAPIFAIL;
-    } else if (res) {
-        RTE_LOG(ERR, MSGMGR, "%s: unkown error %d for rte_ring_enqueue\n", __func__, res);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
         rte_atomic16_dec(&msg->refcnt); /* not enqueued, free manually */
         return EDPVS_DPDKAPIFAIL;

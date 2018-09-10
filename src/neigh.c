@@ -284,10 +284,7 @@ static int neigh_entry_expire(struct neighbour_entry *neighbour)
         mac_param = neigh_ring_clone_entry(neighbour, 0);
         if (mac_param) {
             int ret = rte_ring_enqueue(neigh_ring[master_cid], mac_param);
-            if (unlikely(-EDQUOT == ret))
-                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
-                        __func__);
-            else if (ret < 0) {
+            if (ret < 0) {
                 rte_free(mac_param);
                 RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring enqueue failed\n",
                         __func__);
@@ -408,10 +405,7 @@ static int neigh_edit(struct neighbour_entry *neighbour, struct ether_addr* eth_
         mac_param = neigh_ring_clone_entry(neighbour, 1);
         if (mac_param) {
             int ret = rte_ring_enqueue(neigh_ring[master_cid], mac_param);
-            if (unlikely(-EDQUOT == ret))
-                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
-                        __func__);
-            else if (ret < 0) {
+            if (ret < 0) {
                 rte_free(mac_param);
                 RTE_LOG(WARNING, NETIF, "%s: neigh ring enqueue failed\n",
                         __func__);
@@ -467,10 +461,7 @@ neigh_add_table(uint32_t ipaddr, const struct ether_addr* eth_addr,
         mac_param = neigh_ring_clone_entry(new_neighbour, 1);
         if (mac_param) {
             int ret = rte_ring_enqueue(neigh_ring[master_cid], mac_param);
-            if (unlikely(-EDQUOT == ret))
-                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
-                        __func__);
-            else if (ret < 0) {
+            if (ret < 0) {
                 rte_free(mac_param);
                 RTE_LOG(WARNING, NETIF, "%s: neigh ring enqueue failed\n",
                         __func__);
@@ -944,10 +935,7 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
             mac_param = neigh_ring_clone_param(param, 1);
             if (mac_param) {
                 int ret = rte_ring_enqueue(neigh_ring[i], mac_param);
-                if (unlikely(-EDQUOT == ret))
-                    RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
-                    __func__);
-                else if (ret < 0) {
+                if (ret < 0) {
                     rte_free(mac_param);
                     RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring enqueue failed\n",
                     __func__);
@@ -984,10 +972,7 @@ static int neigh_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
             mac_param = neigh_ring_clone_param(param, 0);
             if (mac_param) {
                 int ret = rte_ring_enqueue(neigh_ring[i], mac_param);
-                if (unlikely(-EDQUOT == ret))
-                    RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
-                    __func__);
-                else if (ret < 0) {
+                if (ret < 0) {
                     rte_free(mac_param);
                     RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring enqueue failed\n",
                     __func__);
