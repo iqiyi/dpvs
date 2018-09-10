@@ -83,13 +83,13 @@ static inline unsigned int neigh_hashkey(int af,
 void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx);
 
 struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key,
-                                           const struct netif_port* port, 
+                                           const struct netif_port *port, 
                                            unsigned int hashkey);
 
 void neigh_send_mbuf_cach(struct neighbour_entry *neighbour);
 
 int neigh_edit(struct neighbour_entry *neighbour, 
-               struct ether_addr* eth_addr);
+               struct ether_addr *eth_addr);
 
 int neigh_init(void);
 
