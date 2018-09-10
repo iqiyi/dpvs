@@ -779,8 +779,8 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-    inet_ntop(AF_INET6, &ic6h->ip6_src, src_addr_buff, sizeof(src_addr_buff));
-    inet_ntop(AF_INET6, &ic6h->ip6_dst, dst_addr_buff, sizeof(dst_addr_buff));
+    inet_ntop(AF_INET6, &ip6h->ip6_src, src_addr_buff, sizeof(src_addr_buff));
+    inet_ntop(AF_INET6, &ip6h->ip6_dst, dst_addr_buff, sizeof(dst_addr_buff));
     RTE_LOG(DEBUG, IPVS, "ICMP6 (%d,%d) %s->%s\n",
             ic6h->icmp6_type, ntohs(icmp6h_id(ic6h)), src_addr_buff, dst_addr_buff);
 #endif
