@@ -42,6 +42,11 @@ static inline struct ip6_hdr *ip6_hdr(const struct rte_mbuf *mbuf)
     return rte_pktmbuf_mtod(mbuf, struct ip6_hdr *);
 }
 
+static inline bool ip6_is_frag(struct ip6_hdr *ip6h)
+{
+    return (ip6h->ip6_nxt == IPPROTO_FRAGMENT);
+}
+
 enum {
     INET6_PROTO_F_NONE      = 0x01,
     INET6_PROTO_F_FINAL     = 0x02,
@@ -72,6 +77,7 @@ int ipv6_init(void);
 int ipv6_term(void);
 
 int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6);
+int ip6_output(struct rte_mbuf *mbuf);
 
 int ipv6_register_hooks(struct inet_hook_ops *ops, size_t n);
 int ipv6_unregister_hooks(struct inet_hook_ops *ops, size_t n);
@@ -94,7 +100,8 @@ int ipv6_ctrl_term(void);
 int ipv6_exthdrs_init(void);
 void ipv6_exthdrs_term(void);
 int ipv6_parse_hopopts(struct rte_mbuf *mbuf);
-int ip6_skip_exthdr(const struct rte_mbuf *mbuf, int start, uint8_t *nexthdrp);
+int ip6_skip_exthdr(const struct rte_mbuf *imbuf, int start,
+                    __u8 *nexthdrp);
 /* get ipv6 header length, including extension header length. */
 int ip6_hdrlen(const struct rte_mbuf *mbuf);
 
