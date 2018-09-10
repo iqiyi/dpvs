@@ -1443,7 +1443,7 @@ inline static void recv_on_isol_lcore(void)
 
     list_for_each_entry(isol_rxq, &isol_rxq_tab[cid], lnode) {
         assert(isol_rxq->cid == cid);
-        rx_len = rte_eth_rx_burst((uint8_t)isol_rxq->pid, isol_rxq->qid,
+        rx_len = rte_eth_rx_burst(isol_rxq->pid, isol_rxq->qid,
                 mbufs, NETIF_MAX_PKT_BURST);
         /* It is safe to reuse lcore_stats for isolate recieving. Isolate recieving
          * always lays on different lcores from packet processing. */
@@ -1498,7 +1498,7 @@ static inline uint16_t netif_rx_burst(portid_t pid, struct netif_queue_conf *qco
         /* Shoul we integrate statistics of isolated recieve lcore into packet
          * processing lcore ? No! we just leave the work to tools */
     } else {
-        nrx = rte_eth_rx_burst((uint8_t)pid, qconf->id, qconf->mbufs, NETIF_MAX_PKT_BURST);
+        nrx = rte_eth_rx_burst(pid, qconf->id, qconf->mbufs, NETIF_MAX_PKT_BURST);
     }
 
     qconf->len = nrx;
@@ -1837,7 +1837,7 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
         kni_send2kern_loop(pid, txq);
     }
 
-    ntx = rte_eth_tx_burst((uint8_t)pid, txq->id, txq->mbufs, txq->len);
+    ntx = rte_eth_tx_burst(pid, txq->id, txq->mbufs, txq->len);
     lcore_stats[cid].opackets += ntx;
     /* do not calculate obytes here in consideration of efficency */
     if (unlikely(ntx < txq->len)) {
