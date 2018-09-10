@@ -292,16 +292,6 @@ void ndisc_solicit(struct neighbour_entry *neigh,
     struct netif_port *dev = neigh->port;
     struct in6_addr *target = &neigh->ip_addr.in6;
 
-/* notice: here is a simple solicit, only send multicast */
-/*
-    if (neigh->state == DPVS_NUD_S_PROBE || 
-        neigh->state == DPVS_NUD_S_DELAY) {
-        ndisc_send_ns(dev, target, target, saddr);
-    } else {
-        addrconf_addr_solict_mult(target, &mcaddr);
-        ndisc_send_ns(dev, target, &mcaddr, saddr);
-    }
-*/
     addrconf_addr_solict_mult(target, &mcaddr);
     ndisc_send_ns(dev, target, &mcaddr, saddr);
 }
