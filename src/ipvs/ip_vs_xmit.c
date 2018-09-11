@@ -604,7 +604,7 @@ static int __dp_vs_out_xmit_fnat4(struct dp_vs_proto *proto,
 
     if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
         dp_vs_save_outxmit_info(mbuf, proto, conn);
-        if (!dp_vs_fast_outxmit_fnat(AF_INET6, proto, conn, mbuf)) {
+        if (!dp_vs_fast_outxmit_fnat(AF_INET, proto, conn, mbuf)) {
             return EDPVS_OK;
         }
     }
@@ -707,7 +707,7 @@ static int __dp_vs_out_xmit_fnat6(struct dp_vs_proto *proto,
 
     if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
         dp_vs_save_outxmit_info(mbuf, proto, conn);
-        if (!dp_vs_fast_outxmit_fnat(AF_INET, proto, conn, mbuf)) {
+        if (!dp_vs_fast_outxmit_fnat(AF_INET6, proto, conn, mbuf)) {
             return EDPVS_OK;
         }
     }
