@@ -56,6 +56,30 @@ struct dp_vs_neigh_conf_array {
     struct dp_vs_neigh_conf addrs[0];
 }__attribute__((__packed__));
 
+#define sNNO DPVS_NUD_S_NONE
+#define sNSD DPVS_NUD_S_SEND
+#define sNRE DPVS_NUD_S_REACHABLE
+#define sNPR DPVS_NUD_S_PROBE
+#define sNDE DPVS_NUD_S_DELAY
+
+#define DPVS_NUD_S_KEEP DPVS_NUD_S_MAX
+#define sNKP DPVS_NUD_S_KEEP /*Keep state and do not reset timer*/
+
+static const char *nud_state_names[] = {
+    [DPVS_NUD_S_NONE]      = "NONE",
+    [DPVS_NUD_S_SEND]      = "SEND",
+    [DPVS_NUD_S_REACHABLE] = "REACHABLE",
+    [DPVS_NUD_S_PROBE]     = "PROBE",
+    [DPVS_NUD_S_DELAY]     = "DELAY",
+};
+
+static inline const char *nud_state_name(int state)
+{
+    if (state >= DPVS_NUD_S_KEEP)
+         return "ERR!";
+    return nud_state_names[state] ? nud_state_names[state] :"<Unknown>";
+}
+
 #define NEIGHBOUR_HASHED     0x01
 #define NEIGHBOUR_STATIC     0x02
 

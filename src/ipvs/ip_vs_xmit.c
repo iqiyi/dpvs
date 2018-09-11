@@ -185,7 +185,7 @@ static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
 
     ip4h->hdr_checksum = 0;
     ip4h->src_addr = conn->vaddr.in.s_addr;
-
+    ip4h->dst_addr = conn->caddr.in.s_addr;
 
     if(proto->fnat_out_handler) {
         err = proto->fnat_out_handler(proto, conn, mbuf);

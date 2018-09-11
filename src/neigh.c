@@ -60,15 +60,6 @@ struct nud_state {
     int next_state[DPVS_NUD_S_MAX];
 };
 
-#define sNNO DPVS_NUD_S_NONE
-#define sNSD DPVS_NUD_S_SEND
-#define sNRE DPVS_NUD_S_REACHABLE
-#define sNPR DPVS_NUD_S_PROBE
-#define sNDE DPVS_NUD_S_DELAY
-
-#define DPVS_NUD_S_KEEP DPVS_NUD_S_MAX
-#define sNKP DPVS_NUD_S_KEEP /*Keep state and do not reset timer*/
-
 static int nud_timeouts[DPVS_NUD_S_MAX] = {
     [DPVS_NUD_S_NONE]        = 2,
     [DPVS_NUD_S_SEND]        = 3,
@@ -258,23 +249,6 @@ static int neigh_entry_expire(struct neighbour_entry *neighbour)
     return DTIMER_STOP;
 }
 
-#ifdef CONFIG_DPVS_NEIGH_DEBUG
-static const char *nud_state_names[] = {    
-    [DPVS_NUD_S_NONE]      = "NONE",
-    [DPVS_NUD_S_SEND]      = "SEND",
-    [DPVS_NUD_S_REACHABLE] = "REACHABLE",
-    [DPVS_NUD_S_PROBE]     = "PROBE",
-    [DPVS_NUD_S_DELAY]     = "DELAY",
-};
-
-static const char *nud_state_name(int state)
-{
-    if (state >= DPVS_NUD_S_KEEP)
-         return "ERR!";
-    return nud_state_names[state] ? nud_state_names[state] :"<Unknown>";
-}
-#endif
-
 void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx)
 {
     struct timeval timeout;
@@ -331,7 +305,7 @@ struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key,
     return NULL;
 }
 
-int neigh_edit(struct neighbour_entry *neighbour, struct ether_addr* eth_addr)
+int neigh_edit(struct neighbour_entry *neighbour, struct ether_addr *eth_addr)
 {
     rte_memcpy(&neighbour->eth_addr, eth_addr, 6);
 
@@ -808,7 +782,7 @@ static void neigh_fill_param(struct dp_vs_neigh_conf  *param,
     param->af      = entry->af;
     param->ip_addr = entry->ip_addr;
     param->flag    = entry->flag;
-    ether_addr_copy(&entry->eth_addr,&param->eth_addr);
+    ether_addr_copy(&entry->eth_addr, &param->eth_addr);
     param->que_num = entry->que_num;
     param->state   = entry->state;
     param->cid     = cid;
@@ -816,7 +790,8 @@ static void neigh_fill_param(struct dp_vs_neigh_conf  *param,
 }
 
 static void neigh_fill_array(struct netif_port *dev, lcoreid_t cid, 
-                             struct dp_vs_neigh_conf_array *array)
+                             struct dp_vs_neigh_conf_array *array,
+                             size_t neigh_nums)
 {
     int hash, off;
     struct neighbour_entry *entry;
@@ -827,7 +802,7 @@ static void neigh_fill_array(struct netif_port *dev, lcoreid_t cid,
         for (hash = 0; hash < NEIGH_TAB_SIZE; hash++) {
             list_for_each_entry(entry, &neigh_table[cid][hash], neigh_list) {
                 if (dev == entry->port) {
-                    if (off >= neigh_nums[cid]) {
+                    if (off >= neigh_nums) {
                         RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh num not match\n", __func__);
                         break;
                     }
@@ -840,7 +815,7 @@ static void neigh_fill_array(struct netif_port *dev, lcoreid_t cid,
     } else {
         for (hash = 0; hash < NEIGH_TAB_SIZE; hash++) {
             list_for_each_entry(entry, &neigh_table[cid][hash], neigh_list) {
-                if (off >= neigh_nums[cid]) {
+                if (off >= neigh_nums) {
                     RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh num not match\n", __func__);
                     break;
                 }
@@ -862,11 +837,11 @@ static int get_neigh_uc_cb(struct dpvs_msg *msg)
     if (msg->len)
         dev = netif_port_get_by_name((char *)msg->data);
 
-    len =sizeof(struct dp_vs_neigh_conf_array) + 
-         sizeof(struct dp_vs_neigh_conf) * neigh_nums[cid];
+    len = sizeof(struct dp_vs_neigh_conf_array) + 
+          sizeof(struct dp_vs_neigh_conf) * neigh_nums[cid];
     array = rte_zmalloc("neigh_array", len, RTE_CACHE_LINE_SIZE);
 
-    neigh_fill_array(dev, cid, array);
+    neigh_fill_array(dev, cid, array, neigh_nums[cid]);
     msg->reply.len = len;
     msg->reply.data = (void *)array;
 
@@ -881,7 +856,7 @@ static int neigh_sockopt_get(sockoptid_t opt, const void *conf,
     size_t off = 0;
     struct netif_port *port = NULL;
     struct dpvs_msg *msg, *cur;
-    struct dpvs_multicast_queue *reply=NULL;
+    struct dpvs_multicast_queue *reply = NULL;
     int neigh_nums_g = 0, err;
 
     if (conf && size >= sizeof(*cf))
