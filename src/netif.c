@@ -2463,7 +2463,7 @@ static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev,
     }
 
     /* VLAN device cannot be scheduled by kni_send2kern_loop */
-    if (dev->type == PORT_TYPE_VLAN ||
+    if ((dev->type == PORT_TYPE_VLAN && qconf->kni_len > 0)||
             unlikely(qconf->kni_len == NETIF_MAX_PKT_BURST)) {
         rte_spinlock_lock(&kni_lock);
         pkt_num = rte_kni_tx_burst(dev->kni.kni, qconf->kni_mbufs, qconf->kni_len);
