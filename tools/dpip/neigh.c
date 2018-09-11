@@ -94,15 +94,6 @@ static int neigh_parse_args(struct dpip_conf *conf,
     return 0;
 }
 
-/* should be the same as dpvs/neigh.c */
-static const char *nud_state_names[] = {    
-    [DPVS_NUD_S_NONE]      = "NONE",
-    [DPVS_NUD_S_SEND]      = "SEND",
-    [DPVS_NUD_S_REACHABLE] = "REACHABLE",
-    [DPVS_NUD_S_PROBE]     = "PROBE",
-    [DPVS_NUD_S_DELAY]     = "DELAY",
-};
-
 static void neigh_dump(struct dp_vs_neigh_conf *neigh)
 {
     char ipaddr[64];
