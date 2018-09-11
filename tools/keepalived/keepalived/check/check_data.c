@@ -515,6 +515,78 @@ alloc_rs(char *ip, char *port)
 	list_add(vs->rs, new);
 }
 
+static void
+free_tunnel_group(void *data)
+{
+	tunnel_group *group = data;
+	if (!group)
+		return;
+
+	FREE_PTR(group->gname);
+	free_list(group->tunnel_entry);
+	FREE(group);
+}
+
+static void
+dump_tunnel_group(void *data)
+{
+	tunnel_group *group = data;
+	if (!group)
+		return;
+
+	log_message(LOG_INFO, "tunnel group = %s", group->gname);
+	dump_list(group->tunnel_entry);
+}
+
+static void
+free_tunnel_entry(void *data)
+{
+	if (!data)
+		return;
+
+	FREE(data);
+}
+
+static void
+dump_tunnel_entry(void *data)
+{
+    tunnel_entry *entry = data;
+    if (!entry)
+       return;
+
+    log_message(LOG_INFO, "tunnel name = %s, local_ip = %s, remote_ip = %s,"
+				" kind = %s, dev = %s",
+				entry->ifname,
+				inet_sockaddrtos(&entry->local),
+				inet_sockaddrtos(&entry->remote),
+				entry->kind,
+				entry->link);
+}
+
+void alloc_tunnel(char *gname)
+{
+	int size = strlen(gname);
+	tunnel_group *new;
+
+	new = (tunnel_group *) MALLOC(sizeof(tunnel_group));
+	new->gname = (char *) MALLOC(size + 1);
+	memcpy(new->gname, gname, size);
+	new->tunnel_entry = alloc_list(free_tunnel_entry, dump_tunnel_entry);
+	list_add(check_data->tunnel_group, new);
+}
+
+void alloc_tunnel_entry(char *name)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *new;
+
+	new = (tunnel_entry *) MALLOC(sizeof(tunnel_entry));
+	strncpy(new->ifname, name, sizeof(new->ifname) - 1);
+
+	if (gtunnel->tunnel_entry)
+		list_add(gtunnel->tunnel_entry, new);
+}
+
 /* data facility functions */
 check_data_t *
 alloc_check_data(void)
@@ -526,6 +598,7 @@ alloc_check_data(void)
 	new->vs_group = alloc_list(free_vsg, dump_vsg);
 	new->laddr_group = alloc_list(free_laddr_group, dump_laddr_group);
 	new->blklst_group = alloc_list(free_blklst_group, dump_blklst_group);
+	new->tunnel_group = alloc_list(free_tunnel_group, dump_tunnel_group);
 
 	return new;
 }
@@ -539,6 +612,8 @@ free_check_data(check_data_t *data)
 	free_list(data->vs_group);
 	free_list(data->laddr_group);
 	free_list(data->blklst_group);
+	free_list(data->tunnel_group);
+
 	FREE(data);
 }
 
@@ -561,6 +636,12 @@ dump_check_data(check_data_t *data)
 			dump_list(data->vs_group);
 		dump_list(data->vs);
 	}
+
+	if (!LIST_ISEMPTY(data->tunnel_group)) {
+		log_message(LOG_INFO, "------< Tunnel definitions >------");
+		dump_list(data->tunnel_group);
+	}
+
 	dump_checkers_queue();
 }
 
