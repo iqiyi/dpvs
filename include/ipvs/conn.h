@@ -27,7 +27,6 @@
 #include "ipvs/conn.h"
 #include "ipvs/proto.h"
 #include "ipvs/service.h"
-#include "sys_time.h"
 
 enum {
     DPVS_CONN_DIR_INBOUND = 0,

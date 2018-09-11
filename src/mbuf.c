@@ -22,6 +22,9 @@
  */
 #include <assert.h>
 #include "mbuf.h"
+#include "inet.h"
+#include "ipv4.h"
+#include "sys_time.h"
 
 #define EMBUF
 #define RTE_LOGTYPE_EMBUF    RTE_LOGTYPE_USER1
@@ -144,3 +147,31 @@ struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp)
     __rte_mbuf_sanity_check(mc, 1); //check packet header segment
     return mc;
 }
+
+#ifdef CONFIG_DPVS_MBUF_DEBUG
+inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf)
+{
+    char sbuf[64], dbuf[64];
+    struct ipv4_hdr *iph;
+    union inet_addr saddr, daddr;
+    __be16 _ports[2], *ports;
+
+    if (af != AF_INET)
+        return;
+
+    iph = ip4_hdr(mbuf);
+    saddr.in.s_addr = iph->src_addr;
+    daddr.in.s_addr = iph->dst_addr;
+    ports = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf), sizeof(_ports), _ports);
+    if (!ports)
+        return;
+
+    RTE_LOG(DEBUG, MBUF, "[%s]%s: %s "
+        "%s %s:%u to %s:%u\n", sys_localtime_str(),
+        __func__, msg ? msg : "", inet_proto_name(iph->next_proto_id),
+        inet_ntop(af, &saddr, sbuf, sizeof(sbuf)),
+        ntohs(ports[0]),
+        inet_ntop(af, &daddr, dbuf, sizeof(dbuf)),
+        ntohs(ports[1]));
+}
+#endif

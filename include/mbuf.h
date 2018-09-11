@@ -120,31 +120,7 @@ struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp);
 void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m);
 
 #ifdef CONFIG_DPVS_MBUF_DEBUG
-static inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf)
-{
-    char sbuf[64], dbuf[64];
-    struct ipv4_hdr *iph;
-    union inet_addr saddr, daddr;
-    __be16 _ports[2], *ports;
-
-    if (af != AF_INET)
-        return;
-
-    iph = ip4_hdr(mbuf);
-    saddr.in.s_addr = iph->src_addr;
-    daddr.in.s_addr = iph->dst_addr;
-    ports = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf), sizeof(_ports), _ports);
-    if (!ports)
-        return;
-
-    RTE_LOG(DEBUG, IPVS, "[%s]%s: %s "
-        "%s %s:%u to %s:%u\n", sys_localtime_str(),
-        __func__, msg ? msg : "", inet_proto_name(iph->next_proto_id),
-        inet_ntop(af, &saddr, sbuf, sizeof(sbuf)),
-        ntohs(ports[0]),
-        inet_ntop(af, &daddr, dbuf, sizeof(dbuf)),
-        ntohs(ports[1]));
-}
+inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf);
 #endif
 
 #endif /* __DP_VS_MBUF_H__ */
