@@ -1944,7 +1944,7 @@ static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 {
 	char	pbuf[32];
 
-	inet_ntop(entry->af, pbuf, (char *)&entry->addr, sizeof(pbuf));
+	inet_ntop(entry->af, (char *)&entry->addr, pbuf, sizeof(pbuf));
 	
 	printf("%-20s %-8s %-20s %-10lu %-10u\n",
 		"",
