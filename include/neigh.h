@@ -74,7 +74,7 @@ enum param_kind {
  * since neighbour table is not a large table
  */
 static inline unsigned int neigh_hashkey(int af,
-                                         const union inet_addr* ip_addr, 
+                                         const union inet_addr *ip_addr, 
                                          struct netif_port *port) {
     return rte_be_to_cpu_32(inet_addr_fold(af, ip_addr)) \
                              & NEIGH_TAB_MASK;
