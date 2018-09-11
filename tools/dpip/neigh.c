@@ -99,7 +99,7 @@ static void neigh_dump(struct dp_vs_neigh_conf *neigh)
     char ipaddr[64];
 
     if (neigh->state >= DPVS_NUD_S_REACHABLE)
-        printf("ip: %s      mac: %02x:%02x:%02x:%02x:%02x:%02x      mbuf: %d %s\n",
+        printf("ip: %-48s mac: %02x:%02x:%02x:%02x:%02x:%02x   state: %-12s  dev: %s  core: %d  %s\n",
             inet_ntop(neigh->af, &neigh->ip_addr, ipaddr, sizeof(ipaddr)) ? ipaddr : "::",
             neigh->eth_addr.ether_addr_octet[0],
             neigh->eth_addr.ether_addr_octet[1],
@@ -107,11 +107,13 @@ static void neigh_dump(struct dp_vs_neigh_conf *neigh)
             neigh->eth_addr.ether_addr_octet[3],
             neigh->eth_addr.ether_addr_octet[4],
             neigh->eth_addr.ether_addr_octet[5],
-            neigh->que_num, (neigh->flag & NEIGHBOUR_STATIC) ? "static" : "");
+            nud_state_names[neigh->state], neigh->ifname, neigh->cid, 
+            (neigh->flag & NEIGHBOUR_STATIC) ? "static" : "");
     else
-        printf("ip: %s      mac:incomplate      mbuf: %d %s\n",
+        printf("ip: %-48s mac:incomplate                       state: %-12s   dev: %s  core: %d  %s\n",
             inet_ntop(neigh->af, &neigh->ip_addr, ipaddr, sizeof(ipaddr)) ? ipaddr : "::",
-            neigh->que_num, (neigh->flag & NEIGHBOUR_STATIC) ? "static" : "");
+            nud_state_names[neigh->state], neigh->ifname, neigh->cid, 
+            (neigh->flag & NEIGHBOUR_STATIC) ? "static" : "");
     return; 
 }
 
@@ -142,12 +144,12 @@ static int neigh_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
             return err;
         if (size < sizeof(*array) || 
             size != sizeof(*array) + \
-            array->n_neigh * sizeof(struct dp_vs_neigh_conf)) {
+            array->neigh_nums * sizeof(struct dp_vs_neigh_conf)) {
             fprintf(stderr, "corrupted response.\n");
             dpvs_sockopt_msg_free(array);
             return EDPVS_INVAL;
         }
-        for (i = 0; i < array->n_neigh; i++)
+        for (i = 0; i < array->neigh_nums; i++)
             neigh_dump(&array->addrs[i]);
         dpvs_sockopt_msg_free(array);
         return EDPVS_OK; 
