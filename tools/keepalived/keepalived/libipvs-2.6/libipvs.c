@@ -321,19 +321,24 @@ static void ipvs_fill_laddr_conf(ipvs_service_t *svc, ipvs_laddr_t *laddr,
                                  struct dp_vs_laddr_conf *conf)
 {
 	memset(conf, 0, sizeof(*conf));
-	conf->af        = svc->af;
+	conf->af        = laddr->af;
 	conf->proto     = svc->protocol;
 	conf->vport     = svc->port;
 	conf->fwmark    = svc->fwmark;
 	if (strlen(laddr->ifname))
 		snprintf(conf->ifname, sizeof(conf->ifname), "%s", laddr->ifname);
+
 	if (svc->af == AF_INET) {
 		conf->vaddr.in = svc->addr.in;
-		conf->laddr.in = laddr->addr.in;
 	} else {
 		conf->vaddr.in6 = svc->addr.in6;
+	}
+
+	if (laddr->af == AF_INET) {
+		conf->laddr.in = laddr->addr.in;
+	} else {
 		conf->laddr.in6 = laddr->addr.in6;
-	}    
+	}
 
 	return;
 }
@@ -341,16 +346,21 @@ static void ipvs_fill_laddr_conf(ipvs_service_t *svc, ipvs_laddr_t *laddr,
 static void ipvs_fill_ipaddr_conf(ipvs_laddr_t *laddr, struct inet_addr_param *param)
 {
 	memset(param, 0, sizeof(*param));
-	param->af = AF_INET;
+	param->af = laddr->af;
 	if (strlen(laddr->ifname))
 		snprintf(param->ifname, sizeof(param->ifname), "%s", laddr->ifname);
-	param->addr.in = laddr->addr.in;
-	param->plen = 32;
+	if (laddr->af == AF_INET) {
+		param->addr.in = laddr->addr.in;
+		param->plen = 32;
+	} else {
+		param->plen = 128;
+		param->addr.in6 = laddr->addr.in6;
+	}
 	param->flags |= IFA_F_SAPOOL;
 	return;
 }
 
-int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr)
+int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t *laddr)
 {
 	struct dp_vs_laddr_conf conf;
 	struct inet_addr_param param;
@@ -362,7 +372,7 @@ int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr)
 	return dpvs_setsockopt(SOCKOPT_SET_LADDR_ADD, &conf, sizeof(conf));
 }
 
-int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr)
+int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t *laddr)
 {
 	struct dp_vs_laddr_conf conf;
 	struct inet_addr_param param;
