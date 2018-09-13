@@ -164,7 +164,8 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 {
     struct dp_vs_laddr *laddr = NULL;
     int i;
-    struct sockaddr_in dsin, ssin = {0};
+    uint16_t sport;
+    struct sockaddr_storage dsin, ssin;
 
     if (!conn || !conn->dest || !svc)
         return EDPVS_INVAL;
@@ -190,17 +191,30 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
             return EDPVS_RESOURCE;
         }
 
-        memset(&dsin, 0, sizeof(struct sockaddr_in));
-        dsin.sin_family = laddr->af;
-        dsin.sin_addr = conn->daddr.in;
-        dsin.sin_port = conn->dport;
+        memset(&dsin, 0, sizeof(struct sockaddr_storage));
+        memset(&ssin, 0, sizeof(struct sockaddr_storage));
 
-        memset(&ssin, 0, sizeof(struct sockaddr_in));
-        ssin.sin_family = laddr->af;
-        ssin.sin_addr = laddr->addr.in;
+        if (laddr->af == AF_INET) {
+            struct sockaddr_in *daddr, *saddr;
+            daddr = (struct sockaddr_in *)&dsin;
+            daddr->sin_family = laddr->af;
+            daddr->sin_addr = conn->daddr.in;
+            daddr->sin_port = conn->dport;
+            saddr = (struct sockaddr_in *)&ssin;
+            saddr->sin_family = laddr->af;
+            saddr->sin_addr = laddr->addr.in;
+        } else {
+            struct sockaddr_in6 *daddr, *saddr;
+            daddr = (struct sockaddr_in6 *)&dsin;
+            daddr->sin6_family = laddr->af;
+            daddr->sin6_addr = conn->daddr.in6;
+            daddr->sin6_port = conn->dport;
+            saddr = (struct sockaddr_in6 *)&ssin;
+            saddr->sin6_family = laddr->af;
+            saddr->sin6_addr = laddr->addr.in6;
+        }
 
-        if (sa_fetch(laddr->af, laddr->iface, (struct sockaddr_storage *)&dsin,
-                    (struct sockaddr_storage *)&ssin) != EDPVS_OK) {
+        if (sa_fetch(laddr->af, laddr->iface, &dsin, &ssin) != EDPVS_OK) {
             char buf[64];
             if (inet_ntop(laddr->af, &laddr->addr, buf, sizeof(buf)) == NULL)
                 snprintf(buf, sizeof(buf), "::");
@@ -212,12 +226,14 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
             put_laddr(laddr);
             continue;
         }
-
         break;
     }
     rte_rwlock_write_unlock(&svc->laddr_lock);
 
-    if (!laddr || ssin.sin_port == 0) {
+    sport = (laddr->af == AF_INET ? (((struct sockaddr_in *)&ssin)->sin_port)
+            : (((struct sockaddr_in6 *)&ssin)->sin6_port));
+
+    if (!laddr || sport == 0) {
 #ifdef CONFIG_DPVS_IPVS_DEBUG
         RTE_LOG(ERR, IPVS, "%s: [%d] no lport available !!\n", 
                 __func__, rte_lcore_id());
@@ -231,9 +247,9 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 
     /* overwrite related fields in out-tuplehash and conn */
     conn->laddr = laddr->addr;
-    conn->lport = ssin.sin_port;
+    conn->lport = sport;
     tuplehash_out(conn).daddr = laddr->addr;
-    tuplehash_out(conn).dport = ssin.sin_port;
+    tuplehash_out(conn).dport = sport;
 
     conn->local = laddr;
     return EDPVS_OK;
@@ -241,7 +257,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 
 int dp_vs_laddr_unbind(struct dp_vs_conn *conn)
 {
-    struct sockaddr_in dsin, ssin;
+    struct sockaddr_storage dsin, ssin;
 
     if (conn->flags & DPVS_CONN_F_TEMPLATE)
         return EDPVS_OK;
@@ -249,17 +265,32 @@ int dp_vs_laddr_unbind(struct dp_vs_conn *conn)
     if (!conn->local)
         return EDPVS_OK; /* not FNAT ? */
 
-    memset(&dsin, 0, sizeof(struct sockaddr_in));
-    dsin.sin_family = conn->af;
-    dsin.sin_addr = conn->daddr.in;
-    dsin.sin_port = conn->dport;
+    memset(&dsin, 0, sizeof(struct sockaddr_storage));
+    memset(&ssin, 0, sizeof(struct sockaddr_storage));
 
-    memset(&ssin, 0, sizeof(struct sockaddr_in));
-    ssin.sin_family = conn->af;
-    ssin.sin_addr = conn->laddr.in;
-    ssin.sin_port = conn->lport;
-    sa_release(conn->local->iface, (struct sockaddr_storage *)&dsin,
-               (struct sockaddr_storage *)&ssin);
+    if (conn->local->af == AF_INET) {
+        struct sockaddr_in *daddr, *saddr;
+        daddr = (struct sockaddr_in *)&dsin;
+        daddr->sin_family = conn->local->af;
+        daddr->sin_addr = conn->daddr.in;
+        daddr->sin_port = conn->dport;
+        saddr = (struct sockaddr_in *)&ssin;
+        saddr->sin_family = conn->local->af;
+        saddr->sin_addr = conn->laddr.in;
+        saddr->sin_port = conn->lport;
+    } else {
+        struct sockaddr_in6 *daddr, *saddr;
+        daddr = (struct sockaddr_in6 *)&dsin;
+        daddr->sin6_family = conn->local->af;
+        daddr->sin6_addr = conn->daddr.in6;
+        daddr->sin6_port = conn->dport;
+        saddr = (struct sockaddr_in6 *)&ssin;
+        saddr->sin6_family = conn->local->af;
+        saddr->sin6_addr = conn->laddr.in6;
+        saddr->sin6_port = conn->lport;
+    }
+
+    sa_release(conn->local->iface, &dsin, &ssin);
 
     rte_atomic32_dec(&conn->local->conn_counts);
 
