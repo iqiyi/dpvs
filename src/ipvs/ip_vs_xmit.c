@@ -771,7 +771,7 @@ static int __dp_vs_out_xmit_fnat6(struct dp_vs_proto *proto,
 
     /* L3 translation before l4 re-csum */
     ip6h->ip6_src = conn->vaddr.in6;
-    ip6h->ip6_src = conn->caddr.in6;
+    ip6h->ip6_dst = conn->caddr.in6;
 
     /* L4 FNAT translation */
     if (proto->fnat_out_handler) {
