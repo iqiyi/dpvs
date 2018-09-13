@@ -728,8 +728,12 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
                 __func__, mbuf->port);
         goto syn_rcv_out;
     }
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD)))
-        mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+        if (af == AF_INET)
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+        else
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
+    }
 
     /* reuse mbuf */
     syn_proxy_reuse_mbuf(af, mbuf, th, &tcp_opt);
