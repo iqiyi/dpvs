@@ -334,10 +334,14 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
 
     /* reset tcp header length */
     tcph->doff += tcp_opt_len >> 2;
+
     /* reset ip header total length */
-    ip4_hdr(mbuf)->total_length = 
-        htons(ntohs(ip4_hdr(mbuf)->total_length) 
-                + tcp_opt_len);
+    if (conn->af == AF_INET)
+        ip4_hdr(mbuf)->total_length =
+            htons(ntohs(ip4_hdr(mbuf)->total_length) + tcp_opt_len);
+    else
+        ip6_hdr(mbuf)->ip6_plen =
+            htons(ntohs(ip6_hdr(mbuf)->ip6_plen) + tcp_opt_len);
 
     /* tcp csum will be recalc later, 
      * so as IP hdr csum since iph.tot_len has been chagned. */
@@ -660,15 +664,13 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
         if (AF_INET6 == af) {
             mbuf->l4_len = ntohs(ip6_hdr(mbuf)->ip6_plen);
             mbuf->l3_len = sizeof(struct ip6_hdr);
-            mbuf->ol_flags |=
-                (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV6);
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
             th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6_hdr(mbuf),
                                             mbuf->ol_flags);
         } else {
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |=
-                (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
             th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
         }
     } else {
@@ -729,8 +731,7 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
         if (AF_INET6 == af) {
             mbuf->l4_len = ntohs(ip6_hdr(mbuf)->ip6_plen);
             mbuf->l3_len = sizeof(struct ip6_hdr);
-            mbuf->ol_flags |=
-                (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV6);
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
             th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6_hdr(mbuf),
                                             mbuf->ol_flags);
         } else {
@@ -783,8 +784,7 @@ static int tcp_snat_in_handler(struct dp_vs_proto *proto,
         if (AF_INET6 == af) {
             mbuf->l4_len = ntohs(ip6_hdr(mbuf)->ip6_plen);
             mbuf->l3_len = sizeof(struct ip6_hdr);
-            mbuf->ol_flags |=
-                (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV6);
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
             th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6_hdr(mbuf),
                                             mbuf->ol_flags);
         } else {
@@ -837,8 +837,7 @@ static int tcp_snat_out_handler(struct dp_vs_proto *proto,
         if (AF_INET6 == af) {
             mbuf->l4_len = ntohs(ip6_hdr(mbuf)->ip6_plen);
             mbuf->l3_len = sizeof(struct ip6_hdr);
-            mbuf->ol_flags |=
-                (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV6);
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
             th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6_hdr(mbuf),
                                             mbuf->ol_flags);
         } else {
