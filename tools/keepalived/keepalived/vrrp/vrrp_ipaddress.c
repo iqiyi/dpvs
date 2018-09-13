@@ -35,7 +35,11 @@ static void dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct 
 {
     param->af = ipaddress->ifa.ifa_family;
     param->addr.in = ipaddress->u.sin.sin_addr;
-    strcpy(param->ifname, dpdk_port);
+    if (dpdk_port) {
+        strcpy(param->ifname, dpdk_port);
+    } else {
+        strcpy(param->ifname, ipaddress->ifp->ifname);
+    }
     param->plen = ipaddress->ifa.ifa_prefixlen;
     param->flags &= ~IFA_F_SAPOOL;
 }
@@ -46,8 +50,6 @@ netlink_ipaddress(ip_address_t *ipaddress, char *dpdk_port, int cmd)
     char *tmp_ip;
     struct inet_addr_param param;
     tmp_ip = ipaddresstos(ipaddress);
-    if (dpdk_port == NULL)//ingore static route or sth. othes
-        return 1;
     memset(&param, 0, sizeof(param));
     dpvs_fill_addrconf(ipaddress, dpdk_port, &param);
     ipvs_set_ipaddr(&param, cmd);
@@ -66,7 +68,7 @@ netlink_iplist(list ip_list, int cmd, char *dpdk_port)
     if (LIST_ISEMPTY(ip_list))
          return;
 
-    /*  
+    /*
      * If "--dont-release-vrrp" (debug & 8) is set then try to release
      * addresses that may be there, even if we didn't set them.
      */
@@ -78,8 +80,8 @@ netlink_iplist(list ip_list, int cmd, char *dpdk_port)
                      ipaddr->set = (cmd) ? 1 : 0;
                  else
                      ipaddr->set = 0;
-         }   
-    }  
+         }
+    }
 }
 
 /* IP address dump/allocation */
@@ -258,7 +260,7 @@ address_exist(list l, ip_address_t *ipaddress, char *old_dpdk_port, char *dpdk_p
 
 	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
 		ipaddr = ELEMENT_DATA(e);
-		if (ipaddr->u.sin.sin_addr.s_addr == 
+		if (ipaddr->u.sin.sin_addr.s_addr ==
             ipaddress->u.sin.sin_addr.s_addr &&
             !strcmp(old_dpdk_port, dpdk_port)) {
 			ipaddr->set = ipaddress->set;
@@ -293,7 +295,7 @@ clear_diff_address(list l, list n, char *old_dpdk_port,char *dpdk_port)
 	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
 		ipaddr = ELEMENT_DATA(e);
 
-		if (!address_exist(n, ipaddr, old_dpdk_port, dpdk_port) 
+		if (!address_exist(n, ipaddr, old_dpdk_port, dpdk_port)
                 && ipaddr->set) {
 			addr = (IP_IS6(ipaddr)) ? (void *) &ipaddr->u.sin6_addr :
 						  (void *) &ipaddr->u.sin.sin_addr;
