@@ -113,10 +113,11 @@ struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol,
     list_for_each_entry(svc, &dp_vs_svc_table[hash], s_list){
         if ((svc->af == af)
             && inet_addr_equal(af, &svc->addr, vaddr)
-            && (svc->port == vport)
             && (svc->proto == protocol)) {
-                rte_atomic32_inc(&svc->usecnt);
-                return svc;
+                if ((svc->port == vport) || (svc->port == 0)) {
+                    rte_atomic32_inc(&svc->usecnt);
+                    return svc;
+                }
             }
     }
 
