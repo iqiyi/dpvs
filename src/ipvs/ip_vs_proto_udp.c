@@ -114,7 +114,7 @@ static struct dp_vs_conn *
 udp_conn_lookup(struct dp_vs_proto *proto,
                 const struct dp_vs_iphdr *iph,
                 struct rte_mbuf *mbuf, int *direct,
-                bool reverse, bool *drop)
+                bool reverse, bool *drop, lcoreid_t *peer_cid)
 {
     struct udp_hdr *uh, _udph;
     struct dp_vs_conn *conn;
@@ -128,11 +128,11 @@ udp_conn_lookup(struct dp_vs_proto *proto,
                             &iph->saddr)) {
         *drop = true;
         return NULL;
-    }  
+    }
 
-    conn = dp_vs_conn_get(iph->af, iph->proto, 
-                          &iph->saddr, &iph->daddr, 
-                          uh->src_port, uh->dst_port, 
+    conn = dp_vs_conn_get(iph->af, iph->proto,
+                          &iph->saddr, &iph->daddr,
+                          uh->src_port, uh->dst_port,
                           direct, reverse);
 
     /*
@@ -141,9 +141,18 @@ udp_conn_lookup(struct dp_vs_proto *proto,
      * UDP can only confirm neighbour to RS
      */
     if (conn != NULL) {
-        if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
+        if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev
              && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))){
             neigh_confirm(conn->in_nexthop.in, conn->in_dev);
+        }
+    } else {
+        struct dp_vs_conn_redirect *r;
+
+        r = dp_vs_conn_get_redirect(iph->af, iph->proto,
+                                    &iph->saddr, &iph->daddr,
+                                    uh->src_port, uh->dst_port);
+        if (r) {
+            *peer_cid = r->cid;
         }
     }
 

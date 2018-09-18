@@ -56,6 +56,7 @@ static int conn_init_timeout = DPVS_CONN_INIT_TIMEOUT_DEF;
 #endif
 #define this_conn_count         (RTE_PER_LCORE(dp_vs_conn_count))
 #define this_conn_cache         (dp_vs_conn_cache[rte_socket_id()])
+#define this_cr_cache           (dp_vs_cr_cache[rte_socket_id()])
 
 /* dpvs control variables */
 static bool conn_expire_quiescent_template = false;
@@ -72,6 +73,10 @@ static RTE_DEFINE_PER_LCORE(rte_spinlock_t, dp_vs_conn_lock);
 static struct list_head *dp_vs_ct_tab;
 static rte_spinlock_t dp_vs_ct_lock;
 
+/* global connection redirect hash table */
+static struct list_head *dp_vs_cr_tab;
+static rte_spinlock_t dp_vs_cr_lock[DPVS_CONN_TAB_SIZE];
+
 static RTE_DEFINE_PER_LCORE(uint32_t, dp_vs_conn_count);
 
 static uint32_t dp_vs_conn_rnd; /* hash random */
@@ -80,6 +85,10 @@ static uint32_t dp_vs_conn_rnd; /* hash random */
  * memory pool for dp_vs_conn{}
  */
 static struct rte_mempool *dp_vs_conn_cache[DPVS_MAX_SOCKET];
+/*
+ * memory pool for connection redirect
+ */
+static struct rte_mempool *dp_vs_cr_cache[DPVS_MAX_SOCKET];
 
 static inline struct dp_vs_conn *
 tuplehash_to_conn(const struct conn_tuple_hash *thash)
@@ -96,6 +105,89 @@ static inline uint32_t conn_hashkey(int af,
             ((uint32_t)sport) << 16 | (uint32_t)dport,
             dp_vs_conn_rnd)
         & DPVS_CONN_TAB_MASK;
+}
+
+static inline struct dp_vs_conn_redirect *
+dp_vs_conn_alloc_redirect(enum dpvs_fwd_mode fwdmode)
+{
+    struct dp_vs_conn_redirect *r;
+
+    if (fwdmode != DPVS_FWD_MODE_NAT) {
+        return NULL;
+    }
+
+    if (unlikely(rte_mempool_get(this_cr_cache, (void **)&r) != 0)) {
+        RTE_LOG(WARNING, IPVS,
+                "%s: no memory for conn redirect\n", __func__);
+        return NULL;
+    }
+
+    memset(r, 0, sizeof(struct dp_vs_conn_redirect));
+    r->redirect_pool = this_cr_cache;
+
+    return r;
+}
+
+static inline void dp_vs_conn_free_redirect(struct dp_vs_conn_redirect *r)
+{
+    if (r) {
+        rte_mempool_put(this_cr_cache, r);
+    }
+}
+
+static inline void dp_vs_conn_init_redirect(struct dp_vs_conn *conn)
+{
+    struct conn_tuple_hash *t = &tuplehash_out(conn);
+    struct dp_vs_conn_redirect *r = conn->redirect;
+
+    r->af    = t->af;
+    r->proto = t->proto;
+    r->saddr = t->saddr;
+    r->daddr = t->daddr;
+    r->sport = t->sport;
+    r->dport = t->dport;
+    r->cid   = rte_lcore_id();
+}
+
+static inline int dp_vs_conn_hash_redirect(struct dp_vs_conn *conn,
+                                           uint32_t hash)
+
+{
+    struct dp_vs_conn_redirect *r = conn->redirect;
+
+    if (unlikely(conn->flags & DPVS_CONN_F_REDIRECT_HASHED)) {
+        return EDPVS_EXIST;
+    }
+
+    rte_spinlock_lock(&dp_vs_cr_lock[hash]);
+    list_add(&r->list, &dp_vs_cr_tab[hash]);
+    rte_spinlock_unlock(&dp_vs_cr_lock[hash]);
+
+    conn->flags |= DPVS_CONN_F_REDIRECT_HASHED;
+
+    return EDPVS_OK;
+}
+
+static inline int dp_vs_conn_unhash_redirect(struct dp_vs_conn *conn)
+{
+    int err;
+    uint32_t hash;
+    struct dp_vs_conn_redirect *r = conn->redirect;
+
+    if (likely(conn->flags & DPVS_CONN_F_REDIRECT_HASHED)) {
+        hash = conn_hashkey(r->af, &r->saddr, r->sport, &r->daddr, r->dport);
+
+        rte_spinlock_lock(&dp_vs_cr_lock[hash]);
+        list_del(&r->list);
+        rte_spinlock_unlock(&dp_vs_cr_lock[hash]);
+
+        conn->flags &= ~DPVS_CONN_F_REDIRECT_HASHED;
+        err = EDPVS_OK;
+    } else {
+        err = EDPVS_NOTEXIST;
+    }
+
+    return err;
 }
 
 static inline int __conn_hash(struct dp_vs_conn *conn,
@@ -142,6 +234,11 @@ static inline int conn_hash(struct dp_vs_conn *conn)
     rte_spinlock_unlock(&this_conn_lock);
 #endif
 
+    if (conn->redirect) {
+        dp_vs_conn_init_redirect(conn);
+        err = dp_vs_conn_hash_redirect(conn, ohash);
+    }
+
     return err;
 }
 
@@ -156,6 +253,14 @@ static inline int conn_unhash(struct dp_vs_conn *conn)
         if (rte_atomic32_read(&conn->refcnt) != 2) {
             err = EDPVS_BUSY;
         } else {
+            /*
+             * the redirect should be unhashed along with its related
+             * connection.
+             */
+            if (conn->flags & DPVS_CONN_F_REDIRECT_HASHED) {
+                dp_vs_conn_unhash_redirect(conn);
+            }
+
             if (conn->flags & DPVS_CONN_F_TEMPLATE) {
                 rte_spinlock_lock(&dp_vs_ct_lock);
                 list_del(&tuplehash_in(conn).list);
@@ -473,7 +578,7 @@ static int conn_expire(void *priv)
         }
 
         rte_atomic32_dec(&conn->refcnt);
-
+        dp_vs_conn_free_redirect(conn->redirect);
         rte_mempool_put(conn->connpool, conn);
         this_conn_count--;
 
@@ -561,6 +666,7 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
                                    struct dp_vs_dest *dest, uint32_t flags)
 {
     struct dp_vs_conn *new;
+    struct dp_vs_conn_redirect *new_r = NULL;
     struct conn_tuple_hash *t;
     uint16_t rport;
     __be16 _ports[2], *ports;
@@ -568,12 +674,19 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
 
     assert(mbuf && param && dest);
 
+    /* no need to create redirect for the global template connection */
+    if ((flags & DPVS_CONN_F_TEMPLATE) == 0) {
+        new_r = dp_vs_conn_alloc_redirect(dest->fwdmode);
+    }
+
     if (unlikely(rte_mempool_get(this_conn_cache, (void **)&new) != 0)) {
         RTE_LOG(WARNING, IPVS, "%s: no memory\n", __func__);
-        return NULL;
+        goto errout_redirect;
     }
+
     memset(new, 0, sizeof(struct dp_vs_conn));
     new->connpool = this_conn_cache;
+    new->redirect = new_r;
 
     /* set proper RS port */
     if ((flags & DPVS_CONN_F_TEMPLATE) || param->ct_dport != 0)
@@ -637,6 +750,7 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     new->in_nexthop.in.s_addr = htonl(INADDR_ANY);
     new->out_nexthop.in.s_addr = htonl(INADDR_ANY);
 
+    /* L2 fast xmit */
     new->in_dev = NULL;
     new->out_dev = NULL;
 
@@ -732,7 +846,59 @@ unbind_dest:
     conn_unbind_dest(new);
 errout:
     rte_mempool_put(this_conn_cache, new);
+errout_redirect:
+    dp_vs_conn_free_redirect(new_r);
     return NULL;
+}
+
+/**
+ * try lookup dp_vs_cr_tab{} by packet tuple
+ *
+ *  <af, proto, saddr, sport, daddr, dport>.
+ *
+ * return r if found or NULL if not exist.
+ */
+struct dp_vs_conn_redirect *
+dp_vs_conn_get_redirect(int af, uint16_t proto,
+    const union inet_addr *saddr, const union inet_addr *daddr,
+    uint16_t sport, uint16_t dport)
+{
+    uint32_t hash;
+    struct dp_vs_conn_redirect *r;
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    char sbuf[64], dbuf[64];
+#endif
+
+    hash = conn_hashkey(af, saddr, sport, daddr, dport);
+
+    rte_spinlock_lock(&dp_vs_cr_lock[hash]);
+    list_for_each_entry(r, &dp_vs_cr_tab[hash], list) {
+        if (r->af == af
+            && r->proto == proto
+            && r->sport == sport
+            && r->dport == dport
+            && inet_addr_equal(af, &r->saddr, saddr)
+            && inet_addr_equal(af, &r->daddr, daddr))
+        {
+            goto found;
+        }
+    }
+    rte_spinlock_unlock(&dp_vs_cr_lock[hash]);
+
+    return NULL;
+
+found:
+    rte_spinlock_unlock(&dp_vs_cr_lock[hash]);
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    RTE_LOG(DEBUG, IPVS, "redirect lookup: [%d -> %d] %s %s:%d -> %s:%d %s \n",
+            rte_lcore_id(), r->cid, inet_proto_name(proto),
+            inet_ntop(af, saddr, sbuf, sizeof(sbuf)) ? sbuf : "::", ntohs(sport),
+            inet_ntop(af, daddr, dbuf, sizeof(dbuf)) ? dbuf : "::", ntohs(dport),
+            r ? "hit" : "miss");
+#endif
+
+    return r;
 }
 
 /**
@@ -1488,6 +1654,46 @@ static void conn_ctrl_term(void)
     unregister_conn_get_msg();
 }
 
+static int dp_vs_conn_init_redirect_table(void)
+{
+    int i;
+    char poolname[32];
+
+    /*
+     * allocate connection redirect cache on each NUMA socket and its size is
+     * same as conn_pool_size
+     */
+    for (i = 0; i < get_numa_nodes(); i++) {
+        snprintf(poolname, sizeof(poolname), "dp_vs_conn_redirect_%d", i);
+        dp_vs_cr_cache[i] =
+            rte_mempool_create(poolname,
+                               conn_pool_size,
+                               sizeof(struct dp_vs_conn_redirect),
+                               conn_pool_cache,
+                               0, NULL, NULL, NULL, NULL,
+                               i, 0);
+        if (!dp_vs_cr_cache[i]) {
+            return EDPVS_NOMEM;
+        }
+    }
+
+    /* allocate the global connection redirect hash table, per socket? */
+    dp_vs_cr_tab =
+        rte_malloc_socket(NULL, sizeof(struct list_head ) * DPVS_CONN_TAB_SIZE,
+                          RTE_CACHE_LINE_SIZE, rte_socket_id());
+    if (!dp_vs_cr_tab) {
+        return EDPVS_NOMEM;
+    }
+
+    /* init the global connection redirect hash table */
+    for (i = 0; i < DPVS_CONN_TAB_SIZE; i++) {
+        INIT_LIST_HEAD(&dp_vs_cr_tab[i]);
+        rte_spinlock_init(&dp_vs_cr_lock[i]);
+    }
+
+    return EDPVS_OK;
+}
+
 int dp_vs_conn_init(void)
 {
     int i, err;
@@ -1529,6 +1735,11 @@ int dp_vs_conn_init(void)
             err = EDPVS_NOMEM;
             goto cleanup;
         }
+    }
+
+    err = dp_vs_conn_init_redirect_table();
+    if (err < 0) {
+        goto cleanup;
     }
 
     dp_vs_conn_rnd = (uint32_t)random();

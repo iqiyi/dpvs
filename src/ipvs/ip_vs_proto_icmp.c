@@ -134,12 +134,15 @@ static bool is_icmp_reply(uint8_t type)
 
 static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
                                            const struct dp_vs_iphdr *iph,
-                                           struct rte_mbuf *mbuf, int *direct, 
-                                           bool reverse, bool *drop)
+                                           struct rte_mbuf *mbuf, int *direct,
+                                           bool reverse, bool *drop,
+                                           lcoreid_t *peer_cid)
 {
     struct icmphdr *ich, _icmph;
     __be16 sport, dport; /* dummy ports */
     uint8_t type;
+    struct dp_vs_conn *conn;
+
     assert(proto && iph && mbuf);
 
     ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph), &_icmph);
@@ -156,8 +159,20 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
         return NULL;
     }
 
-    return dp_vs_conn_get(iph->af, iph->proto, &iph->saddr, &iph->daddr,
+    conn = dp_vs_conn_get(iph->af, iph->proto, &iph->saddr, &iph->daddr,
                           sport, dport, direct, reverse);
+    if (!conn) {
+        struct dp_vs_conn_redirect *r;
+
+        r = dp_vs_conn_get_redirect(iph->af, iph->proto,
+                                    &iph->saddr, &iph->daddr,
+                                    sport, dport);
+        if (r) {
+            *peer_cid = r->cid;
+        }
+    }
+
+    return conn;
 }
 
 static int icmp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,

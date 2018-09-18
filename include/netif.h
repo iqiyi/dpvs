@@ -69,7 +69,7 @@ struct rx_partner;
 /* RX/TX queue conf for lcore */
 struct netif_queue_conf
 {
-    queueid_t id; 
+    queueid_t id;
     uint16_t len;
     uint16_t kni_len;
     struct rx_partner *isol_rxq;
@@ -83,7 +83,7 @@ struct netif_queue_conf
  */
 struct netif_port_conf
 {
-    portid_t id; 
+    portid_t id;
     /* rx/tx queues for this lcore to process*/
     int nrxq;
     int ntxq;
@@ -98,7 +98,7 @@ struct netif_port_conf
  */
 struct netif_lcore_conf
 {
-    lcoreid_t id; 
+    lcoreid_t id;
     /* nic number of this lcore to process */
     int nports;
     /* port list of this lcore to process */
@@ -290,7 +290,7 @@ int netif_register_pkt(struct pkt_type *pt);
 int netif_unregister_pkt(struct pkt_type *pt);
 
 /**************************** port API ******************************/
-int netif_fdir_filter_set(struct netif_port *port, enum rte_filter_op opcode, 
+int netif_fdir_filter_set(struct netif_port *port, enum rte_filter_op opcode,
                           const struct rte_eth_fdir_filter *fdir_flt);
 struct netif_port* netif_port_get(portid_t id);
 /* port_conf can be NULL for default port configure */
@@ -362,5 +362,7 @@ static inline char *eth_addr_dump(const struct ether_addr *ea,
 }
 
 portid_t netif_port_count(void);
+void lcore_process_packets(struct netif_queue_conf *qconf,
+    struct rte_mbuf **mbufs, lcoreid_t cid, uint16_t count, bool pretetch);
 
 #endif /* __DPVS_NETIF_H__ */
