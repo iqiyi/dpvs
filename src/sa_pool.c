@@ -159,10 +159,10 @@ static int __add_del_filter(int af, struct netif_port *dev, lcoreid_t cid,
 
     if (af == AF_INET) {
         filt[0].input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV4_TCP;
-        filt[0].input.flow.ip4_flow.dst_ip = dip->in.s_addr;
+        filt[0].input.flow.tcp4_flow.ip.dst_ip = dip->in.s_addr;
         filt[0].input.flow.tcp4_flow.dst_port = dport;
         filt[1].input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV4_UDP;
-        filt[1].input.flow.ip4_flow.dst_ip = dip->in.s_addr;
+        filt[1].input.flow.udp4_flow.ip.dst_ip = dip->in.s_addr;
         filt[1].input.flow.udp4_flow.dst_port = dport;
     } else if (af == AF_INET6) {
         filt[0].input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV6_TCP;
@@ -215,11 +215,13 @@ static int __add_del_filter(int af, struct netif_port *dev, lcoreid_t cid,
     }
 
 #ifdef CONFIG_DPVS_SAPOOL_DEBUG
-    RTE_LOG(DEBUG, SAPOOL, "FDIR: %s %s TCP/UDP "
-            "ip %s port %d (0x%04x) mask 0x%04X queue %d lcore %2d\n",
+    RTE_LOG(DEBUG, SAPOOL, "FDIR: %s %s %s TCP/UDP "
+            "ip %s port %d (0x%04x) mask 0x%04X queue %d lcore %2d filterID %d/%d\n",
             add ? "add" : "del", dev->name,
-            inet_ntop(af, &dip, ipaddr, sizeof(ipaddr)) ? : "::",
-            ntohs(dport), ntohs(dport), sa_fdirs[cid].mask, queue, cid);
+            af == AF_INET ? "IPv4" : "IPv6",
+            inet_ntop(af, dip, ipaddr, sizeof(ipaddr)) ? : "::",
+            ntohs(dport), ntohs(dport), sa_fdirs[cid].mask, queue, cid,
+            filter_id[0], filter_id[1]);
 #endif
 
     return err;
@@ -330,6 +332,7 @@ int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
         /* if add filter failed, waste some soft-id is acceptable. */
         filtids[0] = fdir->soft_id++;
         filtids[1] = fdir->soft_id++;
+
         err = sa_add_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
                             fdir->port_base, filtids);
         if (err != EDPVS_OK) {
