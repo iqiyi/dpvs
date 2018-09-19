@@ -3544,7 +3544,7 @@ static struct rte_eth_conf default_port_conf = {
                 .dst_ip         = 0xFFFFFFFF,
             },
             .ipv6_mask          = {
-                .src_ip         = { 0, 0, 0, 0},
+                .src_ip         = { 0, 0, 0, 0 },
                 .dst_ip         = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF },
             },
             .src_port_mask      = 0x0000,
@@ -3604,10 +3604,23 @@ int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *
     }
 
     memset(tbuf1, 0, sizeof(tbuf1));
-    snprintf(tbuf1, sizeof(tbuf1), "ipv4_src_ip: %#8x\nipv4_dst_ip: %#8x\n"
-            "src_port: %#4x\ndst_port: %#4x", port_conf->fdir_conf.mask.ipv4_mask.src_ip,
-            port_conf->fdir_conf.mask.ipv4_mask.dst_ip, port_conf->fdir_conf.mask.src_port_mask,
-            port_conf->fdir_conf.mask.dst_port_mask);
+    snprintf(tbuf1, sizeof(tbuf1),
+            "fdir ipv4 mask: src 0x%08x dst 0x%08x\n"
+            "fdir ipv6 mask: src 0x%08x:%08x:%08x:%08x dst 0x%08x:%08x:%08x:%08x\n"
+            "fdir port mask: src 0x%04x dst 0x%04x\n",
+            port_conf->fdir_conf.mask.ipv4_mask.src_ip,
+            port_conf->fdir_conf.mask.ipv4_mask.dst_ip,
+            port_conf->fdir_conf.mask.ipv6_mask.src_ip[0],
+            port_conf->fdir_conf.mask.ipv6_mask.src_ip[1],
+            port_conf->fdir_conf.mask.ipv6_mask.src_ip[2],
+            port_conf->fdir_conf.mask.ipv6_mask.src_ip[3],
+            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[0],
+            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[1],
+            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[2],
+            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[3],
+            port_conf->fdir_conf.mask.src_port_mask,
+            port_conf->fdir_conf.mask.dst_port_mask
+            );
     if (*len - strlen(buf) - 1 < strlen(tbuf1)) {
         RTE_LOG(WARNING, NETIF, "[%s] no enough buf\n", __func__);
         return EDPVS_INVAL;
