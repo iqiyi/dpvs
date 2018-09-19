@@ -559,7 +559,7 @@ Hi, I am 10.40.84.170.
 
 ```
 
-<a id=`nat`/>
+<a id='nat'/>
 
 # NAT mode (one-arm)
 
@@ -581,13 +581,52 @@ Whatever, we give a simple example for NAT mode. Remind it only works single lco
 # config LAN network on bond0, routes will generate automatically
 ./dpip addr add 192.168.0.66/24 dev bond0
 ./dpip addr add 10.140.31.48/20 dev bond0
+
 # add service <VIP:vport> to forwarding, scheduling mode is RR
 ./ipvsadm -A -t 192.168.0.89:80 -s -rr
+
 # add two RSs, forwarding mode is NAT
 ./ipvsadm -A -t 192.168.0.89:80 -r 10.140.18.33 -m
 ./ipvsadm -A -t 192.168.0.89:80 -r 10.140.18.34 -m
+
 # add VIP and the route will generate automatically
 ./dpip addr add 192.168.0.89/32 dev bond0
+
+## keepalived.conf ##
+static ip_address {
+    192.168.0.66/24 dev bond0
+    10.140.31.48/20 dev bond0
+}
+
+virtual_server_group vip_nat {
+    192.168.0.89 80
+}
+
+virtual_server group vip_nat {
+    protocol tcp
+    lb_algo rr
+    lb_kind NAT
+
+    real server 10.140.18.33 80 {
+         weight 100
+         inhibit_on_failure
+         TCP_CHECK {
+            nb_sock_retry 2
+            connect_timeout 3
+            connect_port 80
+        }
+    }
+
+    real server 10.140.18.34 80 {
+         weight 100
+         inhibit_on_failure
+         TCP_CHECK {
+            nb_sock_retry 2
+            connect_timeout 3
+            connect_port 80
+        }
+    }
+}
 ```
 
 On RSs, back routes should be pointed to DPVS.
