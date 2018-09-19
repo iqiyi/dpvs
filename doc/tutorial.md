@@ -802,6 +802,27 @@ Setting up tunnel device is just like what we do on Linux, use `dpip` instead of
 $ dpip tunnel add mode ipip ipip1 local 1.1.1.1 remote 2.2.2.2
 $ dpip tunnel add gre1 mode gre local 1.1.1.1 remote 2.2.2.2 dev dpdk0
 ```
+You can also use keepalived to configure tunnel instead of using ipvsadm.
+
+```
+tunnel_group tunnel_gre {
+    tunnel_entry gre100 {
+        kind gre
+        local 10.62.5.10
+        remote 10.62.5.20
+    }
+    tunnel_entry gre200 {
+        kind gre
+        local 10.62.5.10
+        remote 10.62.6.10
+   }
+   tunnel_entry gre300 {
+        kind gre
+        local 10.62.5.10
+        remote 10.62.6.11
+   }
+}
+```
 
 Pls also check `dpip tunnel help` for details.
 

@@ -238,6 +238,48 @@ init_services(void)
 	return 1;
 }
 
+static int init_tunnel_entry(tunnel_entry *entry)
+{
+	return ipvs_tunnel_cmd(LVS_CMD_ADD_TUNNEL, entry);
+}
+
+static int init_tunnel_group(tunnel_group* group)
+{
+	list l;
+	element e;
+	tunnel_entry* entry;
+
+	l = group->tunnel_entry;
+	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+		entry = ELEMENT_DATA(e);
+		if (!init_tunnel_entry(entry)) {
+			log_message(LOG_ERR, "%s create tunnel %s error.", __FUNCTION__, entry->ifname);
+			return IPVS_ERROR;
+		}
+	}
+
+	return IPVS_SUCCESS;
+}
+
+int init_tunnel(void)
+{
+	element e;
+	list l = check_data->tunnel_group;
+	tunnel_group* entry;
+
+	if (LIST_ISEMPTY(l))
+		return IPVS_SUCCESS;
+
+	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+		entry = ELEMENT_DATA(e);
+		if (!init_tunnel_group(entry)) {
+			log_message(LOG_ERR, "%s create tunnel group %s error.", __FUNCTION__, entry->gname);
+			return IPVS_ERROR;
+		}
+	}
+	return IPVS_SUCCESS;
+}
+
 /* add or remove _alive_ real servers from a virtual server */
 void
 perform_quorum_state(virtual_server_t *vs, int add)
@@ -931,3 +973,116 @@ copy_srv_states (void)
 	}
 	return 0;
 }
+
+static tunnel_group *
+get_tunnel_group_by_name(char *gname, list l)
+{
+	element e;
+	tunnel_group* group;
+
+	if (LIST_ISEMPTY(l))
+		return NULL;
+
+	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+		group = ELEMENT_DATA(e);
+		if (!strcmp(group->gname, gname))
+			return group;
+	}
+
+	return NULL;
+}
+
+static int
+tunnel_entry_exist(tunnel_entry* old_entry, tunnel_group* new_group)
+{
+	element e;
+	tunnel_entry* new_entry;
+	list l = new_group->tunnel_entry;
+
+	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+		new_entry = ELEMENT_DATA(e);
+		if (!strcmp(old_entry->ifname, new_entry->ifname) &&
+			!strcmp(old_entry->link, new_entry->link) &&
+			!strcmp(old_entry->kind, new_entry->kind) &&
+			sockstorage_equal(&old_entry->local, &new_entry->local) &&
+			sockstorage_equal(&old_entry->remote, &new_entry->remote)) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static int
+clear_tunnel_entry(tunnel_entry *entry)
+{
+	return ipvs_tunnel_cmd(LVS_CMD_DEL_TUNNEL, entry);
+}
+
+static int
+clear_tunnel_group(tunnel_group* group)
+{
+	element e;
+	tunnel_entry *entry;
+	list l = group->tunnel_entry;
+
+	if (LIST_ISEMPTY(l))
+		return IPVS_SUCCESS;
+
+	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+		entry = ELEMENT_DATA(e);
+		if (!clear_tunnel_entry(entry)) {
+			log_message(LOG_ERR, "%s clear tunnel %s error.", __FUNCTION__, entry->ifname);
+			return IPVS_ERROR;
+		}
+	}
+
+	return IPVS_SUCCESS;
+}
+
+static int
+clear_diff_tunnel_group(tunnel_group* old_group, tunnel_group* new_group)
+{
+	element e;
+	tunnel_entry *entry;
+	list l = old_group->tunnel_entry;
+
+	if (LIST_ISEMPTY(old_group->tunnel_entry))
+		return IPVS_SUCCESS;
+
+	if (LIST_ISEMPTY(new_group->tunnel_entry))
+		return clear_tunnel_group(old_group);
+
+	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+		entry = ELEMENT_DATA(e);
+		if (!tunnel_entry_exist(entry, new_group))
+			clear_tunnel_entry(entry);
+	}
+
+	return IPVS_SUCCESS;
+}
+
+int clear_diff_tunnel(void)
+{
+	element e;
+	tunnel_group *group;
+	tunnel_group* new_group;
+	list l = old_check_data->tunnel_group;
+
+	/* If old config didn't own tunnel then nothing return */
+	if (LIST_ISEMPTY(l))
+		return IPVS_SUCCESS;
+
+	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+		group = ELEMENT_DATA(e);
+		new_group = get_tunnel_group_by_name(group->gname, check_data->tunnel_group);
+		if (new_group) {
+			clear_diff_tunnel_group(group, new_group);
+		} else {
+			clear_tunnel_group(group);
+		}
+	}
+
+	return IPVS_SUCCESS;
+}
+

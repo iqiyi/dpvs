@@ -413,7 +413,7 @@ static int neigh_edit(struct neighbour_entry *neighbour, struct ether_addr* eth_
                         __func__);
             else if (ret < 0) {
                 rte_free(mac_param);
-                RTE_LOG(WARNING, NETIF, "%s: neigh ring enqueue failed\n",
+                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring enqueue failed\n",
                         __func__);
             }
         }

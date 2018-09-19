@@ -73,6 +73,7 @@ typedef struct ip_vs_laddr_user 	ipvs_laddr_t;
 typedef struct ip_vs_blklst_user        ipvs_blklst_t;
 typedef struct ip_vs_timeout_user	ipvs_timeout_t;
 typedef struct ip_vs_daemon_user	ipvs_daemon_t;
+typedef struct ip_vs_tunnel_user	ipvs_tunnel_t;
 typedef struct ip_vs_service_entry	ipvs_service_entry_t;
 typedef struct ip_vs_dest_entry		ipvs_dest_entry_t;
 typedef struct ip_vs_laddr_entry	ipvs_laddr_entry_t;
@@ -129,6 +130,10 @@ extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc);
 /*for add/delete a blacklist ip*/
 extern int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
 extern int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
+
+/*for add/delete a tunnel*/
+extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
+extern int ipvs_del_tunnel(ipvs_tunnel_t * tunnel_entry);
 
 /* set timeout */
 extern int ipvs_set_timeout(ipvs_timeout_t *to);
