@@ -593,7 +593,7 @@ Whatever, we give a simple example for NAT mode. Remind it only works single lco
 ./dpip addr add 192.168.0.89/32 dev bond0
 
 ## keepalived.conf ##
-static ip_address {
+static_ipaddress {
     192.168.0.66/24 dev bond0
     10.140.31.48/20 dev bond0
 }
