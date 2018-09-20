@@ -243,8 +243,8 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
         ip6h = ip6_hdr(mbuf);
     }
 
-    ip6h->ip6_src = conn->laddr.in6;
-    ip6h->ip6_dst = conn->daddr.in6;
+    ip6h->ip6_src = conn->vaddr.in6;
+    ip6h->ip6_dst = conn->caddr.in6;
 
     if(proto->fnat_out_handler) {
         err = proto->fnat_out_handler(proto, conn, mbuf);
@@ -770,7 +770,7 @@ static int __dp_vs_out_xmit_fnat6(struct dp_vs_proto *proto,
 
     /* L3 translation before l4 re-csum */
     ip6h->ip6_src = conn->vaddr.in6;
-    ip6h->ip6_src = conn->caddr.in6;
+    ip6h->ip6_dst = conn->caddr.in6;
 
     /* L4 FNAT translation */
     if (proto->fnat_out_handler) {
