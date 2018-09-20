@@ -198,10 +198,10 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 
 `dpvs` part is almost the same with the example in [simple fnat](#simple-fnat), except
 
-* one more route to **kni-host** is needed to pass the packets received from `dpvs` device to Linux `kni` device.
-* VIP should not set to `dpvs` by `dpip addr`, need be set to `kni` instead, so that `ospfd` can be aware of it and then to publish.
+* one more address/route is needed to communicate between dpvs and wan-side L3-switch. For ospf packets, dpvs will just send them to kernel.
+* VIP should not only set to `dpvs` by `dpip addr`, but also need to set to `kni`, so that `ospfd` can be aware of it and then to publish.
 
-> the prefix length of `kni_host` must be 32.
+> If you add any kni_host route which means all packets will be sent to kernel by dpvs, the prefix length of `kni_host` must be 32.
 
 ```bash
 #!/bin/sh -
@@ -221,8 +221,9 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 ./ipvsadm --add-laddr -z 192.168.100.200 -t 123.1.2.3:80 -F dpdk0
 ./ipvsadm --add-laddr -z 192.168.100.201 -t 123.1.2.3:80 -F dpdk0
 
-# add route to kni device.
-./dpip route add 172.10.0.2/32 dev dpdk1 scope kni_host
+# add addr/route for dpvs.
+./dpip addr add 172.10.0.2/30 dev dpdk1
+./dpip route add default via 172.10.0.1 dev dpdk1
 ```
 
 Then, the `zebra/ospfd` part. Firstly, run the OSPF protocol between `DPVS` server and wan-side L3-switch, with the "inter-connection network" (here is `172.10.0.2/30`). For `DPVS`, we set the inter-connection IP on `dpdk1.kni`.
