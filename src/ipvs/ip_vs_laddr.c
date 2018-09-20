@@ -164,7 +164,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 {
     struct dp_vs_laddr *laddr = NULL;
     int i;
-    uint16_t sport;
+    uint16_t sport = 0;
     struct sockaddr_storage dsin, ssin;
 
     if (!conn || !conn->dest || !svc)
