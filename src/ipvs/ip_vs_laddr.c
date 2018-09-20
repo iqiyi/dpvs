@@ -226,12 +226,12 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
             put_laddr(laddr);
             continue;
         }
+
+        sport = (laddr->af == AF_INET ? (((struct sockaddr_in *)&ssin)->sin_port)
+                : (((struct sockaddr_in6 *)&ssin)->sin6_port));
         break;
     }
     rte_rwlock_write_unlock(&svc->laddr_lock);
-
-    sport = (laddr->af == AF_INET ? (((struct sockaddr_in *)&ssin)->sin_port)
-            : (((struct sockaddr_in6 *)&ssin)->sin6_port));
 
     if (!laddr || sport == 0) {
 #ifdef CONFIG_DPVS_IPVS_DEBUG
