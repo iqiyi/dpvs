@@ -203,6 +203,9 @@ static int __add_del_filter(int af, struct netif_port *dev, lcoreid_t cid,
     filt[0].action.rx_queue = filt[1].action.rx_queue = queue;
     op = add ? RTE_ETH_FILTER_ADD : RTE_ETH_FILTER_DELETE;
 
+    netif_mask_fdir_filter(af, dev, &filt[0]);
+    netif_mask_fdir_filter(af, dev, &filt[1]);
+
     err = netif_fdir_filter_set(dev, op, &filt[0]);
     if (err != EDPVS_OK)
         return err;

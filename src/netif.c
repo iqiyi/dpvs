@@ -2772,6 +2772,52 @@ static int dpdk_filter_supported(struct netif_port *dev, enum rte_filter_type fl
     return rte_eth_dev_filter_supported(dev->id, fltype);
 }
 
+void netif_mask_fdir_filter(int af, const struct netif_port *port,
+                            struct rte_eth_fdir_filter *filt)
+{
+    struct rte_eth_fdir_info fdir_info;
+    const struct rte_eth_fdir_masks *fmask;
+    union rte_eth_fdir_flow *flow = &filt->input.flow;
+
+    if (rte_eth_dev_filter_ctrl(port->id, RTE_ETH_FILTER_FDIR,
+                RTE_ETH_FILTER_INFO, &fdir_info) < 0) {
+        RTE_LOG(WARNING, NETIF, "%s: Fail to fetch fdir info of %s !\n",
+                __func__, port->name);
+        return;
+    }
+    fmask = &fdir_info.mask;
+
+    /* ipv4 flow */
+    if (af == AF_INET) {
+        flow->ip4_flow.src_ip &= fmask->ipv4_mask.src_ip;
+        flow->ip4_flow.dst_ip &= fmask->ipv4_mask.dst_ip;
+        flow->ip4_flow.tos &= fmask->ipv4_mask.tos;
+        flow->ip4_flow.ttl &= fmask->ipv4_mask.ttl;
+        flow->ip4_flow.proto &= fmask->ipv4_mask.proto;
+        flow->tcp4_flow.src_port &= fmask->src_port_mask;
+        flow->tcp4_flow.dst_port &= fmask->dst_port_mask;
+        return;
+    }
+
+    /* ipv6 flow */
+    if (af == AF_INET6) {
+        flow->ipv6_flow.src_ip[0] &= fmask->ipv6_mask.src_ip[0];
+        flow->ipv6_flow.src_ip[1] &= fmask->ipv6_mask.src_ip[1];
+        flow->ipv6_flow.src_ip[2] &= fmask->ipv6_mask.src_ip[2];
+        flow->ipv6_flow.src_ip[3] &= fmask->ipv6_mask.src_ip[3];
+        flow->ipv6_flow.dst_ip[0] &= fmask->ipv6_mask.dst_ip[0];
+        flow->ipv6_flow.dst_ip[1] &= fmask->ipv6_mask.dst_ip[1];
+        flow->ipv6_flow.dst_ip[2] &= fmask->ipv6_mask.dst_ip[2];
+        flow->ipv6_flow.dst_ip[3] &= fmask->ipv6_mask.dst_ip[3];
+        flow->ipv6_flow.tc &= fmask->ipv6_mask.tc;
+        flow->ipv6_flow.proto &= fmask->ipv6_mask.proto;
+        flow->ipv6_flow.hop_limits &= fmask->ipv6_mask.hop_limits;
+        flow->tcp6_flow.src_port &= fmask->src_port_mask;
+        flow->tcp6_flow.dst_port &= fmask->dst_port_mask;
+        return;
+    }
+}
+
 static int dpdk_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
                               const struct rte_eth_fdir_filter *filt)
 {
@@ -3231,6 +3277,17 @@ static int add_bond_slaves(struct netif_port *port)
     return EDPVS_OK;
 }
 
+/* flush FDIR filters for all physical dpdk ports */
+static int fdir_filter_flush(const struct netif_port *port)
+{
+    if (!port || port->type != PORT_TYPE_GENERAL)
+        return EDPVS_OK;
+    if (rte_eth_dev_filter_ctrl(port->id, RTE_ETH_FILTER_FDIR,
+                RTE_ETH_FILTER_FLUSH, NULL) < 0)
+        return EDPVS_DPDKAPIFAIL;
+    return EDPVS_OK;
+}
+
 /*
  * Note: Invoke the function after port is allocated and lcores are configured.
  */
@@ -3357,7 +3414,14 @@ int netif_port_start(struct netif_port *port)
     /* add in6_addr multicast address */
     ret = idev_add_mcast_init(port);
     if (ret != EDPVS_OK) {
-        RTE_LOG(INFO, NETIF, "multicast address add failed for device %s\n", port->name);
+        RTE_LOG(WARNING, NETIF, "multicast address add failed for device %s\n", port->name);
+        return ret;
+    }
+
+    /* flush FDIR filters */
+    ret = fdir_filter_flush(port);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(WARNING, NETIF, "fail to flush FDIR filters for device %s\n", port->name);
         return ret;
     }
 
