@@ -291,6 +291,8 @@ int netif_unregister_pkt(struct pkt_type *pt);
 /**************************** port API ******************************/
 int netif_fdir_filter_set(struct netif_port *port, enum rte_filter_op opcode, 
                           const struct rte_eth_fdir_filter *fdir_flt);
+void netif_mask_fdir_filter(int af, const struct netif_port *port,
+                            struct rte_eth_fdir_filter *filt);
 struct netif_port* netif_port_get(portid_t id);
 /* port_conf can be NULL for default port configure */
 int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *len);
