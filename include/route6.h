@@ -104,8 +104,9 @@ static inline void rt6_fill_with_cfg(struct route6 *rt6,
     rt6->rt6_prefsrc = cf->prefsrc;
     rt6->rt6_dev = netif_port_get_by_name(cf->ifname);
     rt6->rt6_gateway = cf->gateway;
-    rt6->rt6_mtu = cf->mtu;
     rt6->rt6_flags = cf->flags;
+    if (!cf->mtu && rt6->rt6_dev)
+        rt6->rt6_mtu = rt6->rt6_dev->mtu;
 }
 
 static inline void rt6_fill_cfg(struct dp_vs_route6_conf *cf,
