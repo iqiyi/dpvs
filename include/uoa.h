@@ -31,12 +31,10 @@
 #include <endian.h>
 #endif
 
-#include "ipvs/proto.h"
-
 /* avoid IANA ip options */
 #define IPOPT_UOA        (31 | IPOPT_CONTROL)
-#define IPOLEN_UOA_IPV4  (sizeof(struct ipopt_uoa) + IPV4_ADDR_LEN_IN_BYTES)
-#define IPOLEN_UOA_IPV6  (sizeof(struct ipopt_uoa) + IPV6_ADDR_LEN_IN_BYTES)
+#define IPOLEN_UOA_IPV4  (sizeof(struct ipopt_uoa) + 4)
+#define IPOLEN_UOA_IPV6  (sizeof(struct ipopt_uoa) + 16)
 
 /* 
  * UOA IP option
