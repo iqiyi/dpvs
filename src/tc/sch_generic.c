@@ -237,6 +237,7 @@ struct Qsch *qsch_create_dflt(struct netif_port *dev, struct Qsch_ops *ops,
     sch->parent = parent;
 
     if (ops->init && (err = ops->init(sch, NULL)) != EDPVS_OK) {
+        tc_qsch_ops_put(ops);
         qsch_destroy(sch);
         return NULL;
     }
