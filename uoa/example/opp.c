@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 	/* uoa option */
 	uoa = (void *)opph->options;
 	uoa->op_code	= IPOPT_UOA;
-	uoa->op_len	= IPOLEN_UOA;
+	uoa->op_len	= IPOLEN_UOA_IPV4;
 	uoa->op_port	= htons(atoi(argv[4]));
 
 	if (inet_pton(AF_INET, argv[3], &uoa->op_addr) <= 0) {
