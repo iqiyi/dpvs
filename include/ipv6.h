@@ -79,6 +79,8 @@ int ipv6_term(void);
 int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6);
 int ip6_output(struct rte_mbuf *mbuf);
 
+int ip6_local_out(struct rte_mbuf *mbuf);
+
 int ipv6_register_hooks(struct inet_hook_ops *ops, size_t n);
 int ipv6_unregister_hooks(struct inet_hook_ops *ops, size_t n);
 
