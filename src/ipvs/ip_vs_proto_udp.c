@@ -23,6 +23,7 @@
 #include "dpdk.h"
 #include "ipv4.h"
 #include "ipv6.h"
+#include "route6.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/proto.h"
 #include "ipvs/proto_udp.h"
@@ -183,7 +184,6 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
                                enum uoa_mode mode)
 {
     struct rte_mbuf *mbuf = NULL;
-    struct route_entry *rt;
     void *iph;
     struct udphdr *uh;
     struct ipopt_uoa *uoa = NULL;
@@ -300,10 +300,17 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
 
     /* ip checksum will calc later */
 
-    mbuf->userdata = rt = (struct route_entry *)ombuf->userdata;
-    route4_get(rt);
-
-    return ipv4_local_out(mbuf);
+    if (AF_INET6 == af) {
+        struct route6 *rt6;
+        mbuf->userdata = rt6 = (struct route6*)ombuf->userdata;
+        route6_get(rt6);
+        return ip6_local_out(mbuf);
+    } else { /* IPv4 */
+        struct route_entry *rt;
+        mbuf->userdata = rt = (struct route_entry *)ombuf->userdata;
+        route4_get(rt);
+        return ipv4_local_out(mbuf);
+    }
 
 no_room:
     if (mbuf)
