@@ -185,6 +185,8 @@ extern int ipvs_send_gratuitous_arp(struct in_addr *in);
 
 extern int ipvs_set_route(struct dp_vs_route_conf*, int cmd);
 
+extern int ipvs_set_route6(struct dp_vs_route6_conf*, int cmd);
+
 extern int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd);
 
 extern struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void);
