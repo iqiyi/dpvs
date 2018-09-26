@@ -444,8 +444,6 @@ static int insert_opp_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     opph = (struct opphdr *)((void *)niph + iphdrlen);
     memset(opph, 0, sizeof(*opph));
 
-
-
     if (AF_INET6 == af) {
         /* version 2 for ipv6 address family */
         uint8_t nexthdr = ((struct ip6_hdr *)niph)->ip6_nxt;
@@ -490,20 +488,13 @@ standalone_uoa:
 static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
                           struct conn_uoa *uoa)
 {
-    struct route_entry *rt = NULL;
+    void *rt = NULL;
     struct udphdr *uh = NULL;
     void *iph = NULL;
     int af = conn->af;
     int iphdrlen = 0;
     int err = EDPVS_OK;
-
-    if (AF_INET6 == af) {
-        iph = ip6_hdr(mbuf);
-        iphdrlen = ip6_hdrlen(mbuf);
-    } else {
-        iph = (struct iphdr *)ip4_hdr(mbuf);
-        iphdrlen = ip4_hdrlen(mbuf);
-    }
+    int mtu;
 
     /* already send enough UOA */
     if (uoa->state == UOA_S_DONE)
@@ -516,14 +507,24 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
         return EDPVS_OK;
     }
 
-    /* get udp header before any 'standalone_uoa' */
-    uh = rte_pktmbuf_mtod_offset(mbuf, struct udphdr *, iphdrlen);
-
     rt = mbuf->userdata;
     if (!rt) {
         RTE_LOG(ERR, IPVS, "%s: no route\n", __func__);
         return EDPVS_INVPKT;
     }
+
+    if (AF_INET6 == af) {
+        mtu = ((struct route6* )rt)->rt6_mtu;
+        iph = ip6_hdr(mbuf);
+        iphdrlen = ip6_hdrlen(mbuf);
+    } else {
+        mtu = ((struct route_entry*) rt)->mtu;
+        iph = (struct iphdr *)ip4_hdr(mbuf);
+        iphdrlen = ip4_hdrlen(mbuf);
+    }
+
+    /* get udp header before any 'standalone_uoa' */
+    uh = rte_pktmbuf_mtod_offset(mbuf, struct udphdr *, iphdrlen);
 
     /*
      * send standalone (empty-payload) UDP/IP pkt with UOA if
@@ -539,14 +540,14 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
         case UOA_M_IPO:
             /* only ipv4 support ipopt mode */
             if (AF_INET == af) {
-                err = insert_ipopt_uoa(conn, mbuf, (struct iphdr *)iph, uh, rt->mtu);
+                err = insert_ipopt_uoa(conn, mbuf, (struct iphdr *)iph, uh, mtu);
             } else {
                 RTE_LOG(WARNING, IPVS, "fail to send UOA: %s\n", dpvs_strerror(err));
             }
             break;
 
         case UOA_M_OPP:
-            err = insert_opp_uoa(conn, mbuf, iph, uh, rt->mtu);
+            err = insert_opp_uoa(conn, mbuf, iph, uh, mtu);
             break;
 
         default:
