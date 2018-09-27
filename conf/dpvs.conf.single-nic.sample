@@ -25,7 +25,7 @@ netif_defs {
         rx {
             queue_number        8
             descriptor_number   1024
-            rss                 tcp
+            rss                 all
         }
         tx {
             queue_number        8
