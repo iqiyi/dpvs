@@ -321,6 +321,7 @@ static int route6_parse_args(struct dpip_conf *conf,
             if (inet_pton_try(&af, conf->argv[0],
                         (union inet_addr *)&rt6_cfg->gateway) <= 0)
                 return -1;
+            rt6_cfg->flags |= RTF_GATEWAY;
         } else if (strcmp(conf->argv[0], "dev") == 0) {
             NEXTARG_CHECK(conf, "dev");
             snprintf(rt6_cfg->ifname, sizeof(rt6_cfg->ifname), "%s", conf->argv[0]);
