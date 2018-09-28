@@ -799,20 +799,31 @@ void ipvs_free_service(ipvs_service_entry_t* p)
 	free(p);
 }
 
-int ipvs_set_route(struct dp_vs_route_conf* rt, int cmd)
+int ipvs_set_route(struct dp_vs_route_conf *rt, int cmd)
 {
     int err = -1;
     if (cmd == IPROUTE_DEL){
         err = dpvs_setsockopt(SOCKOPT_SET_ROUTE_DEL, rt, sizeof(struct dp_vs_route_conf));
-        free(rt);
-    }
-    else if (cmd == IPROUTE_ADD){
+    } else if (cmd == IPROUTE_ADD){
         err = dpvs_setsockopt(SOCKOPT_SET_ROUTE_ADD, rt, sizeof(struct dp_vs_route_conf));
-        free(rt);
     }
     return err;
 }
 
+int ipvs_set_route6(struct dp_vs_route6_conf *rt6_cfg, int cmd)
+{
+    int err = -1;
+    if (cmd == IPROUTE_DEL) {
+        rt6_cfg->ops = RT6_OPS_DEL;
+        err = dpvs_setsockopt(SOCKOPT_SET_ROUTE6_ADD_DEL, rt6_cfg, 
+                              sizeof(struct dp_vs_route6_conf));
+    } else if (cmd == IPROUTE_ADD) {
+        rt6_cfg->ops = RT6_OPS_ADD;
+        err = dpvs_setsockopt(SOCKOPT_SET_ROUTE6_ADD_DEL, rt6_cfg,
+                              sizeof(struct dp_vs_route6_conf));
+    }
+    return err;
+}
 
 int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd)
 {

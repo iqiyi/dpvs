@@ -3,6 +3,7 @@
 
 #include <netinet/in.h>
 #include "conf/route.h"
+#include "conf/route6.h"
 #include "conf/inetaddr.h"
 #include "conf/laddr.h"
 #include "conf/blklst.h"
