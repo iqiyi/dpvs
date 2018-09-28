@@ -365,7 +365,7 @@ int ip6_output(struct rte_mbuf *mbuf)
                      dev, ip6_output_fin);
 }
 
-int ip6_local_out(struct rte_mbuf *mbuf)
+static int ip6_local_out(struct rte_mbuf *mbuf)
 {
     struct netif_port *dev;
     struct ip6_hdr *hdr = ip6_hdr(mbuf);
