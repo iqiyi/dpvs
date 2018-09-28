@@ -306,7 +306,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 		    um->sport == cur->sport &&
 		    um->dport == cur->dport) {
 			/* update */
-			memcpy(&cur->optuoa, &um->optuoa, IPOLEN_UOA);
+			memcpy(&cur->optuoa, &um->optuoa, IPOLEN_UOA_IPV4);
 
 			mod_timer(&cur->timer, jiffies + uoa_map_timeout * HZ);
 
@@ -504,8 +504,8 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 	uoa_map_dump(um, "hit:");
 
 	if (likely(um->optuoa.op_code == IPOPT_UOA &&
-		   um->optuoa.op_len == IPOLEN_UOA)) {
-		map.real_saddr = um->optuoa.op_addr;
+		   um->optuoa.op_len == IPOLEN_UOA_IPV4)) {
+		memcpy(&map.real_saddr, um->optuoa.op_addr, sizeof(map.real_saddr));
 		map.real_sport = um->optuoa.op_port;
 		UOA_STATS_INC(success);
 		err = 0;
@@ -624,7 +624,7 @@ static struct uoa_map *uoa_parse_ipopt(unsigned char *optptr, int optlen,
 		if (unlikely(optlen < 2 || optlen > l))
 			goto out; /* invalid */
 
-		if (*optptr == IPOPT_UOA && optlen == IPOLEN_UOA) {
+		if (*optptr == IPOPT_UOA && optlen == IPOLEN_UOA_IPV4) {
 			UOA_STATS_INC(uoa_got);
 
 			um = kmem_cache_alloc(uoa_map_cache, GFP_ATOMIC);
@@ -639,7 +639,7 @@ static struct uoa_map *uoa_parse_ipopt(unsigned char *optptr, int optlen,
 			um->sport = sport;
 			um->dport = dport;
 
-			memcpy(&um->optuoa, optptr, IPOLEN_UOA);
+			memcpy(&um->optuoa, optptr, IPOLEN_UOA_IPV4);
 
 			UOA_STATS_INC(uoa_saved);
 			return um;

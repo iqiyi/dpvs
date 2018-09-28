@@ -164,8 +164,18 @@ struct route6 *route6_output(struct rte_mbuf *mbuf, struct flow6 *fl6)
     return g_rt6_method->rt6_output(mbuf, fl6);
 }
 
+int route6_get(struct route6 *rt)
+{
+    if (!rt)
+        return EDPVS_INVAL;
+    rte_atomic32_inc(&rt->refcnt);
+    return EDPVS_OK;
+}
+
 int route6_put(struct route6 *rt)
 {
+    if (!rt)
+        return EDPVS_INVAL;
     rte_atomic32_dec(&rt->refcnt);
     return EDPVS_OK;
 }

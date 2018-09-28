@@ -26,7 +26,7 @@ netif_defs {
             #max_burst_size     32
             queue_number        6           <16, 0-16>
             descriptor_number   256         <256, 16-8192>
-            rss                 ip          <tcp, tcp|ip>
+            rss                 all         <all, all|ip|tcp|udp|sctp|ether|port|tunnel>
         }
         tx {
             queue_number        6           <16, 0-16>
@@ -41,7 +41,7 @@ netif_defs {
             #max_burst_size     32
             queue_number        4
             descriptor_number   128
-            rss                 tcp
+            rss                 all
         }
         tx {
             queue_number        4

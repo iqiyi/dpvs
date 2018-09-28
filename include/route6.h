@@ -46,6 +46,7 @@ struct route6 {
 
 struct route6 *route6_input(struct rte_mbuf *mbuf, struct flow6 *fl6);
 struct route6 *route6_output(struct rte_mbuf *mbuf, struct flow6 *fl6);
+int route6_get(struct route6 *rt);
 int route6_put(struct route6 *rt);
 
 int route6_init(void);
@@ -105,6 +106,7 @@ static inline void rt6_fill_with_cfg(struct route6 *rt6,
     rt6->rt6_dev = netif_port_get_by_name(cf->ifname);
     rt6->rt6_gateway = cf->gateway;
     rt6->rt6_flags = cf->flags;
+    rt6->rt6_mtu = cf->mtu;
     if (!cf->mtu && rt6->rt6_dev)
         rt6->rt6_mtu = rt6->rt6_dev->mtu;
 }
