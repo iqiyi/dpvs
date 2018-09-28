@@ -119,12 +119,14 @@ netlink_route(ip_route_t *iproute, int cmd)
         memset(route_conf, 0, sizeof(*route_conf));
         dpvs_fill_rt4conf(iproute, route_conf);
         ipvs_set_route(route_conf, cmd);
+        free(route_conf);
     } else {
         struct dp_vs_route6_conf *rt6_cfg;
         rt6_cfg = (struct dp_vs_route6_conf *)malloc(sizeof(struct dp_vs_route6_conf));
         memset(rt6_cfg, 0, sizeof(*rt6_cfg));
         dpvs_fill_rt6conf(iproute, rt6_cfg);
         ipvs_set_route6(rt6_cfg, cmd);
+        free(rt6_cfg);
     }
     return 1;
 }
