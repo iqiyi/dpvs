@@ -514,7 +514,7 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     }
 
     if (AF_INET6 == af) {
-        mtu = ((struct route6* )rt)->rt6_mtu;
+        mtu = ((struct route6*)rt)->rt6_mtu;
         iph = ip6_hdr(mbuf);
         iphdrlen = ip6_hdrlen(mbuf);
     } else {
