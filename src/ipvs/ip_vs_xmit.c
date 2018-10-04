@@ -1864,6 +1864,10 @@ int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
         : __dp_vs_out_xmit_nat6(proto, conn, mbuf);
 }
 
+/*
+ * IP-IP tunnel is used for IPv4 IPVS tunnel forwarding.
+ * `tunl0` should be configured up on RS.
+ * */
 static int __dp_vs_xmit_tunnel4(struct dp_vs_proto *proto,
                                 struct dp_vs_conn *conn,
                                 struct rte_mbuf *mbuf)
@@ -1943,6 +1947,10 @@ errout:
     return err;
 }
 
+/*
+ * IPv6-IPv6 tunnel is used for IPv6 IPVS tunnel forwarding.
+ * `ip6tnl0` should be configured up on RS.
+ * */
 static int __dp_vs_xmit_tunnel6(struct dp_vs_proto *proto,
                    struct dp_vs_conn *conn,
                    struct rte_mbuf *mbuf)
@@ -1992,11 +2000,29 @@ static int __dp_vs_xmit_tunnel6(struct dp_vs_proto *proto,
 
     memset(new_ip6h, 0, sizeof(struct ip6_hdr));
     new_ip6h->ip6_flow = old_ip6h->ip6_flow;
-    new_ip6h->ip6_plen = htons(mbuf->pkt_len - sizeof(struct ip6_hdr)); // if correct???
+    new_ip6h->ip6_plen = htons(mbuf->pkt_len - sizeof(struct ip6_hdr));
     new_ip6h->ip6_nxt = IPPROTO_IPV6;
     new_ip6h->ip6_hops = old_ip6h->ip6_hops;
+
+    /* FIXME: How to set outter IP source ?
+     * 1. why not use `rt6->rt6_src.addr` ?
+     *   `rt6->rt6_src` is not set due to src-validation in route6
+     * 2. why not use `inet_addr_select` ?
+     *   `inet_addr_select` return the vip as source(note the vip is configured on
+     *    ip6tnl0), and has performance concerns because of locking.
+     * For a compromise, the original source IP is used. Routing problem may exist.
+     */
     new_ip6h->ip6_src = old_ip6h->ip6_src;
-    new_ip6h->ip6_dst = old_ip6h->ip6_dst;
+
+    /*
+    new_ip6h->ip6_src = rt6->rt6_src.addr;
+    if (ipv6_addr_any(&new_ip6h->ip6_src))
+        inet_addr_select(AF_INET6, rt6->rt6_dev,
+                (const union inet_addr*)&fl6.fl6_daddr, 0,
+                (union inet_addr*)&new_ip6h->ip6_src);
+    */
+
+    new_ip6h->ip6_dst = conn->daddr.in6;
 
     return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
                      NULL, rt6->rt6_dev, ip6_output);
