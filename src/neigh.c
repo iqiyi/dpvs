@@ -308,25 +308,6 @@ struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key,
 int neigh_edit(struct neighbour_entry *neighbour, struct ether_addr *eth_addr)
 {
     rte_memcpy(&neighbour->eth_addr, eth_addr, 6);
-    lcoreid_t cid = rte_lcore_id();
-
-    if ((g_cid == cid) && !(neighbour->flag & NEIGHBOUR_STATIC)) {
-        struct raw_neigh *mac_param;
-        mac_param = neigh_ring_clone_entry(neighbour, 1);
-        if (mac_param) {
-            int ret = rte_ring_enqueue(neigh_ring[master_cid], mac_param);
-            if (unlikely(-EDQUOT == ret))
-                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring quota exceeded\n",
-                        __func__);
-            else if (ret < 0) {
-                rte_free(mac_param);
-                RTE_LOG(WARNING, NEIGHBOUR, "%s: neigh ring enqueue failed\n",
-                        __func__);
-            }
-        }
-        else
-            RTE_LOG(WARNING, NEIGHBOUR, "%s: clone ring param faild\n", __func__);
-    }
 
     return EDPVS_OK;
 }
