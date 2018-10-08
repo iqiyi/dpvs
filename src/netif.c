@@ -2767,6 +2767,52 @@ static int dpdk_filter_supported(struct netif_port *dev, enum rte_filter_type fl
     return rte_eth_dev_filter_supported(dev->id, fltype);
 }
 
+void netif_mask_fdir_filter(int af, const struct netif_port *port,
+                            struct rte_eth_fdir_filter *filt)
+{
+    struct rte_eth_fdir_info fdir_info;
+    const struct rte_eth_fdir_masks *fmask;
+    union rte_eth_fdir_flow *flow = &filt->input.flow;
+
+    if (rte_eth_dev_filter_ctrl(port->id, RTE_ETH_FILTER_FDIR,
+                RTE_ETH_FILTER_INFO, &fdir_info) < 0) {
+        RTE_LOG(WARNING, NETIF, "%s: Fail to fetch fdir info of %s !\n",
+                __func__, port->name);
+        return;
+    }
+    fmask = &fdir_info.mask;
+
+    /* ipv4 flow */
+    if (af == AF_INET) {
+        flow->ip4_flow.src_ip &= fmask->ipv4_mask.src_ip;
+        flow->ip4_flow.dst_ip &= fmask->ipv4_mask.dst_ip;
+        flow->ip4_flow.tos &= fmask->ipv4_mask.tos;
+        flow->ip4_flow.ttl &= fmask->ipv4_mask.ttl;
+        flow->ip4_flow.proto &= fmask->ipv4_mask.proto;
+        flow->tcp4_flow.src_port &= fmask->src_port_mask;
+        flow->tcp4_flow.dst_port &= fmask->dst_port_mask;
+        return;
+    }
+
+    /* ipv6 flow */
+    if (af == AF_INET6) {
+        flow->ipv6_flow.src_ip[0] &= fmask->ipv6_mask.src_ip[0];
+        flow->ipv6_flow.src_ip[1] &= fmask->ipv6_mask.src_ip[1];
+        flow->ipv6_flow.src_ip[2] &= fmask->ipv6_mask.src_ip[2];
+        flow->ipv6_flow.src_ip[3] &= fmask->ipv6_mask.src_ip[3];
+        flow->ipv6_flow.dst_ip[0] &= fmask->ipv6_mask.dst_ip[0];
+        flow->ipv6_flow.dst_ip[1] &= fmask->ipv6_mask.dst_ip[1];
+        flow->ipv6_flow.dst_ip[2] &= fmask->ipv6_mask.dst_ip[2];
+        flow->ipv6_flow.dst_ip[3] &= fmask->ipv6_mask.dst_ip[3];
+        flow->ipv6_flow.tc &= fmask->ipv6_mask.tc;
+        flow->ipv6_flow.proto &= fmask->ipv6_mask.proto;
+        flow->ipv6_flow.hop_limits &= fmask->ipv6_mask.hop_limits;
+        flow->tcp6_flow.src_port &= fmask->src_port_mask;
+        flow->tcp6_flow.dst_port &= fmask->dst_port_mask;
+        return;
+    }
+}
+
 static int dpdk_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
                               const struct rte_eth_fdir_filter *filt)
 {
@@ -3226,6 +3272,17 @@ static int add_bond_slaves(struct netif_port *port)
     return EDPVS_OK;
 }
 
+/* flush FDIR filters for all physical dpdk ports */
+static int fdir_filter_flush(const struct netif_port *port)
+{
+    if (!port || port->type != PORT_TYPE_GENERAL)
+        return EDPVS_OK;
+    if (rte_eth_dev_filter_ctrl(port->id, RTE_ETH_FILTER_FDIR,
+                RTE_ETH_FILTER_FLUSH, NULL) < 0)
+        return EDPVS_DPDKAPIFAIL;
+    return EDPVS_OK;
+}
+
 /*
  * Note: Invoke the function after port is allocated and lcores are configured.
  */
@@ -3352,7 +3409,14 @@ int netif_port_start(struct netif_port *port)
     /* add in6_addr multicast address */
     ret = idev_add_mcast_init(port);
     if (ret != EDPVS_OK) {
-        RTE_LOG(INFO, NETIF, "multicast address add failed for device %s\n", port->name);
+        RTE_LOG(WARNING, NETIF, "multicast address add failed for device %s\n", port->name);
+        return ret;
+    }
+
+    /* flush FDIR filters */
+    ret = fdir_filter_flush(port);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(WARNING, NETIF, "fail to flush FDIR filters for device %s\n", port->name);
         return ret;
     }
 
@@ -3538,16 +3602,15 @@ static struct rte_eth_conf default_port_conf = {
                 .src_ip         = 0x00000000,
                 .dst_ip         = 0xFFFFFFFF,
             },
+            .ipv6_mask          = {
+                .src_ip         = { 0, 0, 0, 0 },
+                .dst_ip         = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF },
+            },
             .src_port_mask      = 0x0000,
 
             /* to be changed according to slave lcore number in use */
-#if RTE_VERSION >= 0x10040010 //VERSION_NUM(16, 4, 0, 16), dpdk-16.04
             .dst_port_mask      = 0x00F8,
-#else
-            /* alert!!! port mask is host byte order while
-             * filter is network byte order */
-            .dst_port_mask      = 0xF800, // previous dpdk version
-#endif
+
             .mac_addr_byte_mask = 0x00,
             .tunnel_type_mask   = 0,
             .tunnel_id_mask     = 0,
@@ -3600,10 +3663,23 @@ int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *
     }
 
     memset(tbuf1, 0, sizeof(tbuf1));
-    snprintf(tbuf1, sizeof(tbuf1), "ipv4_src_ip: %#8x\nipv4_dst_ip: %#8x\n"
-            "src_port: %#4x\ndst_port: %#4x", port_conf->fdir_conf.mask.ipv4_mask.src_ip,
-            port_conf->fdir_conf.mask.ipv4_mask.dst_ip, port_conf->fdir_conf.mask.src_port_mask,
-            port_conf->fdir_conf.mask.dst_port_mask);
+    snprintf(tbuf1, sizeof(tbuf1),
+            "fdir ipv4 mask: src 0x%08x dst 0x%08x\n"
+            "fdir ipv6 mask: src 0x%08x:%08x:%08x:%08x dst 0x%08x:%08x:%08x:%08x\n"
+            "fdir port mask: src 0x%04x dst 0x%04x\n",
+            port_conf->fdir_conf.mask.ipv4_mask.src_ip,
+            port_conf->fdir_conf.mask.ipv4_mask.dst_ip,
+            port_conf->fdir_conf.mask.ipv6_mask.src_ip[0],
+            port_conf->fdir_conf.mask.ipv6_mask.src_ip[1],
+            port_conf->fdir_conf.mask.ipv6_mask.src_ip[2],
+            port_conf->fdir_conf.mask.ipv6_mask.src_ip[3],
+            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[0],
+            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[1],
+            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[2],
+            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[3],
+            port_conf->fdir_conf.mask.src_port_mask,
+            port_conf->fdir_conf.mask.dst_port_mask
+            );
     if (*len - strlen(buf) - 1 < strlen(tbuf1)) {
         RTE_LOG(WARNING, NETIF, "[%s] no enough buf\n", __func__);
         return EDPVS_INVAL;
@@ -3825,7 +3901,7 @@ int netif_lcore_start(void)
  */
 static int obtain_dpdk_bond_name(char *dst, const char *ori, size_t size)
 {
-    char str[DEVICE_NAME_MAX_LEN];
+    char str[IFNAMSIZ];
     unsigned num;
 
     if (!ori || sscanf(ori, "%[_a-zA-Z]%u", str, &num) != 2)
@@ -3892,8 +3968,8 @@ int netif_virtual_devices_add(void)
             return EDPVS_INVAL;
         }
 
-        char dummy_name[DEVICE_NAME_MAX_LEN] = {'\0'};
-        int rc = obtain_dpdk_bond_name(dummy_name, bond_cfg->name, DEVICE_NAME_MAX_LEN);
+        char dummy_name[IFNAMSIZ] = {'\0'};
+        int rc = obtain_dpdk_bond_name(dummy_name, bond_cfg->name, IFNAMSIZ);
         if (rc != EDPVS_OK) {
             RTE_LOG(ERR, NETIF, "%s: wrong bond device name in config file %s\n",
                     __func__, bond_cfg->name);

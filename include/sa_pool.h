@@ -21,7 +21,7 @@
  * for multi-core app, the traffic comes back of local initiated
  * connection need reach original CPU core. there are several
  * ways to achieve the goal. one is to calc RSS the same way of
- * NIC to select the currect CPU for connect.
+ * NIC to select the correct CPU for connect.
  *
  * the way we use is based on Flow-Director (fdir), allocate
  * local source (e.g., <ip, port>) for each CPU core in advance.
@@ -59,11 +59,13 @@ int sa_pool_destroy(struct inet_ifaddr *ifa);
  * @dev and @daddr is optional,
  * note: if @daddr is used, it must be the same for sa_fetch and sa_release.
  */
-int sa_fetch(struct netif_port *dev, const struct sockaddr_in *daddr,
-             struct sockaddr_in *saddr);
+int sa_fetch(int af, struct netif_port *dev,
+             const struct sockaddr_storage *daddr,
+             struct sockaddr_storage *saddr);
 
-int sa_release(const struct netif_port *dev, const struct sockaddr_in *daddr,
-               const struct sockaddr_in *saddr);
+int sa_release(const struct netif_port *dev,
+               const struct sockaddr_storage *daddr,
+               const struct sockaddr_storage *saddr);
 
 int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats);
 

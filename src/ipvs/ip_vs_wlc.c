@@ -24,7 +24,7 @@ static inline unsigned int dp_vs_wlc_dest_overhead(struct dp_vs_dest *dest)
 }
 
 static struct dp_vs_dest *dp_vs_wlc_schedule(struct dp_vs_service *svc,
-                   const struct rte_mbuf *mbuf)
+                                             const struct rte_mbuf *mbuf)
 {
     struct dp_vs_dest *dest, *least;
     unsigned int loh, doh;
@@ -51,7 +51,7 @@ static struct dp_vs_dest *dp_vs_wlc_schedule(struct dp_vs_service *svc,
     /*
      *    Find the destination with the least load.
      */
-      nextstage:
+nextstage:
     list_for_each_entry_continue(dest, &svc->dests, n_list) {
         if (dest->flags & DPVS_DEST_F_OVERLOAD)
             continue;

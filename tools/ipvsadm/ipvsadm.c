@@ -303,7 +303,7 @@ static int parse_netmask(char *buf, u_int32_t *addr);
 static int parse_timeout(char *buf, int min, int max);
 static unsigned int parse_fwmark(char *buf);
 static int parse_sockpair(char *buf, ipvs_sockpair_t *sockpair);
-static int parse_match(const char *buf, ipvs_service_t *svc);
+static int parse_match_snat(const char *buf, ipvs_service_t *svc);
 
 /* check the options based on the commands_v_options table */
 static void generic_opt_check(int command, int options);
@@ -563,7 +563,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			break;
         case 'H':
 			set_option(options, OPT_SERVICE);
-            if (parse_match(optarg, &ce->svc) != 0)
+            if (parse_match_snat(optarg, &ce->svc) != 0)
 				fail(2, "illegal match specified");
             break;
 		case 'f':
@@ -572,7 +572,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			 * Set protocol to a sane values, even
 			 * though it is not used
 			 */
-			ce->svc.af = AF_INET;
+			ce->svc.af = AF_INET;/*FIXME:DPVS not support fwmark?*/
 			ce->svc.protocol = IPPROTO_TCP;
 			ce->svc.fwmark = parse_fwmark(optarg);
 			break;
@@ -1224,9 +1224,9 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 
     sockpair->af = af;
 	sockpair->proto = proto;
-    sockpair->sip = sip.s_addr;
+    memcpy(&sockpair->sip, &sip, sizeof(sockpair->sip));
     sockpair->sport = ntohs(sport);
-    sockpair->tip = tip.s_addr;
+    memcpy(&sockpair->tip, &tip, sizeof(sockpair->tip));
     sockpair->tport = ntohs(tport);
 
     return 1;
@@ -1245,7 +1245,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
  *
  *   proto=tcp,src-range=192.168.0.1-10:80-100,dst-range=10.0.0.1:1024,iif=eth0
  */
-static int parse_match(const char *buf, ipvs_service_t *svc)
+static int parse_match_snat(const char *buf, ipvs_service_t *svc)
 {
     char params[256];
     char *arg, *start, *sp, key[32], val[128];
@@ -1504,7 +1504,6 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 {
 	char *cname, *vname, *lname, *dname;
 	char proto_str[8], time_str[8];
-	union inet_addr addr;
 
 	if (conn_entry->proto == IPPROTO_TCP)
 		snprintf(proto_str, sizeof(proto_str), "%s", "tcp");
@@ -1515,21 +1514,17 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 
 	snprintf(time_str, sizeof(time_str), "%ds", conn_entry->timeout);
 
-	addr.in.s_addr = conn_entry->caddr;
-	if (!(cname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->cport),
-					conn_entry->proto, format)))
+	if (!(cname = addrport_to_anyname(conn_entry->af, &conn_entry->caddr,
+                    ntohs(conn_entry->cport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->vaddr;
-	if (!(vname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->vport),
-					conn_entry->proto, format)))
+	if (!(vname = addrport_to_anyname(conn_entry->af, &conn_entry->vaddr,
+                    ntohs(conn_entry->vport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->laddr;
-	if (!(lname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->lport),
-					conn_entry->proto, format)))
+	if (!(lname = addrport_to_anyname(conn_entry->af, &conn_entry->laddr,
+                    ntohs(conn_entry->lport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->daddr;
-	if (!(dname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->dport),
-					conn_entry->proto, format)))
+	if (!(dname = addrport_to_anyname(conn_entry->af, &conn_entry->daddr,
+                    ntohs(conn_entry->dport), conn_entry->proto, format)))
 		goto exit;
 
 	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
@@ -1733,21 +1728,21 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 						  se->protocol, format)))
 			fail(2, "addrport_to_anyname: %s", strerror(errno));
 		if (format & FMT_RULE) {
-            if (se->protocol == IPPROTO_TCP)
-                proto = "-t";
-            else if (se->protocol == IPPROTO_UDP)
-                proto = "-u";
-            else
-                proto = "-q";
+			if (se->protocol == IPPROTO_TCP)
+				proto = "-t";
+			else if (se->protocol == IPPROTO_UDP)
+				proto = "-u";
+			else
+				proto = "-q";
 
 			sprintf(svc_name, "%s %s", proto, vname);
-        } else {
-            if (se->protocol == IPPROTO_TCP)
-                proto = "TCP";
-            else if (se->protocol == IPPROTO_UDP)
-                proto = "UDP";
-            else
-                proto = "ICMP";
+		} else {
+			if (se->protocol == IPPROTO_TCP)
+				proto = "TCP";
+			else if (se->protocol == IPPROTO_UDP)
+				proto = "UDP";
+			else
+				proto = "ICMP";
 
 			sprintf(svc_name, "%s  %s", proto, vname);
 			if (se->af != AF_INET6)
@@ -1755,44 +1750,44 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		}
 		free(vname);
 	} else { /* match */
-        char *proto;
+		char *proto;
 
-        if (se->protocol == IPPROTO_TCP)
-            proto = "tcp";
-        else if (se->protocol == IPPROTO_UDP)
-            proto = "udp";
-        else
-            proto = "icmp";
+		if (se->protocol == IPPROTO_TCP)
+			proto = "tcp";
+		else if (se->protocol == IPPROTO_UDP)
+			proto = "udp";
+		else
+			proto = "icmp";
 
-        if (format & FMT_RULE) {
-            snprintf(svc_name, sizeof(svc_name),
-                     "-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
-                     proto, se->srange, se->drange, se->iifname, se->oifname);
+		if (format & FMT_RULE) {
+			snprintf(svc_name, sizeof(svc_name),
+			"-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
+			proto, se->srange, se->drange, se->iifname, se->oifname);
 
-        } else {
-            int left = sizeof(svc_name);
-            svc_name[0] = '\0';
+		} else {
+			int left = sizeof(svc_name);
+			svc_name[0] = '\0';
 
-            left -= snprintf(svc_name + strlen(svc_name), left,
-                             "MATCH %s", proto);
+			left -= snprintf(svc_name + strlen(svc_name), left,
+				"MATCH %s", proto);
             
-            if (strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
-                left -= snprintf(svc_name + strlen(svc_name), left,
-                                 ",from=%s", se->srange);
+			if (strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+				left -= snprintf(svc_name + strlen(svc_name), left,
+				",from=%s", se->srange);
 
-            if (strcmp(se->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
-                left -= snprintf(svc_name + strlen(svc_name), left,
-                                 ",to=%s", se->drange);
+			if (strcmp(se->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+				left -= snprintf(svc_name + strlen(svc_name), left,
+				",to=%s", se->drange);
 
-            if (strlen(se->iifname))
-                left -= snprintf(svc_name + strlen(svc_name), left,
-                                 ",iif=%s", se->iifname);
+			if (strlen(se->iifname))
+				left -= snprintf(svc_name + strlen(svc_name), left,
+				",iif=%s", se->iifname);
 
-            if (strlen(se->oifname))
-                left -= snprintf(svc_name + strlen(svc_name), left,
-                                 ",oif=%s", se->oifname);
-        }
-    }
+			if (strlen(se->oifname))
+				left -= snprintf(svc_name + strlen(svc_name), left,
+				",oif=%s", se->oifname);
+		}
+	}
 
 	/* copy svc's stats from dest */
 	copy_stats_from_dest(se, d);
@@ -1947,11 +1942,11 @@ static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 {
 	char	pbuf[32];
 
-	sprintf(pbuf , "%u.%u.%u.%u" , PRINT_NIP(entry->addr.ip));
+	inet_ntop(entry->af, (char *)&entry->addr, pbuf, sizeof(pbuf));
 	
-	printf("%-20s %-8s %-20s %-10lu %-10u\n" , 
-		"" , 
-		"" , 
+	printf("%-20s %-8s %-20s %-10lu %-10u\n",
+		"",
+		"",
 		pbuf,
 		entry->port_conflict,
 		entry->conn_counts);

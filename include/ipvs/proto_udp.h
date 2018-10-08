@@ -19,8 +19,8 @@
 #define __DP_VS_PROTO_UDP_H__
 
 enum {
-        DPVS_UDP_S_NORMAL   = 0,
-        DPVS_UDP_S_LAST
+    DPVS_UDP_S_NORMAL   = 0,
+    DPVS_UDP_S_LAST
 };
 
 extern int g_defence_udp_drop;

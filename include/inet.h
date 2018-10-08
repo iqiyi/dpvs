@@ -95,6 +95,22 @@ static inline const char *inet_proto_name(uint8_t proto)
     return proto_names[proto] ? proto_names[proto] : "<unknow>";
 }
 
+static inline uint32_t inet_addr_fold(int af, const union inet_addr *addr)
+{
+    uint32_t addr_fold = 0; 
+
+    if (af == AF_INET) {
+        addr_fold = addr->in.s_addr;
+    } else if (af == AF_INET6) {
+        addr_fold = addr->in6.s6_addr32[0] ^ addr->in6.s6_addr32[1] ^
+                    addr->in6.s6_addr32[2] ^ addr->in6.s6_addr32[3];
+    } else {
+        return 0;
+    }
+
+    return addr_fold; 
+}
+
 /* ip1[-ip2][:port1[-port2]] */
 static inline int inet_addr_range_parse(int af, const char *param,
                                         struct inet_addr_range *range)
@@ -247,6 +263,7 @@ typedef int (*inet_hook_fn)(void *priv, struct rte_mbuf *mbuf,
 struct inet_hook_ops {
     inet_hook_fn        hook;
     unsigned int        hooknum;
+    int                 af;
     void                *priv;
     int                 priority;
 
@@ -285,8 +302,8 @@ int inet_addr_range_parse(int af, const char *param,
 int inet_addr_range_dump(int af, const struct inet_addr_range *range,
                          char *buf, size_t size);
 
-int inet_register_hooks(int af, struct inet_hook_ops *reg, size_t n);
-int inet_unregister_hooks(int af, struct inet_hook_ops *reg, size_t n);
+int inet_register_hooks(struct inet_hook_ops *reg, size_t n);
+int inet_unregister_hooks(struct inet_hook_ops *reg, size_t n);
 
 void inet_stats_add(struct inet_stats *stats, const struct inet_stats *diff);
 

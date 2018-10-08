@@ -17,16 +17,21 @@
  */
 #ifndef __DPVS_SVC_H__
 #define __DPVS_SVC_H__
+
 #include <stdint.h>
 #include <net/if.h>
-#include "list.h"
-#include "dpdk.h"
-#include "inet.h"
-#include "netif.h"
 #include "match.h"
-#include "ipvs/ipvs.h"
 #include "ipvs/stats.h"
 #include "ipvs/dest.h"
+#include "inet.h"
+
+#define DP_VS_SCHEDNAME_MAXLEN      16
+
+#ifdef __DPVS__
+#include "list.h"
+#include "dpdk.h"
+#include "netif.h"
+#include "ipvs/ipvs.h"
 #include "ipvs/sched.h"
 
 #define RTE_LOGTYPE_SERVICE RTE_LOGTYPE_USER3
@@ -36,8 +41,6 @@
 
 #define DP_VS_SVC_F_SIP_HASH        0x0100      /* sip hash target */
 #define DP_VS_SVC_F_QID_HASH        0x0200      /* quic cid hash target */
-
-#define DP_VS_SCHEDNAME_MAXLEN      16
 
 rte_rwlock_t __dp_vs_svc_lock;
 
@@ -87,7 +90,7 @@ struct dp_vs_service {
 
     /* ... flags, timer ... */
 } __rte_cache_aligned;
-
+#endif
 
 struct dp_vs_service_conf {
     /* virtual service addresses */
@@ -109,8 +112,9 @@ struct dp_vs_service_conf {
 };
 
 struct dp_vs_service_entry {
+    int                 af;
     uint16_t            proto;
-    uint32_t            addr;
+    union inet_addr      addr;
     uint16_t            port;
     uint32_t            fwmark;
 
@@ -138,7 +142,34 @@ struct dp_vs_get_services {
     struct dp_vs_service_entry entrytable[0];
 };
 
+struct dp_vs_service_user{
+    int               af;
+    uint16_t          proto;
+    union inet_addr   addr;
+    uint16_t          port;
+    uint32_t          fwmark;
 
+    char              sched_name[DP_VS_SCHEDNAME_MAXLEN];
+    unsigned          flags;
+    unsigned          timeout;
+    unsigned          conn_timeout;
+    uint32_t          netmask;
+    unsigned          bps;
+    unsigned          limit_proportion;
+
+    char              srange[256];
+    char              drange[256];
+    char              iifname[IFNAMSIZ];
+    char              oifname[IFNAMSIZ];
+};
+
+struct dp_vs_getinfo {
+    unsigned int version;
+    unsigned int size;
+    unsigned int num_services;
+};
+
+#ifdef __DPVS__
 int dp_vs_service_init(void);
 int dp_vs_service_term(void);
 
@@ -190,33 +221,6 @@ int dp_vs_zero_service(struct dp_vs_service *svc);
 
 int dp_vs_zero_all(void);
 
-
-struct dp_vs_service_user{
-    uint16_t    proto;
-    uint32_t    addr;
-    uint16_t    port;
-    uint32_t    fwmark;
-    
-    char        sched_name[DP_VS_SCHEDNAME_MAXLEN];
-    unsigned    flags;
-    unsigned    timeout;
-    unsigned    conn_timeout;
-    uint32_t    netmask;
-    unsigned    bps;
-    unsigned    limit_proportion;
-
-    char        srange[256];
-    char        drange[256];
-    char        iifname[IFNAMSIZ];
-    char        oifname[IFNAMSIZ];
-};
-
-struct dp_vs_getinfo {
-    unsigned int version;
-    unsigned int size;
-    unsigned int num_services;
-};
-
 enum{
     DPVS_SO_SET_FLUSH = 200,
     DPVS_SO_SET_ZERO,
@@ -246,5 +250,6 @@ enum{
                          sizeof(struct dp_vs_dest_user))
 
 #define DPVS_WAIT_WHILE(expr) while(expr){;}
+#endif
 
 #endif /* __DPVS_SVC_H__ */
