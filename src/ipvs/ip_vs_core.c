@@ -291,6 +291,9 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     dest = svc->scheduler->schedule(svc, mbuf);
     if (!dest) {
         RTE_LOG(WARNING, IPVS, "%s: no dest found.\n", __func__);
+#ifdef CONFIG_DPVS_MBUF_DEBUG
+        dp_vs_mbuf_dump("found dest failed.", iph->af, mbuf);
+#endif
         return NULL;
     }
         

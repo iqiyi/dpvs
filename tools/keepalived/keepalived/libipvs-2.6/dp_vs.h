@@ -10,6 +10,7 @@
 #include "conf/conn.h"
 #include "ipvs/service.h"
 #include "ipvs/dest.h"
+#include "ip_tunnel.h"
 
 enum{
     DPVS_SO_SET_FLUSH = 200,

@@ -51,6 +51,8 @@
 #define LVS_CMD_DEL_LADDR	IP_VS_SO_SET_DELLADDR
 #define LVS_CMD_ADD_BLKLST	IP_VS_SO_SET_ADDBLKLST
 #define LVS_CMD_DEL_BLKLST	IP_VS_SO_SET_DELBLKLST
+#define LVS_CMD_ADD_TUNNEL	IP_VS_SO_SET_ADDTUNNEL
+#define LVS_CMD_DEL_TUNNEL	IP_VS_SO_SET_DELTUNNEL
 
 /* prototypes */
 extern void perform_svr_state(int, virtual_server_t *, real_server_t *);
@@ -61,5 +63,8 @@ extern int init_services(void);
 extern int clear_services(void);
 extern int clear_diff_services(void);
 extern int copy_srv_states(void);
+
+extern int init_tunnel(void);
+extern int clear_diff_tunnel(void);
 
 #endif
