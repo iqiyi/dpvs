@@ -54,7 +54,7 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /* 
+        /*
          * re-fetch IP header
          * the offset may changed during pre-handler
          */
@@ -114,9 +114,9 @@ static int __dp_vs_fast_xmit_fnat6(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /*
+        /* 
          * re-fetch IP header
-         * the offset may changed during pre-handler
+         * the offset may changed during pre-handler 
          */
         ip6h = ip6_hdr(mbuf);
     }
@@ -176,7 +176,7 @@ static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /* 
+        /*
          * re-fetch IP header
          * the offset may changed during pre-handler
          */
@@ -236,9 +236,9 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /*
+        /* 
          * re-fetch IP header
-         * the offset may changed during pre-handler
+         * the offset may changed during pre-handler 
          */
         ip6h = ip6_hdr(mbuf);
     }
@@ -265,6 +265,15 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
 
     /* must return OK since netif_xmit alway consume mbuf */
     return EDPVS_OK;
+}
+
+static int dp_vs_fast_outxmit_fnat(int af,
+                          struct dp_vs_proto *proto,
+                          struct dp_vs_conn *conn,
+                          struct rte_mbuf *mbuf)
+{
+    return af == AF_INET ? __dp_vs_fast_outxmit_fnat4(proto, conn, mbuf)
+        : __dp_vs_fast_outxmit_fnat6(proto, conn, mbuf);
 }
 
 /*
@@ -812,7 +821,7 @@ static void __dp_vs_xmit_icmp4(struct rte_mbuf *mbuf,
     int fullnat = (conn->dest->fwdmode == DPVS_FWD_MODE_FNAT);
     uint16_t csum;
 
-    /*
+    /* 
      * outer/inner L3 translation.
      */
     if (fullnat) {
@@ -837,7 +846,7 @@ static void __dp_vs_xmit_icmp4(struct rte_mbuf *mbuf,
         ip4_send_csum(ciph);
     }
 
-    /*
+    /* 
      * inner L4 translation.
      *
      * note it's no way to recalc inner csum to lack of data,
@@ -1012,7 +1021,7 @@ static int __dp_vs_xmit_dr4(struct dp_vs_proto *proto,
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     int err, mtu;
-    
+
     if (unlikely(mbuf->userdata != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: Already have route %p ?\n",
                 __func__, mbuf->userdata);
@@ -1044,7 +1053,7 @@ static int __dp_vs_xmit_dr4(struct dp_vs_proto *proto,
     mbuf->packet_type = ETHER_TYPE_IPv4;
     err = neigh_output(AF_INET, (union inet_addr *)&conn->daddr.in, mbuf, rt->port);
     route4_put(rt);
-    return err; 
+    return err;
 
 errout:
     if (rt)
