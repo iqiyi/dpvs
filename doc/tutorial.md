@@ -222,6 +222,7 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 ./ipvsadm --add-laddr -z 192.168.100.201 -t 123.1.2.3:80 -F dpdk0
 
 # add addr/route for dpvs.
+./dpip addr add 123.1.2.3/32 dev dpdk1
 ./dpip addr add 172.10.0.2/30 dev dpdk1
 ./dpip route add default via 172.10.0.1 dev dpdk1
 ```
