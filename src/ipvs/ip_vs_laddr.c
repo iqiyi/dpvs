@@ -458,9 +458,9 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
-    if (dp_vs_match_parse(laddr_conf->af, laddr_conf->srange,
-                          laddr_conf->drange, laddr_conf->iifname,
-                          laddr_conf->oifname, &match) != EDPVS_OK)
+    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange, 
+                          laddr_conf->iifname, laddr_conf->oifname, 
+                          &match) != EDPVS_OK)
         return EDPVS_INVAL;
 
     svc = dp_vs_service_lookup(laddr_conf->af, laddr_conf->proto, 
@@ -503,9 +503,9 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
-    if (dp_vs_match_parse(laddr_conf->af, laddr_conf->srange,
-                          laddr_conf->drange, laddr_conf->iifname,
-                          laddr_conf->oifname, &match) != EDPVS_OK)
+    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange, 
+                          laddr_conf->iifname, laddr_conf->oifname, 
+                          &match) != EDPVS_OK)
         return EDPVS_INVAL;
 
 

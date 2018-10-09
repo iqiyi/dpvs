@@ -27,8 +27,8 @@
 #include "inet.h"
 
 struct dp_vs_match {
-    /* TODO: add af, proto, ... */
-
+    /* TODO: add proto, ... */
+    int  af;
     /* range is more flexible than prefix. */
     struct inet_addr_range srange;      /* source range */
     struct inet_addr_range drange;      /* dest range */
@@ -61,13 +61,13 @@ static inline int parse_match(const char *pattern, uint8_t *proto,
         } else if (strncmp(tok, "from=", strlen("from=")) == 0) {
             tok += strlen("from=");
 
-            err = inet_addr_range_parse(AF_INET, tok, &match->srange);
+            err = inet_addr_range_parse(tok, &match->srange, &match->af);
             if (err != EDPVS_OK)
                 return err;
         } else if (strncmp(tok, "to=", strlen("to=")) == 0) {
             tok += strlen("to=");
 
-            err = inet_addr_range_parse(AF_INET, tok, &match->drange);
+            err = inet_addr_range_parse(tok, &match->drange, &match->af);
             if (err != EDPVS_OK)
                 return err;
         } else if (strncmp(tok, "iif=", strlen("iif=")) == 0) {
@@ -99,13 +99,13 @@ static inline char *dump_match(uint8_t proto, const struct dp_vs_match *match,
 
     if (memcmp(&match->srange, &zero_range, sizeof(zero_range)) != 0) {
         left -= snprintf(buf + strlen(buf), left, ",from=");
-        left -= inet_addr_range_dump(AF_INET, &match->srange,
+        left -= inet_addr_range_dump(match->af, &match->srange,
                                      buf + strlen(buf), left);
     }
 
     if (memcmp(&match->drange, &zero_range, sizeof(zero_range)) != 0) {
         left -= snprintf(buf + strlen(buf), left, ",to=");
-        left -= inet_addr_range_dump(AF_INET, &match->drange,
+        left -= inet_addr_range_dump(match->af, &match->drange,
                                      buf + strlen(buf), left);
     }
 
