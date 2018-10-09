@@ -237,7 +237,7 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
     return NULL;
 }
 
-int dp_vs_match_parse(int af, const char *srange, const char *drange,
+int dp_vs_match_parse(const char *srange, const char *drange,
                       const char *iifname, const char *oifname,
                       struct dp_vs_match *match)
 {
@@ -246,13 +246,13 @@ int dp_vs_match_parse(int af, const char *srange, const char *drange,
     memset(match, 0, sizeof(*match));
 
     if (srange && strlen(srange)) {
-        err = inet_addr_range_parse(AF_INET, srange, &match->srange);
+        err = inet_addr_range_parse(srange, &match->srange, &match->af);
         if (err != EDPVS_OK)
             return err;
     }
 
     if (drange && strlen(drange)) {
-        err = inet_addr_range_parse(AF_INET, drange, &match->drange);
+        err = inet_addr_range_parse(drange, &match->drange, &match->af);
         if (err != EDPVS_OK)
             return err;
     }
@@ -609,8 +609,8 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     if (!m)
         return err;
 
-    inet_addr_range_dump(src->af, &m->srange, dst->srange, sizeof(dst->srange));
-    inet_addr_range_dump(src->af, &m->drange, dst->drange, sizeof(dst->drange));
+    inet_addr_range_dump(m->af, &m->srange, dst->srange, sizeof(dst->srange));
+    inet_addr_range_dump(m->af, &m->drange, dst->drange, sizeof(dst->drange));
 
     snprintf(dst->iifname, sizeof(dst->iifname), "%s", m->iifname);
     snprintf(dst->oifname, sizeof(dst->oifname), "%s", m->oifname);
@@ -769,6 +769,7 @@ int dp_vs_zero_all(void)
 static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
                                    struct dp_vs_service_user *user)
 {
+    int err;
     conf->af = user->af;
     conf->protocol = user->proto;
     conf->addr = user->addr;
@@ -785,8 +786,12 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
     conf->bps = user->bps;
     conf->limit_proportion = user->limit_proportion;
 
-    return dp_vs_match_parse(AF_INET, user->srange, user->drange,
-                             user->iifname, user->oifname, &conf->match);
+    err = dp_vs_match_parse(user->srange, user->drange,
+                            user->iifname, user->oifname, &conf->match);
+    if (EDPVS_OK == err)
+        conf->af = conf->match.af;
+
+    return err;
 }
 
 static void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
@@ -975,14 +980,14 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 else {
                     struct dp_vs_match match;
 
-                    ret = dp_vs_match_parse(AF_INET, entry->srange,
-                                            entry->drange, entry->iifname,
-                                            entry->oifname, &match);
+                    ret = dp_vs_match_parse(entry->srange, entry->drange, 
+                                            entry->iifname, entry->oifname, 
+                                            &match);
                     if (ret != EDPVS_OK)
                         return ret;
 
                     if (!is_empty_match(&match)) {
-                        svc = __dp_vs_svc_match_find(AF_INET, entry->proto,
+                        svc = __dp_vs_svc_match_find(match.af, entry->proto,
                                                      &match);
                     }
                 }
@@ -1029,14 +1034,14 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 else {
                     struct dp_vs_match match;
 
-                    ret = dp_vs_match_parse(AF_INET, get->srange,
-                                            get->drange, get->iifname,
-                                            get->oifname, &match);
+                    ret = dp_vs_match_parse(get->srange, get->drange, 
+                                            get->iifname, get->oifname, 
+                                            &match);
                     if (ret != EDPVS_OK)
                         return ret;
 
                     if (!is_empty_match(&match)) {
-                        svc = __dp_vs_svc_match_find(AF_INET, get->proto,
+                        svc = __dp_vs_svc_match_find(match.af, get->proto,
                                                      &match);
                     }
                 }

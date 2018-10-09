@@ -188,7 +188,7 @@ dp_vs_service_lookup(int af, uint16_t protocol,
                      const struct rte_mbuf *mbuf,
                      const struct dp_vs_match *match);
 
-int dp_vs_match_parse(int af, const char *srange, const char *drange,
+int dp_vs_match_parse(const char *srange, const char *drange,
                       const char *iifname, const char *oifname,
                       struct dp_vs_match *match);
 
