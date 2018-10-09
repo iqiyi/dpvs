@@ -788,7 +788,7 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
 
     err = dp_vs_match_parse(user->srange, user->drange,
                             user->iifname, user->oifname, &conf->match);
-    if (EDPVS_OK == err)
+    if (conf->match.af)
         conf->af = conf->match.af;
 
     return err;
