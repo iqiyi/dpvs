@@ -312,10 +312,6 @@ bool inet_addr_same_net(int af, uint8_t plen,
                         const union inet_addr *addr1,
                         const union inet_addr *addr2);
 
-int inet_addr_range_parse(const char *param,
-                          struct inet_addr_range *range,
-                          int *af);
-
 int inet_addr_range_dump(int af, const struct inet_addr_range *range,
                          char *buf, size_t size);
 
