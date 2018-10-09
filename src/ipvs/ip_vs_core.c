@@ -183,6 +183,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
     struct sockaddr_storage daddr, saddr;
+    uint16_t _ports[2];
 
     if (unlikely(iph->proto == IPPROTO_ICMP)) {
         struct icmphdr *ich, _icmph;
@@ -190,14 +191,14 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
         if (!ich)
             return NULL;
 
-        ports[0] = icmp4_id(ich);
-        ports[1] = ich->type << 8 | ich->code;
+        _ports[0] = icmp4_id(ich);
+        _ports[1] = ich->type << 8 | ich->code;
 
         /* ID may confict for diff host,
          * need we use ID pool ? */
         dp_vs_conn_fill_param(iph->af, iph->proto,
                               &iph->daddr, &dest->addr,
-                              ports[1], ports[0],
+                              _ports[1], _ports[0],
                               0, &param);
     } else if (unlikely(iph->proto == IPPROTO_ICMPV6)) {
         struct icmp6_hdr *ic6h, _ic6hp;
@@ -205,12 +206,12 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
         if (!ic6h)
             return NULL;
 
-        ports[0] = icmp6h_id(ic6h);
-        ports[1] = ic6h->icmp6_type << 8 | ic6h->icmp6_code;
+        _ports[0] = icmp6h_id(ic6h);
+        _ports[1] = ic6h->icmp6_type << 8 | ic6h->icmp6_code;
 
         dp_vs_conn_fill_param(iph->af, iph->proto,
                               &iph->daddr, &dest->addr,
-                              ports[1], ports[0],
+                              _ports[1], _ports[0],
                               0, &param);
     } else {
         /* we cannot inherit dest (host's src port),
@@ -319,8 +320,9 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
         if (!ic6h)
             return NULL;
 
-        ports[0] = icmp6h_id(ic6h);
-        ports[1] = ic6h->icmp6_type << 8 | ic6h->icmp6_code;
+        ports = _ports;
+        _ports[0] = icmp6h_id(ic6h);
+        _ports[1] = ic6h->icmp6_type << 8 | ic6h->icmp6_code;
 
         dp_vs_conn_fill_param(iph->af, iph->proto,
                               &iph->daddr, &dest->addr,
@@ -352,7 +354,8 @@ static int xmit_outbound(struct rte_mbuf *mbuf,
     if (dp_vs_stats_out(conn, mbuf)) {
         dp_vs_conn_put(conn);
         return INET_DROP;
-    } 
+    }
+
     if (!conn->packet_out_xmit) {
         RTE_LOG(WARNING, IPVS, "%s: missing out_xmit\n", __func__);
         dp_vs_conn_put(conn);

@@ -112,23 +112,28 @@ static inline uint32_t inet_addr_fold(int af, const union inet_addr *addr)
 }
 
 /* ip1[-ip2][:port1[-port2]] */
-static inline int inet_addr_range_parse(int af, const char *param,
-                                        struct inet_addr_range *range)
+static inline int inet_addr_range_parse(const char *param,
+                                        struct inet_addr_range *range,
+                                        int *af)
 {
     char _param[256], *ips, *ports;
     char *ip1, *ip2, *port1, *port2;
-
-    if (af != AF_INET)
-        return EDPVS_NOTSUPP;
 
     if (strlen(param) == 0)
         return EDPVS_OK; /* return asap */
 
     snprintf(_param, sizeof(_param), "%s", param);
+
+    ips = _param;
+    if (_param[0] == '[') {
+        ips++;
+        ports = strrchr(_param, ']');
+        *ports++ = '\0';
+    }
     ports = strrchr(_param, ':');
+
     if (ports)
         *ports++ = '\0';
-    ips = _param;
 
     ip1 = ips;
     ip2 = strrchr(ips, '-');
@@ -146,14 +151,25 @@ static inline int inet_addr_range_parse(int af, const char *param,
 
     memset(range, 0, sizeof(*range));
 
-    if (strlen(ip1) && inet_pton(AF_INET, ip1, &range->min_addr.in) <= 0)
-        return EDPVS_INVAL;
-
-    if (ip2 && strlen(ip2)) {
-       if  (inet_pton(AF_INET, ip2, &range->max_addr.in) <= 0)
-           return EDPVS_INVAL;
+    if (strlen(ip1) && inet_pton(AF_INET6, ip1, &range->min_addr.in6) > 0) {
+        if (ip2 && strlen(ip2)) {
+            if (inet_pton(AF_INET6, ip2, &range->max_addr.in6) <= 0)
+                return EDPVS_INVAL;
+        } else {
+            range->max_addr = range->min_addr;
+        }
+        *af = AF_INET6;
     } else {
-        range->max_addr = range->min_addr;
+        if (strlen(ip1) && inet_pton(AF_INET, ip1, &range->min_addr.in) <= 0)
+            return EDPVS_INVAL;
+
+        if (ip2 && strlen(ip2)) {
+           if (inet_pton(AF_INET, ip2, &range->max_addr.in) <= 0)
+               return EDPVS_INVAL;
+        } else {
+            range->max_addr = range->min_addr;
+        }
+        *af = AF_INET;
     }
 
     if (port1 && strlen(port1))
@@ -296,8 +312,9 @@ bool inet_addr_same_net(int af, uint8_t plen,
                         const union inet_addr *addr1,
                         const union inet_addr *addr2);
 
-int inet_addr_range_parse(int af, const char *param,
-                          struct inet_addr_range *range);
+int inet_addr_range_parse(const char *param,
+                          struct inet_addr_range *range,
+                          int *af);
 
 int inet_addr_range_dump(int af, const struct inet_addr_range *range,
                          char *buf, size_t size);
