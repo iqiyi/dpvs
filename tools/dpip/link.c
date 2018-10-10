@@ -694,7 +694,7 @@ static int link_show(struct link_param *param)
             if (param->dev_name[0]) { /* show information of specified NIC */
                 return link_nic_show(param);
             } else { /* show infomation of all NIC */
-                if (get_netif_port_list() < 0)
+                if (get_netif_port_list() != EDPVS_OK)
                     return EDPVS_INVAL;
                 ret = EDPVS_OK;
                 for (ii = 0; ii < g_nic_list->nic_num && ii < NETIF_MAX_PORTS; ii++) {
