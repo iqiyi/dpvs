@@ -49,9 +49,9 @@ static int dp_vs_fast_xmit_fnat(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /* 
+        /*
          * re-fetch IP header
-         * the offset may changed during pre-handler 
+         * the offset may changed during pre-handler
          */
         iph = ip4_hdr(mbuf);
     }
@@ -108,9 +108,9 @@ static int dp_vs_fast_outxmit_fnat(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /* 
+        /*
          * re-fetch IP header
-         * the offset may changed during pre-handler 
+         * the offset may changed during pre-handler
          */
         iph = ip4_hdr(mbuf);
     }
@@ -137,7 +137,7 @@ static int dp_vs_fast_outxmit_fnat(struct dp_vs_proto *proto,
     ether_addr_copy(&conn->out_smac, &eth->s_addr);
     eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
     mbuf->packet_type = ETHER_TYPE_IPv4;
-    
+
     err = netif_xmit(mbuf, conn->out_dev);
     if (err != EDPVS_OK)
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
@@ -146,17 +146,17 @@ static int dp_vs_fast_outxmit_fnat(struct dp_vs_proto *proto,
     return EDPVS_OK;
 }
 
-/* 
+/*
  * ARP_HDR_ETHER SUPPORT ONLY
  * save source mac(client) for output in conn as dest mac
  */
-static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf, 
+static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
                           struct dp_vs_proto *proto,
                           struct dp_vs_conn *conn)
 {
     struct ether_hdr *eth = NULL;
 
-    if (!is_zero_ether_addr(&conn->out_dmac) && 
+    if (!is_zero_ether_addr(&conn->out_dmac) &&
         !is_zero_ether_addr(&conn->out_smac))
         return;
 
@@ -167,7 +167,7 @@ static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
 
     ether_addr_copy(&eth->s_addr, &conn->out_dmac);
     ether_addr_copy(&eth->d_addr, &conn->out_smac);
-   
+
     rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr));
 }
 
@@ -188,7 +188,7 @@ static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
         return;
 
     eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
-    
+
     ether_addr_copy(&eth->s_addr, &conn->in_dmac);
     ether_addr_copy(&eth->d_addr, &conn->in_smac);
 
@@ -209,9 +209,9 @@ static void dp_vs_conn_cache_rt(struct dp_vs_conn *conn, struct route_entry *rt,
         conn->in_dev = rt->port;
         if (rt->gw.s_addr == htonl(INADDR_ANY)) {
             conn->in_nexthop.in = conn->daddr.in;
-        } else {           
+        } else {
             conn->in_nexthop.in = rt->gw;
-        }  
+        }
 
     } else {
         conn->out_dev = rt->port;
@@ -241,10 +241,10 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
 
     /*
      * drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route. 
+     * FNAT is PRE_ROUTING, should not have route.
      */
     if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n", 
+        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n",
                 __func__, mbuf->userdata);
         route4_put((struct route_entry *)mbuf->userdata);
     }
@@ -263,8 +263,8 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
     /*
      * didn't cache the pointer to rt
      * or route can't be deleted when there is conn ref
-     * this is for neighbour confirm 
-     */ 
+     * this is for neighbour confirm
+     */
     dp_vs_conn_cache_rt(conn, rt, true);
 
     mtu = rt->mtu;
@@ -295,9 +295,9 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             goto errout;
 
-        /* 
+        /*
          * re-fetch IP header
-         * the offset may changed during pre-handler 
+         * the offset may changed during pre-handler
          */
         iph = ip4_hdr(mbuf);
     }
@@ -345,9 +345,9 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         }
     }
 
-    /* 
+    /*
      * drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route. 
+     * FNAT is PRE_ROUTING, should not have route.
      */
     if (unlikely(mbuf->userdata != NULL))
         route4_put((struct route_entry *)mbuf->userdata);
@@ -365,7 +365,7 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
     /*
      * didn't cache the pointer to rt
      * or route can't be deleted when there is conn ref
-     * this is for neighbour confirm 
+     * this is for neighbour confirm
      */
     dp_vs_conn_cache_rt(conn, rt, false);
 
@@ -397,9 +397,9 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             goto errout;
 
-        /* 
+        /*
          * re-fetch IP header
-         * the offset may changed during pre-handler 
+         * the offset may changed during pre-handler
          */
         iph = ip4_hdr(mbuf);
     }
@@ -443,7 +443,7 @@ void dp_vs_xmit_icmp(struct rte_mbuf *mbuf,
     int fullnat = (conn->dest->fwdmode == DPVS_FWD_MODE_FNAT);
     uint16_t csum;
 
-    /* 
+    /*
      * outer/inner L3 translation.
      */
     if (fullnat) {
@@ -468,7 +468,7 @@ void dp_vs_xmit_icmp(struct rte_mbuf *mbuf,
         ip4_send_csum(ciph);
     }
 
-    /* 
+    /*
      * inner L4 translation.
      *
      * note it's no way to recalc inner csum to lack of data,
@@ -504,7 +504,7 @@ void dp_vs_xmit_icmp(struct rte_mbuf *mbuf,
         }
     }
 
-    /* 
+    /*
      * ICMP recalc csum.
      */
     icmph->checksum = 0;
@@ -522,7 +522,7 @@ int dp_vs_xmit_dr(struct dp_vs_proto *proto,
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     int err, mtu;
-    
+
     if (unlikely(mbuf->userdata != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: Already have route %p ?\n",
                 __func__, mbuf->userdata);
@@ -554,13 +554,13 @@ int dp_vs_xmit_dr(struct dp_vs_proto *proto,
     mbuf->packet_type = ETHER_TYPE_IPv4;
     err = neigh_resolve_output(&conn->daddr.in, mbuf, rt->port);
     route4_put(rt);
-    return err; 
+    return err;
 
 errout:
     if (rt)
         route4_put(rt);
     rte_pktmbuf_free(mbuf);
-    return err;        
+    return err;
 }
 
 int dp_vs_xmit_snat(struct dp_vs_proto *proto,
@@ -572,7 +572,7 @@ int dp_vs_xmit_snat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    /* 
+    /*
      * drop old route. just for safe, because
      * inbound SNAT traffic is hooked at PRE_ROUTING,
      * should not have route.
@@ -583,9 +583,9 @@ int dp_vs_xmit_snat(struct dp_vs_proto *proto,
         route4_put((struct route_entry *)mbuf->userdata);
     }
 
-    /* 
+    /*
      * hosts inside SNAT may belongs to diff net,
-     * let's route it. 
+     * let's route it.
      */
     memset(&fl4, 0, sizeof(struct flow4));
     fl4.daddr = conn->daddr.in;
@@ -718,6 +718,96 @@ errout:
     return err;
 }
 
+static int dp_vs_fast_xmit_nat(struct dp_vs_proto *proto,
+                    struct dp_vs_conn *conn,
+                    struct rte_mbuf *mbuf)
+{
+    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct ether_hdr *eth;
+    int err;
+
+    if (unlikely(conn->in_dev == NULL))
+        return EDPVS_NOROUTE;
+
+    if (unlikely(is_zero_ether_addr(&conn->in_dmac) ||
+                 is_zero_ether_addr(&conn->in_smac)))
+        return EDPVS_NOTSUPP;
+
+    iph->hdr_checksum = 0;
+    iph->dst_addr = conn->daddr.in.s_addr;
+
+    if (proto->nat_in_handler) {
+        err = proto->nat_in_handler(proto, conn, mbuf);
+        if(err != EDPVS_OK)
+            return err;
+    }
+
+    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+        iph->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(iph);
+    }
+
+    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct ether_hdr));
+    ether_addr_copy(&conn->in_dmac, &eth->d_addr);
+    ether_addr_copy(&conn->in_smac, &eth->s_addr);
+    eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
+    mbuf->packet_type = ETHER_TYPE_IPv4;
+
+    err = netif_xmit(mbuf, conn->in_dev);
+    if (err != EDPVS_OK)
+        RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
+
+    /* must return OK since netif_xmit alway consume mbuf */
+    return EDPVS_OK;
+}
+
+static int dp_vs_fast_outxmit_nat(struct dp_vs_proto *proto,
+                          struct dp_vs_conn *conn,
+                          struct rte_mbuf *mbuf)
+{
+    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct ether_hdr *eth;
+    int err;
+
+    if (unlikely(conn->out_dev == NULL))
+        return EDPVS_NOROUTE;
+
+    if (unlikely(is_zero_ether_addr(&conn->out_dmac) ||
+                 is_zero_ether_addr(&conn->out_smac)))
+        return EDPVS_NOTSUPP;
+
+    iph->hdr_checksum = 0;
+    iph->src_addr = conn->vaddr.in.s_addr;
+
+    if (proto->nat_out_handler) {
+        err = proto->nat_out_handler(proto, conn, mbuf);
+        if(err != EDPVS_OK)
+            return err;
+    }
+
+    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+        iph->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(iph);
+    }
+
+    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct ether_hdr));
+    ether_addr_copy(&conn->out_dmac, &eth->d_addr);
+    ether_addr_copy(&conn->out_smac, &eth->s_addr);
+    eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
+    mbuf->packet_type = ETHER_TYPE_IPv4;
+
+    err = netif_xmit(mbuf, conn->out_dev);
+    if (err != EDPVS_OK)
+        RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
+
+    /* must return OK since netif_xmit alway consume mbuf */
+    return EDPVS_OK;
+}
+
 int dp_vs_xmit_nat(struct dp_vs_proto *proto,
                    struct dp_vs_conn *conn,
                    struct rte_mbuf *mbuf)
@@ -727,7 +817,14 @@ int dp_vs_xmit_nat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    /* 
+    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
+        dp_vs_save_xmit_info(mbuf, proto, conn);
+        if (!dp_vs_fast_xmit_nat(proto, conn, mbuf)) {
+            return EDPVS_OK;
+        }
+    }
+
+    /*
      * drop old route. just for safe, because
      * NAT is PREROUTING, should not have route.
      */
@@ -805,7 +902,14 @@ int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    /* 
+    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
+        dp_vs_save_outxmit_info(mbuf, proto, conn);
+        if (!dp_vs_fast_outxmit_nat(proto, conn, mbuf)) {
+            return EDPVS_OK;
+        }
+    }
+
+    /*
      * drop old route. just for safe, because
      * NAT is PREROUTING, should not have route.
      */

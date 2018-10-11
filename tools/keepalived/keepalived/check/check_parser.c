@@ -334,6 +334,53 @@ blklst_gname_handler(vector_t *strvec)
 }
 
 static void
+tunnel_handler(vector_t *strvec)
+{
+	alloc_tunnel(vector_slot(strvec, 1));
+}
+
+static void
+tunnel_entry_handler(vector_t *strvec)
+{
+	alloc_tunnel_entry(vector_slot(strvec, 1));
+}
+
+static void
+kind_handler(vector_t *strvec)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *entry = LIST_TAIL_DATA(gtunnel->tunnel_entry);
+
+	strncpy(entry->kind, vector_slot(strvec, 1), sizeof(entry->kind) - 1);
+}
+
+static void
+remote_handler(vector_t *strvec)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *entry = LIST_TAIL_DATA(gtunnel->tunnel_entry);
+
+	inet_stosockaddr(vector_slot(strvec, 1), NULL, &entry->remote);
+}
+
+static void
+local_handler(vector_t *strvec)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *entry = LIST_TAIL_DATA(gtunnel->tunnel_entry);
+
+	inet_stosockaddr(vector_slot(strvec, 1), NULL, &entry->local);
+}
+
+static void
+if_handler(vector_t *strvec)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *entry = LIST_TAIL_DATA(gtunnel->tunnel_entry);
+	snprintf(entry->link, sizeof(entry->link), "%s", (char *)vector_slot(strvec, 1));
+}
+
+static void
 bps_handler(vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -428,6 +475,16 @@ check_init_keywords(void)
 	install_keyword("ca", &sslca_handler);
 	install_keyword("certificate", &sslcert_handler);
 	install_keyword("key", &sslkey_handler);
+
+	/* tunnel process */
+	install_keyword_root("tunnel_group", &tunnel_handler);
+	install_keyword("tunnel_entry", &tunnel_entry_handler);
+	install_sublevel();
+	install_keyword("kind", &kind_handler);
+	install_keyword("remote", &remote_handler);
+	install_keyword("local", &local_handler);
+	install_keyword("if", &if_handler);
+	install_sublevel_end();
 
 	/* local IP address mapping */
 	install_keyword_root("local_address_group", &laddr_group_handler);

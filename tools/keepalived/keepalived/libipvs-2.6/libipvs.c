@@ -364,6 +364,36 @@ int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst)
 	return dpvs_setsockopt(SOCKOPT_SET_BLKLST_DEL, &conf, sizeof(conf));
 }
 
+/* for tunnel entry */
+static void ipvs_fill_tunnel_conf(ipvs_tunnel_t* tunnel_entry,
+                                 struct ip_tunnel_param *conf)
+{
+	memset(conf, 0, sizeof(*conf));
+
+	strncpy(conf->ifname, tunnel_entry->ifname, sizeof(conf->ifname));
+	strncpy(conf->kind, tunnel_entry->kind, sizeof(conf->kind));
+	strncpy(conf->link, tunnel_entry->link, sizeof(conf->link));
+	conf->iph.saddr = tunnel_entry->laddr.ip;
+	conf->iph.daddr = tunnel_entry->raddr.ip;
+	return;
+}
+
+int ipvs_add_tunnel(ipvs_tunnel_t* tunnel_entry)
+{
+	struct ip_tunnel_param conf;
+	ipvs_fill_tunnel_conf(tunnel_entry, &conf);
+	ipvs_func = ipvs_add_tunnel;
+	return dpvs_setsockopt(SOCKOPT_TUNNEL_ADD, &conf, sizeof(conf));
+}
+
+int ipvs_del_tunnel(ipvs_tunnel_t* tunnel_entry)
+{
+	struct ip_tunnel_param conf;
+	ipvs_fill_tunnel_conf(tunnel_entry, &conf);
+	ipvs_func = ipvs_del_tunnel;
+	return dpvs_setsockopt(SOCKOPT_TUNNEL_DEL, &conf, sizeof(conf));
+}
+
 int ipvs_set_timeout(ipvs_timeout_t *to)
 {
 	ipvs_func = ipvs_set_timeout;

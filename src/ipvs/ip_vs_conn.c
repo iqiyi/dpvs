@@ -33,6 +33,7 @@
 #include "parser/parser.h"
 #include "ctrl.h"
 #include "conf/conn.h"
+#include "sys_time.h"
 
 #define DPVS_CONN_TAB_BITS      20
 #define DPVS_CONN_TAB_SIZE      (1 << DPVS_CONN_TAB_BITS)
@@ -323,6 +324,30 @@ static inline void conn_tab_dump(void)
 }
 #endif
 
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
+static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
+{
+    char cbuf[64], vbuf[64], lbuf[64], dbuf[64];
+    const char *caddr, *vaddr, *laddr, *daddr;
+
+    if (rte_log_get_global_level() >= RTE_LOG_DEBUG) {
+        caddr = inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::";
+        vaddr = inet_ntop(conn->af, &conn->vaddr, vbuf, sizeof(vbuf)) ? vbuf : "::";
+        laddr = inet_ntop(conn->af, &conn->laddr, lbuf, sizeof(lbuf)) ? lbuf : "::";
+        daddr = inet_ntop(conn->af, &conn->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::";
+
+        RTE_LOG(DEBUG, IPVS, "[%s->%s]%s [%d] %s %s:%u %s:%u %s:%u %s:%u"
+                " inpkts=%ld, inbytes=%ld, outpkts=%ld, outbytes=%ld\n",
+                cycles_to_stime(conn->ctime), sys_localtime_str(),
+                msg ? msg : "", rte_lcore_id(), inet_proto_name(conn->proto),
+                caddr, ntohs(conn->cport), vaddr, ntohs(conn->vport),
+                laddr, ntohs(conn->lport), daddr, ntohs(conn->dport),
+                rte_atomic64_read(&conn->stats.inpkts), rte_atomic64_read(&conn->stats.inbytes),
+                rte_atomic64_read(&conn->stats.outpkts), rte_atomic64_read(&conn->stats.outbytes));
+    }
+}
+#endif
+
 /* timeout hanlder */
 static int conn_expire(void *priv)
 {
@@ -452,6 +477,9 @@ static int conn_expire(void *priv)
         rte_mempool_put(conn->connpool, conn);
         this_conn_count--;
 
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
+        conn_stats_dump("del conn", conn);
+#endif
 #ifdef CONFIG_DPVS_IPVS_DEBUG
         conn_dump("del conn: ", conn);
 #endif
@@ -517,6 +545,9 @@ static void conn_flush(void)
 
                 rte_mempool_put(conn->connpool, conn);
                 this_conn_count--;
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
+                conn_stats_dump("conn flush", conn);
+#endif
             }
         }
     }
@@ -618,6 +649,9 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     rte_atomic32_set(&new->refcnt, 1);
     new->flags  = flags;
     new->state  = 0;
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
+    new->ctime = rte_rdtsc();
+#endif
 
     /* bind destination and corresponding trasmitter */
     err = conn_bind_dest(new, dest);

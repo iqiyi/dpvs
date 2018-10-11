@@ -198,10 +198,10 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 
 `dpvs` part is almost the same with the example in [simple fnat](#simple-fnat), except
 
-* one more route to **kni-host** is needed to pass the packets received from `dpvs` device to Linux `kni` device.
-* VIP should not set to `dpvs` by `dpip addr`, need be set to `kni` instead, so that `ospfd` can be aware of it and then to publish.
+* one more address/route is needed to communicate between dpvs and wan-side L3-switch. For ospf packets, dpvs will just send them to kernel.
+* VIP should not only set to `dpvs` by `dpip addr`, but also need to set to `kni`, so that `ospfd` can be aware of it and then to publish.
 
-> the prefix length of `kni_host` must be 32.
+> If you add any kni_host route which means all packets will be sent to kernel by dpvs, the prefix length of `kni_host` must be 32.
 
 ```bash
 #!/bin/sh -
@@ -221,8 +221,10 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 ./ipvsadm --add-laddr -z 192.168.100.200 -t 123.1.2.3:80 -F dpdk0
 ./ipvsadm --add-laddr -z 192.168.100.201 -t 123.1.2.3:80 -F dpdk0
 
-# add route to kni device.
-./dpip route add 172.10.0.2/32 dev dpdk1 scope kni_host
+# add addr/route for dpvs.
+./dpip addr add 123.1.2.3/32 dev dpdk1
+./dpip addr add 172.10.0.2/30 dev dpdk1
+./dpip route add default via 172.10.0.1 dev dpdk1
 ```
 
 Then, the `zebra/ospfd` part. Firstly, run the OSPF protocol between `DPVS` server and wan-side L3-switch, with the "inter-connection network" (here is `172.10.0.2/30`). For `DPVS`, we set the inter-connection IP on `dpdk1.kni`.
@@ -559,7 +561,7 @@ Hi, I am 10.40.84.170.
 
 ```
 
-<a id=`nat`/>
+<a id='nat'/>
 
 # NAT mode (one-arm)
 
@@ -581,13 +583,52 @@ Whatever, we give a simple example for NAT mode. Remind it only works single lco
 # config LAN network on bond0, routes will generate automatically
 ./dpip addr add 192.168.0.66/24 dev bond0
 ./dpip addr add 10.140.31.48/20 dev bond0
+
 # add service <VIP:vport> to forwarding, scheduling mode is RR
 ./ipvsadm -A -t 192.168.0.89:80 -s -rr
+
 # add two RSs, forwarding mode is NAT
 ./ipvsadm -A -t 192.168.0.89:80 -r 10.140.18.33 -m
 ./ipvsadm -A -t 192.168.0.89:80 -r 10.140.18.34 -m
+
 # add VIP and the route will generate automatically
 ./dpip addr add 192.168.0.89/32 dev bond0
+
+## keepalived.conf ##
+static_ipaddress {
+    192.168.0.66/24 dev bond0
+    10.140.31.48/20 dev bond0
+}
+
+virtual_server_group vip_nat {
+    192.168.0.89 80
+}
+
+virtual_server group vip_nat {
+    protocol tcp
+    lb_algo rr
+    lb_kind NAT
+
+    real server 10.140.18.33 80 {
+         weight 100
+         inhibit_on_failure
+         TCP_CHECK {
+            nb_sock_retry 2
+            connect_timeout 3
+            connect_port 80
+        }
+    }
+
+    real server 10.140.18.34 80 {
+         weight 100
+         inhibit_on_failure
+         TCP_CHECK {
+            nb_sock_retry 2
+            connect_timeout 3
+            connect_port 80
+        }
+    }
+}
 ```
 
 On RSs, back routes should be pointed to DPVS.
@@ -762,6 +803,27 @@ Setting up tunnel device is just like what we do on Linux, use `dpip` instead of
 ```bash
 $ dpip tunnel add mode ipip ipip1 local 1.1.1.1 remote 2.2.2.2
 $ dpip tunnel add gre1 mode gre local 1.1.1.1 remote 2.2.2.2 dev dpdk0
+```
+You can also use keepalived to configure tunnel instead of using ipvsadm.
+
+```
+tunnel_group tunnel_gre {
+    tunnel_entry gre100 {
+        kind gre
+        local 10.62.5.10
+        remote 10.62.5.20
+    }
+    tunnel_entry gre200 {
+        kind gre
+        local 10.62.5.10
+        remote 10.62.6.10
+   }
+   tunnel_entry gre300 {
+        kind gre
+        local 10.62.5.10
+        remote 10.62.6.11
+   }
+}
 ```
 
 Pls also check `dpip tunnel help` for details.

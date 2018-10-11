@@ -127,6 +127,13 @@ start_check(void)
 	if (reload) {
 		clear_diff_services();
 		copy_srv_states();
+		clear_diff_tunnel();
+	}
+
+	/* Initialize tunnel */
+	if (!init_tunnel()) {
+		stop_check();
+		return;
 	}
 
 	/* Initialize IPVS topology */
