@@ -142,7 +142,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
             /* set destination with the found template */
             dest = ct->dest;
         }
-        dport = ports[1];
+        dport = dest->port ? dest->port : ports[1];
     }
 
     /* create a new connection according to the template */
