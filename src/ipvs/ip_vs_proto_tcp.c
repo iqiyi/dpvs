@@ -21,6 +21,7 @@
 #include "dpdk.h"
 #include "ipv4.h"
 #include "ipv6.h"
+#include "route6.h"
 #include "neigh.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/proto.h"
@@ -970,33 +971,54 @@ tcp_state_out:
 
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir)
 {
-    struct flow4 fl4;
     struct netif_port *dev;
-    struct route_entry *rt = NULL;
 
     /* we need oif for correct rte_mempoll, 
      * most likely oif is conn->in/out_dev (fast-xmit),
      * if not, determine output device by route. */
     dev = ((dir == DPVS_CONN_DIR_INBOUND) ? conn->in_dev : conn->out_dev);
     if (unlikely(!dev)) {
-        memset(&fl4, 0, sizeof(struct flow4));
-        if (dir == DPVS_CONN_DIR_INBOUND) {
-            fl4.fl4_saddr = conn->laddr.in;
-            fl4.fl4_daddr = conn->daddr.in;
-            fl4.fl4_sport = conn->lport;
-            fl4.fl4_dport = conn->dport;
-        } else {
-            fl4.fl4_saddr = conn->vaddr.in;
-            fl4.fl4_daddr = conn->caddr.in;
-            fl4.fl4_sport = conn->vport;
-            fl4.fl4_dport = conn->cport;
+        if (AF_INET == conn->af) {
+            struct route_entry *rt = NULL;
+            struct flow4 fl4;
+            memset(&fl4, 0, sizeof(struct flow4));
+            if (dir == DPVS_CONN_DIR_INBOUND) {
+                fl4.fl4_saddr = conn->laddr.in;
+                fl4.fl4_daddr = conn->daddr.in;
+                fl4.fl4_sport = conn->lport;
+                fl4.fl4_dport = conn->dport;
+            } else {
+                fl4.fl4_saddr = conn->vaddr.in;
+                fl4.fl4_daddr = conn->caddr.in;
+                fl4.fl4_sport = conn->vport;
+                fl4.fl4_dport = conn->cport;
+            }
+            fl4.fl4_proto = IPPROTO_TCP;
+            if ((rt = route4_output(&fl4)) == NULL)
+                return NULL;
+            dev = rt->port;
+            route4_put(rt);
+        } else { /* AF_INET6 */
+            struct route6 *rt6 = NULL;
+            struct flow6 fl6;
+            memset(&fl6, 0, sizeof(struct flow6));
+            if (dir == DPVS_CONN_DIR_INBOUND) {
+                fl6.fl6_saddr = conn->laddr.in6;
+                fl6.fl6_daddr = conn->daddr.in6;
+                fl6.fl6_sport = conn->lport;
+                fl6.fl6_dport = conn->dport;
+            } else {
+                fl6.fl6_saddr = conn->vaddr.in6;
+                fl6.fl6_daddr = conn->caddr.in6;
+                fl6.fl6_sport = conn->vport;
+                fl6.fl6_dport = conn->cport;
+            }
+            fl6.fl6_proto = IPPROTO_TCP;
+            if ((rt6 = route6_output(NULL, &fl6)) == NULL)
+                return NULL;
+            dev = rt6->rt6_dev;
+            route6_put(rt6);
         }
-
-        fl4.fl4_proto = IPPROTO_TCP;
-        if ((rt = route4_output(&fl4)) == NULL)
-            return NULL;
-        dev = rt->port;
-        route4_put(rt);
     }
 
     return dev->mbuf_pool;
