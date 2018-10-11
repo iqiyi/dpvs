@@ -31,6 +31,7 @@
 #include "neigh.h"
 
 static int dp_vs_num_services = 0;
+static rte_atomic32_t dp_vs_num_nullservices;
 
 /**
  * hash table for svc
@@ -292,6 +293,10 @@ struct dp_vs_service *dp_vs_service_lookup(int af, uint16_t protocol,
     if ((svc = __dp_vs_service_get(af, protocol, vaddr, vport)))
         goto out;
 
+    if (af == AF_INET && rte_atomic32_read(&dp_vs_num_nullservices)
+        && (svc = __dp_vs_service_get(af, protocol, vaddr, 0)))
+        goto out;
+
     if (match && !is_empty_match(match))
         if ((svc = __dp_vs_svc_match_find(af, protocol, match)))
             goto out;
@@ -421,6 +426,8 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
         goto out_err;
     if(svc->af == AF_INET)
         dp_vs_num_services++;
+    if(svc->af == AF_INET && svc->port == 0)
+        rte_atomic32_inc(&dp_vs_num_nullservices);
 
     rte_rwlock_write_lock(&__dp_vs_svc_lock);
     dp_vs_svc_hash(svc);
@@ -528,6 +535,8 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
     /* Count only IPv4 services for old get/setsockopt interface */
     if (svc->af == AF_INET)
         dp_vs_num_services--;
+    if(svc->af == AF_INET && svc->port == 0)
+        rte_atomic32_dec(&dp_vs_num_nullservices);
 
     /* Unbind scheduler */
     dp_vs_unbind_scheduler(svc);
@@ -1072,6 +1081,7 @@ int dp_vs_service_init(void)
     rte_rwlock_init(&__dp_vs_svc_lock);
     dp_vs_dest_init();
     sockopt_register(&sockopts_svc);
+    rte_atomic32_set(&dp_vs_num_nullservices, 0);
     return EDPVS_OK;
 }
 
