@@ -884,10 +884,10 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
 
         ack_ip6h = (struct ip6_hdr *)ip6_hdr(mbuf);
 
-        syn_ip6h->ip6_flow = htonl((6<<28));
+        syn_ip6h->ip6_vfc = 0x60;  /* IPv6 */
         syn_ip6h->ip6_src = ack_ip6h->ip6_src;
         syn_ip6h->ip6_dst = ack_ip6h->ip6_dst;
-        syn_ip6h->ip6_plen = tcp_hdr_size;
+        syn_ip6h->ip6_plen = htons(tcp_hdr_size);
         syn_ip6h->ip6_nxt = NEXTHDR_TCP;
         syn_ip6h->ip6_hlim = IPV6_DEFAULT_HOPLIMIT;
     } else {
