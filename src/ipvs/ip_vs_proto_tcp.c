@@ -117,7 +117,7 @@ inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
     } else if (6 == version) {
         struct ip6_hdr *ip6h = ip6_hdr(mbuf);
         uint8_t ip6nxt = ip6h->ip6_nxt;
-        iphdrlen = ip6_skip_exthdr(mbuf, mbuf->l3_len, &ip6nxt);
+        iphdrlen = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
         if (iphdrlen < 0)
             return NULL;
     } else {
