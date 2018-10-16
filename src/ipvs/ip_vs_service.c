@@ -29,6 +29,8 @@
 #include "netif.h"
 #include "assert.h"
 #include "neigh.h"
+#include "ip_tunnel.h"
+#include "vlan.h"
 
 static int dp_vs_num_services = 0;
 
@@ -181,12 +183,31 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
     union inet_addr saddr, daddr;
     __be16 _ports[2], *ports;
     portid_t oif = NETIF_PORT_ID_ALL;
+    portid_t iif = NETIF_PORT_ID_ALL;
+    struct netif_port *in_dev;
+    struct ip_tunnel *tnl;
+    struct vlan_dev_priv *vlan;
 
     saddr.in.s_addr = iph->src_addr;
     daddr.in.s_addr = iph->dst_addr;
     ports = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf), sizeof(_ports), _ports);
     if (!ports)
         return NULL;
+
+    iif = mbuf->port;
+    in_dev = netif_port_get(mbuf->port);
+    if (!in_dev)
+        return NULL;
+
+    if (in_dev->type == PORT_TYPE_TUNNEL) {
+        tnl = netif_priv(in_dev);
+        if (tnl && tnl->link)
+            iif = tnl->link->id;
+    } else if (in_dev->type == PORT_TYPE_VLAN) {
+        vlan = netif_priv(in_dev);
+        if (vlan && vlan->real_dev)
+            iif = vlan->real_dev->id;
+    }
 
     list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
         struct dp_vs_match *m = svc->match;
@@ -218,7 +239,7 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
         if (svc->af == af && svc->proto == iph->next_proto_id &&
             __svc_in_range(af, &saddr, ports[0], &m->srange) &&
             __svc_in_range(af, &daddr, ports[1], &m->drange) &&
-            (!idev || idev->id == mbuf->port) &&
+            (!idev || idev->id == iif) &&
             (!odev || odev->id == oif)
            ) {
             rte_atomic32_inc(&svc->usecnt);
