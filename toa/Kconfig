@@ -1,0 +1,9 @@
+config TOA
+       tristate "The private TCP option for support Taobao LVS and dpvs's full-NAT feature"
+       default m
+       ---help---
+         This option saves the original IP address and source port of a TCP segment
+         after LVS performed NAT on it. So far, this module supports IPv4 and
+         IPv6.
+
+         Say m if unsure.
