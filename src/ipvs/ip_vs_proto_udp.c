@@ -324,8 +324,9 @@ static int insert_ipopt_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     struct iphdr *niph = NULL;
     struct ipopt_uoa *optuoa;
 
-    if ((ip4_hdrlen(mbuf) + sizeof(struct ipopt_uoa) > MAX_IPOPTLEN) ||
-            (mbuf->pkt_len + sizeof(struct ipopt_uoa) > mtu))
+    if ((ip4_hdrlen(mbuf) + sizeof(struct ipopt_uoa) >
+                sizeof(struct iphdr) + MAX_IPOPTLEN)
+            || (mbuf->pkt_len + sizeof(struct ipopt_uoa) > mtu))
         goto standalone_uoa;
 
     /*
