@@ -5,6 +5,8 @@
  *	Address include ip+port, Now support IPV4 and IPV6
  */
 
+unsigned long sk_data_ready_addr = 0;
+
 #define TOA_NIPQUAD_FMT "%u.%u.%u.%u"
 
 #define TOA_NIPQUAD(addr) \
@@ -13,6 +15,7 @@
  ((unsigned char *)&addr)[2], \
  ((unsigned char *)&addr)[3]
 
+#ifdef TOA_IPV6_ENABLE
 #define TOA_NIP6_FMT "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x"
 
 #define TOA_NIP6(addr) \
@@ -25,9 +28,6 @@
     ntohs((addr).s6_addr16[6]), \
     ntohs((addr).s6_addr16[7])
 
-unsigned long sk_data_ready_addr = 0;
-
-#ifdef TOA_IPV6_ENABLE
 static struct proto_ops *inet6_stream_ops_p = NULL;
 static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
 
@@ -49,8 +49,10 @@ struct toa_stats_entry toa_stats[] = {
 	TOA_STAT_ITEM("getname_toa_mismatch", GETNAME_TOA_MISMATCH_CNT),
 	TOA_STAT_ITEM("getname_toa_bypass", GETNAME_TOA_BYPASS_CNT),
 	TOA_STAT_ITEM("getname_toa_empty", GETNAME_TOA_EMPTY_CNT),
+#ifdef TOA_IPV6_ENABLE
 	TOA_STAT_ITEM("ip6_address_alloc", IP6_ADDR_ALLOC_CNT),
 	TOA_STAT_ITEM("ip6_address_free", IP6_ADDR_FREE_CNT),
+#endif
 	TOA_STAT_END
 };
 
@@ -70,10 +72,6 @@ static void *get_toa_data(int af, struct sk_buff *skb)
 	struct tcphdr *th;
 	int length;
 	unsigned char *ptr;
-
-	struct toa_ip4_data tdata;
-
-	void *ret_ptr = NULL;
 
 	TOA_DBG("get_toa_data called\n");
 
@@ -100,6 +98,10 @@ static void *get_toa_data(int af, struct sk_buff *skb)
 					return NULL;
 				if (TCPOPT_TOA == opcode &&
 					TCPOLEN_IP4_TOA == opsize) {
+
+					struct toa_ip4_data tdata;
+					void *ret_ptr = NULL;
+
 					memcpy(&tdata, ptr - 2, sizeof(tdata));
 					TOA_DBG("af = %d, find toa data: ip = "
 						TOA_NIPQUAD_FMT", port = %u\n",
@@ -113,9 +115,13 @@ static void *get_toa_data(int af, struct sk_buff *skb)
 							ret_ptr);
 						return ret_ptr;
 					}
+#ifdef TOA_IPV6_ENABLE
 					else if (af == AF_INET6) {
 						struct toa_ip6_data *ptr_toa_ip6 =
 							kmalloc(sizeof(struct toa_ip6_data), GFP_ATOMIC);
+						if (!ptr_toa_ip6) {
+							return NULL;
+						}
 						ptr_toa_ip6->opcode = opcode;
 						ptr_toa_ip6->opsize = TCPOLEN_IP6_TOA;
 						ipv6_addr_set(&ptr_toa_ip6->in6_addr, 0, 0,
@@ -125,13 +131,18 @@ static void *get_toa_data(int af, struct sk_buff *skb)
 						TOA_INC_STATS(ext_stats, IP6_ADDR_ALLOC_CNT);
 						return ptr_toa_ip6;
 					}
+#endif
 				}
-				
+
+#ifdef TOA_IPV6_ENABLE
 				if (TCPOPT_TOA == opcode &&
 				    TCPOLEN_IP6_TOA == opsize &&
 				    af == AF_INET6) {
 					struct toa_ip6_data *ptr_toa_ip6 =
 						kmalloc(sizeof(struct toa_ip6_data), GFP_ATOMIC);
+					if (!ptr_toa_ip6) {
+							return NULL;
+					}
 					memcpy(ptr_toa_ip6, ptr - 2, sizeof(struct toa_ip6_data));
 
 					TOA_DBG("find toa_v6 data : ip = "
@@ -143,6 +154,7 @@ static void *get_toa_data(int af, struct sk_buff *skb)
 					TOA_INC_STATS(ext_stats, IP6_ADDR_ALLOC_CNT);
 					return ptr_toa_ip6;
 				}
+#endif
 				ptr += opsize - 2;
 				length -= opsize;
 			}
@@ -260,7 +272,7 @@ get_kernel_ipv6_symbol(void)
         inet6_stream_ops_p =
                 (struct proto_ops *)kallsyms_lookup_name("inet6_stream_ops");
         if (inet6_stream_ops_p == NULL) {
-                TOA_INFO("CPU [%u] kallsyms_lookup_name findn't symbol inet6_stream_ops\n",
+                TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol inet6_stream_ops\n",
                         smp_processor_id());
     
                 return -1;    
@@ -268,14 +280,14 @@ get_kernel_ipv6_symbol(void)
         ipv6_specific_p =
                 (struct inet_connection_sock_af_ops *)kallsyms_lookup_name("ipv6_specific");
         if (ipv6_specific_p == NULL) {
-                TOA_INFO("CPU [%u] kallsyms_lookup_name findn't symbol ipv6_specific\n",
+                TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol ipv6_specific\n",
                         smp_processor_id());
                 return -1; 
         }   
         tcp_v6_syn_recv_sock_org_pt =
                 (syn_recv_sock_func_pt)kallsyms_lookup_name("tcp_v6_syn_recv_sock");
         if (tcp_v6_syn_recv_sock_org_pt == NULL) {
-                TOA_INFO("CPU [%u] kallsyms_lookup_name findn't symbol tcp_v6_syn_recv_sock\n",
+                TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol tcp_v6_syn_recv_sock\n",
                         smp_processor_id());
         	return -1;
 	}   
@@ -310,6 +322,7 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
 		else
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_NO_TOA_CNT);
+
 		TOA_DBG("tcp_v4_syn_recv_sock_toa: set "
 			"sk->sk_user_data to %p\n",
 			newsock->sk_user_data);
@@ -342,11 +355,13 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 	/* set our value if need */
 	if (NULL != newsock && NULL == newsock->sk_user_data) {
 		newsock->sk_user_data = get_toa_data(AF_INET6, skb);
-		newsock->sk_destruct = tcp_v6_sk_destruct_toa;
-		if (NULL != newsock->sk_user_data)
+		if (NULL != newsock->sk_user_data) {
+			newsock->sk_destruct = tcp_v6_sk_destruct_toa;
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
-		else
+		} else {
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_NO_TOA_CNT);
+		}
+
 		TOA_DBG("tcp_v6_syn_recv_sock_toa: set "
 			"sk->sk_user_data to %p\n",
 			newsock->sk_user_data);
