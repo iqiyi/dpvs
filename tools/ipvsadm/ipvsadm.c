@@ -404,6 +404,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		  NULL, NULL },
 		{ "icmp-service", 'q', POPT_ARG_STRING, &optarg, 'q',
 		  NULL, NULL },
+		{ "icmpv6-service", '1', POPT_ARG_STRING, &optarg, 'q',
+		  NULL, NULL },
 		{ "fwmark-service", 'f', POPT_ARG_STRING, &optarg, 'f',
 		  NULL, NULL },
 		{ "scheduler", 's', POPT_ARG_STRING, &optarg, 's', NULL, NULL },
@@ -549,23 +551,25 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		case 'u':
 		case 'q':
 			set_option(options, OPT_SERVICE);
-            if (c == 't')
-                ce->svc.protocol = IPPROTO_TCP;
-            else if (c == 'u')
-                ce->svc.protocol = IPPROTO_UDP;
-            else
-                ce->svc.protocol = IPPROTO_ICMP;
+			if (c == 't')
+				ce->svc.protocol = IPPROTO_TCP;
+			else if (c == 'u')
+				ce->svc.protocol = IPPROTO_UDP;
+			else if (c == 'q')
+				ce->svc.protocol = IPPROTO_ICMP;
+			else if (c == '1') // a~Z is out. ipvsadm is really not friendly here
+				ce->svc.protocol = IPPROTO_ICMPV6;
 
 			parse = parse_service(optarg, &ce->svc);
 			if (!(parse & SERVICE_ADDR))
 				fail(2, "illegal virtual server "
 				     "address[:port] specified");
 			break;
-        case 'H':
+		case 'H':
 			set_option(options, OPT_SERVICE);
-            if (parse_match_snat(optarg, &ce->svc) != 0)
+		if (parse_match_snat(optarg, &ce->svc) != 0)
 				fail(2, "illegal match specified");
-            break;
+			break;
 		case 'f':
 			set_option(options, OPT_SERVICE);
 			/*
@@ -1234,7 +1238,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 /*
  * comma separated parameters list, all fields is used to match packets.
  *
- *   proto      := tcp | udp | icmp
+ *   proto      := tcp | udp | icmp |icmpv6
  *   src-range  := RANGE
  *   dst-range  := RANGE
  *   iif        := IFNAME
@@ -1271,6 +1275,8 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
                 svc->protocol = IPPROTO_UDP;
             else if (strcmp(val, "icmp") == 0)
                 svc->protocol = IPPROTO_ICMP;
+            else if (strcmp(val, "icmpv6") == 0)
+                svc->protocol = IPPROTO_ICMPV6;
             else
                 return -1;
         } else if (strcmp(key, "src-range") == 0) {
@@ -1421,6 +1427,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --tcp-service  -t service-address   service-address is host[:port]\n"
 		"  --udp-service  -u service-address   service-address is host[:port]\n"
 		"  --icmp-service -q service-address   service-address is host[:port]\n"
+		"  --icmpv6-service -1 service-address   service-address is host[:port]\n"
 		"  --fwmark-service  -f fwmark         fwmark is an integer greater than zero\n"
 		"  --ipv6         -6                   fwmark entry uses IPv6\n"
 		"  --scheduler    -s scheduler         one of " SCHEDULERS ",\n"
@@ -1511,6 +1518,8 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 		snprintf(proto_str, sizeof(proto_str), "%s", "udp");
 	else if (conn_entry->proto == IPPROTO_ICMP)
 		snprintf(proto_str, sizeof(proto_str), "%s", "icmp");
+	else if (conn_entry->proto == IPPROTO_ICMPV6)
+		snprintf(proto_str, sizeof(proto_str), "%s", "icmpv6");
 	else
 		snprintf(proto_str, sizeof(proto_str), "%s", "--");
 
@@ -1743,8 +1752,10 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 				proto = "TCP";
 			else if (se->protocol == IPPROTO_UDP)
 				proto = "UDP";
-			else
+			else if (se->protocol == IPPROTO_ICMP)
 				proto = "ICMP";
+			else 
+				proto = "ICMPv6";
 
 			sprintf(svc_name, "%s  %s", proto, vname);
 			if (se->af != AF_INET6)
@@ -1758,9 +1769,11 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 			proto = "tcp";
 		else if (se->protocol == IPPROTO_UDP)
 			proto = "udp";
-		else
+		else if (se->protocol == IPPROTO_ICMP)
 			proto = "icmp";
-
+		else
+			proto = "icmpv6";
+			
 		if (format & FMT_RULE) {
 			snprintf(svc_name, sizeof(svc_name),
 			"-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
@@ -1773,11 +1786,13 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 			left -= snprintf(svc_name + strlen(svc_name), left,
 				"MATCH %s", proto);
             
-			if (strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+			if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
+                            strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
 				left -= snprintf(svc_name + strlen(svc_name), left,
 				",from=%s", se->srange);
 
-			if (strcmp(se->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+			if (strcmp(se->drange, "[::-::]:0-0") != 0 &&
+                            strcmp(se->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
 				left -= snprintf(svc_name + strlen(svc_name), left,
 				",to=%s", se->drange);
 
@@ -2211,6 +2226,9 @@ int service_to_port(const char *name, unsigned short proto)
 	else if (proto == IPPROTO_ICMP
 		 && (service = getservbyname(name, "icmp")) != NULL)
 		return ntohs((unsigned short) service->s_port);
+	else if (proto == IPPROTO_ICMPV6
+		 && (service = getservbyname(name, "icmpv6")) != NULL)
+		return ntohs((unsigned short) service->s_port);
 	else
 		return -1;
 }
@@ -2228,6 +2246,9 @@ static char * port_to_service(unsigned short port, unsigned short proto)
 		return service->s_name;
 	else if (proto == IPPROTO_ICMP &&
 		 (service = getservbyport(htons(port), "icmp")) != NULL)
+		return service->s_name;
+	else if (proto == IPPROTO_ICMPV6 &&
+		 (service = getservbyport(htons(port), "icmpv6")) != NULL)
 		return service->s_name;
 	else
 		return (char *) NULL;

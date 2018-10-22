@@ -256,10 +256,10 @@ static int ip6_mc_local_in(struct rte_mbuf *mbuf)
 static inline struct in6_addr *ip6_rt_nexthop(struct route6 *rt,
                                               struct in6_addr *daddr)
 {
-    if ((rt->rt6_flags & RTF_GATEWAY) && !ipv6_addr_any(&rt->rt6_gateway))
-        return &rt->rt6_gateway;
-    else
+    if (ipv6_addr_any(&rt->rt6_gateway))
         return daddr;
+    else
+        return &rt->rt6_gateway;
 }
 
 static inline unsigned int ip6_mtu_forward(struct route6 *rt)

@@ -48,7 +48,7 @@ uint16_t icmp6_csum(struct ip6_hdr *iph, struct icmp6_hdr *ich)
     return csum;
 }
 
-static inline void icmp6_send_csum(struct ip6_hdr *shdr, struct icmp6_hdr *ich)
+void icmp6_send_csum(struct ip6_hdr *shdr, struct icmp6_hdr *ich)
 {
     uint32_t csum, l4_len;
 
