@@ -60,7 +60,7 @@
  *      - ip_vs_nat_xmit() or ip_vs_out_snat_xmit()
  *      - handle_response()
  *
- *   + For ICMPv6 messages in SNAT/DNAT, checksum should be recaculate.
+ *   + For ICMPv6 messages in SNAT/DNAT/FULLNAT, checksum should be recaculate.
  *
  *   + For ICMP-Error, which includes original IP packet as payload:
  *     Those embedded IPs are not be handled here IPVS core.
