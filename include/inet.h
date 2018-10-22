@@ -129,6 +129,8 @@ static inline int inet_addr_range_parse(const char *param,
     if (_param[0] == '[') {
         ips++;
         ports = strrchr(_param, ']');
+        if (ports == NULL)
+            return EDPVS_INVAL;
         *ports++ = '\0';
         if (*ports == ':')
             *ports++ = '\0';
@@ -136,7 +138,7 @@ static inline int inet_addr_range_parse(const char *param,
             return EDPVS_INVAL;
     }
 
-    /* judge ipv4/ipv6 */
+    /* judge ipv4 */
     if (strrchr(_param, ':') == strchr(_param, ':')) {
         ports = strrchr(_param, ':');
         if (ports)

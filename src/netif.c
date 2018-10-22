@@ -3598,7 +3598,7 @@ static struct rte_eth_conf default_port_conf = {
         .mq_mode = ETH_MQ_TX_NONE,
     },
     .fdir_conf = {
-        .mode    = RTE_FDIR_MODE_SIGNATURE,
+        .mode    = RTE_FDIR_MODE_PERFECT,
         .pballoc = RTE_FDIR_PBALLOC_64K,
         .status  = RTE_FDIR_REPORT_STATUS/*_ALWAYS*/,
         .mask    = {
