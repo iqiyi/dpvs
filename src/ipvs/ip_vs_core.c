@@ -902,7 +902,8 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
     if (dp_vs_fill_iphdr(af, mbuf, &iph) != EDPVS_OK)
         return INET_ACCEPT;
 
-    if (unlikely(iph.proto == IPPROTO_ICMP)) {
+    if (unlikely(iph.proto == IPPROTO_ICMP ||
+                 iph.proto == IPPROTO_ICMPV6)) {
         /* handle related ICMP error to existing conn */
         verdict = dp_vs_in_icmp(af, mbuf, &related);
         if (related || verdict != INET_ACCEPT)

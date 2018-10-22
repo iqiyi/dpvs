@@ -28,6 +28,7 @@
 #include "inet.h"
 #include "ipv4.h"
 #include "ipv6.h"
+#include "icmp6.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/proto.h"
 #include "ipvs/proto_icmp.h"
@@ -58,6 +59,8 @@
  *     ICMP SNAT/DNAT only mapping the L3 address, which can be done with
  *      - ip_vs_nat_xmit() or ip_vs_out_snat_xmit()
  *      - handle_response()
+ *
+ *   + For ICMPv6 messages in SNAT/DNAT, checksum should be recaculate.
  *
  *   + For ICMP-Error, which includes original IP packet as payload:
  *     Those embedded IPs are not be handled here IPVS core.
@@ -232,6 +235,26 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
                           sport, dport, direct, reverse);
 }
 
+static int icmp6_csum_handler(struct dp_vs_proto *proto,
+                              struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
+{
+    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+    struct icmp6_hdr *ich;
+    uint8_t ip6nxt = ip6h->ip6_nxt;
+    int offset = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+
+    if (unlikely(mbuf_may_pull(mbuf, offset + sizeof(struct icmp6_hdr)) != 0))
+        return EDPVS_INVPKT;
+
+    ich = rte_pktmbuf_mtod_offset(mbuf, struct icmp6_hdr *, offset);
+    if (unlikely(!ich))
+        return EDPVS_INVPKT;
+
+    icmp6_send_csum(ip6h, ich);
+
+    return EDPVS_OK;
+}
+
 static int icmp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
                             struct rte_mbuf *mbuf, int dir)
 {
@@ -246,4 +269,18 @@ struct dp_vs_proto dp_vs_proto_icmp = {
     .conn_sched     = icmp_conn_sched,
     .conn_lookup    = icmp_conn_lookup,
     .state_trans    = icmp_state_trans,
+};
+
+struct dp_vs_proto dp_vs_proto_icmp6 = {
+    .name             = "ICMPV6",
+    .proto            = IPPROTO_ICMPV6,
+    .conn_sched       = icmp_conn_sched,
+    .conn_lookup      = icmp_conn_lookup,
+    .nat_in_handler   = icmp6_csum_handler,
+    .nat_out_handler  = icmp6_csum_handler,
+    .fnat_in_handler  = icmp6_csum_handler,
+    .fnat_out_handler = icmp6_csum_handler,
+    .snat_in_handler  = icmp6_csum_handler,
+    .snat_out_handler = icmp6_csum_handler,
+    .state_trans      = icmp_state_trans,
 };

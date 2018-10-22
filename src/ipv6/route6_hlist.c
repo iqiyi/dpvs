@@ -289,7 +289,7 @@ rt6_hlist_flow_match(const struct route6 *rt6, const struct flow6 *fl6)
     return true;
 }
 
-static struct route6 *rt6_hlist_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
+static struct route6 *rt6_hlist_lookup(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
     struct rt6_hlist *hlist;
     struct route6 *rt6;
@@ -308,12 +308,12 @@ static struct route6 *rt6_hlist_lookup(struct rte_mbuf *mbuf, struct flow6 *fl6)
     return NULL;
 }
 
-static struct route6 *rt6_hlist_input(struct rte_mbuf *mbuf, struct flow6 *fl6)
+static struct route6 *rt6_hlist_input(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
     return rt6_hlist_lookup(mbuf, fl6);
 }
 
-static struct route6 *rt6_hlist_output(struct rte_mbuf *mbuf, struct flow6 *fl6)
+static struct route6 *rt6_hlist_output(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
     return rt6_hlist_lookup(mbuf, fl6);
 }

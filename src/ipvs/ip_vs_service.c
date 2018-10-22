@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 #include "inet.h"
 #include "ipv4.h"
+#include "ipv6.h"
 #include "ipvs/service.h"
 #include "ipvs/dest.h"
 #include "ipvs/sched.h"
@@ -26,6 +27,7 @@
 #include "ipvs/blklst.h"
 #include "ctrl.h"
 #include "route.h"
+#include "route6.h"
 #include "netif.h"
 #include "assert.h"
 #include "neigh.h"
@@ -154,21 +156,28 @@ static inline bool __svc_in_range(int af,
                                   const union inet_addr *addr, __be16 port,
                                   const struct inet_addr_range *range)
 {
-    if (unlikely(af != AF_INET))
+    if (unlikely((af == AF_INET) && 
+        (ntohl(range->min_addr.in.s_addr) > ntohl(range->max_addr.in.s_addr))))
         return false;
 
-    if (unlikely(ntohl(range->min_addr.in.s_addr) > \
-        ntohl(range->max_addr.in.s_addr)))
+    if (unlikely((af == AF_INET6) &&
+        ipv6_addr_cmp(&range->min_addr.in6, &range->max_addr.in6) > 0))
         return false;
 
     if (unlikely(ntohs(range->min_port) > ntohs(range->max_port)))
         return false;
 
     /* if both min/max are zero, means need not check. */
-    if (range->max_addr.in.s_addr != htonl(INADDR_ANY)) {
-        if (ntohl(addr->in.s_addr) < ntohl(range->min_addr.in.s_addr) ||
-            ntohl(addr->in.s_addr) > ntohl(range->max_addr.in.s_addr))
-            return false;
+    if (!inet_is_addr_any(af, &range->max_addr)) {
+        if (af == AF_INET) {
+            if (ntohl(addr->in.s_addr) < ntohl(range->min_addr.in.s_addr) ||
+                ntohl(addr->in.s_addr) > ntohl(range->max_addr.in.s_addr))
+                return false;
+        } else {
+            if (ipv6_addr_cmp(&range->min_addr.in6, &addr->in6) > 0 ||
+                ipv6_addr_cmp(&range->max_addr.in6, &addr->in6) < 0)
+                return false;
+        }
     }
 
     if (range->max_port != 0) {
@@ -181,7 +190,7 @@ static inline bool __svc_in_range(int af,
 }
 
 static struct dp_vs_service *
-__dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
+__dp_vs_svc_match_get4(const struct rte_mbuf *mbuf)
 {
     struct route_entry *rt = mbuf->userdata;
     struct ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
@@ -196,36 +205,40 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
     if (!ports)
         return NULL;
 
+    /* snat is handled at pre-routing to check if oif
+     * is match perform route here. */
+    if (rt) {
+        if ((rt->flag & RTF_KNI) || (rt->flag & RTF_LOCALIN))
+            return NULL;
+        oif = rt->port->id;
+    } else {
+        rt = route4_input(mbuf, &daddr.in, &saddr.in,
+                          iph->type_of_service,
+                          netif_port_get(mbuf->port));
+        if (!rt)
+            return NULL;
+        if ((rt->flag & RTF_KNI) || (rt->flag & RTF_LOCALIN)) {
+            route4_put(rt);
+            return NULL;
+        }
+        oif = rt->port->id;
+        route4_put(rt);
+    }
+
     list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
         struct dp_vs_match *m = svc->match;
         struct netif_port *idev, *odev;
         assert(m);
 
-        /* snat is handled at pre-routing to check if oif
-         * is match perform route here. */
-        if (strlen(m->oifname)) {
-            if (!rt) {
-                rt = route4_input(mbuf, &daddr.in, &saddr.in,
-                                  iph->type_of_service,
-                                  netif_port_get(mbuf->port));
-                if (!rt)
-                    return NULL;
-
-                /* set mbuf->userdata to @rt as side-effect is not good!
-                 * although route will done again when out-xmit. */
-                oif = rt->port->id;
-                route4_put(rt);
-            } else {
-                oif = rt->port->id;
-            }
-        }
+        if (!strlen(m->oifname))
+            oif = NETIF_PORT_ID_ALL;
 
         idev = netif_port_get_by_name(m->iifname);
         odev = netif_port_get_by_name(m->oifname);
 
-        if (svc->af == af && svc->proto == iph->next_proto_id &&
-            __svc_in_range(af, &saddr, ports[0], &m->srange) &&
-            __svc_in_range(af, &daddr, ports[1], &m->drange) &&
+        if (svc->af == AF_INET && svc->proto == iph->next_proto_id &&
+            __svc_in_range(AF_INET, &saddr, ports[0], &m->srange) &&
+            __svc_in_range(AF_INET, &daddr, ports[1], &m->drange) &&
             (!idev || idev->id == mbuf->port) &&
             (!odev || odev->id == oif)
            ) {
@@ -235,6 +248,86 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
     }
 
     return NULL;
+}
+
+static struct dp_vs_service *
+__dp_vs_svc_match_get6(const struct rte_mbuf *mbuf)
+{
+    struct route6 *rt = mbuf->userdata;
+    struct ip6_hdr *iph = ip6_hdr(mbuf);
+    struct dp_vs_service *svc;
+    union inet_addr saddr, daddr;
+    __be16 _ports[2], *ports;
+    portid_t oif = NETIF_PORT_ID_ALL;
+
+    struct flow6 fl6 = {
+        .fl6_iif    = NULL,
+        .fl6_daddr  = iph->ip6_dst,
+        .fl6_saddr  = iph->ip6_src,
+        .fl6_proto  = iph->ip6_nxt,
+    };
+
+    saddr.in6 = iph->ip6_src;
+    daddr.in6 = iph->ip6_dst;
+    ports = mbuf_header_pointer(mbuf, ip6_hdrlen(mbuf), sizeof(_ports), _ports);
+    if (!ports)
+        return NULL;
+
+    /* snat is handled at pre-routing to check if oif
+     * is match perform route here. */
+    if (rt) {
+        if ((rt->rt6_flags & RTF_KNI) || (rt->rt6_flags & RTF_LOCALIN))
+            return NULL;
+        oif = rt->rt6_dev->id;
+    } else {
+        rt = route6_input(mbuf, &fl6);
+        if (!rt)
+            return NULL;
+
+        /* set mbuf->userdata to @rt as side-effect is not good!
+         * although route will done again when out-xmit. */
+        if ((rt->rt6_flags & RTF_KNI) || (rt->rt6_flags & RTF_LOCALIN)) {
+            route6_put(rt);
+            return NULL;
+        }
+        oif = rt->rt6_dev->id;
+        route6_put(rt);
+    }
+
+    list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
+        struct dp_vs_match *m = svc->match;
+        struct netif_port *idev, *odev;
+        assert(m);
+
+        if (!strlen(m->oifname))
+            oif = NETIF_PORT_ID_ALL;
+
+        idev = netif_port_get_by_name(m->iifname);
+        odev = netif_port_get_by_name(m->oifname);
+
+        if (svc->af == AF_INET6 && svc->proto == iph->ip6_nxt &&
+            __svc_in_range(AF_INET6, &saddr, ports[0], &m->srange) &&
+            __svc_in_range(AF_INET6, &daddr, ports[1], &m->drange) &&
+            (!idev || idev->id == mbuf->port) &&
+            (!odev || odev->id == oif)
+           ) {
+            rte_atomic32_inc(&svc->usecnt);
+            return svc;
+        }
+    }
+
+    return NULL;
+}
+
+static struct dp_vs_service *
+__dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
+{
+    if (af == AF_INET)
+        return __dp_vs_svc_match_get4(mbuf);
+    else if (af == AF_INET6)
+        return __dp_vs_svc_match_get6(mbuf);
+    else
+        return NULL;
 }
 
 int dp_vs_match_parse(const char *srange, const char *drange,
@@ -856,7 +949,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     }
 
     if (usvc.protocol != IPPROTO_TCP && usvc.protocol != IPPROTO_UDP &&
-        usvc.protocol != IPPROTO_ICMP) {
+        usvc.protocol != IPPROTO_ICMP && usvc.protocol != IPPROTO_ICMPV6) {
         RTE_LOG(ERR, SERVICE, "%s: protocol not support.\n", __func__);
         return EDPVS_INVAL;
     }

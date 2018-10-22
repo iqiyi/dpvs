@@ -154,12 +154,12 @@ static int rt6_destroy_lcore(void *arg)
     return g_rt6_method->rt6_destroy_lcore(arg);
 }
 
-struct route6 *route6_input(struct rte_mbuf *mbuf, struct flow6 *fl6)
+struct route6 *route6_input(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
     return g_rt6_method->rt6_input(mbuf, fl6);
 }
 
-struct route6 *route6_output(struct rte_mbuf *mbuf, struct flow6 *fl6)
+struct route6 *route6_output(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
     return g_rt6_method->rt6_output(mbuf, fl6);
 }
