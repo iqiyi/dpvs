@@ -107,4 +107,20 @@ int ip6_skip_exthdr(const struct rte_mbuf *imbuf, int start,
 /* get ipv6 header length, including extension header length. */
 int ip6_hdrlen(const struct rte_mbuf *mbuf);
 
+/*
+ * Exthdr supported checksum function for upper layer protocol.
+ * @param ol_flags
+ *    The ol_flags of the associated mbuf.
+ * @param exthdrlen
+ *    The IPv6 fixed header length plus the extension header length.
+ * @param l4_proto
+ *    The L4 protocol type, i.e. IPPROTO_TCP, IPPROTO_UDP, IPPROTO_ICMP
+ * @return
+ *    The non-complemented checksum to set in the L4 header.
+ */
+uint16_t ip6_phdr_cksum(struct ip6_hdr*, uint64_t ol_flags,
+		uint32_t exthdrlen, uint8_t l4_proto);
+uint16_t ip6_udptcp_cksum(struct ip6_hdr*, const void *l4_hdr,
+		uint32_t exthdrlen, uint8_t l4_proto);
+
 #endif /* __DPVS_IPV6_H__ */

@@ -18,6 +18,8 @@
 #ifndef __DP_VS_PROTO_UDP_H__
 #define __DP_VS_PROTO_UDP_H__
 
+#include <netinet/udp.h>
+
 enum {
     DPVS_UDP_S_NORMAL   = 0,
     DPVS_UDP_S_LAST
@@ -27,5 +29,8 @@ extern int g_defence_udp_drop;
 
 void install_proto_udp_keywords(void);
 void udp_keyword_value_init(void);
+
+void udp4_send_csum(struct ipv4_hdr *iph, struct udphdr *uh);
+void udp6_send_csum(struct ipv6_hdr *iph, struct udphdr *uh);
 
 #endif

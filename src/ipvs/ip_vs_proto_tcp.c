@@ -151,7 +151,8 @@ inline void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th)
  */
 inline void tcp6_send_csum(struct ipv6_hdr *iph, struct tcphdr *th) {
     th->check = 0;
-    th->check = rte_ipv6_udptcp_cksum(iph, th);
+    th->check = ip6_udptcp_cksum((struct ip6_hdr *)iph, th,
+            (void *)th - (void *)iph, IPPROTO_TCP);
 }
 
 static inline uint32_t seq_scale(uint32_t seq)
@@ -663,11 +664,11 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
 
     if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
         if (AF_INET6 == af) {
-            mbuf->l4_len = ntohs(ip6_hdr(mbuf)->ip6_plen);
-            mbuf->l3_len = sizeof(struct ip6_hdr);
+            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+            mbuf->l3_len = iphdrlen;
+            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6_hdr(mbuf),
-                                            mbuf->ol_flags);
+            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
         } else {
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
@@ -730,11 +731,11 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
 
     if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
         if (AF_INET6 == af) {
-            mbuf->l4_len = ntohs(ip6_hdr(mbuf)->ip6_plen);
-            mbuf->l3_len = sizeof(struct ip6_hdr);
+            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+            mbuf->l3_len = iphdrlen;
+            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6_hdr(mbuf),
-                                            mbuf->ol_flags);
+            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
         } else {
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
@@ -783,11 +784,11 @@ static int tcp_snat_in_handler(struct dp_vs_proto *proto,
     /* leverage HW TX TCP csum offload if possible */
     if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
         if (AF_INET6 == af) {
-            mbuf->l4_len = ntohs(ip6_hdr(mbuf)->ip6_plen);
-            mbuf->l3_len = sizeof(struct ip6_hdr);
+            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+            mbuf->l3_len = iphdrlen;
+            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6_hdr(mbuf),
-                                            mbuf->ol_flags);
+            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
         } else {
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
@@ -836,11 +837,11 @@ static int tcp_snat_out_handler(struct dp_vs_proto *proto,
     /* leverage HW TX TCP csum offload if possible */
     if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
         if (AF_INET6 == af) {
-            mbuf->l4_len = ntohs(ip6_hdr(mbuf)->ip6_plen);
-            mbuf->l3_len = sizeof(struct ip6_hdr);
+            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+            mbuf->l3_len = iphdrlen;
+            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6_hdr(mbuf),
-                                            mbuf->ol_flags);
+            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
         } else {
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
