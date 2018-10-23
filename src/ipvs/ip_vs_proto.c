@@ -101,9 +101,9 @@ int dp_vs_proto_init(void)
     return EDPVS_OK;
 
 icmp_error:
-    proto_unregister(&dp_vs_proto_tcp);
-icmp6_error:
     proto_unregister(&dp_vs_proto_icmp6);
+icmp6_error:
+    proto_unregister(&dp_vs_proto_tcp);
 tcp_error:
     proto_unregister(&dp_vs_proto_udp);
     return err;

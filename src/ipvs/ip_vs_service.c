@@ -255,6 +255,7 @@ __dp_vs_svc_match_get6(const struct rte_mbuf *mbuf)
 {
     struct route6 *rt = mbuf->userdata;
     struct ip6_hdr *iph = ip6_hdr(mbuf);
+    uint8_t ip6nxt = iph->ip6_nxt;
     struct dp_vs_service *svc;
     union inet_addr saddr, daddr;
     __be16 _ports[2], *ports;
@@ -305,7 +306,9 @@ __dp_vs_svc_match_get6(const struct rte_mbuf *mbuf)
         idev = netif_port_get_by_name(m->iifname);
         odev = netif_port_get_by_name(m->oifname);
 
-        if (svc->af == AF_INET6 && svc->proto == iph->ip6_nxt &&
+        ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+
+        if (svc->af == AF_INET6 && svc->proto == ip6nxt &&
             __svc_in_range(AF_INET6, &saddr, ports[0], &m->srange) &&
             __svc_in_range(AF_INET6, &daddr, ports[1], &m->drange) &&
             (!idev || idev->id == mbuf->port) &&
