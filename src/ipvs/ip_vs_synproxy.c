@@ -625,10 +625,9 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         ip6h->ip6_hlim = dp_vs_synproxy_ctrl_synack_ttl;
 
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
-            mbuf->l3_len = iphlen;
-            /* consider exthdr as L4 payload */
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) - iphlen;
-            th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr*)ip6h, mbuf->ol_flags);
+            mbuf->l3_len = (void *)th - (void *)ip6h;
+            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - mbuf->l3_len;
+            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, mbuf->l3_len, IPPROTO_TCP);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return;

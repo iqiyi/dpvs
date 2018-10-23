@@ -818,3 +818,77 @@ int ip6_hdrlen(const struct rte_mbuf *mbuf) {
     /* ip6_skip_exthdr may return -1 */
     return (ip6_hdrlen >= 0) ? ip6_hdrlen : sizeof(struct ip6_hdr);
 }
+
+/*
+ * "ip6_phdr_cksum" is a upgraded version of DPDK routine "rte_ipv6_phdr_cksum"
+ * to support IPv6 extension headers (RFC 2460).
+ * */
+uint16_t ip6_phdr_cksum(struct ip6_hdr *ip6h, uint64_t ol_flags,
+        uint32_t exthdrlen, uint8_t l4_proto)
+{
+    uint16_t csum;
+    uint8_t ip6nxt = ip6h->ip6_nxt;
+    uint32_t ip6plen = ip6h->ip6_plen;
+    struct in6_addr ip6dst = ip6h->ip6_dst;
+
+    ip6h->ip6_nxt = l4_proto;
+
+    /* length of L4 header plus L4 data */
+    ip6h->ip6_plen = htons(ntohs(ip6h->ip6_plen) +
+            sizeof(struct ip6_hdr) - exthdrlen);
+
+    /* ip6_dst translation for NEXTHDR_ROUTING exthdrs */
+    if (unlikely(ip6nxt == NEXTHDR_ROUTING)) {
+        struct ip6_rthdr0 *rh = (struct ip6_rthdr0 *)(ip6h + 1);
+        if (likely(rh->ip6r0_segleft > 0))
+            ip6h->ip6_dst = rh->ip6r0_addr[rh->ip6r0_segleft - 1];
+    }
+    /*FIXME: what if NEXTHDR_ROUTING is not the first exthdr? */
+
+    csum = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6h, ol_flags);
+
+    /* restore original ip6h header */
+    ip6h->ip6_nxt = ip6nxt;
+    ip6h->ip6_plen = ip6plen;
+    if (unlikely(ip6nxt == NEXTHDR_ROUTING))
+        ip6h->ip6_dst = ip6dst;
+
+    return csum;
+}
+
+/*
+ * "ip6_udptcp_cksum" is a upgraded version of DPDK routine "rte_ipv6_udptcp_cksum"
+ * to support IPv6 extension headers (RFC 2460).
+ * */
+uint16_t ip6_udptcp_cksum(struct ip6_hdr *ip6h, const void *l4_hdr,
+        uint32_t exthdrlen, uint8_t l4_proto)
+{
+    uint16_t csum;
+    uint8_t ip6nxt = ip6h->ip6_nxt;
+    uint32_t ip6plen = ip6h->ip6_plen;
+    struct in6_addr ip6dst = ip6h->ip6_dst;
+
+    ip6h->ip6_nxt = l4_proto;
+
+    /* length of L4 header plus L4 data */
+    ip6h->ip6_plen = htons(ntohs(ip6h->ip6_plen) +
+            sizeof(struct ip6_hdr) - exthdrlen);
+
+    /* ip6_dst translation for NEXTHDR_ROUTING exthdrs */
+    if (unlikely(ip6nxt == NEXTHDR_ROUTING)) {
+        struct ip6_rthdr0 *rh = (struct ip6_rthdr0 *)(ip6h + 1);
+        if (likely(rh->ip6r0_segleft > 0))
+            ip6h->ip6_dst = rh->ip6r0_addr[rh->ip6r0_segleft - 1];
+    }
+    /*FIXME: what if NEXTHDR_ROUTING is not the first exthdr? */
+
+    csum = rte_ipv6_udptcp_cksum((struct ipv6_hdr *)ip6h, l4_hdr);
+
+    /* restore original ip6h header */
+    ip6h->ip6_nxt = ip6nxt;
+    ip6h->ip6_plen = ip6plen;
+    if (unlikely(ip6nxt == NEXTHDR_ROUTING))
+        ip6h->ip6_dst = ip6dst;
+
+    return csum;
+}
