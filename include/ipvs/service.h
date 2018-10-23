@@ -114,7 +114,7 @@ struct dp_vs_service_conf {
 struct dp_vs_service_entry {
     int                 af;
     uint16_t            proto;
-    union inet_addr      addr;
+    union inet_addr     addr;
     uint16_t            port;
     uint32_t            fwmark;
 

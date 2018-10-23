@@ -208,7 +208,7 @@ static struct route6 *rt6_lpm_lookup(const struct in6_addr *addr)
     return rt6;
 }
 
-static struct route6 *rt6_lpm_input(struct rte_mbuf *mbuf, struct flow6 *fl6)
+static struct route6 *rt6_lpm_input(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
     struct route6 *rt6;
 
@@ -232,7 +232,7 @@ miss:
     return NULL;
 }
 
-static struct route6 *rt6_lpm_output(struct rte_mbuf *mbuf, struct flow6 *fl6)
+static struct route6 *rt6_lpm_output(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
     struct route6 *rt6;
 

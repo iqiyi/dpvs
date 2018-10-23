@@ -165,7 +165,10 @@ static void node_fini(struct node_s *node)
         node->data = NULL;
     }
 
-    rte_free(node);
+    if (node->replicas > 1)
+        node->replicas--;
+    else
+        rte_free(node);
 }
 
 static int dp_vs_conhash_init_svc(struct dp_vs_service *svc)

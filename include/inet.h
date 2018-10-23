@@ -87,9 +87,10 @@ struct inet_stats {
 static inline const char *inet_proto_name(uint8_t proto)
 {
     const static char *proto_names[256] = {
-        [IPPROTO_TCP]   = "TCP",
-        [IPPROTO_UDP]   = "UDP",
-        [IPPROTO_ICMP]  = "ICMP",
+        [IPPROTO_TCP]     = "TCP",
+        [IPPROTO_UDP]     = "UDP",
+        [IPPROTO_ICMP]    = "ICMP",
+        [IPPROTO_ICMPV6]  = "ICMPV6",
     };
 
     return proto_names[proto] ? proto_names[proto] : "<unknow>";
@@ -116,7 +117,7 @@ static inline int inet_addr_range_parse(const char *param,
                                         struct inet_addr_range *range,
                                         int *af)
 {
-    char _param[256], *ips, *ports;
+    char _param[256], *ips, *ports = NULL;
     char *ip1, *ip2, *port1, *port2;
 
     if (strlen(param) == 0)
@@ -128,12 +129,21 @@ static inline int inet_addr_range_parse(const char *param,
     if (_param[0] == '[') {
         ips++;
         ports = strrchr(_param, ']');
+        if (ports == NULL)
+            return EDPVS_INVAL;
         *ports++ = '\0';
+        if (*ports == ':')
+            *ports++ = '\0';
+        else
+            return EDPVS_INVAL;
     }
-    ports = strrchr(_param, ':');
 
-    if (ports)
-        *ports++ = '\0';
+    /* judge ipv4 */
+    if (strrchr(_param, ':') == strchr(_param, ':')) {
+        ports = strrchr(_param, ':');
+        if (ports)
+            *ports++ = '\0';
+    }
 
     ip1 = ips;
     ip2 = strrchr(ips, '-');
@@ -195,7 +205,10 @@ static inline int inet_addr_range_dump(int af,
     snprintf(min_port, sizeof(min_port), "%u",  ntohs(range->min_port));
     snprintf(max_port, sizeof(max_port), "%u",  ntohs(range->max_port));
 
-    return snprintf(buf, size, "%s-%s:%s-%s",
+    if (af == AF_INET)
+        return snprintf(buf, size, "%s-%s:%s-%s",
+                    min_ip, max_ip, min_port, max_port);
+    return snprintf(buf, size, "[%s-%s]:%s-%s",
                     min_ip, max_ip, min_port, max_port);
 }
 
