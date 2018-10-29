@@ -625,10 +625,9 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         ip6h->ip6_hlim = dp_vs_synproxy_ctrl_synack_ttl;
 
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
-            mbuf->l3_len = iphlen;
-            /* consider exthdr as L4 payload */
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) - iphlen;
-            th->check = rte_ipv6_phdr_cksum((struct ipv6_hdr*)ip6h, mbuf->ol_flags);
+            mbuf->l3_len = (void *)th - (void *)ip6h;
+            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - mbuf->l3_len;
+            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, mbuf->l3_len, IPPROTO_TCP);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return;
@@ -884,10 +883,10 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
 
         ack_ip6h = (struct ip6_hdr *)ip6_hdr(mbuf);
 
-        syn_ip6h->ip6_flow = htonl((6<<28));
+        syn_ip6h->ip6_vfc = 0x60;  /* IPv6 */
         syn_ip6h->ip6_src = ack_ip6h->ip6_src;
         syn_ip6h->ip6_dst = ack_ip6h->ip6_dst;
-        syn_ip6h->ip6_plen = tcp_hdr_size;
+        syn_ip6h->ip6_plen = htons(tcp_hdr_size);
         syn_ip6h->ip6_nxt = NEXTHDR_TCP;
         syn_ip6h->ip6_hlim = IPV6_DEFAULT_HOPLIMIT;
     } else {

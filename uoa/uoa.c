@@ -727,6 +727,18 @@ static struct uoa_map *uoa_opp_rcv(struct iphdr *iph, struct sk_buff *skb)
 	 */
 	skb_set_transport_header(skb, ip_hdrlen(skb) + opplen);
 
+	/* Old kernel like 2.6.32 use "iph->ihl" rather "skb->transport_header"
+	 * to get UDP header offset. The UOA private protocol data should be
+	 * erased here, but this should move skb data and harm perfomance. As a
+	 * compromise, we convert the private protocol data into NOP IP option
+	 * data if possible.*/
+	if (iph->ihl + (opplen >> 2) < 16) {
+		iph->ihl = (iph->ihl) + (opplen >> 2);
+		memset(opph, opplen, IPOPT_NOOP);
+	} else {
+		pr_warn("IP header has no room to convert uoa data into option.\n");
+	}
+
 	/* need change it to parse transport layer */
 	iph->protocol = opph->protocol;
 	ip_send_check(iph);
