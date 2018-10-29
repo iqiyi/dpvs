@@ -45,7 +45,8 @@ void conhash_fini(struct conhash_s *conhash,void (*node_fini)(struct node_s*))
             if (rbnode && rbnode->data) 
             {
                 node = ((struct virtual_node_s*)rbnode->data)->node;
-                (*node_fini)(node);
+                if (--(node->replicas) == 0)
+                    (*node_fini)(node);
             }
             __conhash_del_rbnode(rbnode);
         }
