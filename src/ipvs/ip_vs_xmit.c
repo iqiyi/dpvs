@@ -155,6 +155,7 @@ static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
                           struct dp_vs_conn *conn)
 {
     struct ether_hdr *eth = NULL;
+    struct netif_port *port = NULL;
 
     if (!is_zero_ether_addr(&conn->out_dmac) &&
         !is_zero_ether_addr(&conn->out_smac))
@@ -162,6 +163,10 @@ static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
 
     if (unlikely(mbuf->l2_len != sizeof(struct ether_hdr)))
         return;
+
+    port = netif_port_get(mbuf->port);
+    if (port)
+        conn->out_dev = port;
 
     eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
 
@@ -179,6 +184,7 @@ static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
                              struct dp_vs_conn *conn)
 {
     struct ether_hdr *eth = NULL;
+    struct netif_port *port = NULL;
 
     if (!is_zero_ether_addr(&conn->in_dmac) &&
         !is_zero_ether_addr(&conn->in_smac))
@@ -186,6 +192,10 @@ static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
 
     if (mbuf->l2_len != sizeof(struct ether_hdr))
         return;
+
+    port = netif_port_get(mbuf->port);
+    if (port)
+        conn->in_dev = port;
 
     eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
 
