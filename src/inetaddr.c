@@ -825,6 +825,7 @@ void inet_addr_select(int af, const struct netif_port *dev,
     } else if (af == AF_INET6) {
         addr->in6 = in6addr_any;
     } else {
+        idev_put(idev);
         return;
     }
 
@@ -851,6 +852,7 @@ void inet_addr_select(int af, const struct netif_port *dev,
 
     /* should we use other interface's address ? */
     rte_rwlock_read_unlock(&in_addr_lock);
+    idev_put(idev);
     return;
 }
 

@@ -342,6 +342,7 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
         lladdr = ndisc_opt_addr_data(ndopts.nd_opts_src_lladdr, dev);
         if (!lladdr) {
             RTE_LOG(ERR, NEIGHBOUR, "[%s] NS: invalid link-layer address\n", __func__);
+            inet_addr_ifa_put(ifa);
             return EDPVS_DROP;
         }
         /*
@@ -352,10 +353,12 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
         if (dad) {
             RTE_LOG(ERR, NEIGHBOUR, "[%s] NS: bad DAD packet (link-layer address option)\n", \
                                                                              __func__);
+            inet_addr_ifa_put(ifa);
             return EDPVS_DROP;
         }
     } else {
         /* ingnore mbuf without opt */
+        inet_addr_ifa_put(ifa);
         return EDPVS_KNICONTINUE;
     }
 

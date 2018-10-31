@@ -131,12 +131,15 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     struct rte_mbuf *mbuf;
     struct icmp6_hdr *ich;
     struct flow6 fl6;
+    struct inet_ifaddr *ifa;
     int room, err;
     int addr_type = 0;
     
-    if (inet_addr_ifa_get(AF_INET6, netif_port_get(imbuf->port), 
-                          (union inet_addr *)&iph->ip6_dst)) {
+    ifa = inet_addr_ifa_get(AF_INET6, netif_port_get(imbuf->port),
+                           (union inet_addr *)&iph->ip6_dst);
+    if (ifa) {
         saddr = &iph->ip6_dst;
+        inet_addr_ifa_put(ifa);
     }
 
     addr_type = ipv6_addr_type(&iph->ip6_dst);
