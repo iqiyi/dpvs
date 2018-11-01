@@ -27,6 +27,15 @@
 #include "ipvs/conn.h"
 #include "ipvs/proto.h"
 #include "ipvs/service.h"
+#include "ipvs/redirect.h"
+
+/*
+ * the same bucket size for per-lcore connection hash table and the global
+ * connection template hash table
+ */
+#define DPVS_CONN_TAB_BITS      20
+#define DPVS_CONN_TAB_SIZE      (1 << DPVS_CONN_TAB_BITS)
+#define DPVS_CONN_TAB_MASK      (DPVS_CONN_TAB_SIZE - 1)
 
 enum {
     DPVS_CONN_DIR_INBOUND = 0,
@@ -150,27 +159,7 @@ struct dp_vs_conn {
     uint64_t ctime;                     /* create time */
 
     /* connection redirect in nat-mode */
-    struct dp_vs_conn_redirect  *redirect;
-} __rte_cache_aligned;
-
-/*
- * The conneciton redirect tuple is only for the reverse tuple
- * (inside -> outside) in nat-mode.
- */
-struct dp_vs_conn_redirect {
-    struct list_head     list;
-
-    uint8_t              af;
-    uint8_t              proto;
-    lcoreid_t            cid;
-    uint8_t              padding;
-
-    union inet_addr      saddr;
-    union inet_addr      daddr;
-    uint16_t             sport;
-    uint16_t             dport;
-
-    struct rte_mempool  *redirect_pool;
+    struct dp_vs_redirect  *redirect;
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
@@ -292,8 +281,29 @@ static inline void dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn 
     rte_atomic32_inc(&ctl_conn->n_control);
 }
 
-struct dp_vs_conn_redirect *dp_vs_conn_get_redirect(int af, uint16_t proto,
-    const union inet_addr *saddr, const union inet_addr *daddr,
-    uint16_t sport, uint16_t dport);
+static inline bool
+dp_vs_conn_is_redirect_hashed(struct dp_vs_conn *conn)
+{
+    return  (conn->flags & DPVS_CONN_F_REDIRECT_HASHED) ? true : false;
+}
+
+static inline void
+dp_vs_conn_set_redirect_hashed(struct dp_vs_conn *conn)
+{
+    conn->flags |= DPVS_CONN_F_REDIRECT_HASHED;
+}
+
+static inline void
+dp_vs_conn_clear_redirect_hashed(struct dp_vs_conn *conn)
+{
+    conn->flags &= ~DPVS_CONN_F_REDIRECT_HASHED;
+}
+
+uint32_t dp_vs_conn_hashkey(int af,
+    const union inet_addr *saddr, uint16_t sport,
+    const union inet_addr *daddr, uint16_t dport,
+    uint32_t mask);
+int dp_vs_conn_pool_size(void);
+int dp_vs_conn_pool_cache_size(void);
 
 #endif /* __DPVS_CONN_H__ */

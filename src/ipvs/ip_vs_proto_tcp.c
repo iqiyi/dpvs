@@ -541,11 +541,11 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
             }
         }
     } else {
-        struct dp_vs_conn_redirect *r;
+        struct dp_vs_redirect *r;
 
-        r = dp_vs_conn_get_redirect(iph->af, iph->proto,
-                                    &iph->saddr, &iph->daddr,
-                                    th->source, th->dest);
+        r = dp_vs_redirect_get(iph->af, iph->proto,
+                               &iph->saddr, &iph->daddr,
+                               th->source, th->dest);
         if (r) {
             *peer_cid = r->cid;
         }

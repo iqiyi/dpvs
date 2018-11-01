@@ -32,7 +32,7 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/blklst.h"
 #include "ipvs/proto_udp.h"
-#include "ipvs/pkt_fwd.h"
+#include "ipvs/redirect.h"
 
 #define icmp4_id(icmph)      (((icmph)->un).echo.id)
 
@@ -517,7 +517,7 @@ static int dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
         /* recover mbuf.data_off to outer Ether header */
         rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr) + off);
 
-        return dp_vs_pkt_fwd(mbuf, peer_cid);
+        return dp_vs_redirect_pkt(mbuf, peer_cid);
     }
 
     if (!conn)
@@ -634,7 +634,7 @@ static int dp_vs_in(void *priv, struct rte_mbuf *mbuf,
         /* recover mbuf.data_off to outer Ether header */
         rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr));
 
-        return dp_vs_pkt_fwd(mbuf, peer_cid);
+        return dp_vs_redirect_pkt(mbuf, peer_cid);
     }
 
     if (unlikely(!conn)) {
@@ -771,10 +771,10 @@ int dp_vs_init(void)
         goto err_conn;
     }
 
-    err = dp_vs_pkt_fwd_init();
+    err = dp_vs_redirects_init();
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, IPVS, "fail to init pkt_fwd: %s\n", dpvs_strerror(err));
-        goto err_pkt_fwd;
+        RTE_LOG(ERR, IPVS, "fail to init redirect: %s\n", dpvs_strerror(err));
+        goto err_redirect;
     }
 
     err = dp_vs_synproxy_init();
@@ -827,9 +827,9 @@ err_serv:
 err_sched:
     dp_vs_synproxy_term();
 err_synproxy:
+    dp_vs_redirects_term();
+err_redirect:
     dp_vs_conn_term();
-err_pkt_fwd:
-    dp_vs_pkt_fwd_term();
 err_conn:
     dp_vs_laddr_term();
 err_laddr:

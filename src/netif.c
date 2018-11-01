@@ -41,7 +41,7 @@
 #include <rte_arp.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <ipvs/pkt_fwd.h>
+#include <ipvs/redirect.h>
 
 
 #define NETIF_PKTPOOL_NB_MBUF_DEF   65535
@@ -2280,9 +2280,9 @@ static void lcore_process_arp_ring(struct netif_queue_conf *qconf, lcoreid_t cid
     }
 }
 
-static void lcore_process_pkt_fwd_ring(struct netif_queue_conf *qconf, lcoreid_t cid)
+static void lcore_process_redirect_ring(struct netif_queue_conf *qconf, lcoreid_t cid)
 {
-    dp_vs_pkt_fwd_ring_proc(qconf, cid);
+    dp_vs_redirect_ring_proc(qconf, cid);
 }
 
 static void lcore_job_recv_fwd(void *arg)
@@ -2303,7 +2303,7 @@ static void lcore_job_recv_fwd(void *arg)
             qconf = &lcore_conf[lcore2index[cid]].pqs[i].rxqs[j];
 
             lcore_process_arp_ring(qconf, cid);
-            lcore_process_pkt_fwd_ring(qconf, cid);
+            lcore_process_redirect_ring(qconf, cid);
             qconf->len = netif_rx_burst(pid, qconf);
 
             lcore_stats_burst(&lcore_stats[cid], qconf->len);

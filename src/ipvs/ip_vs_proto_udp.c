@@ -146,11 +146,11 @@ udp_conn_lookup(struct dp_vs_proto *proto,
             neigh_confirm(conn->in_nexthop.in, conn->in_dev);
         }
     } else {
-        struct dp_vs_conn_redirect *r;
+        struct dp_vs_redirect *r;
 
-        r = dp_vs_conn_get_redirect(iph->af, iph->proto,
-                                    &iph->saddr, &iph->daddr,
-                                    uh->src_port, uh->dst_port);
+        r = dp_vs_redirect_get(iph->af, iph->proto,
+                               &iph->saddr, &iph->daddr,
+                               uh->src_port, uh->dst_port);
         if (r) {
             *peer_cid = r->cid;
         }

@@ -162,11 +162,11 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
     conn = dp_vs_conn_get(iph->af, iph->proto, &iph->saddr, &iph->daddr,
                           sport, dport, direct, reverse);
     if (!conn) {
-        struct dp_vs_conn_redirect *r;
+        struct dp_vs_redirect *r;
 
-        r = dp_vs_conn_get_redirect(iph->af, iph->proto,
-                                    &iph->saddr, &iph->daddr,
-                                    sport, dport);
+        r = dp_vs_redirect_get(iph->af, iph->proto,
+                               &iph->saddr, &iph->daddr,
+                               sport, dport);
         if (r) {
             *peer_cid = r->cid;
         }
