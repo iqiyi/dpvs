@@ -882,7 +882,7 @@ int dp_vs_xmit_nat(struct dp_vs_proto *proto,
     iph->dst_addr = conn->daddr.in.s_addr;
 
     /* L4 NAT translation */
-    if (proto->fnat_in_handler) {
+    if (proto->nat_in_handler) {
         err = proto->nat_in_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
@@ -967,7 +967,7 @@ int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
     iph->src_addr = conn->vaddr.in.s_addr;
 
     /* L4 NAT translation */
-    if (proto->fnat_in_handler) {
+    if (proto->nat_out_handler) {
         err = proto->nat_out_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
