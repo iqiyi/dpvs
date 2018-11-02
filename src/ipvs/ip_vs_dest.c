@@ -227,7 +227,7 @@ int dp_vs_new_dest(struct dp_vs_service *svc,
     }
     assert(dest->svc == NULL);
 
-    dest->af = svc->af;
+    dest->af = udest->af;
     dest->proto = svc->proto;
     dest->vaddr = svc->addr;
     dest->vport = svc->port;

@@ -1883,7 +1883,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		char *dname;
 		ipvs_dest_entry_t *e = &d->entrytable[i];
 
-		if (!(dname = addrport_to_anyname(se->af, &(e->addr), ntohs(e->port),
+		if (!(dname = addrport_to_anyname(e->af, &(e->addr), ntohs(e->port),
 						  se->protocol, format))) {
 			fprintf(stderr, "addrport_to_anyname fails\n");
 			exit(1);
