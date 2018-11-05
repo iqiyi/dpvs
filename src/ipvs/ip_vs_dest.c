@@ -239,7 +239,11 @@ int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
 
     INIT_LIST_HEAD(&dest->d_list);
 
-    dp_vs_new_stats(&(dest->stats));
+    if (dp_vs_new_stats(&(dest->stats)) != EDPVS_OK) {
+        rte_free(dest);
+        return EDPVS_NOMEM;
+    }
+
     __dp_vs_update_dest(svc, dest, udest);
 
     *dest_p = dest;
