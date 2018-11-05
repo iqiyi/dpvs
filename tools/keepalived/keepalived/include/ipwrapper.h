@@ -55,7 +55,7 @@
 #define LVS_CMD_DEL_TUNNEL	IP_VS_SO_SET_DELTUNNEL
 
 /* prototypes */
-extern void perform_svr_state(int, virtual_server_t *, real_server_t *);
+extern bool perform_svr_state(int, virtual_server_t *, real_server_t *);
 extern void update_svr_wgt(int, virtual_server_t *, real_server_t *);
 extern int svr_checker_up(checker_id_t, real_server_t *);
 extern void update_svr_checker_state(int, checker_id_t, virtual_server_t *, real_server_t *);
