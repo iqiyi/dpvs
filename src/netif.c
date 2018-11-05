@@ -93,6 +93,10 @@ struct port_conf_stream {
     int tx_queue_nb;
     int tx_desc_nb;
 
+    enum rte_fdir_mode fdir_mode;
+    enum rte_fdir_pballoc_type fdir_pballoc;
+    enum rte_fdir_status_mode fdir_status;
+
     bool promisc_mode;
 
     struct list_head port_list_node;
@@ -257,6 +261,9 @@ static void device_handler(vector_t tokens)
     port_cfg->tx_desc_nb = NETIF_NB_TX_DESC_DEF;
     port_cfg->promisc_mode = false;
     strncpy(port_cfg->rss, "tcp", sizeof(port_cfg->rss));
+    port_cfg->fdir_mode = RTE_FDIR_MODE_PERFECT;
+    port_cfg->fdir_pballoc = RTE_FDIR_PBALLOC_64K;
+    port_cfg->fdir_status = RTE_FDIR_REPORT_STATUS;
 
     list_add(&port_cfg->port_list_node, &port_list);
 }
@@ -367,6 +374,102 @@ static void tx_desc_nb_handler(vector_t tokens)
                 current_device->name, desc_nb);
         current_device->tx_desc_nb = desc_nb;
     }
+
+    FREE_PTR(str);
+}
+
+static void fdir_mode_handler(vector_t tokens)
+{
+    char *mode, *str = set_value(tokens);
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+    bool use_default = false;
+    assert(str);
+
+    mode = strlwr(str);
+
+    if (!strncmp(mode, "none", sizeof("none")))
+        current_device->fdir_mode = RTE_FDIR_MODE_NONE;
+    else if (!strncmp(mode, "signature", sizeof("signature")))
+        current_device->fdir_mode = RTE_FDIR_MODE_SIGNATURE;
+    else if (!strncmp(mode, "perfect", sizeof("perfect")))
+        current_device->fdir_mode = RTE_FDIR_MODE_PERFECT;
+    else if (!strncmp(mode, "perfect_mac_vlan", sizeof("perfect_mac_vlan")))
+        current_device->fdir_mode = RTE_FDIR_MODE_PERFECT_MAC_VLAN;
+    else if (!strncmp(mode, "perfect_tunnel", sizeof("perfect_tunnel")))
+        current_device->fdir_mode = RTE_FDIR_MODE_PERFECT_TUNNEL;
+    else {
+        use_default = true;
+        current_device->fdir_mode = RTE_FDIR_MODE_PERFECT;
+    }
+
+    if (use_default)
+        RTE_LOG(WARNING, NETIF, "invalid %s:fdir_mode '%s', "
+                "use default 'perfect'\n", current_device->name, mode);
+    else
+        RTE_LOG(INFO, NETIF, "%s:fdir_mode = %s\n", current_device->name, mode);
+
+    FREE_PTR(str);
+}
+
+static void fdir_pballoc_handler(vector_t tokens)
+{
+    char *pballoc, *str = set_value(tokens);
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+    bool use_default = false;
+    assert(str);
+
+    pballoc = strlwr(str);
+
+    if (!strncmp(pballoc, "64k", sizeof("64k")))
+        current_device->fdir_pballoc = RTE_FDIR_PBALLOC_64K;
+    else if (!strncmp(pballoc, "128k", sizeof("128k")))
+        current_device->fdir_pballoc = RTE_FDIR_PBALLOC_128K;
+    else if (!strncmp(pballoc, "256k", sizeof("256k")))
+        current_device->fdir_pballoc = RTE_FDIR_PBALLOC_256K;
+    else {
+        use_default = true;
+        current_device->fdir_pballoc = RTE_FDIR_PBALLOC_64K;
+    }
+
+    if (use_default)
+        RTE_LOG(WARNING, NETIF, "invalid %s:fdir_pballoc '%s', "
+                "use default '64k'\n", current_device->name, pballoc);
+    else
+        RTE_LOG(INFO, NETIF, "%s:fdir_pballoc = %s\n",
+                current_device->name, pballoc);
+
+    FREE_PTR(str);
+}
+
+static void fdir_status_handler(vector_t tokens)
+{
+    char *status, *str = set_value(tokens);
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+    bool use_default = false;
+    assert(str);
+
+    status = strlwr(str);
+
+    if (!strncmp(status, "close", sizeof("close")))
+        current_device->fdir_status = RTE_FDIR_NO_REPORT_STATUS;
+    else if (!strncmp(status, "matched", sizeof("matched")))
+        current_device->fdir_status = RTE_FDIR_REPORT_STATUS;
+    else if (!strncmp(status, "always", sizeof("always")))
+        current_device->fdir_status = RTE_FDIR_REPORT_STATUS_ALWAYS;
+    else {
+        use_default = true;
+        current_device->fdir_status = RTE_FDIR_REPORT_STATUS;
+    }
+
+    if (use_default)
+        RTE_LOG(WARNING, NETIF, "invalid %s:fdir_status '%s', "
+                "use default 'matched'\n", current_device->name, status);
+    else
+        RTE_LOG(INFO, NETIF, "%s:fdir_status = %s\n",
+                current_device->name, status);
 
     FREE_PTR(str);
 }
@@ -735,6 +838,12 @@ void install_netif_keywords(void)
     install_sublevel();
     install_keyword("queue_number", tx_queue_number_handler, KW_TYPE_INIT);
     install_keyword("descriptor_number", tx_desc_nb_handler, KW_TYPE_INIT);
+    install_sublevel_end();
+    install_keyword("fdir", NULL, KW_TYPE_INIT);
+    install_sublevel();
+    install_keyword("mode", fdir_mode_handler, KW_TYPE_INIT);
+    install_keyword("pballoc", fdir_pballoc_handler, KW_TYPE_INIT);
+    install_keyword("status", fdir_status_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
     install_keyword("kni_name", kni_name_handler, KW_TYPE_INIT);
@@ -3176,6 +3285,10 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
             port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_PORT;
         else if (!strcmp(cfg_stream->rss, "tunnel"))
             port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_TUNNEL;
+
+        port->dev_conf.fdir_conf.mode = cfg_stream->fdir_mode;
+        port->dev_conf.fdir_conf.pballoc = cfg_stream->fdir_pballoc;
+        port->dev_conf.fdir_conf.status = cfg_stream->fdir_status;
 
         if (cfg_stream->rx_queue_nb > 0 && port->nrxq > cfg_stream->rx_queue_nb) {
             RTE_LOG(WARNING, NETIF, "%s: rx-queues(%d) configured in workers != "
