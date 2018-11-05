@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <linux/if_ether.h>
 
@@ -133,5 +134,19 @@ ssize_t writen(int fd, const void *vptr, size_t n);
 
 /* send "n" bytes to a descriptor */
 ssize_t sendn(int fd, const void *vptr, size_t n, int flags);
+
+static inline char *strupr(char *str) {
+    char *s;
+    for (s = str; *s != '\0'; s++)
+        *s = toupper(*s);
+    return str;
+}
+
+static inline char *strlwr(char *str) {
+    char *s;
+    for (s = str; *s != '\0'; s++)
+        *s = tolower(*s);
+    return str;
+}
 
 #endif /* __DPVS_COMMON_H__ */

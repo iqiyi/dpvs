@@ -32,6 +32,11 @@ netif_defs {
             queue_number        6           <16, 0-16>
             descriptor_number   512         <512, 16-8192>
         }
+        fdir {
+            mode                perfect     <perfect, none|signature|perfect|perfect_mac_vlan|perfect_tunnel>
+            pballoc             64k         <64k, 64k|128k|256k>
+            status              matched     <matched, close|matched|always>
+        }
     !    promisc_mode                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
     }
