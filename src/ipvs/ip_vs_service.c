@@ -921,6 +921,8 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
         case DPVS_SO_GET_VERSION:
             {
                 char *buf = rte_zmalloc("info",64,0);
+                if (unlikely(NULL == buf))
+                    return EDPVS_NOMEM;
                 sprintf(buf,"DPDK-FULLNAT Server version 1.1.4 (size=0)");
                 *out = buf;
                 *outlen = 64;
@@ -930,6 +932,8 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
             {
                 struct dp_vs_getinfo *info;
                 info = rte_zmalloc("info", sizeof(struct dp_vs_getinfo), 0);
+                if (unlikely(NULL == info))
+                    return EDPVS_NOMEM;
                 info->version = 0;
                 info->size = 0;
                 info->num_services = dp_vs_num_services;
@@ -950,6 +954,8 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     return EDPVS_INVAL;
                 }
                 output = rte_zmalloc("get_services", len, 0);
+                if (unlikely(NULL == output))
+                    return EDPVS_NOMEM;
                 memcpy(output, get, size);
                 ret = dp_vs_get_service_entries(get, output);
                 *out = output;
@@ -986,6 +992,8 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
 
                 output = rte_zmalloc("get_service",
                                      sizeof(struct dp_vs_service_entry), 0);
+                if (unlikely(NULL == output))
+                    return EDPVS_NOMEM;
                 memcpy(output, entry, sizeof(struct dp_vs_service_entry));
                 if(svc) {
                     ret = dp_vs_copy_service(output, svc);
@@ -1012,6 +1020,8 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 }
                 addr.in.s_addr = get->addr;
                 output = rte_zmalloc("get_services", size, 0);
+                if (unlikely(NULL == output))
+                    return EDPVS_NOMEM;
                 memcpy(output, get, size);
 
                 if(get->fwmark)
