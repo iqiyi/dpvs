@@ -13,6 +13,7 @@ DPVS Tutorial
 * [Tunnel Mode(one-arm)](#tunnel)
 * [NAT Mode(one-arm)](#nat)
 * [SNAT Mode (two-arm)](#snat)
+* [IPv6 Support](#ipv6_support)
 * [Virtual devices](#virt-dev)
   - [Bonding Device](#vdev-bond)
   - [VLAN Device](#vdev-vlan)
@@ -764,6 +765,139 @@ Then try Internet access from hosts through SNAT `DPVS` server.
 host$ ping www.iqiyi.com
 host$ curl www.iqiyi.com
 ```
+
+<a id='ipv6-support'/>
+
+# IPv6 Support
+
+DPVS support IPv6 since 1.7-0. You can configure IPv6 fullnat just like IPv4:
+
+```bash
+#!/bin/sh -
+
+# add VIP to WAN interface
+./dpip addr add 2001::1/128 dev dpdk1
+
+# route for WAN/LAN access
+# add routes for other network or default route if needed.
+./dpip route -6 add 2001::/64 dev dpdk1
+
+# add service <VIP:vport> to forwarding, scheduling mode is RR.
+# use ipvsadm --help for more info.
+./ipvsadm -A -t [2001::1]:80 -s rr
+
+# add two RS for service, forwarding mode is FNAT (-b)
+./ipvsadm -a -t [2001::1]:80 -r 2001::3 -b
+./ipvsadm -a -t [2001::1]:80 -r 2001::4 -b
+
+# add at least one Local-IP (LIP) for FNAT on LAN interface
+./ipvsadm --add-laddr -z 2001::2 -t [2001::1]:80 -F dpdk0
+```
+You can use commands to check what's you have set like IPv4 except route:
+
+```bash
+$./dpip route -6 show
+inet6 2001::1/128 dev dpdk0 mtu 1500 scope host
+inet6 2001::2/128 dev dpdk0 mtu 1500 scope host
+inet6 2001::/64 dev dpdk0 mtu 1500 scope link
+```
+
+You can configure IPv6 OSPF's configuration like this:
+
+```bash
+$ cat /etc/quagga/ospf6d.conf   # may installed to other path
+log file /var/log/quagga/ospf6.log
+log stdout
+log syslog
+password ****
+enable password ****
+interface dpdk1.kni
+ ipv6 ospf6 network point-to-point
+ ipv6 ospf6 hello-interval 10
+ ipv6 ospf6 dead-interval 40
+!
+router ospf6
+ router-id 192.168.100.200
+ area 0.0.0.0 range 2001::1/64 # announce VIP
+ area 0.0.0.0 range fec0::172:10:10:11/127 # announce inter-connection network
+ interface dpdk1.kni area 0.0.0.0
+!
+```
+
+If you prefer keepalived, you can configure it like this:
+```
+$ cat /etc/keepalived/keepalived.conf
+! Configuration File for keepalived
+
+global_defs {
+    notification_email {
+        foo@example.com
+    }
+    notification_email_from bar@example.com
+    smtp_server 1.2.3.4
+    smtp_connect_timeout 60
+    router_id DPVS_DEVEL
+}
+
+local_address_group laddr_g1 {
+    2001::2 dpdk0    # use DPDK interface
+}
+
+#
+# VRRP section
+#
+vrrp_instance VI_1 {
+    state MASTER                  # master
+    interface dpdk0.kni           # should be kni interface, and IPv4 should be configured for vrrp
+    dpdk_interface dpdk0          # should be DPDK interface
+    virtual_router_id 123         # VID should be unique in network
+    priority 100                  # master's priority is bigger than worker
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass ****
+    }
+
+    virtual_ipaddress {
+        2001::1
+    }
+}
+
+#
+# Virtual Server Section
+#
+virtual_server_group 2001-1-80 {
+    2001::1 80
+}
+
+virtual_server group 2001-1-80 {
+    delay_loop 3
+    lb_algo rr         # scheduling algorithm Round-Robin
+    lb_kind FNAT       # Forwarding Mode Full-NAT
+    protocol TCP       # Protocol TCP
+
+    laddr_group_name laddr_g1   # Local IP group-ID
+
+    real_server 2001::3 80 { # real-server
+        weight 100
+        inhibit_on_failure
+        TCP_CHECK {    # health check
+            nb_sock_retry 2
+            connect_timeout 3
+            connect_port 80
+        }
+    }
+
+    real_server 2001::4 80 { # real-server
+        weight 100
+        inhibit_on_failure
+        TCP_CHECK { # health check
+            nb_sock_retry 2
+            connect_timeout 3
+            connect_port 80
+        }
+    }
+}
 
 <a id='virt-dev'/>
 
