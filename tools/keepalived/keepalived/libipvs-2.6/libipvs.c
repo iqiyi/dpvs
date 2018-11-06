@@ -442,10 +442,9 @@ struct ip_vs_get_services *ipvs_get_services(void)
 	ipvs_func = ipvs_get_services;
 	getk->num_services = ipvs_info.num_services;
 	len_rcv = len;
-	if (dpvs_getsockopt(DPVS_SO_GET_SERVICES, getk, len, (void **)&getk_rcv, &len_rcv) < 0) {
+	if (dpvs_getsockopt(DPVS_SO_GET_SERVICES, getk, len, (void **)&getk_rcv, &len_rcv)) {
 		free(get);
 		free(getk);
-        //dpvs_sockopt_msg_free(getk_rcv);
 		return NULL;
 	}
 	memcpy(get, getk_rcv, sizeof(struct ip_vs_get_services));
@@ -673,10 +672,9 @@ struct ip_vs_get_dests *ipvs_get_dests(ipvs_service_entry_t *svc)
 	snprintf(dk->iifname, sizeof(dk->iifname), "%s", svc->iifname);
 	snprintf(dk->oifname, sizeof(dk->oifname), "%s", svc->oifname);
 
-	if (dpvs_getsockopt(DPVS_SO_GET_DESTS, dk, len, (void **)&dk_rcv, &len_rcv) < 0) {
+	if (dpvs_getsockopt(DPVS_SO_GET_DESTS, dk, len, (void **)&dk_rcv, &len_rcv)) {
 		free(d);
 		free(dk);
-        dpvs_sockopt_msg_free(dk_rcv);
 		return NULL;
 	}
 	memcpy(d, dk_rcv, sizeof(struct ip_vs_get_dests_kern));
@@ -748,7 +746,6 @@ ipvs_get_service(struct ip_vs_service_user *hint)
 	if (dpvs_getsockopt(DPVS_SO_GET_SERVICE,
 		       svc, len, (void **)&svc_rcv, &len_rcv)) {
 		free(svc);
-		dpvs_sockopt_msg_free(svc_rcv);
 		return NULL;
 	}
 	memcpy(svc, svc_rcv, len_rcv);
