@@ -64,6 +64,9 @@ void dp_svc_stats_clear(struct dp_vs_stats *stats)
     uint8_t nlcore, i;
     uint64_t lcore_mask;
 
+    if (NULL == stats)
+        return;
+
     netif_get_slave_lcores(&nlcore, &lcore_mask);
 
     for (i = 0; i < DPVS_MAX_LCORE; i++) {
