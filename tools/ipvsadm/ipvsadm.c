@@ -2049,6 +2049,8 @@ static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
 		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "TCP", pbuf_d);
 	else if(blklst->proto ==IPPROTO_UDP)
 		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "UDP", pbuf_d);
+	else if (blklst->proto == IPPROTO_ICMP)
+		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "ICMP", pbuf_d);
 	else
 		printf("proto not support!");
 }
