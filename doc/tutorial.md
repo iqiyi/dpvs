@@ -766,7 +766,7 @@ host$ ping www.iqiyi.com
 host$ curl www.iqiyi.com
 ```
 
-<a id='ipv6-support'/>
+<a id='ipv6_support'/>
 
 # IPv6 Support
 
