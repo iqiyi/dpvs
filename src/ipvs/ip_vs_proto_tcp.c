@@ -25,6 +25,7 @@
 #include "ipvs/proto.h"
 #include "ipvs/proto_tcp.h"
 #include "ipvs/conn.h"
+#include "ipvs/redirect.h"
 #include "ipvs/service.h"
 #include "ipvs/dest.h"
 #include "ipvs/synproxy.h"
@@ -143,7 +144,7 @@ static inline uint32_t tcp_secure_sequence_number(uint32_t saddr, uint32_t daddr
     return seq_scale(*(uint32_t *)&hash0);
 }
 
-static inline void tcp_in_init_seq(struct dp_vs_conn *conn, 
+static inline void tcp_in_init_seq(struct dp_vs_conn *conn,
                                    struct rte_mbuf *mbuf, struct tcphdr *th)
 {
     struct dp_vs_seq *fseq = &conn->fnat_seq;
@@ -155,7 +156,7 @@ static inline void tcp_in_init_seq(struct dp_vs_conn *conn,
     if (fseq->isn)
         return;
 
-    fseq->isn = tcp_secure_sequence_number(conn->laddr.in.s_addr, 
+    fseq->isn = tcp_secure_sequence_number(conn->laddr.in.s_addr,
             conn->daddr.in.s_addr, conn->lport, conn->dport);
 
     fseq->delta = fseq->isn - seq;
@@ -279,30 +280,30 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     /* reset tcp header length */
     tcph->doff += sizeof(struct tcpopt_addr) >> 2;
     /* reset ip header total length */
-    ip4_hdr(mbuf)->total_length = 
-        htons(ntohs(ip4_hdr(mbuf)->total_length) 
+    ip4_hdr(mbuf)->total_length =
+        htons(ntohs(ip4_hdr(mbuf)->total_length)
                 + sizeof(struct tcpopt_addr));
 
-    /* tcp csum will be recalc later, 
+    /* tcp csum will be recalc later,
      * so as IP hdr csum since iph.tot_len has been chagned. */
     return EDPVS_OK;
 }
 
-static void tcp_out_save_seq(struct rte_mbuf *mbuf, 
+static void tcp_out_save_seq(struct rte_mbuf *mbuf,
                              struct dp_vs_conn *conn, struct tcphdr *th)
 {
     if (th->rst)
         return;
 
     /* out of order ? */
-    if (seq_before(ntohl(th->ack_seq), ntohl(conn->rs_end_ack)) 
+    if (seq_before(ntohl(th->ack_seq), ntohl(conn->rs_end_ack))
             && conn->rs_end_ack != 0)
         return;
 
     if (th->syn && th->ack)
         conn->rs_end_seq = htonl(ntohl(th->seq) + 1);
     else
-        conn->rs_end_seq = htonl(ntohl(th->seq) + mbuf->pkt_len 
+        conn->rs_end_seq = htonl(ntohl(th->seq) + mbuf->pkt_len
                 - ip4_hdrlen(mbuf) - (th->doff << 2));
 
     conn->rs_end_ack = th->ack_seq;
@@ -425,9 +426,9 @@ static void tcp_out_init_seq(struct dp_vs_conn *conn, struct tcphdr *th)
 }
 
 /* set @verdict if failed to schedule */
-static int tcp_conn_sched(struct dp_vs_proto *proto, 
+static int tcp_conn_sched(struct dp_vs_proto *proto,
                           const struct dp_vs_iphdr *iph,
-                          struct rte_mbuf *mbuf, 
+                          struct rte_mbuf *mbuf,
                           struct dp_vs_conn **conn,
                           int *verdict)
 {
@@ -459,7 +460,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
         daddr = inet_ntop(iph->af, &iph->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::";
         saddr = inet_ntop(iph->af, &iph->saddr, sbuf, sizeof(sbuf)) ? sbuf : "::";
         RTE_LOG(DEBUG, IPVS,
-                "%s: [%d] try sched non-SYN packet: [%c%c%c%c] %s:%d->%s:%d\n", 
+                "%s: [%d] try sched non-SYN packet: [%c%c%c%c] %s:%d->%s:%d\n",
                 __func__, rte_lcore_id(),
                 th->syn ? 'S' : '.', th->fin ? 'F' : '.',
                 th->ack ? 'A' : '.', th->rst ? 'R' : '.',
@@ -478,7 +479,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_INVAL;
     }
 
-    svc = dp_vs_service_lookup(iph->af, iph->proto, 
+    svc = dp_vs_service_lookup(iph->af, iph->proto,
                                &iph->daddr, th->dest, 0, mbuf, NULL);
     if (!svc) {
         /* Drop tcp packet which is send to vip and !vport */
@@ -506,7 +507,8 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 
 static struct dp_vs_conn *
 tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
-                struct rte_mbuf *mbuf, int *direct, bool reverse, bool *drop)
+                struct rte_mbuf *mbuf, int *direct, bool reverse, bool *drop,
+                lcoreid_t *peer_cid)
 {
     struct tcphdr *th, _tcph;
     struct dp_vs_conn *conn;
@@ -515,29 +517,38 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
     if (unlikely(!th))
         return NULL;
-    
+
     if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
         *drop = true;
         return NULL;
     }
 
-    conn = dp_vs_conn_get(iph->af, iph->proto, 
+    conn = dp_vs_conn_get(iph->af, iph->proto,
             &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);
 
     /*
      * L2 confirm neighbour
-     * pkt in from client confirm neighbour to client 
-     * pkt out from rs confirm neighbour to rs 
+     * pkt in from client confirm neighbour to client
+     * pkt out from rs confirm neighbour to rs
      */
     if (conn != NULL) {
         if (th->ack) {
-            if ((*direct == DPVS_CONN_DIR_INBOUND) && conn->out_dev 
+            if ((*direct == DPVS_CONN_DIR_INBOUND) && conn->out_dev
                  && (conn->out_nexthop.in.s_addr != htonl(INADDR_ANY))) {
                 neigh_confirm(conn->out_nexthop.in, conn->out_dev);
-            } else if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
+            } else if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev
                         && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))) {
                 neigh_confirm(conn->in_nexthop.in, conn->in_dev);
             }
+        }
+    } else {
+        struct dp_vs_redirect *r;
+
+        r = dp_vs_redirect_get(iph->af, iph->proto,
+                               &iph->saddr, &iph->daddr,
+                               th->source, th->dest);
+        if (r) {
+            *peer_cid = r->cid;
         }
     }
 
@@ -551,7 +562,7 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
     struct route_entry *rt = mbuf->userdata;
     struct netif_port *dev = NULL;
     int ip4hlen = ip4_hdrlen(mbuf);
-    
+
     if (mbuf_may_pull(mbuf, ip4hlen + sizeof(*th)) != 0)
         return EDPVS_INVPKT;
 
@@ -562,7 +573,7 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
     if (mbuf_may_pull(mbuf, ip4hlen + (th->doff<<2)) != 0)
         return EDPVS_INVPKT;
 
-    /* 
+    /*
      * for SYN packet
      * 1. remove tcp timestamp option
      *    laddress for different client have diff timestamp.
@@ -617,7 +628,7 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
 
     if (mbuf_may_pull(mbuf, ip4hlen + sizeof(*th)) != 0)
         return EDPVS_INVPKT;
-    
+
     th = tcp_hdr(mbuf);
     if (unlikely(!th))
         return EDPVS_INVPKT;
@@ -811,8 +822,8 @@ tcp_state_out:
             proto->name, dir == DPVS_CONN_DIR_OUTBOUND ? "out" : "in",
             th->syn ? 'S' : '.', th->fin ? 'F' : '.',
             th->ack ? 'A' : '.', th->rst ? 'R' : '.',
-            caddr, ntohs(conn->cport), 
-            daddr, ntohs(conn->dport), 
+            caddr, ntohs(conn->cport),
+            daddr, ntohs(conn->dport),
             tcp_state_name(conn->state),
             tcp_state_name(new_state),
             rte_atomic32_read(&conn->refcnt));
@@ -832,7 +843,7 @@ tcp_state_out:
     }
 
     if (dest) {
-        if (!(conn->flags & DPVS_CONN_F_INACTIVE) 
+        if (!(conn->flags & DPVS_CONN_F_INACTIVE)
                 && (new_state != DPVS_TCP_S_ESTABLISHED)) {
             rte_atomic32_dec(&dest->actconns);
             rte_atomic32_inc(&dest->inactconns);
@@ -854,7 +865,7 @@ struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir)
     struct netif_port *dev;
     struct route_entry *rt = NULL;
 
-    /* we need oif for correct rte_mempoll, 
+    /* we need oif for correct rte_mempoll,
      * most likely oif is conn->in/out_dev (fast-xmit),
      * if not, determine output device by route. */
     dev = ((dir == DPVS_CONN_DIR_INBOUND) ? conn->in_dev : conn->out_dev);
@@ -882,7 +893,7 @@ struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir)
     return dev->mbuf_pool;
 }
 
-static int tcp_send_rst(struct dp_vs_proto *proto, 
+static int tcp_send_rst(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn, int dir)
 {
     struct rte_mempool *pool;
@@ -904,9 +915,9 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
         return EDPVS_NOMEM;
     mbuf->userdata = NULL; /* make sure "no route info" */
 
-    /* 
+    /*
      * reserve head room ?
-     * mbuf has alreay configured header room 
+     * mbuf has alreay configured header room
      * RTE_PKTMBUF_HEADROOM for lower layer headers.
      */
     assert(rte_pktmbuf_headroom(mbuf) >= 128); /* how to reserve. >_< */
@@ -968,13 +979,13 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
     return EDPVS_OK;
 }
 
-static int tcp_conn_expire(struct dp_vs_proto *proto, 
+static int tcp_conn_expire(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn)
 {
     int err;
     assert(proto && conn && conn->dest);
 
-    if (conn->dest->fwdmode == DPVS_FWD_MODE_NAT 
+    if (conn->dest->fwdmode == DPVS_FWD_MODE_NAT
             || conn->dest->fwdmode == DPVS_FWD_MODE_FNAT) {
         /* send RST to RS and client */
         err = tcp_send_rst(proto, conn, DPVS_CONN_DIR_INBOUND);
