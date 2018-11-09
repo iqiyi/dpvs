@@ -197,16 +197,20 @@ init_service_vs(virtual_server_t * vs)
 			SET_ALIVE(vs);
 	}
 
-	/*Set local ip address in "FNAT" mode of IPVS */
-	if ((vs->loadbalancing_kind == IP_VS_CONN_F_FULLNAT) && vs->local_addr_gname) { 
+	/* Set local ip address in "FNAT" mode of IPVS */
+	if (vs->local_addr_gname &&
+        (vs->loadbalancing_kind == IP_VS_CONN_F_SNAT ||
+         vs->loadbalancing_kind == IP_VS_CONN_F_FULLNAT)) {
 		if (!ipvs_cmd(LVS_CMD_ADD_LADDR, check_data->vs_group, vs, NULL))
-			return 0; 
+			return 0;
 	}
-        /*Set blacklist ip address */
-        if (vs->blklst_addr_gname) {
-                if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, check_data->vs_group, vs, NULL))
-                        return 0;
-        }
+
+    /* Set blacklist ip address */
+    if (vs->blklst_addr_gname) {
+        if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, check_data->vs_group, vs, NULL))
+            return 0;
+    }
+
 	/* Processing real server queue */
 	if (!LIST_ISEMPTY(vs->rs)) {
 		if (vs->alpha && ! vs->reloaded)
@@ -566,7 +570,7 @@ clear_diff_vsge(list old, list new, virtual_server_t * old_vs)
 	for (e = LIST_HEAD(old); e; ELEMENT_NEXT(e)) {
 		vsge = ELEMENT_DATA(e);
 		if (!vsge_exist(vsge, new)) {
-			log_message(LOG_INFO, "VS [[%s]:%d:%d:%d] in group %s no longer exist" 
+			log_message(LOG_INFO, "VS [[%s]:%d:%d:%d] in group %s no longer exist"
 					    , inet_sockaddrtos(&vsge->addr)
 					    , ntohs(inet_sockaddrport(&vsge->addr))
 					    , vsge->range
@@ -630,7 +634,7 @@ vs_exist(virtual_server_t * old_vs, bool* empty_vsg)
 					*empty_vsg = true;
 					return NULL;
 				}
-					
+
 				else
 					if (!clear_diff_vsg(old_vs))
 						return NULL;
@@ -736,7 +740,7 @@ laddr_entry_exist(local_addr_entry *laddr_entry, list l)
 
 	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
 		entry = ELEMENT_DATA(e);
-		if (sockstorage_equal(&entry->addr, &laddr_entry->addr) && 
+		if (sockstorage_equal(&entry->addr, &laddr_entry->addr) &&
 				(entry->range == laddr_entry->range) &&
                          !strcmp(entry->ifname, laddr_entry->ifname))
 			return 1;
@@ -754,7 +758,7 @@ clear_diff_laddr_entry(list old, list new, virtual_server_t * old_vs)
 	for (e = LIST_HEAD(old); e; ELEMENT_NEXT(e)) {
 		laddr_entry = ELEMENT_DATA(e);
 		if (!laddr_entry_exist(laddr_entry, new)) {
-			log_message(LOG_INFO, "VS [%s-%d] in local address group %s no longer exist\n" 
+			log_message(LOG_INFO, "VS [%s-%d] in local address group %s no longer exist\n"
 					    , inet_sockaddrtos(&laddr_entry->addr)
 					    , laddr_entry->range
 					    , old_vs->local_addr_gname);
@@ -775,17 +779,17 @@ clear_diff_laddr(virtual_server_t * old_vs)
 	local_addr_group *new;
 
 	/*
- 	 *  If old vs was not in fulllnat mod or didn't own local address group, 
- 	 * then do nothing and return 
+	 *  If old vs was not in fulllnat mod or didn't own local address group,
+	 * then do nothing and return
  	 */
-	if ((old_vs->loadbalancing_kind != IP_VS_CONN_F_FULLNAT) || 
+	if ((old_vs->loadbalancing_kind != IP_VS_CONN_F_FULLNAT) ||
 						!old_vs->local_addr_gname)
 		return 1;
 
 	/* Fetch local address group */
-	old = ipvs_get_laddr_group_by_name(old_vs->local_addr_gname, 
+	old = ipvs_get_laddr_group_by_name(old_vs->local_addr_gname,
 							old_check_data->laddr_group);
-	new = ipvs_get_laddr_group_by_name(old_vs->local_addr_gname, 
+	new = ipvs_get_laddr_group_by_name(old_vs->local_addr_gname,
 							check_data->laddr_group);
 
 	if (!clear_diff_laddr_entry(old->addr_ip, new->addr_ip, old_vs))
@@ -843,8 +847,8 @@ clear_diff_blklst(virtual_server_t * old_vs)
         blklst_addr_group *new;
 
         /*
-         *  If old vs  didn't own blacklist address group, 
-         * then do nothing and return 
+         *  If old vs  didn't own blacklist address group,
+         * then do nothing and return
          */
         if (!old_vs->blklst_addr_gname)
                 return 1;
@@ -1085,4 +1089,3 @@ int clear_diff_tunnel(void)
 
 	return IPVS_SUCCESS;
 }
-
