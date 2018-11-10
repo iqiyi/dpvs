@@ -17,6 +17,7 @@
  */
 #ifndef __DPVS_NETIF_H__
 #define __DPVS_NETIF_H__
+#include <net/if.h>
 #include "list.h"
 #include "dpdk.h"
 #include "inetaddr.h"
@@ -168,7 +169,6 @@ typedef enum {
 } eth_type_t;
 
 /************************ data type for NIC ****************************/
-#define DEVICE_NAME_MAX_LEN 32
 typedef enum {
     PORT_TYPE_GENERAL,
     PORT_TYPE_BOND_MASTER,
@@ -179,7 +179,7 @@ typedef enum {
 } port_type_t;
 
 struct netif_kni {
-    char name[DEVICE_NAME_MAX_LEN];
+    char name[IFNAMSIZ];
     struct rte_kni *kni;
     struct ether_addr addr;
     struct dpvs_timer kni_rtnl_timer;
@@ -240,7 +240,7 @@ struct netif_hw_addr_list {
 };
 
 struct netif_port {
-    char                    name[DEVICE_NAME_MAX_LEN];  /* device name */
+    char                    name[IFNAMSIZ];  /* device name */
     portid_t                id;                         /* device id */
     port_type_t             type;                       /* device type */
     uint16_t                flag;                       /* device flag */
@@ -261,7 +261,6 @@ struct netif_port {
     struct list_head        list;                       /* device list node hashed by id */
     struct list_head        nlist;                      /* device list node hashed by name */
     struct inet_device      *in_ptr;
-    struct inet_device      *in6_ptr;
     struct netif_kni        kni;                        /* kni device */
     union netif_bond        *bond;                      /* bonding conf */
     struct vlan_info        *vlan_info;                 /* VLANs info for real device */
@@ -292,6 +291,8 @@ int netif_unregister_pkt(struct pkt_type *pt);
 /**************************** port API ******************************/
 int netif_fdir_filter_set(struct netif_port *port, enum rte_filter_op opcode, 
                           const struct rte_eth_fdir_filter *fdir_flt);
+void netif_mask_fdir_filter(int af, const struct netif_port *port,
+                            struct rte_eth_fdir_filter *filt);
 struct netif_port* netif_port_get(portid_t id);
 /* port_conf can be NULL for default port configure */
 int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *len);

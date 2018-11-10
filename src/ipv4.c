@@ -30,8 +30,6 @@
 #define IPV4
 #define RTE_LOGTYPE_IPV4    RTE_LOGTYPE_USER1
 
-#define INET_MAX_PROTS      256     /* cannot change */
-
 #define IPV4_FORWARD_DEF  false
 static bool ipv4_forward_switch = IPV4_FORWARD_DEF;
 
@@ -56,7 +54,7 @@ static void ipv4_default_ttl_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
-static void ipv4_forward_handler(vector_t tokens)
+static void ipv4_forwarding_handler(vector_t tokens)
 {
     char *str = set_value(tokens);
     assert(str);
@@ -64,6 +62,11 @@ static void ipv4_forward_handler(vector_t tokens)
         ipv4_forward_switch = true;
     else if (strcasecmp(str, "off") == 0)
         ipv4_forward_switch = false;
+    else
+        RTE_LOG(WARNING, IPV4, "invalid ipv4:forwarding %s\n", str);
+
+    RTE_LOG(INFO, IPV4, "ipv4:forwarding = %s\n", ipv4_forward_switch ? "on" : "off");
+
     FREE_PTR(str);
 }
 
@@ -74,25 +77,15 @@ void ipv4_keyword_value_init(void)
         inet_def_ttl = INET_DEF_TTL;
     }
     /* KW_TYPE_NORMAL keyword */
+    ipv4_forward_switch = false;
 }
 
 void install_ipv4_keywords(void)
 {
     install_keyword_root("ipv4_defs", NULL);
     install_keyword("default_ttl", ipv4_default_ttl_handler, KW_TYPE_INIT);
-    install_keyword("ipv4_forward", ipv4_forward_handler, KW_TYPE_INIT);
+    install_keyword("forwarding", ipv4_forwarding_handler, KW_TYPE_NORMAL);
 }
-
-static struct list_head inet_hooks[INET_HOOK_NUMHOOKS];
-/**
- * if remove this inet_hook_lock for performance,
- * it assume all hook registeration are done
- * during initialization, there's no race condition
- * at that time. and never changed after that.
- */
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-static rte_rwlock_t inet_hook_lock;
-#endif
 
 static const struct inet_protocol *inet_prots[INET_MAX_PROTS];
 static rte_spinlock_t inet_prot_lock; /* to see if rwlock is better */
@@ -107,51 +100,6 @@ static uint32_t ip4_id_hashrnd;
 struct ip4_stats ip4_statistics;
 rte_spinlock_t ip4_stats_lock;
 #endif
-
-int INET_HOOK(unsigned int hook, struct rte_mbuf *mbuf,
-        struct netif_port *in, struct netif_port *out,
-        int (*okfn)(struct rte_mbuf *mbuf))
-{
-    struct list_head *hook_list;
-    struct inet_hook_ops *ops;
-    struct inet_hook_state state;
-    int verdict = INET_ACCEPT;
-
-    state.hook = hook;
-    hook_list = &inet_hooks[hook];
-
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-    rte_rwlock_read_lock(&inet_hook_lock);
-#endif
-
-    ops = list_entry(hook_list, struct inet_hook_ops, list);
-
-    if (!list_empty(hook_list)) {
-        verdict = INET_ACCEPT;
-        list_for_each_entry_continue(ops, hook_list, list) {
-repeat:
-            verdict = ops->hook(ops->priv, mbuf, &state);
-            if (verdict != INET_ACCEPT) {
-                if (verdict == INET_REPEAT)
-                    goto repeat;
-                break;
-            }
-        }
-    }
-
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-    rte_rwlock_read_unlock(&inet_hook_lock);
-#endif
-
-    if (verdict == INET_ACCEPT || verdict == INET_STOP) {
-        return okfn(mbuf);
-    } else if (verdict == INET_DROP) {
-        rte_pktmbuf_free(mbuf);
-        return EDPVS_DROP;
-    } else { /* INET_STOLEN */
-        return EDPVS_OK;
-    }
-}
 
 #ifdef CONFIG_DPVS_IPV4_DEBUG
 static void ip4_dump_hdr(const struct ipv4_hdr *iph, portid_t port)
@@ -260,7 +208,7 @@ static int ipv4_local_in(struct rte_mbuf *mbuf)
         }
     }
 
-    return INET_HOOK(INET_HOOK_LOCAL_IN, mbuf,
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_IN, mbuf,
             netif_port_get(mbuf->port), NULL, ipv4_local_in_fin);
 }
 
@@ -290,7 +238,7 @@ static int ipv4_output_fin2(struct rte_mbuf *mbuf)
     /* reuse @userdata/@udata64 for prio (used by tc:pfifo_fast) */
     mbuf->udata64 = ((ip4_hdr(mbuf)->type_of_service >> 1) & 15);
 
-    err = neigh_resolve_output(&nexthop, mbuf, rt->port);
+    err = neigh_output(AF_INET, (union inet_addr *)&nexthop, mbuf, rt->port);
     route4_put(rt);
     return err;
 }
@@ -312,7 +260,7 @@ int ipv4_output(struct rte_mbuf *mbuf)
 
     IP4_UPD_PO_STATS(out, mbuf->pkt_len);
 
-    return INET_HOOK(INET_HOOK_POST_ROUTING, mbuf,
+    return INET_HOOK(AF_INET, INET_HOOK_POST_ROUTING, mbuf,
             NULL, rt->port, ipv4_output_fin);
 }
 
@@ -357,7 +305,7 @@ static int ipv4_forward(struct rte_mbuf *mbuf)
     iph->hdr_checksum = (uint16_t)(csum + (csum >= 0xffff));
     iph->time_to_live--;
 
-    return INET_HOOK(INET_HOOK_FORWARD, mbuf,
+    return INET_HOOK(AF_INET, INET_HOOK_FORWARD, mbuf,
             netif_port_get(mbuf->port), rt->port, ipv4_forward_fin);
 
 drop:
@@ -474,7 +422,8 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
     ip4_dump_hdr(iph, mbuf->port);
 #endif
 
-    return INET_HOOK(INET_HOOK_PRE_ROUTING, mbuf, port, NULL, ipv4_rcv_fin);
+    return INET_HOOK(AF_INET, INET_HOOK_PRE_ROUTING,
+                     mbuf, port, NULL, ipv4_rcv_fin);
 
 csum_error:
     IP4_INC_STATS(csumerrors);
@@ -502,16 +451,6 @@ int ipv4_init(void)
     ip4_id_hashrnd = (uint32_t)random();
     for (i = 0; i < IP4_IDENTS_SZ; i++)
         rte_atomic32_set(&ip4_idents[i], (uint32_t)random());
-
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-    rte_rwlock_init(&inet_hook_lock);
-    rte_rwlock_write_lock(&inet_hook_lock);
-#endif
-    for (i = 0; i < NELEMS(inet_hooks); i++)
-        INIT_LIST_HEAD(&inet_hooks[i]);
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-    rte_rwlock_write_unlock(&inet_hook_lock);
-#endif
 
     rte_spinlock_init(&inet_prot_lock);
     rte_spinlock_lock(&inet_prot_lock);
@@ -576,7 +515,8 @@ int ipv4_local_out(struct rte_mbuf *mbuf)
     } else {
         ip4_send_csum(iph);
     }
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 }
 
 int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
@@ -584,7 +524,7 @@ int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
     struct route_entry *rt;
     struct ipv4_hdr *iph;
 
-    if (!mbuf || !fl4 || fl4->daddr.s_addr == htonl(INADDR_ANY)) {
+    if (!mbuf || !fl4 || fl4->fl4_saddr.s_addr == htonl(INADDR_ANY)) {
         if (mbuf)
             rte_pktmbuf_free(mbuf);
         return EDPVS_INVAL;
@@ -609,19 +549,19 @@ int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
 
     /* build the IP header */
     iph->version_ihl = ((4 << 4) | 5);
-    iph->type_of_service = fl4->tos;
+    iph->type_of_service = fl4->fl4_tos;
     iph->fragment_offset = 0;
-    iph->time_to_live = fl4->ttl ? fl4->ttl : INET_DEF_TTL;
-    iph->next_proto_id = fl4->proto;
-    iph->src_addr = fl4->saddr.s_addr; /* route will not fill fl4.saddr */
-    iph->dst_addr = fl4->daddr.s_addr;
+    iph->time_to_live = fl4->fl4_ttl ? fl4->fl4_ttl : INET_DEF_TTL;
+    iph->next_proto_id = fl4->fl4_proto;
+    iph->src_addr = fl4->fl4_saddr.s_addr; /* route will not fill fl4.saddr */
+    iph->dst_addr = fl4->fl4_daddr.s_addr;
     iph->packet_id = ip4_select_id(iph);
 
     if (iph->src_addr == htonl(INADDR_ANY)) {
         union inet_addr saddr;
 
-        inet_addr_select(AF_INET, rt->port, (union inet_addr *)&fl4->daddr,
-                         fl4->scope, &saddr);
+        inet_addr_select(AF_INET, rt->port, (union inet_addr *)&fl4->fl4_daddr,
+                         fl4->fl4_scope, &saddr);
         iph->src_addr = saddr.in.s_addr;
     }
 
@@ -656,91 +596,4 @@ int ipv4_unregister_protocol(struct inet_protocol *prot,
     rte_spinlock_unlock(&inet_prot_lock);
 
     return err;
-}
-
-static int __inet_register_hooks(struct list_head *head,
-                                 struct inet_hook_ops *reg)
-{
-    struct inet_hook_ops *elem;
-
-    /* check if exist */
-    list_for_each_entry(elem, head, list) {
-        if (elem == reg) {
-            RTE_LOG(ERR, IPV4, "%s: hook already exist\n", __func__);
-            return EDPVS_EXIST; /* error ? */
-        }
-    }
-
-    list_for_each_entry(elem, head, list) {
-        if (reg->priority < elem->priority)
-            break;
-    }
-    list_add(&reg->list, elem->list.prev);
-
-    return EDPVS_OK;
-}
-
-int ipv4_register_hooks(struct inet_hook_ops *reg, size_t n)
-{
-    size_t i, err;
-    struct list_head *hook_list;
-    assert(reg);
-
-    for (i = 0; i < n; i++) {
-        if (reg[i].hooknum >= INET_HOOK_NUMHOOKS || !reg[i].hook) {
-            err = EDPVS_INVAL;
-            goto rollback;
-        }
-        hook_list = &inet_hooks[reg[i].hooknum];
-
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-        rte_rwlock_write_lock(&inet_hook_lock);
-#endif
-        err = __inet_register_hooks(hook_list, &reg[i]);
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-        rte_rwlock_write_unlock(&inet_hook_lock);
-#endif
-
-        if (err != EDPVS_OK)
-            goto rollback;
-    }
-
-    return EDPVS_OK;
-
-rollback:
-    ipv4_unregister_hooks(reg, n);
-    return err;
-}
-
-int ipv4_unregister_hooks(struct inet_hook_ops *reg, size_t n)
-{
-    size_t i;
-    struct inet_hook_ops *elem, *next;
-    struct list_head *hook_list;
-    assert(reg);
-
-    for (i = 0; i < n; i++) {
-        if (reg[i].hooknum >= INET_HOOK_NUMHOOKS) {
-            RTE_LOG(WARNING, IPV4, "%s: bad hook number\n", __func__);
-            continue; /* return error ? */
-        }
-        hook_list = &inet_hooks[reg[i].hooknum];
-
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-        rte_rwlock_write_lock(&inet_hook_lock);
-#endif
-        list_for_each_entry_safe(elem, next, hook_list, list) {
-            if (elem == &reg[i]) {
-                list_del(&elem->list);
-                break;
-            }
-        }
-#ifdef CONFIG_DPVS_IPV4_INET_HOOK
-        rte_rwlock_write_unlock(&inet_hook_lock);
-#endif
-        if (&elem->list == hook_list)
-            RTE_LOG(WARNING, IPV4, "%s: hook not found\n", __func__);
-    }
-
-    return EDPVS_OK;
 }

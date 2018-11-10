@@ -328,12 +328,12 @@ static int dump_nic_verbose(char *name, int namelen)
             ext_get->dev_info.max_vfs);
     printf("    %-16s%-16s%-16s%-16s\n", "max_vmdq_pools", "rx_ol_capa",
             "tx_ol_capa", "reta_size");
-    printf("    %-16u%-16u%-16u%-16u\n", ext_get->dev_info.max_vmdq_pools,
+    printf("    %-16u0x%-14X0x%-14X%-16u\n", ext_get->dev_info.max_vmdq_pools,
             ext_get->dev_info.rx_offload_capa, ext_get->dev_info.tx_offload_capa,
             ext_get->dev_info.reta_size);
     printf("    %-16s%-16s%-16s%-16s\n", "hash_key_size", "flowtype_rss_ol",
             "vmdq_que_base", "vmdq_que_num");
-    printf("    %-16u%-16lu%-16u%-16u\n", ext_get->dev_info.hash_key_size,
+    printf("    %-16u0x%-14lX%-16u%-16u\n", ext_get->dev_info.hash_key_size,
             ext_get->dev_info.flow_type_rss_offloads,
             ext_get->dev_info.vmdq_queue_base, ext_get->dev_info.vmdq_queue_num);
     printf("    %-16s%-16s%-16s%-16s\n", "rx_desc_max", "rx_desc_min",

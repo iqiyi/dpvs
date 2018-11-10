@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 #include "inet.h"
 #include "ipv4.h"
+#include "ipv6.h"
 #include "ipvs/service.h"
 #include "ipvs/dest.h"
 #include "ipvs/sched.h"
@@ -26,6 +27,7 @@
 #include "ipvs/blklst.h"
 #include "ctrl.h"
 #include "route.h"
+#include "route6.h"
 #include "netif.h"
 #include "assert.h"
 #include "neigh.h"
@@ -47,8 +49,15 @@ static struct list_head dp_vs_svc_match_list;
 
 static inline unsigned dp_vs_svc_hashkey(int af, unsigned proto, const union inet_addr *addr)
 {
-    /* now IPv4 only */
-    uint32_t addr_fold = addr->in.s_addr;
+    uint32_t addr_fold;
+
+    addr_fold = inet_addr_fold(af, addr);
+
+    if (!addr_fold) {
+        RTE_LOG(DEBUG, SERVICE, "%s: IP proto not support.\n", __func__);
+        return 0;
+    }
+
     return (proto ^ rte_be_to_cpu_32(addr_fold)) & DP_VS_SVC_TAB_MASK;
 }
 
@@ -104,7 +113,8 @@ static int dp_vs_svc_unhash(struct dp_vs_service *svc)
 }
 
 struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol, 
-                                          const union inet_addr *vaddr, uint16_t vport)
+                                          const union inet_addr *vaddr, 
+                                          uint16_t vport)
 {
     unsigned hash;
     struct dp_vs_service *svc;
@@ -146,21 +156,28 @@ static inline bool __svc_in_range(int af,
                                   const union inet_addr *addr, __be16 port,
                                   const struct inet_addr_range *range)
 {
-    if (unlikely(af != AF_INET))
+    if (unlikely((af == AF_INET) && 
+        (ntohl(range->min_addr.in.s_addr) > ntohl(range->max_addr.in.s_addr))))
         return false;
 
-    if (unlikely(ntohl(range->min_addr.in.s_addr) > \
-        ntohl(range->max_addr.in.s_addr)))
+    if (unlikely((af == AF_INET6) &&
+        ipv6_addr_cmp(&range->min_addr.in6, &range->max_addr.in6) > 0))
         return false;
 
     if (unlikely(ntohs(range->min_port) > ntohs(range->max_port)))
         return false;
 
     /* if both min/max are zero, means need not check. */
-    if (range->max_addr.in.s_addr != htonl(INADDR_ANY)) {
-        if (ntohl(addr->in.s_addr) < ntohl(range->min_addr.in.s_addr) ||
-            ntohl(addr->in.s_addr) > ntohl(range->max_addr.in.s_addr))
-            return false;
+    if (!inet_is_addr_any(af, &range->max_addr)) {
+        if (af == AF_INET) {
+            if (ntohl(addr->in.s_addr) < ntohl(range->min_addr.in.s_addr) ||
+                ntohl(addr->in.s_addr) > ntohl(range->max_addr.in.s_addr))
+                return false;
+        } else {
+            if (ipv6_addr_cmp(&range->min_addr.in6, &addr->in6) > 0 ||
+                ipv6_addr_cmp(&range->max_addr.in6, &addr->in6) < 0)
+                return false;
+        }
     }
 
     if (range->max_port != 0) {
@@ -173,7 +190,7 @@ static inline bool __svc_in_range(int af,
 }
 
 static struct dp_vs_service *
-__dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
+__dp_vs_svc_match_get4(const struct rte_mbuf *mbuf)
 {
     struct route_entry *rt = mbuf->userdata;
     struct ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
@@ -188,36 +205,40 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
     if (!ports)
         return NULL;
 
+    /* snat is handled at pre-routing to check if oif
+     * is match perform route here. */
+    if (rt) {
+        if ((rt->flag & RTF_KNI) || (rt->flag & RTF_LOCALIN))
+            return NULL;
+        oif = rt->port->id;
+    } else {
+        rt = route4_input(mbuf, &daddr.in, &saddr.in,
+                          iph->type_of_service,
+                          netif_port_get(mbuf->port));
+        if (!rt)
+            return NULL;
+        if ((rt->flag & RTF_KNI) || (rt->flag & RTF_LOCALIN)) {
+            route4_put(rt);
+            return NULL;
+        }
+        oif = rt->port->id;
+        route4_put(rt);
+    }
+
     list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
         struct dp_vs_match *m = svc->match;
         struct netif_port *idev, *odev;
         assert(m);
 
-        /* snat is handled at pre-routing to check if oif
-         * is match perform route here. */
-        if (strlen(m->oifname)) {
-            if (!rt) {
-                rt = route4_input(mbuf, &daddr.in, &saddr.in,
-                                  iph->type_of_service,
-                                  netif_port_get(mbuf->port));
-                if (!rt)
-                    return NULL;
-
-                /* set mbuf->userdata to @rt as side-effect is not good!
-                 * although route will done again when out-xmit. */
-                oif = rt->port->id;
-                route4_put(rt);
-            } else {
-                oif = rt->port->id;
-            }
-        }
+        if (!strlen(m->oifname))
+            oif = NETIF_PORT_ID_ALL;
 
         idev = netif_port_get_by_name(m->iifname);
         odev = netif_port_get_by_name(m->oifname);
 
-        if (svc->af == af && svc->proto == iph->next_proto_id &&
-            __svc_in_range(af, &saddr, ports[0], &m->srange) &&
-            __svc_in_range(af, &daddr, ports[1], &m->drange) &&
+        if (svc->af == AF_INET && svc->proto == iph->next_proto_id &&
+            __svc_in_range(AF_INET, &saddr, ports[0], &m->srange) &&
+            __svc_in_range(AF_INET, &daddr, ports[1], &m->drange) &&
             (!idev || idev->id == mbuf->port) &&
             (!odev || odev->id == oif)
            ) {
@@ -229,7 +250,90 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
     return NULL;
 }
 
-int dp_vs_match_parse(int af, const char *srange, const char *drange,
+static struct dp_vs_service *
+__dp_vs_svc_match_get6(const struct rte_mbuf *mbuf)
+{
+    struct route6 *rt = mbuf->userdata;
+    struct ip6_hdr *iph = ip6_hdr(mbuf);
+    uint8_t ip6nxt = iph->ip6_nxt;
+    struct dp_vs_service *svc;
+    union inet_addr saddr, daddr;
+    __be16 _ports[2], *ports;
+    portid_t oif = NETIF_PORT_ID_ALL;
+
+    struct flow6 fl6 = {
+        .fl6_iif    = NULL,
+        .fl6_daddr  = iph->ip6_dst,
+        .fl6_saddr  = iph->ip6_src,
+        .fl6_proto  = iph->ip6_nxt,
+    };
+
+    saddr.in6 = iph->ip6_src;
+    daddr.in6 = iph->ip6_dst;
+    ports = mbuf_header_pointer(mbuf, ip6_hdrlen(mbuf), sizeof(_ports), _ports);
+    if (!ports)
+        return NULL;
+
+    /* snat is handled at pre-routing to check if oif
+     * is match perform route here. */
+    if (rt) {
+        if ((rt->rt6_flags & RTF_KNI) || (rt->rt6_flags & RTF_LOCALIN))
+            return NULL;
+        oif = rt->rt6_dev->id;
+    } else {
+        rt = route6_input(mbuf, &fl6);
+        if (!rt)
+            return NULL;
+
+        /* set mbuf->userdata to @rt as side-effect is not good!
+         * although route will done again when out-xmit. */
+        if ((rt->rt6_flags & RTF_KNI) || (rt->rt6_flags & RTF_LOCALIN)) {
+            route6_put(rt);
+            return NULL;
+        }
+        oif = rt->rt6_dev->id;
+        route6_put(rt);
+    }
+
+    list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
+        struct dp_vs_match *m = svc->match;
+        struct netif_port *idev, *odev;
+        assert(m);
+
+        if (!strlen(m->oifname))
+            oif = NETIF_PORT_ID_ALL;
+
+        idev = netif_port_get_by_name(m->iifname);
+        odev = netif_port_get_by_name(m->oifname);
+
+        ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+
+        if (svc->af == AF_INET6 && svc->proto == ip6nxt &&
+            __svc_in_range(AF_INET6, &saddr, ports[0], &m->srange) &&
+            __svc_in_range(AF_INET6, &daddr, ports[1], &m->drange) &&
+            (!idev || idev->id == mbuf->port) &&
+            (!odev || odev->id == oif)
+           ) {
+            rte_atomic32_inc(&svc->usecnt);
+            return svc;
+        }
+    }
+
+    return NULL;
+}
+
+static struct dp_vs_service *
+__dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
+{
+    if (af == AF_INET)
+        return __dp_vs_svc_match_get4(mbuf);
+    else if (af == AF_INET6)
+        return __dp_vs_svc_match_get6(mbuf);
+    else
+        return NULL;
+}
+
+int dp_vs_match_parse(const char *srange, const char *drange,
                       const char *iifname, const char *oifname,
                       struct dp_vs_match *match)
 {
@@ -238,13 +342,13 @@ int dp_vs_match_parse(int af, const char *srange, const char *drange,
     memset(match, 0, sizeof(*match));
 
     if (srange && strlen(srange)) {
-        err = inet_addr_range_parse(AF_INET, srange, &match->srange);
+        err = inet_addr_range_parse(srange, &match->srange, &match->af);
         if (err != EDPVS_OK)
             return err;
     }
 
     if (drange && strlen(drange)) {
-        err = inet_addr_range_parse(AF_INET, drange, &match->drange);
+        err = inet_addr_range_parse(drange, &match->drange, &match->af);
         if (err != EDPVS_OK)
             return err;
     }
@@ -310,7 +414,7 @@ out:
 
 
 struct dp_vs_service *dp_vs_lookup_vip(int af, uint16_t protocol,
-                       const union inet_addr *vaddr)
+                                       const union inet_addr *vaddr)
 {
     struct dp_vs_service *svc;
     unsigned hash;
@@ -353,15 +457,15 @@ void __dp_vs_unbind_svc(struct dp_vs_dest *dest)
 }
 
 int dp_vs_add_service(struct dp_vs_service_conf *u, 
-                             struct dp_vs_service **svc_p)
+                      struct dp_vs_service **svc_p)
 {
     int ret = 0;
     int size;
     struct dp_vs_scheduler *sched = NULL;
     struct dp_vs_service *svc = NULL;
 
-    if (!u->fwmark && !u->addr.in.s_addr && !u->port &&
-            is_empty_match(&u->match)) {
+    if (!u->fwmark && inet_is_addr_any(u->af, &u->addr) 
+        && !u->port && is_empty_match(&u->match)) {
         RTE_LOG(ERR, SERVICE, "%s: adding empty servive\n", __func__);
         return EDPVS_INVAL;
     }
@@ -419,8 +523,8 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     ret = dp_vs_new_stats(&(svc->stats));
     if(ret)
         goto out_err;
-    if(svc->af == AF_INET)
-        dp_vs_num_services++;
+        
+    dp_vs_num_services++;
 
     rte_rwlock_write_lock(&__dp_vs_svc_lock);
     dp_vs_svc_hash(svc);
@@ -457,12 +561,10 @@ dp_vs_edit_service(struct dp_vs_service *svc, struct dp_vs_service_conf *u)
     }
     old_sched = sched;
 
-#ifdef CONFIG_IP_VS_IPV6
     if (u->af == AF_INET6 && (u->netmask < 1 || u->netmask > 128)) {
-        ret = -EINVAL;
+        ret = EDPVS_INVAL;
         goto out;
     }
-#endif
 
     rte_rwlock_write_lock(&__dp_vs_svc_lock);
 
@@ -511,12 +613,9 @@ dp_vs_edit_service(struct dp_vs_service *svc, struct dp_vs_service_conf *u)
         }
     }
 
-      out_unlock:
+out_unlock:
     rte_rwlock_write_unlock(&__dp_vs_svc_lock);
-#ifdef CONFIG_IP_VS_IPV6
-      out:
-#endif
-
+out:
     return ret;
 }
 
@@ -526,8 +625,7 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
     struct dp_vs_dest *dest, *nxt;
 
     /* Count only IPv4 services for old get/setsockopt interface */
-    if (svc->af == AF_INET)
-        dp_vs_num_services--;
+    dp_vs_num_services--;
 
     /* Unbind scheduler */
     dp_vs_unbind_scheduler(svc);
@@ -587,8 +685,9 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     struct dp_vs_match *m;
 
     memset(dst, 0, sizeof(*dst));
+    dst->af = src->af;
     dst->proto = src->proto;
-    dst->addr = src->addr.in.s_addr;
+    dst->addr = src->addr;
     dst->port = src->port;
     dst->fwmark = src->fwmark;
     snprintf(dst->sched_name, sizeof(dst->sched_name),
@@ -606,8 +705,8 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     if (!m)
         return err;
 
-    inet_addr_range_dump(AF_INET, &m->srange, dst->srange, sizeof(dst->srange));
-    inet_addr_range_dump(AF_INET, &m->drange, dst->drange, sizeof(dst->drange));
+    inet_addr_range_dump(m->af, &m->srange, dst->srange, sizeof(dst->srange));
+    inet_addr_range_dump(m->af, &m->drange, dst->drange, sizeof(dst->drange));
 
     snprintf(dst->iifname, sizeof(dst->iifname), "%s", m->iifname);
     snprintf(dst->oifname, sizeof(dst->oifname), "%s", m->oifname);
@@ -624,8 +723,6 @@ int dp_vs_get_service_entries(const struct dp_vs_get_services *get,
 
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         list_for_each_entry(svc, &dp_vs_svc_table[idx], s_list){
-            if (svc->af != AF_INET)
-                continue;
             if (count >= get->num_services)
                 goto out;
             ret = dp_vs_copy_service(&uptr->entrytable[count], svc);
@@ -637,9 +734,6 @@ int dp_vs_get_service_entries(const struct dp_vs_get_services *get,
 
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         list_for_each_entry(svc, &dp_vs_svc_fwm_table[idx], f_list) {
-            /* Only expose IPv4 entries to old interface */
-            if (svc->af != AF_INET)
-                continue;
             if (count >= get->num_services)
                 goto out;
             ret = dp_vs_copy_service(&uptr->entrytable[count], svc);
@@ -650,8 +744,6 @@ int dp_vs_get_service_entries(const struct dp_vs_get_services *get,
     }
 
     list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
-        if (svc->af != AF_INET)
-            continue;
         if (count >= get->num_services)
             goto out;
         ret = dp_vs_copy_service(&uptr->entrytable[count], svc);
@@ -773,9 +865,10 @@ int dp_vs_zero_all(void)
 static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
                                    struct dp_vs_service_user *user)
 {
-    conf->af = AF_INET;
+    int err;
+    conf->af = user->af;
     conf->protocol = user->proto;
-    conf->addr.in.s_addr = user->addr;
+    conf->addr = user->addr;
     conf->port = user->port;
     conf->fwmark = user->fwmark;
 
@@ -789,27 +882,32 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
     conf->bps = user->bps;
     conf->limit_proportion = user->limit_proportion;
 
-    return dp_vs_match_parse(AF_INET, user->srange, user->drange,
-                             user->iifname, user->oifname, &conf->match);
+    err = dp_vs_match_parse(user->srange, user->drange,
+                            user->iifname, user->oifname, &conf->match);
+    if (conf->match.af)
+        conf->af = conf->match.af;
+
+    return err;
 }
 
 static void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
                                     struct dp_vs_dest_user *udest_compat)
 {
-    udest->addr.in.s_addr = udest_compat->addr;
-    udest->port = udest_compat->port;
-    udest->fwdmode = udest_compat->conn_flags;//make sure fwdmode and conn_flags are the same
+    udest->af         = udest_compat->af;
+    udest->addr       = udest_compat->addr;
+    udest->port       = udest_compat->port;
+    udest->fwdmode    = udest_compat->conn_flags;//make sure fwdmode and conn_flags are the same
     udest->conn_flags = udest_compat->conn_flags; 
-    udest->weight = udest_compat->weight;
-    udest->max_conn = udest_compat->max_conn;
-    udest->min_conn = udest_compat->min_conn;
+    udest->weight     = udest_compat->weight;
+    udest->max_conn   = udest_compat->max_conn;
+    udest->min_conn   = udest_compat->min_conn;
 }
 
 static int gratuitous_arp_send_vip(struct in_addr *vip)
 {
     struct route_entry *local_route;
-    local_route = route_out_local_lookup(vip->s_addr);
 
+    local_route = route_out_local_lookup(vip->s_addr);
     if(local_route){
         neigh_gratuitous_arp(&local_route->dest, local_route->port);
         route4_put(local_route);
@@ -835,8 +933,8 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     }
     if (opt == DPVS_SO_SET_FLUSH)
         return dp_vs_flush();
-    memcpy(arg, user, len);
 
+    memcpy(arg, user, len);
     usvc_compat = (struct dp_vs_service_user *)arg;
     udest_compat = (struct dp_vs_dest_user *)(usvc_compat + 1);
     
@@ -845,7 +943,8 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
         return ret;
     
     if (opt == DPVS_SO_SET_ZERO) {
-        if(!usvc.fwmark && !usvc.addr.in.s_addr && !usvc.port &&
+        if(!inet_is_addr_any(usvc.af, &usvc.addr) && 
+           !usvc.fwmark && !usvc.port &&
            is_empty_match(&usvc.match)
           ) {
             return dp_vs_zero_all();
@@ -853,12 +952,12 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     }
 
     if (usvc.protocol != IPPROTO_TCP && usvc.protocol != IPPROTO_UDP &&
-        usvc.protocol != IPPROTO_ICMP) {
+        usvc.protocol != IPPROTO_ICMP && usvc.protocol != IPPROTO_ICMPV6) {
         RTE_LOG(ERR, SERVICE, "%s: protocol not support.\n", __func__);
         return EDPVS_INVAL;
     }
 
-    if (usvc.addr.in.s_addr || usvc.port)
+    if (!inet_is_addr_any(usvc.af, &usvc.addr) || usvc.port)
         svc = __dp_vs_service_get(usvc.af, usvc.protocol, 
                                   &usvc.addr, usvc.port);
     else if (usvc.fwmark)
@@ -945,18 +1044,17 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
             {
                 struct dp_vs_get_services *get, *output;
                 int size;
-                get = (struct dp_vs_get_services*)user;
+                get = (struct dp_vs_get_services *)user;
                 size = sizeof(*get) + \
                        sizeof(struct dp_vs_service_entry) * (get->num_services);
-                //memcpy(&get, user, size);
-                if(len != size){
+                if(len != sizeof(*get)){
                     *outlen = 0; 
                     return EDPVS_INVAL;
                 }
-                output = rte_zmalloc("get_services", len, 0);
+                output = rte_zmalloc("get_services", size, 0);
                 if (unlikely(NULL == output))
                     return EDPVS_NOMEM;
-                memcpy(output, get, size);
+                memcpy(output, get, sizeof(*get));
                 ret = dp_vs_get_service_entries(get, output);
                 *out = output;
                 *outlen = size;
@@ -969,23 +1067,23 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 union inet_addr addr;
 
                 entry = (struct dp_vs_service_entry *)user;
-                addr.in.s_addr = entry->addr;
+                addr = entry->addr;
                 if(entry->fwmark)
                     svc = __dp_vs_svc_fwm_get(AF_INET, entry->fwmark);
-                else if (entry->addr || entry->port)
-                    svc = __dp_vs_service_get(AF_INET, entry->proto,
+                else if (!inet_is_addr_any(entry->af, &entry->addr) || entry->port)
+                    svc = __dp_vs_service_get(entry->af, entry->proto,
                                               &addr, entry->port);
                 else {
                     struct dp_vs_match match;
 
-                    ret = dp_vs_match_parse(AF_INET, entry->srange,
-                                            entry->drange, entry->iifname,
-                                            entry->oifname, &match);
+                    ret = dp_vs_match_parse(entry->srange, entry->drange, 
+                                            entry->iifname, entry->oifname, 
+                                            &match);
                     if (ret != EDPVS_OK)
                         return ret;
 
                     if (!is_empty_match(&match)) {
-                        svc = __dp_vs_svc_match_find(AF_INET, entry->proto,
+                        svc = __dp_vs_svc_match_find(match.af, entry->proto,
                                                      &match);
                     }
                 }
@@ -1014,32 +1112,32 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 int size;
                 get = (struct dp_vs_get_dests *)user;
                 size = sizeof(*get) + sizeof(struct dp_vs_dest_entry) * get->num_dests;
-                if(len != size){
+                if(len != sizeof(*get)){
                     *outlen = 0;
                     return EDPVS_INVAL;
                 }
-                addr.in.s_addr = get->addr;
+                addr = get->addr;
                 output = rte_zmalloc("get_services", size, 0);
                 if (unlikely(NULL == output))
                     return EDPVS_NOMEM;
-                memcpy(output, get, size);
+                memcpy(output, get, sizeof(*get));
 
                 if(get->fwmark)
-                    svc = __dp_vs_svc_fwm_get(AF_INET, get->fwmark);
-                else if (addr.in.s_addr || get->port)
-                    svc = __dp_vs_service_get(AF_INET, get->proto, &addr,
+                    svc = __dp_vs_svc_fwm_get(get->af, get->fwmark);
+                else if (!inet_is_addr_any(get->af, &addr) || get->port)
+                    svc = __dp_vs_service_get(get->af, get->proto, &addr,
                                               get->port);
                 else {
                     struct dp_vs_match match;
 
-                    ret = dp_vs_match_parse(AF_INET, get->srange,
-                                            get->drange, get->iifname,
-                                            get->oifname, &match);
+                    ret = dp_vs_match_parse(get->srange, get->drange, 
+                                            get->iifname, get->oifname, 
+                                            &match);
                     if (ret != EDPVS_OK)
                         return ret;
 
                     if (!is_empty_match(&match)) {
-                        svc = __dp_vs_svc_match_find(AF_INET, get->proto,
+                        svc = __dp_vs_svc_match_find(match.af, get->proto,
                                                      &match);
                     }
                 }

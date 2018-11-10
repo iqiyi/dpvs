@@ -17,9 +17,12 @@
  */
 #include <assert.h>
 #include <netinet/ip_icmp.h>
+#include <netinet/icmp6.h>
 #include "common.h"
 #include "ipv4.h"
+#include "ipv6.h"
 #include "icmp.h"
+#include "icmp6.h"
 #include "sa_pool.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/conn.h"
@@ -32,19 +35,26 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/blklst.h"
 #include "ipvs/proto_udp.h"
+#include "route6.h"
 
-#define icmp4_id(icmph)      (((icmph)->un).echo.id)
-
-static inline int dp_vs_fill_iphdr(int af, const struct rte_mbuf *mbuf, 
+static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
                                    struct dp_vs_iphdr *iph)
 {
     if (af == AF_INET) {
-        const struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
+        struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
         iph->af     = AF_INET;
         iph->len    = ip4_hdrlen(mbuf);
         iph->proto  = ip4h->next_proto_id;
         iph->saddr.in.s_addr = ip4h->src_addr;
         iph->daddr.in.s_addr = ip4h->dst_addr;
+    } else if (af == AF_INET6) {
+        struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+        uint8_t ip6nxt = ip6h->ip6_nxt;
+        iph->af         = AF_INET6;
+        iph->len        = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+        iph->proto      = ip6nxt;
+        iph->saddr.in6  = ip6h->ip6_src;
+        iph->daddr.in6  = ip6h->ip6_dst;
     } else {
         return EDPVS_NOTSUPP;
     }
@@ -75,8 +85,8 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
 
     conn_flags = (is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
     if (svc->af == AF_INET6) {
-        RTE_LOG(ERR, IPVS, "%s: IPv6 is not supported!\n", __func__);
-        return NULL;
+        /* FIXME: Is OK to use svc->netmask as IPv6 prefix length ? */
+        ipv6_addr_prefix_copy(&snet.in6, &iph->saddr.in6, svc->netmask);
     } else {
         snet.in.s_addr = iph->saddr.in.s_addr & svc->netmask;
     }
@@ -109,7 +119,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
             dp_vs_conn_fill_param(iph->af, iph->proto, &snet, &iph->daddr,
                     0, ports[1], 0, &param);
 
-            ct = dp_vs_conn_new(mbuf, &param, dest, conn_flags | DPVS_CONN_F_TEMPLATE);
+            ct = dp_vs_conn_new(mbuf, iph, &param, dest, conn_flags | DPVS_CONN_F_TEMPLATE);
             if(unlikely(NULL == ct))
                 return NULL;
 
@@ -133,7 +143,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
             dp_vs_conn_fill_param(iph->af, iph->proto, &snet, &iph->daddr,
                     0, 0, 0, &param);
 
-            ct = dp_vs_conn_new(mbuf, &param, dest, conn_flags | DPVS_CONN_F_TEMPLATE);
+            ct = dp_vs_conn_new(mbuf, iph, &param, dest, conn_flags | DPVS_CONN_F_TEMPLATE);
             if(unlikely(NULL == ct))
                 return NULL;
 
@@ -149,7 +159,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
     dp_vs_conn_fill_param(iph->af, iph->proto, &iph->saddr, &iph->daddr,
             ports[0], ports[1], dport, &param);
 
-    conn = dp_vs_conn_new(mbuf, &param, dest, conn_flags);
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest, conn_flags);
     if (unlikely(NULL == conn)) {
         dp_vs_conn_put(ct);
         return NULL;
@@ -164,6 +174,100 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
     return conn;
 }
 
+static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
+                                       const struct dp_vs_iphdr *iph,
+                                       uint16_t *ports,
+                                       struct rte_mbuf *mbuf)
+{
+    int err;
+    struct dp_vs_conn *conn;
+    struct dp_vs_conn_param param;
+    struct sockaddr_storage daddr, saddr;
+    uint16_t _ports[2];
+
+    if (unlikely(iph->proto == IPPROTO_ICMP)) {
+        struct icmphdr *ich, _icmph;
+        ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph), &_icmph);
+        if (!ich)
+            return NULL;
+
+        _ports[0] = icmp4_id(ich);
+        _ports[1] = ich->type << 8 | ich->code;
+
+        /* ID may confict for diff host,
+         * need we use ID pool ? */
+        dp_vs_conn_fill_param(iph->af, iph->proto,
+                              &iph->daddr, &dest->addr,
+                              _ports[1], _ports[0],
+                              0, &param);
+    } else if (unlikely(iph->proto == IPPROTO_ICMPV6)) {
+        struct icmp6_hdr *ic6h, _ic6hp;
+        ic6h = mbuf_header_pointer(mbuf, iph->len, sizeof(_ic6hp), &_ic6hp);
+        if (!ic6h)
+            return NULL;
+
+        _ports[0] = icmp6h_id(ic6h);
+        _ports[1] = ic6h->icmp6_type << 8 | ic6h->icmp6_code;
+
+        dp_vs_conn_fill_param(iph->af, iph->proto,
+                              &iph->daddr, &dest->addr,
+                              _ports[1], _ports[0],
+                              0, &param);
+    } else {
+        /* we cannot inherit dest (host's src port),
+         * that may confict for diff hosts,
+         * and using dest->port is worse choice. */
+        if (iph->af == AF_INET) {
+            struct sockaddr_in *daddr4 = (struct sockaddr_in *)&daddr;
+            struct sockaddr_in *saddr4 = (struct sockaddr_in *)&saddr;
+
+            memset(&daddr, 0, sizeof(daddr));
+            daddr4->sin_family = AF_INET;
+            daddr4->sin_addr = iph->daddr.in;
+            daddr4->sin_port = ports[1];
+
+            memset(&saddr, 0, sizeof(saddr));
+            saddr4->sin_family = AF_INET;
+            saddr4->sin_addr = dest->addr.in;
+            saddr4->sin_port = 0;
+
+            err = sa_fetch(AF_INET, NULL, &daddr, &saddr);
+            if (err != 0)
+                return NULL;
+            dp_vs_conn_fill_param(AF_INET, iph->proto, &iph->daddr, &dest->addr,
+                    ports[1], saddr4->sin_port, 0, &param);
+        } else { /* AF_INET6 */
+            struct sockaddr_in6 *daddr6 = (struct sockaddr_in6 *)&daddr;
+            struct sockaddr_in6 *saddr6 = (struct sockaddr_in6 *)&saddr;
+
+            memset(&daddr, 0, sizeof(daddr));
+            daddr6->sin6_family = AF_INET6;
+            daddr6->sin6_addr = iph->daddr.in6;
+            daddr6->sin6_port = ports[1];
+
+            memset(&saddr, 0, sizeof(saddr));
+            saddr6->sin6_family = AF_INET6;
+            saddr6->sin6_addr = dest->addr.in6;
+            saddr6->sin6_port = 0;
+
+            err = sa_fetch(AF_INET6, NULL, &daddr, &saddr);
+            if (err != 0)
+                return NULL;
+            dp_vs_conn_fill_param(AF_INET6, iph->proto, &iph->daddr, &dest->addr,
+                    ports[1], saddr6->sin6_port, 0, &param);
+        }
+    }
+
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest, 0);
+    if (!conn) {
+        sa_release(NULL, &daddr, &saddr);
+        return NULL;
+    }
+
+    dp_vs_stats_conn(conn);
+    return conn;
+}
+
 /* select an RS by service's scheduler and create a connection */
 struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc, 
                                   const struct dp_vs_iphdr *iph,
@@ -174,8 +278,6 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     struct dp_vs_dest *dest;
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
-    struct sockaddr_in daddr, saddr;
-    int err;
 
     assert(svc && iph && mbuf);
 
@@ -196,80 +298,46 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
         return NULL;
     }
         
-    if (dest->fwdmode == DPVS_FWD_MODE_SNAT) {
-        if (unlikely(iph->proto == IPPROTO_ICMP)) {
-            struct icmphdr *ich, _icmph;
-            ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph), &_icmph);
-            if (!ich)
-                return NULL;
+    if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
+        return dp_vs_snat_schedule(dest, iph, ports, mbuf);
 
-            ports = _ports;
-            _ports[0] = icmp4_id(ich);
-            _ports[1] = ich->type << 8 | ich->code;
+    if (unlikely(iph->proto == IPPROTO_ICMP)) {
+        struct icmphdr *ich, _icmph;
+        ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph), &_icmph);
+        if (!ich)
+            return NULL;
 
-            /* ID may confict for diff host,
-             * need we use ID pool ? */
-            dp_vs_conn_fill_param(iph->af, iph->proto,
-                                  &iph->daddr, &dest->addr,
-                                  ports[1], ports[0],
-                                  0, &param);
-        } else {
-            /* we cannot inherit dest (host's src port),
-             * that may confict for diff hosts,
-             * and using dest->port is worse choice. */
-            memset(&daddr, 0, sizeof(daddr));
-            daddr.sin_family = AF_INET;
-            daddr.sin_addr = iph->daddr.in;
-            daddr.sin_port = ports[1];
-            memset(&saddr, 0, sizeof(saddr));
-            saddr.sin_family = AF_INET;
-            saddr.sin_addr = dest->addr.in;
-            saddr.sin_port = 0;
+        ports = _ports;
+        _ports[0] = icmp4_id(ich);
+        _ports[1] = ich->type << 8 | ich->code;
 
-            err = sa_fetch(NULL, &daddr, &saddr);
-            if (err != 0) {
-#ifdef CONFIG_DPVS_MBUF_DEBUG
-                dp_vs_mbuf_dump("sa_fetch failed.", iph->af, mbuf);
-#endif
-                return NULL;
-            }
+        dp_vs_conn_fill_param(iph->af, iph->proto,
+                              &iph->saddr, &iph->daddr,
+                              ports[0], ports[1], 0, &param);
+    } else if (unlikely(iph->proto == IPPROTO_ICMPV6)) {
+        struct icmp6_hdr *ic6h, _ic6hp;
+        ic6h = mbuf_header_pointer(mbuf, iph->len, sizeof(_ic6hp), &_ic6hp);
+        if (!ic6h)
+            return NULL;
 
-            dp_vs_conn_fill_param(iph->af, iph->proto,
-                                  &iph->daddr, &dest->addr,
-                                  ports[1], saddr.sin_port,
-                                  0, &param);
-        }
+        ports = _ports;
+        _ports[0] = icmp6h_id(ic6h);
+        _ports[1] = ic6h->icmp6_type << 8 | ic6h->icmp6_code;
+
+        dp_vs_conn_fill_param(iph->af, iph->proto,
+                              &iph->daddr, &dest->addr,
+                              ports[1], ports[0],
+                              0, &param);
     } else {
-        if (unlikely(iph->proto == IPPROTO_ICMP)) {
-            struct icmphdr *ich, _icmph;
-            ich = mbuf_header_pointer(mbuf, iph->len, sizeof(_icmph), &_icmph);
-            if (!ich)
-                return NULL;
-
-            ports = _ports;
-            _ports[0] = icmp4_id(ich);
-            _ports[1] = ich->type << 8 | ich->code;
-
-            dp_vs_conn_fill_param(iph->af, iph->proto,
-                                  &iph->saddr, &iph->daddr,
-                                  ports[0], ports[1], 0, &param);
-        } else {
-            dp_vs_conn_fill_param(iph->af, iph->proto,
-                                  &iph->saddr, &iph->daddr,
-                                  ports[0], ports[1], 0, &param);
-        }
+        dp_vs_conn_fill_param(iph->af, iph->proto,
+                              &iph->saddr, &iph->daddr,
+                              ports[0], ports[1], 0, &param);
     }
 
-    conn = dp_vs_conn_new(mbuf, &param, dest,
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest,
             is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
-    if (!conn) {
-        if (dest->fwdmode == DPVS_FWD_MODE_SNAT && iph->proto != IPPROTO_ICMP)
-            sa_release(NULL, &daddr, &saddr);
-#ifdef CONFIG_DPVS_MBUF_DEBUG
-        dp_vs_mbuf_dump("create conn failed.", iph->af, mbuf);
-#endif
+    if (!conn)
         return NULL;
-    }
 
     dp_vs_stats_conn(conn);
     return conn;
@@ -277,8 +345,8 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
 
 /* return verdict INET_XXX */
 static int xmit_outbound(struct rte_mbuf *mbuf, 
-                          struct dp_vs_proto *prot, 
-                          struct dp_vs_conn *conn)
+                         struct dp_vs_proto *prot, 
+                         struct dp_vs_conn *conn)
 {
     int err;
     assert(mbuf && prot && conn);
@@ -286,7 +354,8 @@ static int xmit_outbound(struct rte_mbuf *mbuf,
     if (dp_vs_stats_out(conn, mbuf)) {
         dp_vs_conn_put(conn);
         return INET_DROP;
-    } 
+    }
+
     if (!conn->packet_out_xmit) {
         RTE_LOG(WARNING, IPVS, "%s: missing out_xmit\n", __func__);
         dp_vs_conn_put(conn);
@@ -304,8 +373,8 @@ static int xmit_outbound(struct rte_mbuf *mbuf,
 
 /* return verdict INET_XXX */
 static int xmit_inbound(struct rte_mbuf *mbuf,
-                          struct dp_vs_proto *prot,
-                          struct dp_vs_conn *conn)
+                        struct dp_vs_proto *prot,
+                        struct dp_vs_conn *conn)
 {
     int err;
     assert(mbuf && prot && conn);
@@ -340,9 +409,9 @@ static int xmit_inbound(struct rte_mbuf *mbuf,
 }
 
 /* mbuf should be consumed here. */
-static int xmit_outbound_icmp(struct rte_mbuf *mbuf, 
-                              struct dp_vs_proto *prot, 
-                              struct dp_vs_conn *conn)
+static int __xmit_outbound_icmp4(struct rte_mbuf *mbuf,
+                                 struct dp_vs_proto *prot,
+                                 struct dp_vs_conn *conn)
 {
     struct flow4 fl4;
     struct route_entry *rt = NULL;
@@ -362,9 +431,9 @@ static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->caddr.in;
-    fl4.saddr = conn->vaddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->caddr.in;
+    fl4.fl4_saddr = conn->vaddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         rte_pktmbuf_free(mbuf);
@@ -387,13 +456,75 @@ static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
     /* translation for outer L3, ICMP, and inner L3 and L4 */
     dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_OUTBOUND);
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
 }
 
 /* mbuf should be consumed here. */
-static int xmit_inbound_icmp(struct rte_mbuf *mbuf, 
-                             struct dp_vs_proto *prot, 
-                             struct dp_vs_conn *conn)
+static int __xmit_outbound_icmp6(struct rte_mbuf *mbuf,
+                                 struct dp_vs_proto *prot,
+                                 struct dp_vs_conn *conn)
+{
+    struct flow6 fl6;
+    struct route6 *rt6 = NULL;
+
+    /* no translation needed for DR/TUN. */
+    if (conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
+        if (!conn->packet_out_xmit) {
+            RTE_LOG(WARNING, IPVS, "%s: missing packet_out_xmit\n", __func__);
+            rte_pktmbuf_free(mbuf);
+            return EDPVS_NOTSUPP;
+        }
+
+        return conn->packet_out_xmit(prot, conn, mbuf);
+    }
+
+    memset(&fl6, 0, sizeof(struct flow6));
+    fl6.fl6_daddr = conn->caddr.in6;
+    fl6.fl6_saddr = conn->vaddr.in6;
+    rt6 = route6_output(mbuf, &fl6);
+    if (!rt6) {
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_NOROUTE;
+    }
+
+    if (mbuf->pkt_len > rt6->rt6_mtu) {
+        route6_put(rt6);
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(rt6->rt6_mtu));
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_FRAG;
+    }
+
+    if (unlikely(mbuf->userdata != NULL))
+        route6_put((struct route6 *)mbuf->userdata);
+    mbuf->userdata = rt6;
+
+    /* translation for outer L3, ICMP, and inner L3 and L4 */
+    dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_OUTBOUND);
+
+    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt6->rt6_dev, ip6_output);
+}
+
+static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
+                              struct dp_vs_proto *prot,
+                              struct dp_vs_conn *conn)
+{
+    int af = conn->af;
+
+    assert(af == AF_INET || af == AF_INET6);
+    if (af == AF_INET)
+        return __xmit_outbound_icmp4(mbuf, prot, conn);
+    else
+        return __xmit_outbound_icmp6(mbuf, prot, conn);
+}
+
+/* mbuf should be consumed here. */
+static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
+                                  struct dp_vs_proto *prot,
+                                  struct dp_vs_conn *conn)
 {
     struct flow4 fl4;
     struct route_entry *rt = NULL;
@@ -413,9 +544,9 @@ static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr = conn->daddr.in;
-    fl4.saddr = conn->laddr.in;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr = conn->daddr.in;
+    fl4.fl4_saddr = conn->laddr.in;
+    fl4.fl4_tos = iph->type_of_service;
     rt = route4_output(&fl4);
     if (!rt) {
         rte_pktmbuf_free(mbuf);
@@ -438,11 +569,75 @@ static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
     /* translation for outer L3, ICMP, and inner L3 and L4 */
     dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_INBOUND);
 
-    return INET_HOOK(INET_HOOK_LOCAL_OUT, mbuf, NULL, rt->port, ipv4_output);
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
+}
+
+
+/* mbuf should be consumed here. */
+static int __xmit_inbound_icmp6(struct rte_mbuf *mbuf,
+                                struct dp_vs_proto *prot,
+                                struct dp_vs_conn *conn)
+{
+    struct flow6 fl6;
+    struct route6 *rt6 = NULL;
+
+    /* no translation needed for DR/TUN. */
+    if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
+        conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
+        if (!conn->packet_xmit) {
+            RTE_LOG(WARNING, IPVS, "%s: missing packet_xmit\n", __func__);
+            rte_pktmbuf_free(mbuf);
+            return EDPVS_NOTSUPP;
+        }
+
+        return conn->packet_xmit(prot, conn, mbuf);
+    }
+
+    memset(&fl6, 0, sizeof(struct flow6));
+    fl6.fl6_daddr = conn->daddr.in6;
+    fl6.fl6_saddr = conn->laddr.in6;
+    rt6 = route6_output(mbuf, &fl6);
+    if (!rt6) {
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_NOROUTE;
+    }
+
+    if (mbuf->pkt_len > rt6->rt6_mtu) {
+        route6_put(rt6);
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(rt6->rt6_mtu));
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_FRAG;
+    }
+
+    if (unlikely(mbuf->userdata != NULL))
+        route6_put((struct route6 *)mbuf->userdata);
+    mbuf->userdata = rt6;
+
+    /* translation for outer L3, ICMP, and inner L3 and L4 */
+    dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_INBOUND);
+
+    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt6->rt6_dev, ip6_output);
+}
+
+static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
+                             struct dp_vs_proto *prot,
+                             struct dp_vs_conn *conn)
+{
+    int af = conn->af;
+
+    assert(af == AF_INET || af == AF_INET6);
+
+    if (af == AF_INET)
+        return __xmit_inbound_icmp4(mbuf, prot, conn);
+    else
+        return __xmit_inbound_icmp6(mbuf, prot, conn);
 }
 
 /* return verdict INET_XXX */
-static int dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
+static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
 {
     struct icmphdr *ich, _icmph;
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
@@ -520,6 +715,9 @@ static int dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
     }
 
+    // re-fetch IP header and Icmp address
+    iph = ip4_hdr(mbuf);
+    ich = (struct icmphdr*)((void*)iph + ip4_hdrlen(mbuf));
     if (rte_raw_cksum(ich, mbuf->pkt_len - ip4_hdrlen(mbuf)) != 0xffff) {
         RTE_LOG(DEBUG, IPVS, "%s: bad checksum\n", __func__);
         dp_vs_conn_put_no_reset(conn);
@@ -547,21 +745,156 @@ static int dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
 }
 
 /* return verdict INET_XXX */
-static int dp_vs_in(void *priv, struct rte_mbuf *mbuf, 
-                    const struct inet_hook_state *state)
+static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
+{
+    struct icmp6_hdr *ic6h, _icmp6h;
+    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+    struct ip6_hdr *cip6h, _cip6h;
+    struct dp_vs_iphdr dcip6h;
+    struct dp_vs_proto *prot;
+    struct dp_vs_conn *conn;
+    int off, ic6h_off, dir, err;
+    bool drop = false;
+    uint8_t nexthdr = ip6h->ip6_nxt;
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    char src_addr_buff[64], dst_addr_buff[64];
+#endif
+
+    *related = 0; /* not related until found matching conn */
+
+    // don't suppurt frag now
+    if (unlikely(ip6_is_frag(ip6h))) {
+        RTE_LOG(WARNING, IPVS, "%s: ip packet is frag.\n", __func__);
+        return INET_DROP;
+    }
+
+    off = sizeof(struct ip6_hdr);
+    off = ip6_skip_exthdr(mbuf, off, &nexthdr);
+    if (off < 0 || nexthdr != IPPROTO_ICMPV6) {
+        RTE_LOG(WARNING, IPVS, "%s: off or nexthdr is illegal. off is %d, nexthdr is %u.\n",
+                __func__, off, nexthdr);
+        return INET_DROP;
+    }
+
+    ic6h_off = off;
+    ic6h = mbuf_header_pointer(mbuf, off, sizeof(_icmp6h), &_icmp6h);
+    if (unlikely(!ic6h))
+        return INET_DROP;
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    inet_ntop(AF_INET6, &ip6h->ip6_src, src_addr_buff, sizeof(src_addr_buff));
+    inet_ntop(AF_INET6, &ip6h->ip6_dst, dst_addr_buff, sizeof(dst_addr_buff));
+    RTE_LOG(DEBUG, IPVS, "ICMP6 (%d,%d) %s->%s\n",
+            ic6h->icmp6_type, ntohs(icmp6h_id(ic6h)), src_addr_buff, dst_addr_buff);
+#endif
+
+    /* support these related error types only,
+     * others either not support or not related.
+     */
+    if (ic6h->icmp6_type != ICMP6_DST_UNREACH
+            && ic6h->icmp6_type != ICMP6_PACKET_TOO_BIG
+            && ic6h->icmp6_type != ICMP6_TIME_EXCEEDED)
+        return INET_ACCEPT;
+
+    /* inner (contained) IP header */
+    off += sizeof(struct icmp6_hdr);
+    cip6h = mbuf_header_pointer(mbuf, off, sizeof(_cip6h), &_cip6h);
+    if (unlikely(!cip6h))
+        return INET_ACCEPT;
+
+    if (unlikely(ip6_is_frag(cip6h))) {
+        RTE_LOG(WARNING, IPVS, "%s: frag needed.\n", __func__);
+        return INET_ACCEPT;
+    }
+
+    /*
+     * lookup conn with inner IP pkt.
+     * it need to move mbuf.data_off to inner IP pkt,
+     * and restore it later. although it looks strange.
+     */
+    rte_pktmbuf_adj(mbuf, off);
+    if (mbuf_may_pull(mbuf, sizeof(struct ip6_hdr)) != 0)
+        return INET_DROP;
+    dp_vs_fill_iphdr(AF_INET6, mbuf, &dcip6h);
+
+    prot = dp_vs_proto_lookup(dcip6h.proto);
+    if (!prot)
+        return INET_ACCEPT;
+
+    conn = prot->conn_lookup(prot, &dcip6h, mbuf, &dir, true, &drop);
+    if (!conn)
+        return INET_ACCEPT;
+
+    /* recover mbuf.data_off to outer IP header. */
+    rte_pktmbuf_prepend(mbuf, off);
+
+    /* so the ICMP is related to existing conn */
+    *related = 1;
+
+    if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0) {
+        RTE_LOG(WARNING, IPVS, "%s: may_pull icmp error\n", __func__);
+        dp_vs_conn_put_no_reset(conn);
+        return INET_DROP;
+    }
+
+    /*
+     * check checksum
+     * re-fetch IP header and Icmp address
+     */
+    ip6h = ip6_hdr(mbuf);
+    ic6h = (struct icmp6_hdr *)((void*)(ip6h) + ic6h_off);
+    if (icmp6_csum(ip6h, ic6h) != 0xffff) {
+        RTE_LOG(DEBUG, IPVS, "%s: bad checksum\n", __func__);
+        dp_vs_conn_put_no_reset(conn);
+        return INET_DROP;
+    }
+
+    if (dp_vs_stats_in(conn, mbuf)) {
+        dp_vs_conn_put(conn);
+        return INET_DROP;
+    }
+    /* note
+     * 1. the direction of inner IP pkt is reversed with ICMP pkt.
+     * 2. but we use (@reverse == true) for prot->conn_lookup()
+     * as a result, @dir is same with icmp packet. */
+    if (dir == DPVS_CONN_DIR_INBOUND)
+        err = xmit_inbound_icmp(mbuf, prot, conn);
+    else
+        err = xmit_outbound_icmp(mbuf, prot, conn);
+    if (err != EDPVS_OK)
+        RTE_LOG(WARNING, IPVS, "%s: xmit icmp error: %s\n", 
+                __func__, dpvs_strerror(err));
+
+    dp_vs_conn_put_no_reset(conn);
+    return INET_STOLEN;
+}
+
+static int dp_vs_in_icmp(int af, struct rte_mbuf *mbuf, int *related)
+{
+    *related = 0;
+    switch (af) {
+    case AF_INET:
+        return __dp_vs_in_icmp4(mbuf, related);
+    case AF_INET6:
+        return __dp_vs_in_icmp6(mbuf, related);
+    }
+    return INET_ACCEPT;
+}
+
+/* return verdict INET_XXX
+ * af from mbuf->l3_type? No! The field is rewritten by netif and conflicts with
+ * m.packet_type(an union), so using a wrapper to get af.
+ * */
+static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
+                      const struct inet_hook_state *state, int af)
 {
     struct dp_vs_iphdr iph;
     struct dp_vs_proto *prot;
     struct dp_vs_conn *conn;
-    int dir, af, verdict, err, related;
+    int dir, verdict, err, related;
     bool drop = false;
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
     assert(mbuf && state);
-
-    /* cannot use mbuf->l3_type which is conflict with m.packet_type
-     * or using wrapper to avoid af check here */
-    /* af = mbuf->l3_type == htons(ETHER_TYPE_IPv4) ? AF_INET : AF_INET6; */
-    af = AF_INET;
 
     if (unlikely(etype != ETH_PKT_HOST))
         return INET_ACCEPT;
@@ -569,9 +902,10 @@ static int dp_vs_in(void *priv, struct rte_mbuf *mbuf,
     if (dp_vs_fill_iphdr(af, mbuf, &iph) != EDPVS_OK)
         return INET_ACCEPT;
 
-    if (unlikely(iph.proto == IPPROTO_ICMP)) {
+    if (unlikely(iph.proto == IPPROTO_ICMP ||
+                 iph.proto == IPPROTO_ICMPV6)) {
         /* handle related ICMP error to existing conn */
-        verdict = dp_vs_in_icmp(mbuf, &related);
+        verdict = dp_vs_in_icmp(af, mbuf, &related);
         if (related || verdict != INET_ACCEPT)
             return verdict;
         /* let unrelated and valid ICMP goes down, 
@@ -594,7 +928,7 @@ static int dp_vs_in(void *priv, struct rte_mbuf *mbuf,
      * case frags in same flow are not occur in same lcore, a global lock is
      * needed, which is not a good idea.
      */
-    if (ip4_is_frag(ip4_hdr(mbuf))) {
+    if (af == AF_INET && ip4_is_frag(ip4_hdr(mbuf))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag not support.\n", __func__);
         return INET_DROP;
     }
@@ -646,7 +980,7 @@ static int dp_vs_in(void *priv, struct rte_mbuf *mbuf,
         } else {
             /* Syn-proxy 3 logic: receive syn-ack from rs */
             if (dp_vs_synproxy_synack_rcv(mbuf, conn, prot,
-                                          ip4_hdrlen(mbuf), &verdict) == 0) {
+                                          iph.len, &verdict) == 0) {
                 dp_vs_stats_out(conn, mbuf);
                 dp_vs_conn_put(conn);
                 return verdict;
@@ -668,14 +1002,24 @@ static int dp_vs_in(void *priv, struct rte_mbuf *mbuf,
         return xmit_outbound(mbuf, prot, conn);
 }
 
-static int dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
-                    const struct inet_hook_state *state)
+static int dp_vs_in(void *priv, struct rte_mbuf *mbuf,
+                      const struct inet_hook_state *state)
+{
+    return __dp_vs_in(priv, mbuf, state, AF_INET);
+}
+
+static int dp_vs_in6(void *priv, struct rte_mbuf *mbuf,
+                      const struct inet_hook_state *state)
+{
+    return __dp_vs_in(priv, mbuf, state, AF_INET6);
+}
+
+static int __dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
+                    const struct inet_hook_state *state, int af)
 {
     struct dp_vs_iphdr iph;
-    int af;
     struct dp_vs_service *svc;
 
-    af = AF_INET;
     if (EDPVS_OK != dp_vs_fill_iphdr(af, mbuf, &iph))
         return INET_ACCEPT;
 
@@ -706,14 +1050,40 @@ static int dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
     return INET_ACCEPT;
 }
 
+static int dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
+                    const struct inet_hook_state *state)
+{
+    return __dp_vs_pre_routing(priv, mbuf, state, AF_INET);
+}
+
+static int dp_vs_pre_routing6(void *priv, struct rte_mbuf *mbuf,
+                    const struct inet_hook_state *state)
+{
+    return __dp_vs_pre_routing(priv, mbuf, state, AF_INET6);
+}
+
 static struct inet_hook_ops dp_vs_ops[] = {
     {
+        .af         = AF_INET,
         .hook       = dp_vs_in,
         .hooknum    = INET_HOOK_PRE_ROUTING,
         .priority   = 100,
     },
     {
+        .af         = AF_INET,
         .hook       = dp_vs_pre_routing,
+        .hooknum    = INET_HOOK_PRE_ROUTING,
+        .priority   = 99,
+    },
+    {
+        .af         = AF_INET6,
+        .hook       = dp_vs_in6,
+        .hooknum    = INET_HOOK_PRE_ROUTING,
+        .priority   = 100,
+    },
+    {
+        .af         = AF_INET6,
+        .hook       = dp_vs_pre_routing6,
         .hooknum    = INET_HOOK_PRE_ROUTING,
         .priority   = 99,
     },
@@ -768,7 +1138,7 @@ int dp_vs_init(void)
         RTE_LOG(ERR, IPVS, "fail to init stats: %s\n", dpvs_strerror(err));
         goto err_stats;
     }
-    err = ipv4_register_hooks(dp_vs_ops, NELEMS(dp_vs_ops));
+    err = inet_register_hooks(dp_vs_ops, NELEMS(dp_vs_ops));
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to register hooks: %s\n", dpvs_strerror(err));
         goto err_hooks;
@@ -780,9 +1150,9 @@ int dp_vs_init(void)
 err_hooks:
     dp_vs_stats_term();
 err_stats:
-    dp_vs_service_term();
-err_blklst:
     dp_vs_blklst_term();
+err_blklst:
+    dp_vs_service_term();
 err_serv:
     dp_vs_sched_term();
 err_sched:
@@ -801,7 +1171,7 @@ int dp_vs_term(void)
 {
     int err;
 
-    err = ipv4_unregister_hooks(dp_vs_ops, NELEMS(dp_vs_ops));
+    err = inet_unregister_hooks(dp_vs_ops, NELEMS(dp_vs_ops));
     if (err != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "fail to unregister hooks: %s\n", dpvs_strerror(err));
 

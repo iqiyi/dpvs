@@ -16,30 +16,43 @@
  *
  */
 
+#include <netinet/ip6.h>
 #include "ipv4.h"
+#include "ipv6.h"
 #include "libconhash/conhash.h"
 #include "ipvs/conhash.h"
 
 #define REPLICA 160
-
 #define QUIC_PACKET_8BYTE_CONNECTION_ID  (1 << 3)
 
-
-/* QUIC CID hash target for quic*
- * QUIC CID(qid) should be configured in UDP service*/
-static int get_quic_hash_target(const struct rte_mbuf *mbuf, uint64_t *quic_cid)
+/* 
+ * QUIC CID hash target for quic*
+ * QUIC CID(qid) should be configured in UDP service
+ */
+static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf, 
+                                uint64_t *quic_cid)
 {
     uint8_t pub_flags;
+    uint32_t udphoff;
     char *quic_data;
     uint32_t quic_len;
 
-    quic_len = ip4_hdrlen(mbuf) + sizeof(struct udp_hdr) + \
-                  sizeof(pub_flags) + sizeof(*quic_cid);
+    if (af == AF_INET6) {
+        struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+        uint8_t ip6nxt = ip6h->ip6_nxt;
+        udphoff = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+    }
+    else
+        udphoff = ip4_hdrlen(mbuf);
+    
+    quic_len = udphoff + sizeof(struct udp_hdr) +
+               sizeof(pub_flags) + sizeof(*quic_cid);
 
     if (mbuf_may_pull((struct rte_mbuf *)mbuf, quic_len) != 0)
         return EDPVS_NOTEXIST;
 
-    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *, ip4_hdrlen(mbuf) + sizeof(struct udp_hdr));
+    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *, 
+                                        udphoff + sizeof(struct udp_hdr));
     pub_flags = *((uint8_t *)quic_data);
 
     if ((pub_flags & QUIC_PACKET_8BYTE_CONNECTION_ID) == 0) {
@@ -54,9 +67,19 @@ static int get_quic_hash_target(const struct rte_mbuf *mbuf, uint64_t *quic_cid)
 }
 
 /*source ip hash target*/
-static int get_sip_hash_target(const struct rte_mbuf *mbuf, uint32_t *sip)
+static int get_sip_hash_target(int af, const struct rte_mbuf *mbuf, 
+                               uint32_t *addr_fold)
 {
-    *sip = ip4_hdr(mbuf)->src_addr;
+    if (af == AF_INET) {
+        *addr_fold = ip4_hdr(mbuf)->src_addr;
+    } else if (af == AF_INET6) {
+        struct in6_addr *saddr = &ip6_hdr(mbuf)->ip6_src;
+        *addr_fold = saddr->s6_addr32[0]^saddr->s6_addr32[1]^
+                     saddr->s6_addr32[2]^saddr->s6_addr32[3];
+    } else {
+        return EDPVS_NOTSUPP;
+    }
+
     return EDPVS_OK;
 }
 
@@ -66,7 +89,7 @@ dp_vs_conhash_get(struct dp_vs_service *svc, struct conhash_s *conhash,
 {
     char str[40] = {0};
     uint64_t quic_cid;
-    uint32_t sip;
+    uint32_t addr_fold;
     const struct node_s *node;
 
     if (svc->flags & DP_VS_SVC_F_QID_HASH) {
@@ -75,17 +98,17 @@ dp_vs_conhash_get(struct dp_vs_service *svc, struct conhash_s *conhash,
             return NULL;
         }
         /* try to get CID for hash target first, then source IP. */
-        if (EDPVS_OK == get_quic_hash_target(mbuf, &quic_cid)) {
+        if (EDPVS_OK == get_quic_hash_target(svc->af, mbuf, &quic_cid)) {
             snprintf(str, sizeof(str), "%lu", quic_cid);
-        } else if (EDPVS_OK == get_sip_hash_target(mbuf, &sip)) {
-            snprintf(str, sizeof(str), "%u", sip);
+        } else if (EDPVS_OK == get_sip_hash_target(svc->af, mbuf, &addr_fold)) {
+            snprintf(str, sizeof(str), "%u", addr_fold);
         } else {
             return NULL;
         }
 
     } else if (svc->flags & DP_VS_SVC_F_SIP_HASH) {
-        if (EDPVS_OK == get_sip_hash_target(mbuf, &sip)) {
-            snprintf(str, sizeof(str), "%u", sip);
+        if (EDPVS_OK == get_sip_hash_target(svc->af, mbuf, &addr_fold)) {
+            snprintf(str, sizeof(str), "%u", addr_fold);
         } else {
             return NULL;
         }
@@ -107,13 +130,13 @@ dp_vs_conhash_assign(struct dp_vs_service *svc)
 {
     struct dp_vs_dest *dest;
     struct node_s *p_node;
+    uint32_t addr_fold;
     int weight = 0;
     char str[40];
 
     list_for_each_entry(dest, &svc->dests, n_list) {
        weight = rte_atomic16_read(&dest->weight);
        if (weight > 0) {
-
            p_node = rte_zmalloc("p_node", sizeof(struct node_s), RTE_CACHE_LINE_SIZE);
            if (p_node == NULL) {
                 return EDPVS_NOMEM;
@@ -122,7 +145,8 @@ dp_vs_conhash_assign(struct dp_vs_service *svc)
            rte_atomic32_inc(&dest->refcnt);
            p_node->data = dest;
 
-           snprintf(str, sizeof(str), "%u%d", dest->addr.in.s_addr, dest->port);
+           addr_fold = inet_addr_fold(dest->af, &dest->addr);
+           snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
 
            conhash_set_node(p_node, str, weight*REPLICA);
            conhash_add_node(svc->sched_data, p_node);
@@ -140,7 +164,7 @@ static void node_fini(struct node_s *node)
         rte_atomic32_dec(&(((struct dp_vs_dest *)(node->data))->refcnt));
         node->data = NULL;
     }
-
+    
     rte_free(node);
 }
 

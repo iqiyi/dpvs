@@ -17,33 +17,33 @@
  */
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <assert.h>
 #include "inet.h"
 #include "ipvs/service.h"
 #include "ipvs/dest.h"
 #include "ipvs/sched.h"
 #include "ipvs/laddr.h"
 #include "ipvs/conn.h"
-#include <assert.h>
 
-/**
+/*
  * locks
- * */
+ */
 
 static rte_rwlock_t __dp_vs_rs_lock;
 
 
-/***
+/*
  * hash table for rs
- ***/
+ */
 #define DP_VS_RTAB_BITS 4
 #define DP_VS_RTAB_SIZE (1 << DP_VS_RTAB_BITS)
 #define DP_VS_RTAB_MASK (DP_VS_RTAB_SIZE - 1)
 
 static struct list_head dp_vs_rtable[DP_VS_RTAB_SIZE];
 
-/**
+/*
  * Trash for destinations
- * **/
+ */
 
 struct list_head dp_vs_dest_trash = LIST_HEAD_INIT(dp_vs_dest_trash);
 
@@ -52,10 +52,14 @@ static inline unsigned dp_vs_rs_hashkey(int af,
                     uint32_t port)
 {
     register unsigned porth = ntohs(port);
-    uint32_t addr_fold = addr->in.s_addr;
+    uint32_t addr_fold;
 
-#ifdef CONFIG_IP_VS_IPV6
-#endif
+    addr_fold = inet_addr_fold(af, addr);
+
+    if (!addr_fold) {
+        RTE_LOG(DEBUG, SERVICE, "%s: IP proto not support.\n", __func__);
+        return 0;
+    }
 
     return (ntohl(addr_fold) ^ (porth >> DP_VS_RTAB_BITS) ^ porth)
         & DP_VS_RTAB_MASK;
@@ -83,7 +87,8 @@ static int dp_vs_rs_unhash(struct dp_vs_dest *dest)
 
 
 struct dp_vs_dest *dp_vs_lookup_dest(struct dp_vs_service *svc,
-                             const union inet_addr *daddr, uint16_t dport)
+                                     const union inet_addr *daddr, 
+                                     uint16_t dport)
 {
     struct dp_vs_dest *dest;
 
@@ -123,7 +128,8 @@ struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
  *  scheduling.
  */
 struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
-                                           const union inet_addr *daddr, uint16_t dport)
+                                        const union inet_addr *daddr, 
+                                        uint16_t dport)
 {
     struct dp_vs_dest *dest, *nxt;
 
@@ -170,15 +176,13 @@ void dp_vs_trash_cleanup(void)
 }
 
 static void __dp_vs_update_dest(struct dp_vs_service *svc,
-                            struct dp_vs_dest *dest, struct dp_vs_dest_conf *udest)
+                                struct dp_vs_dest *dest, 
+                                struct dp_vs_dest_conf *udest)
 {
     int conn_flags;
 
     rte_atomic16_set(&dest->weight, udest->weight);
     conn_flags = udest->conn_flags | DPVS_CONN_F_INACTIVE;
-
-#ifdef CONFIG_IP_VS_IPV6
-#endif
 
     rte_rwlock_write_lock(&__dp_vs_rs_lock);
     dp_vs_rs_hash(dest);
@@ -207,8 +211,9 @@ static void __dp_vs_update_dest(struct dp_vs_service *svc,
 }
 
 
-int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
-                                     struct dp_vs_dest **dest_p)
+int dp_vs_new_dest(struct dp_vs_service *svc, 
+                   struct dp_vs_dest_conf *udest,
+                   struct dp_vs_dest **dest_p)
 {
     int size;
     struct dp_vs_dest *dest;
@@ -526,7 +531,8 @@ int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
         if(count >= get->num_dests)
             break;
         memset(&entry, 0, sizeof(entry));
-        entry.addr = dest->addr.in.s_addr;
+        entry.af   = dest->af;
+        entry.addr = dest->addr;
         entry.port = dest->port;
         entry.conn_flags = dest->fwdmode;
         entry.weight = rte_atomic16_read(&dest->weight);

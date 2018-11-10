@@ -26,6 +26,7 @@
 #include "neigh.h"
 #include "ipv4.h"
 #include "ipv4_frag.h"
+#include "ipv6.h"
 #include "ctrl.h"
 #include "sa_pool.h"
 #include "ipvs/conn.h"
@@ -51,6 +52,8 @@ static void keyword_value_init(void)
     udp_keyword_value_init();
     tcp_keyword_value_init();
     synproxy_keyword_value_init();
+
+    ipv6_keyword_value_init();
 }
 
 static vector_t install_keywords(void)
@@ -83,6 +86,8 @@ static vector_t install_keywords(void)
     install_sublevel();
     install_proto_udp_keywords();
     install_sublevel_end();
+
+    install_ipv6_keywords();
 
     return g_keywords;
 }
