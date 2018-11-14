@@ -3958,6 +3958,11 @@ static int netif_loop(void *dummy)
     uint64_t loop_start, loop_end;
 #endif
 
+#ifdef DPVS_MAX_LCORE
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_IDLE;
+#endif
+
     assert(LCORE_ID_ANY != cid);
 
     try_isol_rxq_lcore_loop();
