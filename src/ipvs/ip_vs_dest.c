@@ -86,35 +86,20 @@ static int dp_vs_rs_unhash(struct dp_vs_dest *dest)
 }
 
 
-struct dp_vs_dest *dp_vs_lookup_dest(struct dp_vs_service *svc,
+struct dp_vs_dest *dp_vs_lookup_dest(int af,
+                                     struct dp_vs_service *svc,
                                      const union inet_addr *daddr, 
                                      uint16_t dport)
 {
     struct dp_vs_dest *dest;
 
     list_for_each_entry(dest, &svc->dests, n_list){
-        if ((dest->af == svc->af)
-            && inet_addr_equal(svc->af, &dest->addr, daddr)
+        if ((dest->af == af)
+            && inet_addr_equal(af, &dest->addr, daddr)
             && (dest->port == dport))
             return dest;
     }
     return NULL;
-}
-
-struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
-                                   uint16_t dport, const union inet_addr *vaddr,
-                                   uint16_t vport, uint16_t protocol)
-{
-    struct dp_vs_dest *dest;
-    struct dp_vs_service *svc;
-    svc = dp_vs_service_lookup(af, protocol, vaddr, vport, 0, NULL, NULL);
-    if(!svc)
-        return NULL;
-    dest = dp_vs_lookup_dest(svc, daddr, dport);
-    if(dest)
-        rte_atomic32_inc(&dest->refcnt);
-    dp_vs_service_put(svc);
-    return dest;
 }
 
 /*
@@ -275,7 +260,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      * Check if the dest already exists in the list
      */
-    dest = dp_vs_lookup_dest(svc, &daddr, dport);
+    dest = dp_vs_lookup_dest(udest->af, svc, &daddr, dport);
 
     if (dest != NULL) {
         RTE_LOG(DEBUG, SERVICE, "%s: dest already exists.\n", __func__);
@@ -376,7 +361,7 @@ dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      *  Lookup the destination list
      */
-    dest = dp_vs_lookup_dest(svc, &daddr, dport);
+    dest = dp_vs_lookup_dest(udest->af, svc, &daddr, dport);
 
     if (dest == NULL) {
         RTE_LOG(DEBUG, SERVICE,"%s(): dest doesn't exist\n", __func__);
@@ -485,7 +470,7 @@ dp_vs_del_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     struct dp_vs_dest *dest;
     uint16_t dport = udest->port;
 
-    dest = dp_vs_lookup_dest(svc, &udest->addr, dport);
+    dest = dp_vs_lookup_dest(udest->af, svc, &udest->addr, dport);
 
     if (dest == NULL) {
         RTE_LOG(DEBUG, SERVICE,"%s(): destination not found!\n", __func__);

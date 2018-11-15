@@ -138,11 +138,11 @@ static inline int conn_hash(struct dp_vs_conn *conn)
     uint32_t ihash, ohash;
     int err;
 
-    ihash = conn_hashkey(conn->af,
+    ihash = conn_hashkey(tuplehash_in(conn).af,
                 &tuplehash_in(conn).saddr, tuplehash_in(conn).sport,
                 &tuplehash_in(conn).daddr, tuplehash_in(conn).dport);
 
-    ohash = conn_hashkey(conn->af,
+    ohash = conn_hashkey(tuplehash_out(conn).af,
                 &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
                 &tuplehash_out(conn).daddr, tuplehash_out(conn).dport);
 
@@ -656,7 +656,7 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     /* init outbound conn tuple hash */
     t = &tuplehash_out(new);
     t->direct   = DPVS_CONN_DIR_OUTBOUND;
-    t->af       = param->af;
+    t->af       = dest->af;
     t->proto    = param->proto;
     if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
         t->saddr = iph->saddr;
@@ -684,11 +684,15 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     new->dport  = rport;
 
     /* neighbour confirm cache */
-    if (AF_INET == param->af) {
+    if (AF_INET == tuplehash_in(new).af) {
         new->in_nexthop.in.s_addr = htonl(INADDR_ANY);
-        new->out_nexthop.in.s_addr = htonl(INADDR_ANY);
-    } else if (AF_INET6 == param->af) {
+    } else {
         new->in_nexthop.in6 = in6addr_any;
+    }
+
+    if (AF_INET == tuplehash_out(new).af) {
+        new->out_nexthop.in.s_addr = htonl(INADDR_ANY);
+    } else {
         new->out_nexthop.in6 = in6addr_any;
     }
 
@@ -1107,17 +1111,10 @@ static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
     entry->lcoreid = rte_lcore_id();
     snprintf(entry->state, sizeof(entry->state), "%s",
             get_conn_state_name(conn->proto, conn->state));
-    if (AF_INET == conn->af) {
-        entry->caddr.in = conn->caddr.in;
-        entry->vaddr.in = conn->vaddr.in;
-        entry->laddr.in = conn->laddr.in;
-        entry->daddr.in = conn->daddr.in;
-    } else if (AF_INET6 == conn->af) {
-        entry->caddr.in6 = conn->caddr.in6;
-        entry->vaddr.in6 = conn->vaddr.in6;
-        entry->laddr.in6 = conn->laddr.in6;
-        entry->daddr.in6 = conn->daddr.in6;
-    }
+    entry->caddr = conn->caddr;
+    entry->vaddr = conn->vaddr;
+    entry->laddr = conn->laddr;
+    entry->daddr = conn->daddr;
     entry->cport = conn->cport;
     entry->vport = conn->vport;
     entry->lport = conn->lport;
