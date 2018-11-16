@@ -152,12 +152,8 @@ struct dp_vs_dest_user{
 int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
                                               struct dp_vs_dest **dest_p);
 
-struct dp_vs_dest *dp_vs_lookup_dest(struct dp_vs_service *svc,
+struct dp_vs_dest *dp_vs_lookup_dest(int af, struct dp_vs_service *svc,
                                      const union inet_addr *daddr, uint16_t dport);
-
-struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
-                                   uint16_t dport, const union inet_addr *vaddr,
-                                   uint16_t vport, uint16_t protocol);
 
 struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
                                         const union inet_addr *daddr, uint16_t dport);

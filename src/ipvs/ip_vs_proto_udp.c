@@ -582,7 +582,8 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
     struct udp_hdr *uh = NULL;
     struct opphdr *opp = NULL;
     void *iph = NULL;
-    int af = conn->af;
+    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4*/
+    int af = tuplehash_out(conn).af;
     int iphdrlen = 0;
     uint8_t nxt_proto;
 
@@ -646,7 +647,8 @@ static int udp_fnat_out_handler(struct dp_vs_proto *proto,
                     struct rte_mbuf *mbuf)
 {
     struct udp_hdr *uh;
-    int af = conn->af;
+    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4*/
+    int af = tuplehash_in(conn).af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
     /* cannot use mbuf_header_pointer() */
