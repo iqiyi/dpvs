@@ -272,9 +272,9 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
      * check if we can add the new option
      */
     /* skb length and tcp option length checking */
-    if (tuplehash_out(conn.af) == AF_INET && (rt = mbuf->userdata) != NULL) {
+    if (tuplehash_out(conn).af == AF_INET && (rt = mbuf->userdata) != NULL) {
         mtu = rt->mtu;
-    } else if (tuplehash_out(conn.af) == AF_INET6 && (rt6 = mbuf->userdata) != NULL) {
+    } else if (tuplehash_out(conn).af == AF_INET6 && (rt6 = mbuf->userdata) != NULL) {
         mtu = rt6->rt6_mtu;
     } else if (conn->in_dev) { /* no route for fast-xmit */
         mtu = conn->in_dev->mtu;

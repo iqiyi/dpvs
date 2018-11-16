@@ -663,7 +663,8 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
     }
 
     /* L3 translation before l4 re-csum */
-    if (err = mbuf_6to4(mbuf, &conn->laddr.in, &conn->daddr.in))
+    err = mbuf_6to4(mbuf, &conn->laddr.in, &conn->daddr.in);
+    if (err)
         goto errout;
     ip4h = ip4_hdr(mbuf);
     ip4h->hdr_checksum = 0;
@@ -978,7 +979,8 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
     }    
 
     /* L3 translation before l4 re-csum */
-    if (err = mbuf_4to6(mbuf, &conn->vaddr.in6, &conn->caddr.in6))
+    err = mbuf_4to6(mbuf, &conn->vaddr.in6, &conn->caddr.in6);
+    if (err)
         goto errout;
 
     /* L4 FNAT translation */
