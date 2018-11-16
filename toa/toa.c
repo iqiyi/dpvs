@@ -149,7 +149,12 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 						ptr_toa_ip6->port,
 						ptr_toa_ip6);
 					TOA_INC_STATS(ext_stats, IP6_ADDR_ALLOC_CNT);
-					*nat64 = 1;
+#ifdef TOA_IPV6_ENABLE
+					if (af == AF_INET6)
+						*nat64 = 0;
+					else
+#endif
+						*nat64 = 1;
 					return ptr_toa_ip6;
 				}
 
