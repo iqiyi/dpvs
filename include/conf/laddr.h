@@ -43,7 +43,7 @@ struct dp_vs_laddr_entry {
 
 struct dp_vs_laddr_conf {
     /* identify service */
-    int                 af;
+    int                 af_s;
     uint8_t             proto;
     union inet_addr     vaddr;
     uint16_t            vport;
@@ -54,6 +54,7 @@ struct dp_vs_laddr_conf {
     char                oifname[IFNAMSIZ];
 
     /* for set */
+    int                 af_l;
     union inet_addr     laddr;
     char                ifname[IFNAMSIZ];
 
