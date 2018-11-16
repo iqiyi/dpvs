@@ -34,7 +34,7 @@ int mbuf_6to4(struct rte_mbuf *mbuf,
     if (ip6h->ip6_nxt != IPPROTO_TCP &&
         ip6h->ip6_nxt != IPPROTO_UDP &&
         ip6h->ip6_nxt != IPPROTO_ICMP &&
-        ip6h->ip6_nxt != IPPROTO_ICMPv6) {
+        ip6h->ip6_nxt != IPPROTO_ICMPV6) {
         return EDPVS_NOTSUPP;
     }
     if (rte_pktmbuf_adj(mbuf, mbuf->l3_len) == NULL)
