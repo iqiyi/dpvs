@@ -15,7 +15,7 @@ int main(int argc,char **argv)
     struct sockaddr_in sockaddr;
     char recvline[MAXLINE], sendline[MAXLINE];
     int n;
-     socketfd = socket(AF_INET,SOCK_STREAM,0);
+    socketfd = socket(AF_INET,SOCK_STREAM,0);
     memset(&sockaddr,0,sizeof(sockaddr));
     sockaddr.sin_family = AF_INET;
     sockaddr.sin_port = htons(10004);
@@ -24,13 +24,13 @@ int main(int argc,char **argv)
         printf("connect error %s errno: %d\n",strerror(errno),errno);
         exit(0);
     }
-     printf("send message to server\n");
-     fgets(sendline,1024,stdin);
-     if((send(socketfd,sendline,strlen(sendline),0)) < 0) {
+    printf("send message to server\n");
+    fgets(sendline,1024,stdin);
+    if((send(socketfd,sendline,strlen(sendline),0)) < 0) {
         printf("send mes error: %s errno : %d",strerror(errno),errno);
         exit(0);
     }
-     close(socketfd);
+    close(socketfd);
     printf("exit\n");
     exit(0);
 }
