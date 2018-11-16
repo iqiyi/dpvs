@@ -19,7 +19,6 @@
 #include "ipvs/nat64.h"
 #include "ipvs/ipvs.h"
 
-
 int mbuf_6to4(struct rte_mbuf *mbuf, 
               const struct in_addr *saddr,
               const struct in_addr *daddr)
@@ -32,7 +31,10 @@ int mbuf_6to4(struct rte_mbuf *mbuf,
     /*
      * ext_hdr not support yet
      */
-    if (mbuf->l3_len != sizeof(struct ip6_hdr)) {
+    if (ip6h->ip6_nxt != IPPROTO_TCP &&
+        ip6h->ip6_nxt != IPPROTO_UDP &&
+        ip6h->ip6_nxt != IPPROTO_ICMP &&
+        ip6h->ip6_nxt != IPPROTO_ICMPv6) {
         return EDPVS_NOTSUPP;
     }
     if (rte_pktmbuf_adj(mbuf, mbuf->l3_len) == NULL)
