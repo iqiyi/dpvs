@@ -28,13 +28,24 @@
 
 struct inet_device {
     struct netif_port   *dev;
-    int                 af;
     struct list_head    ifa_list;   /* inet_ifaddr list */
+    struct list_head    ifm_list;   /* inet_ifmcaddr list*/
     rte_atomic32_t      ifa_cnt;
     rte_atomic32_t      refcnt;
 };
 
-/**
+/*
+ * no timer, release me by inet_ifaddr
+ */
+struct inet_ifmcaddr {
+    struct list_head        d_list;
+    struct inet_device      *idev;
+    union  inet_addr         addr;
+    uint32_t                flags;
+    rte_atomic32_t          refcnt;
+};
+
+/*
  * do not support peer address now.
  */
 struct inet_ifaddr {
@@ -42,6 +53,7 @@ struct inet_ifaddr {
     struct list_head        h_list;     /* global hash, key is addr */
     struct inet_device      *idev;
 
+    int                     af;
     union inet_addr         addr;       /* primary address of iface */
     uint8_t                 plen;
     union inet_addr         mask;
@@ -98,6 +110,14 @@ static inline void inet_addr_ifa_put(struct inet_ifaddr *ifa)
 {
     rte_atomic32_dec(&ifa->refcnt);
 }
+
+bool inet_chk_mcast_addr(int af, struct netif_port *dev,
+                        const union inet_addr *group,
+                        const union inet_addr *src);
+
+void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa);
+
+int idev_add_mcast_init(struct netif_port *dev);
 
 int inet_addr_init(void);
 int inet_addr_term(void);

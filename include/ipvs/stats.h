@@ -19,9 +19,6 @@
 #define __DPVS_STATS_H__
 #include <stdint.h>
 #include "ipvs/service.h"
-#include "dpdk.h"
-
-struct dp_vs_conn;
 
 struct dp_vs_stats {
     uint64_t            conns;
@@ -37,6 +34,10 @@ struct dp_vs_stats {
     uint32_t outbps;
 };
 
+#ifdef __DPVS__
+#include "dpdk.h"
+
+struct dp_vs_conn;
 
 /* statistics for FULLNAT and SYNPROXY */
 enum  dp_vs_estats_type {
@@ -112,15 +113,6 @@ int dp_vs_new_stats(struct dp_vs_stats **p);
 void dp_vs_del_stats(struct dp_vs_stats *p);
 void dp_vs_zero_stats(struct dp_vs_stats* stats);
 int dp_vs_copy_stats(struct dp_vs_stats* dst, struct dp_vs_stats* src);
-
-#if 0
-/*rate control code*/
-int dp_vs_rate_init(void);
-void dp_vs_rate_cleanup(void);
-void dp_vs_new_rate(struct dp_vs_service *svc);
-void dp_vs_kill_rate(struct dp_vs_service *svc);
-void dp_vs_zero_rate(struct dp_vs_service *svc);
-__u64 dp_vs_rate_bps(struct dp_vs_rate *rate);
 #endif
 
 #endif /* __DPVS_STATS_H__ */

@@ -31,42 +31,78 @@
 #include "memory.h"
 #include "utils.h"
 
-void dpvs_fill_rtconf(ip_route_t *iproute, struct dp_vs_route_conf *route_conf)
+/*
+ * refer to function netlink_scope_a2n
+ * */
+static int scope_n2dpvs(int scope)
+{
+    if (scope == 254)
+        return ROUTE_CF_SCOPE_HOST;
+    if (scope == 253)
+        return ROUTE_CF_SCOPE_LINK;
+    if (scope == 0)
+        return ROUTE_CF_SCOPE_GLOBAL;
+    return ROUTE_CF_SCOPE_GLOBAL;
+}
+
+static int flag_n2dpvs(int scope)
+{
+    if (scope == 254)
+        return RTF_LOCALIN;
+    if (scope == 253)
+        return RTF_FORWARD; 
+    return RTF_FORWARD;
+}
+
+void dpvs_fill_rt4conf(ip_route_t *iproute, struct dp_vs_route_conf *route_conf)
 {
     route_conf->af = AF_INET;
-    (route_conf->dst).in  = ((iproute->dst)->u).sin.sin_addr;
-    route_conf->plen    = iproute->dmask;
-    if(iproute->gw){
-        (route_conf->via).in = ((iproute->gw)->u).sin.sin_addr;
-    }
-    else{
+    (route_conf->dst).in  = (iproute->dst->u).sin.sin_addr;
+    route_conf->plen = iproute->dmask;
+
+    if (iproute->gw){
+        (route_conf->via).in = (iproute->gw->u).sin.sin_addr;
+    } else {
         (route_conf->via).in.s_addr = 0;
     }
-    if(iproute->src){
-        (route_conf->src).in = ((iproute->src) -> u).sin.sin_addr;
-    }
-    else
-        (route_conf->src).in.s_addr = 0;
 
-    if(iproute->scope == 254) {
-        route_conf->scope = ROUTE_CF_SCOPE_HOST;
+    if (iproute->src){
+        (route_conf->src).in = (iproute->src->u).sin.sin_addr;
+    } else {
+        (route_conf->src).in.s_addr = 0;
     }
-    else if(iproute->scope == 253) {
-        route_conf->scope = ROUTE_CF_SCOPE_LINK;
-    }
-    else if(iproute->scope == 0) {
-        route_conf->scope = ROUTE_CF_SCOPE_GLOBAL;
-    }
-    
+
+    route_conf->scope = scope_n2dpvs(iproute->scope);    
     strcpy(route_conf->ifname, iproute->ifname);
     route_conf->mtu = 0;
     route_conf->metric = 0;
 }
 
+void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg) 
+{
+    rt6_cfg->dst.addr = ((iproute->dst)->u).sin6_addr;
+    rt6_cfg->dst.plen = iproute->dmask;
+    rt6_cfg->src.plen = 128;
+    if (iproute->gw) {
+        rt6_cfg->gateway = (iproute->gw->u).sin6_addr;
+    } else {
+        memset(&rt6_cfg->gateway, 0, sizeof(rt6_cfg->gateway));
+    }
+
+    if (iproute->src) {
+        rt6_cfg->src.addr = (iproute->src->u).sin6_addr;
+    } else {
+        memset(&rt6_cfg->src, 0, sizeof(rt6_cfg->src));
+    }
+
+    rt6_cfg->flags |= flag_n2dpvs(iproute->scope);
+    strcpy(rt6_cfg->ifname, iproute->ifname);
+    rt6_cfg->mtu = 0;
+}
+
 int
 netlink_route(ip_route_t *iproute, int cmd)
 {
-    struct dp_vs_route_conf *route_conf;
     char *tmp_dst,*tmp_src;
 
     tmp_dst = ipaddresstos(iproute->dst);
@@ -76,9 +112,22 @@ netlink_route(ip_route_t *iproute, int cmd)
             cmd, tmp_dst, iproute->dmask, tmp_src, iproute->ifname, iproute->scope);
     FREE(tmp_dst);
     FREE(tmp_src);
-    route_conf = (struct dp_vs_route_conf *)malloc(sizeof(struct dp_vs_route_conf));
-    dpvs_fill_rtconf(iproute, route_conf);
-    ipvs_set_route(route_conf, cmd);
+
+    if (iproute->dst->ifa.ifa_family == AF_INET) {
+        struct dp_vs_route_conf *route_conf;
+        route_conf = (struct dp_vs_route_conf *)malloc(sizeof(struct dp_vs_route_conf));
+        memset(route_conf, 0, sizeof(*route_conf));
+        dpvs_fill_rt4conf(iproute, route_conf);
+        ipvs_set_route(route_conf, cmd);
+        free(route_conf);
+    } else {
+        struct dp_vs_route6_conf *rt6_cfg;
+        rt6_cfg = (struct dp_vs_route6_conf *)malloc(sizeof(struct dp_vs_route6_conf));
+        memset(rt6_cfg, 0, sizeof(*rt6_cfg));
+        dpvs_fill_rt6conf(iproute, rt6_cfg);
+        ipvs_set_route6(rt6_cfg, cmd);
+        free(rt6_cfg);
+    }
     return 1;
 }
 

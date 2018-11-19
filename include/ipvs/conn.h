@@ -164,6 +164,7 @@ int dp_vs_conn_term(void);
 
 struct dp_vs_conn * 
 dp_vs_conn_new(struct rte_mbuf *mbuf, 
+               const struct dp_vs_iphdr *iph,
                struct dp_vs_conn_param *param,
                struct dp_vs_dest *dest,
                uint32_t flags);

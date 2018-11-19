@@ -306,7 +306,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 		    um->sport == cur->sport &&
 		    um->dport == cur->dport) {
 			/* update */
-			memcpy(&cur->optuoa, &um->optuoa, IPOLEN_UOA);
+			memcpy(&cur->optuoa, &um->optuoa, IPOLEN_UOA_IPV4);
 
 			mod_timer(&cur->timer, jiffies + uoa_map_timeout * HZ);
 
@@ -504,8 +504,8 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 	uoa_map_dump(um, "hit:");
 
 	if (likely(um->optuoa.op_code == IPOPT_UOA &&
-		   um->optuoa.op_len == IPOLEN_UOA)) {
-		map.real_saddr = um->optuoa.op_addr;
+		   um->optuoa.op_len == IPOLEN_UOA_IPV4)) {
+		memcpy(&map.real_saddr, um->optuoa.op_addr, sizeof(map.real_saddr));
 		map.real_sport = um->optuoa.op_port;
 		UOA_STATS_INC(success);
 		err = 0;
@@ -624,7 +624,7 @@ static struct uoa_map *uoa_parse_ipopt(unsigned char *optptr, int optlen,
 		if (unlikely(optlen < 2 || optlen > l))
 			goto out; /* invalid */
 
-		if (*optptr == IPOPT_UOA && optlen == IPOLEN_UOA) {
+		if (*optptr == IPOPT_UOA && optlen == IPOLEN_UOA_IPV4) {
 			UOA_STATS_INC(uoa_got);
 
 			um = kmem_cache_alloc(uoa_map_cache, GFP_ATOMIC);
@@ -639,7 +639,7 @@ static struct uoa_map *uoa_parse_ipopt(unsigned char *optptr, int optlen,
 			um->sport = sport;
 			um->dport = dport;
 
-			memcpy(&um->optuoa, optptr, IPOLEN_UOA);
+			memcpy(&um->optuoa, optptr, IPOLEN_UOA_IPV4);
 
 			UOA_STATS_INC(uoa_saved);
 			return um;
@@ -726,6 +726,18 @@ static struct uoa_map *uoa_opp_rcv(struct iphdr *iph, struct sk_buff *skb)
 	 * protocol, tot_len and checksum. these could be slow ?
 	 */
 	skb_set_transport_header(skb, ip_hdrlen(skb) + opplen);
+
+	/* Old kernel like 2.6.32 use "iph->ihl" rather "skb->transport_header"
+	 * to get UDP header offset. The UOA private protocol data should be
+	 * erased here, but this should move skb data and harm perfomance. As a
+	 * compromise, we convert the private protocol data into NOP IP option
+	 * data if possible.*/
+	if (iph->ihl + (opplen >> 2) < 16) {
+		iph->ihl = (iph->ihl) + (opplen >> 2);
+		memset(opph, opplen, IPOPT_NOOP);
+	} else {
+		pr_warn("IP header has no room to convert uoa data into option.\n");
+	}
 
 	/* need change it to parse transport layer */
 	iph->protocol = opph->protocol;

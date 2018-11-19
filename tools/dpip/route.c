@@ -22,6 +22,8 @@
 #include "common.h"
 #include "dpip.h"
 #include "conf/route.h"
+#include "conf/route6.h"
+#include "linux_ipv6.h"
 #include "sockopt.h"
 
 static void route_help(void)
@@ -43,6 +45,8 @@ static void route_help(void)
         "    dpip route add default via 10.0.0.1\n"
         "    dpip route add 172.0.0.0/16 via 172.0.0.3 dev dpdk0\n"
         "    dpip route add 192.168.0.0/24 dev dpdk0\n"
+        "    dpip -6 route add ffe1::/128 dev dpdk0"
+        "    dpip -6 route add 2001:db8:1::/64 via 2001:db8:1::1 dev dpdk0\n"
         "    dpip route del 172.0.0.0/16\n"
         "    dpip route set 172.0.0.0/16 via 172.0.0.1\n"
         "    dpip route flush\n"
@@ -111,7 +115,7 @@ static const char *flags_itoa(uint32_t flags)
     return flags_buf;
 }
 
-static void route_dump(const struct dp_vs_route_conf *route)
+static void route4_dump(const struct dp_vs_route_conf *route)
 {
     char dst[64], via[64], src[64];
 
@@ -128,7 +132,47 @@ static void route_dump(const struct dp_vs_route_conf *route)
     return;
 }
 
-static int route_parse_args(struct dpip_conf *conf, 
+static void route6_dump(const struct dp_vs_route6_conf *rt6_cfg)
+{
+    char dst[64], gateway[64], src[64], scope[32];
+
+    if (rt6_cfg->flags & RTF_KNI)
+        snprintf(scope, sizeof(scope), "%s", "kni_host");
+    else if (rt6_cfg->flags & RTF_LOCALIN)
+        snprintf(scope, sizeof(scope), "%s", "host");
+    else if (rt6_cfg->flags & RTF_FORWARD) {
+        if (ipv6_addr_any(&rt6_cfg->gateway))
+            snprintf(scope, sizeof(scope), "%s", "link");
+        else
+            snprintf(scope, sizeof(scope), "%s", "global");
+    } else
+        snprintf(scope, sizeof(scope), "%s", "::");
+
+    if (ipv6_addr_any(&rt6_cfg->dst.addr) && rt6_cfg->dst.plen == 0) {
+        snprintf(dst, sizeof(dst), "%s", "default");
+        printf("%s %s", af_itoa(AF_INET6), dst);
+    } else {
+        inet_ntop(AF_INET6, (union inet_addr*)&rt6_cfg->dst.addr, dst, sizeof(dst));
+        printf("%s %s/%d", af_itoa(AF_INET6), dst, rt6_cfg->dst.plen);
+    }
+
+    if (!ipv6_addr_any(&rt6_cfg->gateway))
+        printf(" via %s", inet_ntop(AF_INET6, (union inet_addr*)&rt6_cfg->gateway,
+                    gateway, sizeof(gateway)) ? gateway : "::");
+    if (!ipv6_addr_any(&rt6_cfg->src.addr))
+        printf(" src %s", inet_ntop(AF_INET6, (union inet_addr*)&rt6_cfg->src.addr,
+                    src, sizeof(src)) ? src : "::");
+    printf(" dev %s", rt6_cfg->ifname);
+
+    if (rt6_cfg->mtu > 0)
+        printf(" mtu %d", rt6_cfg->mtu);
+
+    printf(" scope %s", scope);
+
+    printf("\n");
+}
+
+static int route4_parse_args(struct dpip_conf *conf, 
                             struct dp_vs_route_conf *route)
 {
     char *prefix = NULL;
@@ -258,12 +302,108 @@ static int route_parse_args(struct dpip_conf *conf,
     }
 
     if (conf->verbose)
-        route_dump(route);
+        route4_dump(route);
 
     return 0;
 }
 
-static int route_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
+static int route6_parse_args(struct dpip_conf *conf, 
+                            struct dp_vs_route6_conf *rt6_cfg)
+{
+    int af;
+    char *prefix = NULL;
+
+    memset(rt6_cfg, 0, sizeof(*rt6_cfg));
+
+    while (conf->argc > 0) {
+        if (strcmp(conf->argv[0], "via") == 0) {
+            NEXTARG_CHECK(conf, "via");
+            if (inet_pton_try(&af, conf->argv[0],
+                        (union inet_addr *)&rt6_cfg->gateway) <= 0)
+                return -1;
+        } else if (strcmp(conf->argv[0], "dev") == 0) {
+            NEXTARG_CHECK(conf, "dev");
+            snprintf(rt6_cfg->ifname, sizeof(rt6_cfg->ifname), "%s", conf->argv[0]);
+        } else if (strcmp(conf->argv[0], "tos") == 0) {
+            NEXTARG_CHECK(conf, "tos");
+        } else if (strcmp(conf->argv[0], "mtu") == 0) {
+            NEXTARG_CHECK(conf, "mtu");
+            rt6_cfg->mtu = atoi(conf->argv[0]);
+        } else if (strcmp(conf->argv[0], "scope") == 0) {
+            NEXTARG_CHECK(conf, "scope");
+            if (strcmp(conf->argv[0], "host") == 0)
+                rt6_cfg->flags |= RTF_LOCALIN;
+            else if (strcmp(conf->argv[0], "kni_host") == 0)
+                rt6_cfg->flags |= RTF_KNI;
+            else if (strcmp(conf->argv[0], "link") == 0)
+                rt6_cfg->flags |= RTF_FORWARD;
+            else if (strcmp(conf->argv[0], "global") == 0)
+                rt6_cfg->flags |= RTF_FORWARD;
+        } else if (strcmp(conf->argv[0], "src") == 0) {
+            NEXTARG_CHECK(conf, "src");
+            if (inet_pton_try(&af, conf->argv[0],
+                        (union inet_addr *)&rt6_cfg->src.addr) <= 0)
+                return -1;
+        } else if (strcmp(conf->argv[0], "metric") == 0) {
+            NEXTARG_CHECK(conf, "metric");
+        } else if (strcmp(conf->argv[0], "proto") == 0) {
+            NEXTARG_CHECK(conf, "proto");
+        } else if (strcmp(conf->argv[0], "onlink") == 0) {
+            ;/* on-link is output only */
+        } else if (strcmp(conf->argv[0], "local") == 0) {
+            rt6_cfg->flags |= RTF_LOCALIN;
+        } else {
+            prefix = conf->argv[0];
+        }
+
+        NEXTARG(conf);
+    }
+
+    if ((rt6_cfg->flags & RTF_FORWARD) && (ipv6_addr_any(&rt6_cfg->dst.addr) == 0))
+        rt6_cfg->flags |= RTF_DEFAULT;
+    if (!(rt6_cfg->flags & (RTF_LOCALIN|RTF_KNI|RTF_FORWARD|RTF_DEFAULT)))
+            rt6_cfg->flags |= RTF_FORWARD;
+
+    if (conf->argc > 0) {
+        fprintf(stderr, "too many arguments\n");
+        return -1;
+    }
+
+    if (conf->cmd == DPIP_CMD_SHOW)
+        return 0;
+
+    if (!prefix) {
+        fprintf(stderr, "missing prefix\n");
+        return -1;
+    }
+
+    /* PREFIX */
+    if (strcmp(prefix, "default") == 0) {
+        memset(&rt6_cfg->dst.addr, 0, sizeof(rt6_cfg->dst.addr));
+    } else {
+        char *addr, *plen;
+
+        addr = prefix;
+        if ((plen = strchr(addr, '/')) != NULL)
+            *plen++ = '\0';
+
+        if (inet_pton_try(&af, prefix,
+                    (union inet_addr*)&rt6_cfg->dst.addr) <= 0)
+            return -1;
+
+        rt6_cfg->dst.plen = plen ? atoi(plen) : 0;
+    }
+
+    if (!rt6_cfg->dst.plen && (strcmp(prefix, "default") != 0))
+        rt6_cfg->dst.plen = 128;
+
+    if (conf->verbose)
+        route6_dump(rt6_cfg);
+
+    return 0;
+}
+
+static int route4_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
                         struct dpip_conf *conf)
 {
     struct dp_vs_route_conf route;
@@ -271,7 +411,7 @@ static int route_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
     size_t size, i;
     int err;
 
-    if (route_parse_args(conf, &route) != 0)
+    if (route4_parse_args(conf, &route) != 0)
         return EDPVS_INVAL;
 
     switch (conf->cmd) {
@@ -302,12 +442,74 @@ static int route_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         }
 
         for (i = 0; i < array->nroute; i++)
-            route_dump(&array->routes[i]);
+            route4_dump(&array->routes[i]);
 
         dpvs_sockopt_msg_free(array);
         return EDPVS_OK;
     default:
         return EDPVS_NOTSUPP;
+    }
+}
+
+static int route6_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
+                         struct dpip_conf *conf)
+{
+    struct dp_vs_route6_conf rt6_cfg;
+    struct dp_vs_route6_conf_array *rt6_arr;
+    size_t size, i;
+    int err;
+
+    if (route6_parse_args(conf, &rt6_cfg) != 0)
+        return EDPVS_INVAL;
+
+    switch (conf->cmd) {
+        case DPIP_CMD_ADD:
+            rt6_cfg.ops = RT6_OPS_ADD;
+            return dpvs_setsockopt(SOCKOPT_SET_ROUTE6_ADD_DEL, &rt6_cfg, sizeof(rt6_cfg));
+        case DPIP_CMD_DEL:
+            rt6_cfg.ops = RT6_OPS_DEL;
+            return dpvs_setsockopt(SOCKOPT_SET_ROUTE6_ADD_DEL, &rt6_cfg, sizeof(rt6_cfg));
+        case DPIP_CMD_SET:
+            return EDPVS_NOTSUPP;
+        case DPIP_CMD_FLUSH:
+            rt6_cfg.ops = RT6_OPS_FLUSH;
+            return dpvs_setsockopt(SOCKOPT_SET_ROUTE6_FLUSH, &rt6_cfg, sizeof(rt6_cfg));
+        case DPIP_CMD_SHOW:
+            err = dpvs_getsockopt(SOCKOPT_GET_ROUTE6_SHOW, &rt6_cfg, sizeof(rt6_cfg),
+                    (void **)&rt6_arr, &size);
+            if (err != 0)
+                return err;
+            if (size < sizeof(*rt6_arr) ||
+                    size != sizeof(*rt6_arr) +
+                    rt6_arr->nroute * sizeof(struct dp_vs_route6_conf)) {
+                fprintf(stderr, "corrupted response.\n");
+                dpvs_sockopt_msg_free(rt6_arr);
+                return EDPVS_INVAL;
+            }
+            for (i = 0; i < rt6_arr->nroute; i++)
+                route6_dump(&rt6_arr->routes[i]);
+
+            dpvs_sockopt_msg_free(rt6_arr);
+            return EDPVS_OK;
+
+        default:
+            return EDPVS_NOTSUPP;
+    }
+
+    return EDPVS_OK;
+}
+
+static int route_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
+                        struct dpip_conf *conf)
+{
+    switch (conf->af) {
+        case AF_UNSPEC:
+        case AF_INET:
+            return route4_do_cmd(obj, cmd, conf);
+        case AF_INET6:
+            return route6_do_cmd(obj, cmd, conf);
+        default:
+            return EDPVS_NOTSUPP;
     }
 }
 

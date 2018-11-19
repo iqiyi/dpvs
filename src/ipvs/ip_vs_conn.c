@@ -20,6 +20,7 @@
 #include "common.h"
 #include "inet.h"
 #include "ipv4.h"
+#include "ipv6.h"
 #include "sa_pool.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/conn.h"
@@ -91,11 +92,22 @@ static inline uint32_t conn_hashkey(int af,
                                 const union inet_addr *saddr, uint16_t sport,
                                 const union inet_addr *daddr, uint16_t dport)
 {
-    return rte_jhash_3words((uint32_t)saddr->in.s_addr,
-            (uint32_t)daddr->in.s_addr,
-            ((uint32_t)sport) << 16 | (uint32_t)dport,
-            dp_vs_conn_rnd)
-        & DPVS_CONN_TAB_MASK;
+    if (AF_INET == af)
+        return rte_jhash_3words((uint32_t)saddr->in.s_addr,
+                (uint32_t)daddr->in.s_addr,
+                ((uint32_t)sport) << 16 | (uint32_t)dport,
+                dp_vs_conn_rnd) & DPVS_CONN_TAB_MASK;
+
+    if (AF_INET6 == af) {
+        uint32_t vect[9];
+        vect[0] = ((uint32_t)sport) << 16 | (uint32_t)dport;
+        memcpy(&vect[1], &saddr->in6, 16);
+        memcpy(&vect[5], &daddr->in6, 16);
+        return rte_jhash_32b(vect, 9, dp_vs_conn_rnd) & DPVS_CONN_TAB_MASK;
+    }
+
+    RTE_LOG(WARNING, IPVS, "%s: hashing unsupported protocol %d\n", __func__, af);
+    return 0;
 }
 
 static inline int __conn_hash(struct dp_vs_conn *conn,
@@ -357,6 +369,7 @@ static int conn_expire(void *priv)
     struct dp_vs_synproxy_ack_pakcet *ack_mbuf, *t_ack_mbuf;
     struct rte_mempool *pool;
     assert(conn);
+    assert(conn->af == AF_INET || conn->af == AF_INET6);
 
     /* set proper timeout */
     unsigned conn_timeout = 0;
@@ -373,8 +386,7 @@ static int conn_expire(void *priv)
             conn->timeout.tv_sec = pp->timeout_table[conn->state];
         else
             conn->timeout.tv_sec = 60;
-    }
-    else if (pp && pp->timeout_table)
+    } else if (pp && pp->timeout_table)
         conn->timeout.tv_sec = pp->timeout_table[conn->state];
     else
         conn->timeout.tv_sec = 60;
@@ -423,8 +435,6 @@ static int conn_expire(void *priv)
     /* refcnt == 1 means we are the only referer.
      * no one is using the conn and it's timed out. */
     if (rte_atomic32_read(&conn->refcnt) == 1) {
-        struct dp_vs_proto *proto = dp_vs_proto_lookup(conn->proto);
-
         if (conn->flags & DPVS_CONN_F_TEMPLATE)
             dpvs_timer_cancel(&conn->timer, true);
         else
@@ -434,24 +444,40 @@ static int conn_expire(void *priv)
         if (conn->control)
             dp_vs_control_del(conn);
 
-        if (proto && proto->conn_expire)
-            proto->conn_expire(proto, conn);
+        if (pp && pp->conn_expire)
+            pp->conn_expire(pp, conn);
 
         if (conn->dest->fwdmode == DPVS_FWD_MODE_SNAT
-                && conn->proto != IPPROTO_ICMP) {
-            struct sockaddr_in daddr, saddr;
-
-            memset(&daddr, 0, sizeof(daddr));
-            daddr.sin_family = AF_INET;
-            daddr.sin_addr = conn->caddr.in;
-            daddr.sin_port = conn->cport;
-
+                && conn->proto != IPPROTO_ICMP
+                && conn->proto != IPPROTO_ICMPV6) {
+            struct sockaddr_storage saddr, daddr;
             memset(&saddr, 0, sizeof(saddr));
-            saddr.sin_family = AF_INET;
-            saddr.sin_addr = conn->vaddr.in;
-            saddr.sin_port = conn->vport;
+            memset(&daddr, 0, sizeof(daddr));
+            if (AF_INET == conn->af) {
+                struct sockaddr_in *daddr4 = (struct sockaddr_in *)&saddr;
+                struct sockaddr_in *saddr4 = (struct sockaddr_in *)&saddr;
 
-            sa_release(conn->out_dev, &daddr, &saddr);
+                daddr4->sin_family = AF_INET;
+                daddr4->sin_addr = conn->caddr.in;
+                daddr4->sin_port = conn->cport;
+
+                saddr4->sin_family = AF_INET;
+                saddr4->sin_addr = conn->vaddr.in;
+                saddr4->sin_port = conn->vport;
+            } else { /* AF_INET6 */
+                struct sockaddr_in6 *daddr6 = (struct sockaddr_in6 *)&daddr;
+                struct sockaddr_in6 *saddr6 = (struct sockaddr_in6 *)&saddr;
+
+                daddr6->sin6_family = AF_INET6;
+                daddr6->sin6_addr = conn->caddr.in6;
+                daddr6->sin6_port = conn->cport;
+
+                saddr6->sin6_family = AF_INET6;
+                saddr6->sin6_addr = conn->vaddr.in6;
+                saddr6->sin6_port = conn->vport;
+            }
+            sa_release(conn->out_dev, (struct sockaddr_storage *)&daddr,
+                    (struct sockaddr_storage *)&saddr);
         }
 
         conn_unbind_dest(conn);
@@ -524,19 +550,40 @@ static void conn_flush(void)
                 conn_unhash(conn);
 
                 if (conn->dest->fwdmode == DPVS_FWD_MODE_SNAT &&
-                        conn->proto != IPPROTO_ICMP) {
-                    struct sockaddr_in daddr, saddr;
-
+                        conn->proto != IPPROTO_ICMP &&
+                        conn->proto != IPPROTO_ICMPV6) {
+                    struct sockaddr_storage daddr, saddr;
                     memset(&daddr, 0, sizeof(daddr));
-                    daddr.sin_family = AF_INET;
-                    daddr.sin_addr = conn->caddr.in;
-                    daddr.sin_port = conn->cport;
-
                     memset(&saddr, 0, sizeof(saddr));
-                    saddr.sin_family = AF_INET;
-                    saddr.sin_addr = conn->vaddr.in;
-                    saddr.sin_port = conn->vport;
-                    sa_release(conn->out_dev, &daddr, &saddr);
+
+                    if (AF_INET == conn->af) {
+                        struct sockaddr_in *daddr4 = (struct sockaddr_in *)&daddr;
+                        struct sockaddr_in *saddr4 = (struct sockaddr_in *)&saddr;
+
+                        daddr4->sin_family = AF_INET;
+                        daddr4->sin_addr = conn->caddr.in;
+                        daddr4->sin_port = conn->cport;
+
+                        saddr4->sin_family = AF_INET;
+                        saddr4->sin_addr = conn->vaddr.in;
+                        saddr4->sin_port = conn->vport;
+                    } else if (AF_INET6 == conn->af) {
+                        struct sockaddr_in6 *daddr6 = (struct sockaddr_in6 *)&daddr;
+                        struct sockaddr_in6 *saddr6 = (struct sockaddr_in6 *)&saddr;
+
+                        daddr6->sin6_family = AF_INET6;
+                        daddr6->sin6_addr = conn->caddr.in6;
+                        daddr6->sin6_port = conn->cport;
+
+                        saddr6->sin6_family = AF_INET6;
+                        saddr6->sin6_addr = conn->vaddr.in6;
+                        saddr6->sin6_port = conn->cport;
+                    } else {
+                        RTE_LOG(WARNING, IPVS, "%s: conn address family %d "
+                                "not supported!\n", __func__, conn->af);
+                    }
+                    sa_release(conn->out_dev, (struct sockaddr_storage *)&daddr,
+                              (struct sockaddr_storage *)&saddr);
                 }
 
                 conn_unbind_dest(conn);
@@ -556,9 +603,10 @@ static void conn_flush(void)
 #endif
 }
 
-struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
-                                   struct dp_vs_conn_param *param,
-                                   struct dp_vs_dest *dest, uint32_t flags)
+struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
+                                  const struct dp_vs_iphdr *iph,
+                                  struct dp_vs_conn_param *param,
+                                  struct dp_vs_dest *dest, uint32_t flags)
 {
     struct dp_vs_conn *new;
     struct conn_tuple_hash *t;
@@ -579,19 +627,20 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     if ((flags & DPVS_CONN_F_TEMPLATE) || param->ct_dport != 0)
         rport = param->ct_dport;
     else if (dest->fwdmode == DPVS_FWD_MODE_SNAT) {
-        if (unlikely(param->proto == IPPROTO_ICMP)) {
+        if (unlikely(param->proto == IPPROTO_ICMP ||
+                    param->proto == IPPROTO_ICMPV6)) {
             rport = param->vport;
         } else {
-            ports = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf),
-                                        sizeof(_ports), _ports);
+            ports = mbuf_header_pointer(mbuf, iph->len, sizeof(_ports), _ports);
             if (unlikely(!ports)) {
                 RTE_LOG(WARNING, IPVS, "%s: no memory\n", __func__);
                 goto errout;
             }
             rport = ports[0];
         }
-    } else
+    } else {
         rport = dest->port;
+    }
 
     /* init inbound conn tuple hash */
     t = &tuplehash_in(new);
@@ -610,9 +659,9 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     t->af       = param->af;
     t->proto    = param->proto;
     if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
-        t->saddr.in.s_addr    = ip4_hdr(mbuf)->src_addr;
+        t->saddr = iph->saddr;
     else
-        t->saddr    = dest->addr;
+        t->saddr = dest->addr;
     t->sport    = rport;
     t->daddr    = *param->caddr;    /* non-FNAT */
     t->dport    = param->cport;     /* non-FNAT */
@@ -627,15 +676,21 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     new->vport  = param->vport;
     new->laddr  = *param->caddr;    /* non-FNAT */
     new->lport  = param->cport;     /* non-FNAT */
-    if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
-        new->daddr.in.s_addr  = ip4_hdr(mbuf)->src_addr;
-    else
+    if (dest->fwdmode == DPVS_FWD_MODE_SNAT) {
+        new->daddr  = iph->saddr;
+    } else {
         new->daddr  = dest->addr;
+    }
     new->dport  = rport;
 
     /* neighbour confirm cache */
-    new->in_nexthop.in.s_addr = htonl(INADDR_ANY);
-    new->out_nexthop.in.s_addr = htonl(INADDR_ANY);
+    if (AF_INET == param->af) {
+        new->in_nexthop.in.s_addr = htonl(INADDR_ANY);
+        new->out_nexthop.in.s_addr = htonl(INADDR_ANY);
+    } else if (AF_INET6 == param->af) {
+        new->in_nexthop.in6 = in6addr_any;
+        new->out_nexthop.in6 = in6addr_any;
+    }
 
     new->in_dev = NULL;
     new->out_dev = NULL;
@@ -680,11 +735,11 @@ struct dp_vs_conn * dp_vs_conn_new(struct rte_mbuf *mbuf,
     rte_atomic32_set(&new->syn_retry_max, 0);
     rte_atomic32_set(&new->dup_ack_cnt, 0);
     if ((flags & DPVS_CONN_F_SYNPROXY) && !(flags & DPVS_CONN_F_TEMPLATE)) {
-        struct tcphdr _tcph, *th;
+        struct tcphdr _tcph, *th = NULL;
         struct dp_vs_synproxy_ack_pakcet *ack_mbuf;
         struct dp_vs_proto *pp;
 
-        th = mbuf_header_pointer(mbuf, ip4_hdrlen(mbuf), sizeof(_tcph), &_tcph);
+        th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
         if (!th) {
             RTE_LOG(ERR, IPVS, "%s: get tcphdr failed\n", __func__);
             goto unbind_laddr;
@@ -830,8 +885,7 @@ struct dp_vs_conn *dp_vs_ct_in_get(int af, uint16_t proto,
         conn = tuplehash_to_conn(tuphash);
         if (tuphash->sport == sport && tuphash->dport == dport
                 && inet_addr_equal(af, &tuphash->saddr, saddr)
-                && inet_addr_equal(proto == IPPROTO_IP ? AF_UNSPEC : af,
-                    &tuphash->daddr, daddr)
+                && inet_addr_equal(af, &tuphash->daddr, daddr)
                 && conn->flags & DPVS_CONN_F_TEMPLATE
                 && tuphash->proto == proto
                 && tuphash->af == af) {
@@ -1027,6 +1081,7 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
             }
             break;
         case IPPROTO_ICMP:
+        case IPPROTO_ICMPV6:
             switch (state) {
                 case DPVS_ICMP_S_NORMAL:
                     return "ICMP_NORMAL";
@@ -1052,10 +1107,17 @@ static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
     entry->lcoreid = rte_lcore_id();
     snprintf(entry->state, sizeof(entry->state), "%s",
             get_conn_state_name(conn->proto, conn->state));
-    entry->caddr = conn->caddr.in.s_addr;
-    entry->vaddr = conn->vaddr.in.s_addr;
-    entry->laddr = conn->laddr.in.s_addr;
-    entry->daddr = conn->daddr.in.s_addr;
+    if (AF_INET == conn->af) {
+        entry->caddr.in = conn->caddr.in;
+        entry->vaddr.in = conn->vaddr.in;
+        entry->laddr.in = conn->laddr.in;
+        entry->daddr.in = conn->daddr.in;
+    } else if (AF_INET6 == conn->af) {
+        entry->caddr.in6 = conn->caddr.in6;
+        entry->vaddr.in6 = conn->vaddr.in6;
+        entry->laddr.in6 = conn->laddr.in6;
+        entry->daddr.in6 = conn->daddr.in6;
+    }
     entry->cport = conn->cport;
     entry->vport = conn->vport;
     entry->lport = conn->lport;
@@ -1066,19 +1128,16 @@ static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
 static int sockopt_conn_get_specified(const struct ip_vs_conn_req *conn_req,
         struct ip_vs_conn_array *conn_arr)
 {
-    union inet_addr sip, tip;
     struct dp_vs_conn *conn;
     struct dpvs_msg *msg, *rmsg;
     struct dpvs_multicast_queue *mcq;
     struct ip_vs_conn_array *resp_conn;
     int res;
 
-    sip.in.s_addr = conn_req->sockpair.sip;
-    tip.in.s_addr = conn_req->sockpair.tip;
-
     if (conn_req->flag & GET_IPVS_CONN_FLAG_TEMPLATE) {
         conn = dp_vs_ct_in_get(conn_req->sockpair.af, conn_req->sockpair.proto,
-                &sip, &tip, conn_req->sockpair.sport, conn_req->sockpair.tport);
+                &conn_req->sockpair.sip, &conn_req->sockpair.tip,
+                conn_req->sockpair.sport, conn_req->sockpair.tport);
         if (unlikely(conn != NULL)) { /* hit persist conn */
             sockopt_fill_conn_entry(conn, &conn_arr->array[0]);
             conn_arr->nconns = 1;
@@ -1180,7 +1239,7 @@ again:
 
             assert(got == MAX_CTRL_CONN_GET_ENTRIES);
             conn_arr->nconns = got;
-            /* low chance that all done here, we assign GET_IPVS_CONN_RESL_MORE
+            /* small chance that all done here, we assign GET_IPVS_CONN_RESL_MORE
              * flag for simplicity here anyway */
             conn_arr->resl = GET_IPVS_CONN_RESL_OK | GET_IPVS_CONN_RESL_MORE;
             conn_arr->curcid = cid;
@@ -1332,7 +1391,6 @@ static struct dpvs_sockopts conn_sockopts = {
 static int conn_get_msgcb_slave(struct dpvs_msg *msg)
 {
     const struct ip_vs_conn_req *conn_req;
-    union inet_addr sip, tip;
     struct dp_vs_conn *conn;
     int dir, reply_len;
     struct ip_vs_conn_array *reply_data;
@@ -1340,19 +1398,17 @@ static int conn_get_msgcb_slave(struct dpvs_msg *msg)
     assert(msg->len == sizeof(struct ip_vs_conn_req));
     conn_req = (struct ip_vs_conn_req *)&msg->data[0];
 
-    sip.in.s_addr = conn_req->sockpair.sip;
-    tip.in.s_addr = conn_req->sockpair.tip;
-
     /* templates are global, it should never found here */
     if (conn_req->flag & GET_IPVS_CONN_FLAG_TEMPLATE)
         return EDPVS_INVAL;
 
     conn = dp_vs_conn_get(conn_req->sockpair.af, conn_req->sockpair.proto,
-            &sip, &tip, conn_req->sockpair.sport, conn_req->sockpair.tport, &dir, 0);
+            &conn_req->sockpair.sip, &conn_req->sockpair.tip,
+            conn_req->sockpair.sport, conn_req->sockpair.tport, &dir, 0);
     if (!conn) {
         conn = dp_vs_conn_get(conn_req->sockpair.af, conn_req->sockpair.proto,
-                    &sip, &tip, conn_req->sockpair.sport,
-                    conn_req->sockpair.tport, &dir, 1);
+                &conn_req->sockpair.sip, &conn_req->sockpair.tip,
+                conn_req->sockpair.sport, conn_req->sockpair.tport, &dir, 1);
     }
 
     if (unlikely(conn != NULL))

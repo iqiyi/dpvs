@@ -119,11 +119,11 @@ static int tunnel_bind_dev(struct netif_port *dev)
     if (tiph->daddr) {
         struct route_entry *rt;
         struct flow4 fl4 = {
-            .proto          = tiph->protocol,
-            .daddr.s_addr   = tiph->daddr,
-            .saddr.s_addr   = tiph->saddr,
-            .tos            = tiph->tos,
-            .oif            = tnl->link,
+            .fl4_proto          = tiph->protocol,
+            .fl4_daddr.s_addr   = tiph->daddr,
+            .fl4_saddr.s_addr   = tiph->saddr,
+            .fl4_tos            = tiph->tos,
+            .fl4_oif            = tnl->link,
         };
 
         rt = route4_output(&fl4);
@@ -828,11 +828,11 @@ int ip_tunnel_xmit(struct rte_mbuf *mbuf, struct netif_port *dev,
     rt = connected ? tnl->rt_cache : NULL;
     if (!rt) {
         /* not connected or no route cache */
-        fl4.proto = proto;
-        fl4.daddr.s_addr = dip;
-        fl4.saddr.s_addr = tiph->saddr;
-        fl4.tos = tos;
-        fl4.oif = tnl->link;
+        fl4.fl4_proto           = proto;
+        fl4.fl4_daddr.s_addr    = dip;
+        fl4.fl4_saddr.s_addr    = tiph->saddr;
+        fl4.fl4_tos             = tos;
+        fl4.fl4_oif             = tnl->link;
 
         rt = route4_output(&fl4);
         if (!rt) {

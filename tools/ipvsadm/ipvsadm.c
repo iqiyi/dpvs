@@ -303,7 +303,7 @@ static int parse_netmask(char *buf, u_int32_t *addr);
 static int parse_timeout(char *buf, int min, int max);
 static unsigned int parse_fwmark(char *buf);
 static int parse_sockpair(char *buf, ipvs_sockpair_t *sockpair);
-static int parse_match(const char *buf, ipvs_service_t *svc);
+static int parse_match_snat(const char *buf, ipvs_service_t *svc);
 
 /* check the options based on the commands_v_options table */
 static void generic_opt_check(int command, int options);
@@ -403,6 +403,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "udp-service", 'u', POPT_ARG_STRING, &optarg, 'u',
 		  NULL, NULL },
 		{ "icmp-service", 'q', POPT_ARG_STRING, &optarg, 'q',
+		  NULL, NULL },
+		{ "icmpv6-service", '1', POPT_ARG_STRING, &optarg, 'q',
 		  NULL, NULL },
 		{ "fwmark-service", 'f', POPT_ARG_STRING, &optarg, 'f',
 		  NULL, NULL },
@@ -549,30 +551,32 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		case 'u':
 		case 'q':
 			set_option(options, OPT_SERVICE);
-            if (c == 't')
-                ce->svc.protocol = IPPROTO_TCP;
-            else if (c == 'u')
-                ce->svc.protocol = IPPROTO_UDP;
-            else
-                ce->svc.protocol = IPPROTO_ICMP;
+			if (c == 't')
+				ce->svc.protocol = IPPROTO_TCP;
+			else if (c == 'u')
+				ce->svc.protocol = IPPROTO_UDP;
+			else if (c == 'q')
+				ce->svc.protocol = IPPROTO_ICMP;
+			else if (c == '1') // a~Z is out. ipvsadm is really not friendly here
+				ce->svc.protocol = IPPROTO_ICMPV6;
 
 			parse = parse_service(optarg, &ce->svc);
 			if (!(parse & SERVICE_ADDR))
 				fail(2, "illegal virtual server "
 				     "address[:port] specified");
 			break;
-        case 'H':
+		case 'H':
 			set_option(options, OPT_SERVICE);
-            if (parse_match(optarg, &ce->svc) != 0)
+		if (parse_match_snat(optarg, &ce->svc) != 0)
 				fail(2, "illegal match specified");
-            break;
+			break;
 		case 'f':
 			set_option(options, OPT_SERVICE);
 			/*
 			 * Set protocol to a sane values, even
 			 * though it is not used
 			 */
-			ce->svc.af = AF_INET;
+			ce->svc.af = AF_INET;/*FIXME:DPVS not support fwmark?*/
 			ce->svc.protocol = IPPROTO_TCP;
 			ce->svc.fwmark = parse_fwmark(optarg);
 			break;
@@ -1224,9 +1228,9 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 
     sockpair->af = af;
 	sockpair->proto = proto;
-    sockpair->sip = sip.s_addr;
+    memcpy(&sockpair->sip, &sip, sizeof(sockpair->sip));
     sockpair->sport = ntohs(sport);
-    sockpair->tip = tip.s_addr;
+    memcpy(&sockpair->tip, &tip, sizeof(sockpair->tip));
     sockpair->tport = ntohs(tport);
 
     return 1;
@@ -1234,7 +1238,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 /*
  * comma separated parameters list, all fields is used to match packets.
  *
- *   proto      := tcp | udp | icmp
+ *   proto      := tcp | udp | icmp |icmpv6
  *   src-range  := RANGE
  *   dst-range  := RANGE
  *   iif        := IFNAME
@@ -1245,7 +1249,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
  *
  *   proto=tcp,src-range=192.168.0.1-10:80-100,dst-range=10.0.0.1:1024,iif=eth0
  */
-static int parse_match(const char *buf, ipvs_service_t *svc)
+static int parse_match_snat(const char *buf, ipvs_service_t *svc)
 {
     char params[256];
     char *arg, *start, *sp, key[32], val[128];
@@ -1271,6 +1275,8 @@ static int parse_match(const char *buf, ipvs_service_t *svc)
                 svc->protocol = IPPROTO_UDP;
             else if (strcmp(val, "icmp") == 0)
                 svc->protocol = IPPROTO_ICMP;
+            else if (strcmp(val, "icmpv6") == 0)
+                svc->protocol = IPPROTO_ICMPV6;
             else
                 return -1;
         } else if (strcmp(key, "src-range") == 0) {
@@ -1421,6 +1427,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --tcp-service  -t service-address   service-address is host[:port]\n"
 		"  --udp-service  -u service-address   service-address is host[:port]\n"
 		"  --icmp-service -q service-address   service-address is host[:port]\n"
+		"  --icmpv6-service -1 service-address   service-address is host[:port]\n"
 		"  --fwmark-service  -f fwmark         fwmark is an integer greater than zero\n"
 		"  --ipv6         -6                   fwmark entry uses IPv6\n"
 		"  --scheduler    -s scheduler         one of " SCHEDULERS ",\n"
@@ -1504,7 +1511,6 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 {
 	char *cname, *vname, *lname, *dname;
 	char proto_str[8], time_str[8];
-	union inet_addr addr;
 
 	if (conn_entry->proto == IPPROTO_TCP)
 		snprintf(proto_str, sizeof(proto_str), "%s", "tcp");
@@ -1512,26 +1518,24 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 		snprintf(proto_str, sizeof(proto_str), "%s", "udp");
 	else if (conn_entry->proto == IPPROTO_ICMP)
 		snprintf(proto_str, sizeof(proto_str), "%s", "icmp");
+	else if (conn_entry->proto == IPPROTO_ICMPV6)
+		snprintf(proto_str, sizeof(proto_str), "%s", "icmpv6");
 	else
 		snprintf(proto_str, sizeof(proto_str), "%s", "--");
 
 	snprintf(time_str, sizeof(time_str), "%ds", conn_entry->timeout);
 
-	addr.in.s_addr = conn_entry->caddr;
-	if (!(cname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->cport),
-					conn_entry->proto, format)))
+	if (!(cname = addrport_to_anyname(conn_entry->af, &conn_entry->caddr,
+                    ntohs(conn_entry->cport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->vaddr;
-	if (!(vname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->vport),
-					conn_entry->proto, format)))
+	if (!(vname = addrport_to_anyname(conn_entry->af, &conn_entry->vaddr,
+                    ntohs(conn_entry->vport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->laddr;
-	if (!(lname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->lport),
-					conn_entry->proto, format)))
+	if (!(lname = addrport_to_anyname(conn_entry->af, &conn_entry->laddr,
+                    ntohs(conn_entry->lport), conn_entry->proto, format)))
 		goto exit;
-	addr.in.s_addr = conn_entry->daddr;
-	if (!(dname = addrport_to_anyname(conn_entry->af, &addr, ntohs(conn_entry->dport),
-					conn_entry->proto, format)))
+	if (!(dname = addrport_to_anyname(conn_entry->af, &conn_entry->daddr,
+                    ntohs(conn_entry->dport), conn_entry->proto, format)))
 		goto exit;
 
 	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
@@ -1735,21 +1739,23 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 						  se->protocol, format)))
 			fail(2, "addrport_to_anyname: %s", strerror(errno));
 		if (format & FMT_RULE) {
-            if (se->protocol == IPPROTO_TCP)
-                proto = "-t";
-            else if (se->protocol == IPPROTO_UDP)
-                proto = "-u";
-            else
-                proto = "-q";
+			if (se->protocol == IPPROTO_TCP)
+				proto = "-t";
+			else if (se->protocol == IPPROTO_UDP)
+				proto = "-u";
+			else
+				proto = "-q";
 
 			sprintf(svc_name, "%s %s", proto, vname);
-        } else {
-            if (se->protocol == IPPROTO_TCP)
-                proto = "TCP";
-            else if (se->protocol == IPPROTO_UDP)
-                proto = "UDP";
-            else
-                proto = "ICMP";
+		} else {
+			if (se->protocol == IPPROTO_TCP)
+				proto = "TCP";
+			else if (se->protocol == IPPROTO_UDP)
+				proto = "UDP";
+			else if (se->protocol == IPPROTO_ICMP)
+				proto = "ICMP";
+			else 
+				proto = "ICMPv6";
 
 			sprintf(svc_name, "%s  %s", proto, vname);
 			if (se->af != AF_INET6)
@@ -1757,44 +1763,48 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		}
 		free(vname);
 	} else { /* match */
-        char *proto;
+		char *proto;
 
-        if (se->protocol == IPPROTO_TCP)
-            proto = "tcp";
-        else if (se->protocol == IPPROTO_UDP)
-            proto = "udp";
-        else
-            proto = "icmp";
+		if (se->protocol == IPPROTO_TCP)
+			proto = "tcp";
+		else if (se->protocol == IPPROTO_UDP)
+			proto = "udp";
+		else if (se->protocol == IPPROTO_ICMP)
+			proto = "icmp";
+		else
+			proto = "icmpv6";
+			
+		if (format & FMT_RULE) {
+			snprintf(svc_name, sizeof(svc_name),
+			"-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
+			proto, se->srange, se->drange, se->iifname, se->oifname);
 
-        if (format & FMT_RULE) {
-            snprintf(svc_name, sizeof(svc_name),
-                     "-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
-                     proto, se->srange, se->drange, se->iifname, se->oifname);
+		} else {
+			int left = sizeof(svc_name);
+			svc_name[0] = '\0';
 
-        } else {
-            int left = sizeof(svc_name);
-            svc_name[0] = '\0';
-
-            left -= snprintf(svc_name + strlen(svc_name), left,
-                             "MATCH %s", proto);
+			left -= snprintf(svc_name + strlen(svc_name), left,
+				"MATCH %s", proto);
             
-            if (strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
-                left -= snprintf(svc_name + strlen(svc_name), left,
-                                 ",from=%s", se->srange);
+			if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
+                            strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+				left -= snprintf(svc_name + strlen(svc_name), left,
+				",from=%s", se->srange);
 
-            if (strcmp(se->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
-                left -= snprintf(svc_name + strlen(svc_name), left,
-                                 ",to=%s", se->drange);
+			if (strcmp(se->drange, "[::-::]:0-0") != 0 &&
+                            strcmp(se->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+				left -= snprintf(svc_name + strlen(svc_name), left,
+				",to=%s", se->drange);
 
-            if (strlen(se->iifname))
-                left -= snprintf(svc_name + strlen(svc_name), left,
-                                 ",iif=%s", se->iifname);
+			if (strlen(se->iifname))
+				left -= snprintf(svc_name + strlen(svc_name), left,
+				",iif=%s", se->iifname);
 
-            if (strlen(se->oifname))
-                left -= snprintf(svc_name + strlen(svc_name), left,
-                                 ",oif=%s", se->oifname);
-        }
-    }
+			if (strlen(se->oifname))
+				left -= snprintf(svc_name + strlen(svc_name), left,
+				",oif=%s", se->oifname);
+		}
+	}
 
 	/* copy svc's stats from dest */
 	copy_stats_from_dest(se, d);
@@ -1949,11 +1959,11 @@ static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 {
 	char	pbuf[32];
 
-	sprintf(pbuf , "%u.%u.%u.%u" , PRINT_NIP(entry->addr.ip));
+	inet_ntop(entry->af, (char *)&entry->addr, pbuf, sizeof(pbuf));
 	
-	printf("%-20s %-8s %-20s %-10lu %-10u\n" , 
-		"" , 
-		"" , 
+	printf("%-20s %-8s %-20s %-10lu %-10u\n",
+		"",
+		"",
 		pbuf,
 		entry->port_conflict,
 		entry->conn_counts);
@@ -2049,6 +2059,8 @@ static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
 		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "TCP", pbuf_d);
 	else if(blklst->proto ==IPPROTO_UDP)
 		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "UDP", pbuf_d);
+	else if (blklst->proto == IPPROTO_ICMP)
+		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "ICMP", pbuf_d);
 	else
 		printf("proto not support!");
 }
@@ -2214,6 +2226,9 @@ int service_to_port(const char *name, unsigned short proto)
 	else if (proto == IPPROTO_ICMP
 		 && (service = getservbyname(name, "icmp")) != NULL)
 		return ntohs((unsigned short) service->s_port);
+	else if (proto == IPPROTO_ICMPV6
+		 && (service = getservbyname(name, "icmpv6")) != NULL)
+		return ntohs((unsigned short) service->s_port);
 	else
 		return -1;
 }
@@ -2231,6 +2246,9 @@ static char * port_to_service(unsigned short port, unsigned short proto)
 		return service->s_name;
 	else if (proto == IPPROTO_ICMP &&
 		 (service = getservbyport(htons(port), "icmp")) != NULL)
+		return service->s_name;
+	else if (proto == IPPROTO_ICMPV6 &&
+		 (service = getservbyport(htons(port), "icmpv6")) != NULL)
 		return service->s_name;
 	else
 		return (char *) NULL;

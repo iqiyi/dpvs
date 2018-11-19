@@ -26,11 +26,16 @@ netif_defs {
             #max_burst_size     32
             queue_number        6           <16, 0-16>
             descriptor_number   256         <256, 16-8192>
-            rss                 ip          <tcp, tcp|ip>
+            rss                 all         <all, all|ip|tcp|udp|sctp|ether|port|tunnel>
         }
         tx {
             queue_number        6           <16, 0-16>
             descriptor_number   512         <512, 16-8192>
+        }
+        fdir {
+            mode                perfect     <perfect, none|signature|perfect|perfect_mac_vlan|perfect_tunnel>
+            pballoc             64k         <64k, 64k|128k|256k>
+            status              matched     <matched, close|matched|always>
         }
     !    promisc_mode                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
@@ -41,7 +46,7 @@ netif_defs {
             #max_burst_size     32
             queue_number        4
             descriptor_number   128
-            rss                 tcp
+            rss                 all
         }
         tx {
             queue_number        4
@@ -137,12 +142,29 @@ neigh_defs {
 
 ! dpvs ipv4 config
 ipv4_defs {
+    forwarding                 off      <off, on/off>
     <init> default_ttl         64       <64, 0-255>
     fragment {
         <init> bucket_number   4096     <4096, 32-65536>
         <init> bucket_entries  16       <16, 1-256>
         <init> max_entries     409600   <4096, 32-65536>
         <init> ttl             1        <1, 1-255>
+    }
+}
+
+! dpvs ipv6 config
+ipv6_defs {
+    disable                 off         <off, on/off>
+    forwarding              off         <off, on/off>
+    route6 {
+        <init> method       "hlist"     <"hlist"/"lpm">
+        recycle_time        10          <10, 1-36000>
+        lpm {
+            <init> lpm6_max_rules       1024    <1024, 16-2147483647>
+            <init> lpm6_num_tbl8s       65536   <65536, 16-2147483647>
+            <init> rt6_array_size       65536   <65536, 16-2147483647>
+            <init> rt6_hash_bucket      256     <256, 2-2147483647>
+        }
     }
 }
 
@@ -221,3 +243,4 @@ ipvs_defs {
 sa_pool {
     <init> pool_hash_size   16  <16, 1-128>
 }
+
