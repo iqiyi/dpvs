@@ -18,14 +18,19 @@ int n;
 struct toa_nat64_peer uaddr;
 int len = sizeof(struct toa_nat64_peer);
 char from[32];
+int err;
 memset(&sockaddr,0,sizeof(sockaddr));
 memset(&caddr,0,sizeof(caddr));
 sockaddr.sin_family = AF_INET;
 sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 sockaddr.sin_port = htons(10004);
 listenfd = socket(AF_INET,SOCK_STREAM,0);
-bind(listenfd,(struct sockaddr *) &sockaddr,sizeof(sockaddr));
-listen(listenfd,1024);
+if (err = bind(listenfd,(struct sockaddr *) &sockaddr,sizeof(sockaddr)) != 0) {
+    printf("bind error, code = %d\n", err);
+}
+if (listen(listenfd,1024) != 0) {
+    printf("listen error\n");
+}
 printf("Please wait for the client information\n");
 for(;;) {
     socklen_t length = sizeof(caddr);
@@ -37,7 +42,7 @@ for(;;) {
     
     if (getsockopt(connfd, IPPROTO_IP, TOA_SO_GET_LOOKUP, &uaddr, &len) == 0) {
 	    inet_ntop(AF_INET6, &uaddr.saddr, from, sizeof(from));
-	    printf("  real client %s:%d\n", from, ntohs(uaddr.sport));
+	    printf("  real client [%s]:%d\n", from, ntohs(uaddr.sport));
     } else {
         printf("client is %s\n", inet_ntoa(caddr.sin_addr));
     }
