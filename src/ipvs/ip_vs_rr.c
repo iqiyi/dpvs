@@ -24,7 +24,8 @@ static int dp_vs_rr_init_svc(struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
-static int dp_vs_rr_update_svc(struct dp_vs_service *svc)
+static int dp_vs_rr_update_svc(struct dp_vs_service *svc,
+        struct dp_vs_dest *dest __rte_unused, sockoptid_t opt __rte_unused)
 {
     svc->sched_data = &svc->dests;
     return EDPVS_OK;
