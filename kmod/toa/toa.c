@@ -228,6 +228,10 @@ inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
  * Find toa and copy_to_user
  * This function will not return inet_getname,
  * so users can get distinctions from normal v4
+ *
+ * Notice:
+ * In fact, we can just use original api inet_getname_toa by uaddr_len judge.
+ * We didn't do this because RS developers may be confused about this api.
  */
 static int
 inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
