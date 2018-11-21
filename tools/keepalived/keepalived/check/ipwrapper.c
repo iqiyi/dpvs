@@ -547,7 +547,7 @@ update_svr_checker_state(int alive, checker_id_t cid, virtual_server_t *vs, real
 		/* Remove the succeeded check from failed_checkers list. */
 		remove_failed_checker_list(cid, rs);
 		if (LIST_SIZE(rs->failed_checkers) == 0) {
-			if(!perform_svr_state(alive, vs, rs))
+			if (!perform_svr_state(alive, vs, rs))
 				add_failed_checker_list(cid, rs);
 		}
 	}
@@ -555,7 +555,7 @@ update_svr_checker_state(int alive, checker_id_t cid, virtual_server_t *vs, real
 	else {
 		add_failed_checker_list(cid, rs);
 		if (LIST_SIZE(rs->failed_checkers) == 1) {
-			if(!perform_svr_state(alive, vs, rs))
+			if (!perform_svr_state(alive, vs, rs))
 				remove_failed_checker_list(cid, rs);
 		}
 	}
