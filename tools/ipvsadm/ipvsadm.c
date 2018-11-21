@@ -1957,7 +1957,7 @@ static void list_laddrs_print_service(struct ip_vs_get_laddrs *d)
 
 static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 {
-	char	pbuf[32];
+	char	pbuf[40];
 
 	inet_ntop(entry->af, (char *)&entry->addr, pbuf, sizeof(pbuf));
 	
