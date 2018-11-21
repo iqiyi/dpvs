@@ -30,7 +30,6 @@
 #ifdef _WITH_SNMP_
   #include "check_snmp.h"
 #endif
-
 /* out-of-order functions declarations */
 static void update_quorum_state(virtual_server_t * vs);
 
@@ -747,6 +746,7 @@ clear_diff_rs(list old_vs_group, virtual_server_t * old_vs)
 			log_message(LOG_INFO, "service %s no longer exist"
 					    , FMT_RS(rs));
 			rs->inhibit = 0;
+			SET_ALIVE(rs);
 			list_add (rs_to_remove, rs);
 		}
 	}
