@@ -407,7 +407,7 @@ ipvs_stop(void)
 }
 
 /* Send user rules to IPVS module */
-static void
+static int
 ipvs_talk(int cmd)
 {
 	int result = -1;
@@ -462,8 +462,14 @@ ipvs_talk(int cmd)
 			break;
 	}
 
-	if (result)
+	if (result) {
+		if (result == EDPVS_EXIST && (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_ADDDEST))
+			result = 0;
+		else if (result == EDPVS_NOTEXIST && (cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST))
+			result = 0;
 		log_message(LOG_INFO, "IPVS: %s", ipvs_strerror(errno));
+	}
+	return result? IPVS_ERROR:IPVS_SUCCESS;
 }
 
 int
@@ -517,7 +523,7 @@ ipvs_group_range_cmd(int cmd, virtual_server_group_entry_t *vsg_entry)
 }
 
 /* set IPVS group rules */
-static void
+static int
 ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs)
 {
 	virtual_server_group_t *vsg = ipvs_get_group_by_name(vs->vsgname, vs_group);
@@ -526,7 +532,7 @@ ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs
 	element e;
 
 	/* return if jointure fails */
-	if (!vsg) return;
+	if (!vsg) return IPVS_ERROR;
 
 	/* visit addr_ip list */
 	l = vsg->addr_ip;
@@ -543,7 +549,8 @@ ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs
 
 		/* Talk to the IPVS channel */
 		if (IPVS_ALIVE(cmd, vsg_entry, rs)) {
-			ipvs_talk(cmd);
+			if (ipvs_talk(cmd) != IPVS_SUCCESS) 
+				return IPVS_ERROR;
 			IPVS_SET_ALIVE(cmd, vsg_entry);
 		}
 	}
@@ -566,7 +573,8 @@ ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs
 
 		/* Talk to the IPVS channel */
 		if (IPVS_ALIVE(cmd, vsg_entry, rs)) {
-			ipvs_talk(cmd);
+			if (ipvs_talk(cmd) != IPVS_SUCCESS) 
+				return IPVS_ERROR;
 			IPVS_SET_ALIVE(cmd, vsg_entry);
 		}
 	}
@@ -583,6 +591,7 @@ ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs
 			IPVS_SET_ALIVE(cmd, vsg_entry);
 		}
 	}
+	return IPVS_SUCCESS;
 }
 
 /* Fill IPVS rule with root vs infos */
@@ -1003,7 +1012,7 @@ ipvs_cmd(int cmd, list vs_group, virtual_server_t * vs, real_server_t * rs)
 
 	/* Set vs rule and send to kernel */
 	if (vs->vsgname) {
-		ipvs_group_cmd(cmd, vs_group, rs, vs);
+		return ipvs_group_cmd(cmd, vs_group, rs, vs);
 	} else {
 		if (vs->vfwmark) {
 			srule->af = AF_INET;
@@ -1028,7 +1037,7 @@ ipvs_cmd(int cmd, list vs_group, virtual_server_t * vs, real_server_t * rs)
 		}
 
 		/* Talk to the IPVS channel */
-		ipvs_talk(cmd);
+		return ipvs_talk(cmd);
 	}
 
 	return IPVS_SUCCESS;
