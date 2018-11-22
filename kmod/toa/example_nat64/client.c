@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #define MAXLINE 1024
+
 int main(int argc,char **argv)
 {
     char *servInetAddr = "127.0.0.1";//TODO
