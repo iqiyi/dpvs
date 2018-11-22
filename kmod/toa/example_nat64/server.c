@@ -17,7 +17,7 @@ char buff[MAXLINE];
 int n;
 struct toa_nat64_peer uaddr;
 int len = sizeof(struct toa_nat64_peer);
-char from[32];
+char from[40];
 int err;
 memset(&sockaddr,0,sizeof(sockaddr));
 memset(&caddr,0,sizeof(caddr));
