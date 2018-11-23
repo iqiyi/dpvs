@@ -30,6 +30,10 @@
 
 #define MSG_MAX_LCORE_SUPPORTED 64
 
+#ifdef CONFIG_DPVS_MSG_DEBUG
+rte_atomic32_t wild_msg_count;
+#endif
+
 uint64_t slave_lcore_mask;     /* bit-wise enabled lcores */
 uint8_t slave_lcore_nb;        /* slave lcore number */
 lcoreid_t master_lcore;        /* master lcore id */
@@ -294,6 +298,9 @@ struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
     rte_atomic16_init(&msg->refcnt);
     rte_atomic16_inc(&msg->refcnt);
 
+#ifdef CONFIG_DPVS_MSG_DEBUG
+    rte_atomic32_inc(&wild_msg_count);
+#endif
     return msg;
 }
 
@@ -338,6 +345,11 @@ int msg_destroy(struct dpvs_msg **pmsg)
     rte_free(msg);
     *pmsg = NULL;
 
+#ifdef CONFIG_DPVS_MSG_DEBUG
+    rte_atomic32_dec(&wild_msg_count);
+    RTE_LOG(DEBUG, MSGMGR, "%s: msg sent but not freed -- %d\n",
+            __func__, rte_atomic32_read(&wild_msg_count));
+#endif
     return EDPVS_OK;
 }
 
@@ -389,7 +401,7 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
     /* blockable msg, wait here until done or timeout */
     add_msg_flags(msg, DPVS_MSG_F_STATE_SEND);
     start = rte_get_timer_cycles();
-    while(!(test_msg_flags(msg, (DPVS_MSG_F_STATE_FIN | DPVS_MSG_F_STATE_DROP)))) {
+    while (!(test_msg_flags(msg, (DPVS_MSG_F_STATE_FIN | DPVS_MSG_F_STATE_DROP)))) {
         /* to avoid dead lock when one send a blockable msg to itself */
         if (rte_lcore_id() == master_lcore)
             msg_master_process();
@@ -500,7 +512,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     /* blockable msg wait here until done or timeout */
     add_msg_flags(msg, DPVS_MSG_F_STATE_SEND);
     start = rte_get_timer_cycles();
-    while(!(test_msg_flags(msg, (DPVS_MSG_F_STATE_FIN | DPVS_MSG_F_STATE_DROP)))) {
+    while (!(test_msg_flags(msg, (DPVS_MSG_F_STATE_FIN | DPVS_MSG_F_STATE_DROP)))) {
         msg_master_process(); /* to avoid dead lock if send msg to myself */
         delay = (uint64_t)msg_timeout * rte_get_timer_hz() / 1E6;
         if (start + delay < rte_get_timer_cycles()) {
@@ -567,7 +579,6 @@ int msg_master_process(void)
                 msg_type_put(msg_type);
                 continue;
             }
-            rte_atomic16_dec(&mcq->org_msg->refcnt); /* for each reply, decrease refcnt of org_msg */
             if (!msg_type->multicast_msg_cb) {
                 RTE_LOG(DEBUG, MSGMGR, "%s: no callback registered for multicast msg %d\n",
                         __func__, msg->type);
@@ -577,6 +588,7 @@ int msg_master_process(void)
                 continue;
             }
             if (mcq->mask & (1L << msg->cid)) { /* you are the msg i'm waiting */
+                rte_atomic16_dec(&mcq->org_msg->refcnt); /* for each reply, decrease refcnt of org_msg */
                 list_add_tail(&msg->mq_node, &mcq->mq);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_QUEUE);/* set QUEUE flag for slave's reply msg */
                 mcq->mask &= ~(1L << msg->cid);
@@ -597,11 +609,9 @@ int msg_master_process(void)
                 msg_type_put(msg_type);
                 continue;
             }
-            /* free repeated msg, but not free msg queue, so change msg mode to DPVS_MSG_UNICAST */
-            msg->mode = DPVS_MSG_UNICAST;
+            /* free repeated msg, but not free msg queue */
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg); /* sorry, you are late */
-            rte_atomic16_inc(&mcq->org_msg->refcnt); /* do not count refcnt for repeated msg */
         }
         msg_type_put(msg_type);
     }
@@ -885,6 +895,9 @@ static inline int msg_init(void)
         }
     }
 
+#ifdef CONFIG_DPVS_MSG_DEBUG
+    rte_atomic32_init(&wild_msg_count);
+#endif
     /* register netif-lcore-loop-job for Slaves */
     snprintf(ctrl_lcore_job.name, sizeof(ctrl_lcore_job.name) - 1, "%s", "slave_ctrl_plane");
     ctrl_lcore_job.func = slave_lcore_loop_func;
