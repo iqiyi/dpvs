@@ -317,7 +317,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 
         /* call the update_service function of its scheduler */
         if (svc->scheduler->update_service)
-            svc->scheduler->update_service(svc);
+            svc->scheduler->update_service(svc, dest, DPVS_SO_SET_ADDDEST);
 
         rte_rwlock_write_unlock(&__dp_vs_svc_lock);
         return EDPVS_OK;
@@ -349,7 +349,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 
     /* call the update_service function of its scheduler */
     if (svc->scheduler->update_service)
-        svc->scheduler->update_service(svc);
+        svc->scheduler->update_service(svc, dest, DPVS_SO_SET_ADDDEST);
 
     rte_rwlock_write_unlock(&__dp_vs_svc_lock);
 
@@ -410,7 +410,7 @@ dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 
     /* call the update_service, because server weight may be changed */
     if (svc->scheduler->update_service)
-        svc->scheduler->update_service(svc);
+        svc->scheduler->update_service(svc, dest, DPVS_SO_SET_EDITDEST);
 
     rte_rwlock_write_unlock(&__dp_vs_svc_lock);
 
@@ -480,7 +480,7 @@ void __dp_vs_unlink_dest(struct dp_vs_service *svc,
      *  Call the update_service function of its scheduler
      */
     if (svcupd && svc->scheduler->update_service)
-        svc->scheduler->update_service(svc);
+        svc->scheduler->update_service(svc, dest, DPVS_SO_SET_DELDEST);
 }
 
 int
