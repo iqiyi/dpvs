@@ -443,6 +443,14 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
         return EDPVS_INVAL;
     }
 
+    mc_msg = rte_zmalloc("mc_msg", sizeof(struct dpvs_multicast_queue),
+            RTE_CACHE_LINE_SIZE);
+    if (unlikely(!mc_msg)) {
+        RTE_LOG(ERR, MSGMGR, "%s: no memory\n", __func__);
+        add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
+        return EDPVS_NOMEM;
+    }
+
     /* send unicast msgs from master to all alive slaves */
     rte_atomic16_inc(&msg->refcnt); /* refcnt increase by 1 for itself */
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
@@ -451,7 +459,6 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
             if (unlikely(!new_msg)) {
                 RTE_LOG(ERR, MSGMGR, "%s: msg make fail\n", __func__);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                rte_atomic16_dec(&msg->refcnt); /* decrease refcnt by 1 manually */
                 return EDPVS_NOMEM;
             }
 
@@ -460,25 +467,17 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
             if (ret < 0) { /* nonblock msg not equeued */
                 RTE_LOG(ERR, MSGMGR, "%s: msg send fail\n", __func__);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                rte_atomic16_dec(&msg->refcnt); /* decrease refcnt by 1 manually */
                 msg_destroy(&new_msg);
                 return ret;
             }
             msg_destroy(&new_msg);
+            mc_msg->mask |= (slave_lcore_mask & (1L << ii));
             rte_atomic16_inc(&msg->refcnt); /* refcnt increase by 1 for each slave */
         }
     }
 
-    mc_msg = rte_zmalloc("mc_msg", sizeof(struct dpvs_multicast_queue), RTE_CACHE_LINE_SIZE);
-    if (unlikely(!mc_msg)) {
-        RTE_LOG(ERR, MSGMGR, "%s: no memory\n", __func__);
-        add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        return EDPVS_NOMEM;
-    }
-
     mc_msg->type = msg->type;
     mc_msg->seq = msg->seq;
-    mc_msg->mask = slave_lcore_mask;
     mc_msg->org_msg = msg; /* save original msg */
     INIT_LIST_HEAD(&mc_msg->mq);
 
