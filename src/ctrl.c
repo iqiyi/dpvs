@@ -538,6 +538,7 @@ int msg_master_process(void)
                     __func__, msg->type);
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg);
+            msg_type_put(msg_type);
             continue;
         }
         if (DPVS_MSG_UNICAST == msg_type->mode) { /* unicast msg */
