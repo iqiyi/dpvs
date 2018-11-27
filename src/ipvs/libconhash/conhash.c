@@ -42,7 +42,7 @@ void conhash_fini(struct conhash_s *conhash,void (*node_fini)(struct node_s*))
             struct node_s *node;
             util_rbtree_node_t *rbnode = conhash->vnode_tree.root;
             util_rbtree_delete(&(conhash->vnode_tree), rbnode);
-            if (rbnode && rbnode->data) 
+            if (rbnode && rbnode->data)
             {
                 node = ((struct virtual_node_s*)rbnode->data)->node;
                 if (--(node->replicas) == 0)
