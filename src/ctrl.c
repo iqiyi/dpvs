@@ -263,6 +263,13 @@ int msg_type_mc_unregister(const struct dpvs_msg_type *msg_type)
     return EDPVS_OK;
 }
 
+static inline void multicast_msg_set_seq(struct dpvs_msg *msg)
+{
+    static uint32_t seq = 0;
+    if (likely(msg != NULL))
+        msg->seq = ++seq ? : ++seq;
+}
+
 struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
         DPVS_MSG_MODE mode,
         lcoreid_t cid,
@@ -283,6 +290,8 @@ struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
 
     msg->type = type;
     msg->seq = seq;
+    if (type == DPVS_MSG_MULTICAST && seq == 0)
+        multicast_msg_set_seq(msg);
     msg->mode = mode;
     msg->cid = cid;
     msg->len = len;
@@ -534,7 +543,6 @@ int msg_master_process(void)
                     __func__, msg->type);
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg);
-            msg_type_put(msg_type);
             continue;
         }
         if (DPVS_MSG_UNICAST == msg_type->mode) { /* unicast msg */
