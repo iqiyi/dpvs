@@ -15,6 +15,7 @@ unsigned long sk_data_ready_addr = 0;
  ((unsigned char *)&addr)[2], \
  ((unsigned char *)&addr)[3]
 
+#ifdef TOA_IPV6_ENABLE
 #define TOA_NIP6_FMT "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x"
 
 #define TOA_NIP6(addr) \
@@ -27,7 +28,6 @@ unsigned long sk_data_ready_addr = 0;
     ntohs((addr).s6_addr16[6]), \
     ntohs((addr).s6_addr16[7])
 
-#ifdef TOA_IPV6_ENABLE
 static struct proto_ops *inet6_stream_ops_p = NULL;
 static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
 
@@ -49,8 +49,10 @@ struct toa_stats_entry toa_stats[] = {
 	TOA_STAT_ITEM("getname_toa_mismatch", GETNAME_TOA_MISMATCH_CNT),
 	TOA_STAT_ITEM("getname_toa_bypass", GETNAME_TOA_BYPASS_CNT),
 	TOA_STAT_ITEM("getname_toa_empty", GETNAME_TOA_EMPTY_CNT),
+#ifdef TOA_IPV6_ENABLE
 	TOA_STAT_ITEM("ip6_address_alloc", IP6_ADDR_ALLOC_CNT),
 	TOA_STAT_ITEM("ip6_address_free", IP6_ADDR_FREE_CNT),
+#endif
 	TOA_STAT_END
 };
 
@@ -133,6 +135,7 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 #endif
 				}
 
+#ifdef TOA_IPV6_ENABLE
 				if (TCPOPT_TOA == opcode &&
 				    TCPOLEN_IP6_TOA == opsize) {
 					struct toa_ip6_data *ptr_toa_ip6 =
@@ -149,15 +152,13 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 						ptr_toa_ip6->port,
 						ptr_toa_ip6);
 					TOA_INC_STATS(ext_stats, IP6_ADDR_ALLOC_CNT);
-#ifdef TOA_IPV6_ENABLE
 					if (af == AF_INET6)
 						*nat64 = 0;
 					else
-#endif
 						*nat64 = 1;
 					return ptr_toa_ip6;
 				}
-
+#endif
 				ptr += opsize - 2;
 				length -= opsize;
 			}
@@ -253,7 +254,7 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 
 	inet = inet_sk(sk);
 	/* refered to inet_getname */
-#if LINUX_VERSION_CODE >=KERNEL_VERSION(2,6,33)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,33)
 	if (!inet->inet_dport || 
 #else
 	if (!inet->dport ||
@@ -368,7 +369,6 @@ get_kernel_ipv6_symbol(void)
 	}   
         return 0;    
 }
-#endif
 
 static void 
 tcp_v6_sk_destruct_toa(struct sock *sk) {
@@ -379,6 +379,7 @@ tcp_v6_sk_destruct_toa(struct sock *sk) {
         }   
         inet_sock_destruct(sk);
 }
+#endif
 
 /* The three way handshake has completed - we got a valid synack -
  * now create the new socket.

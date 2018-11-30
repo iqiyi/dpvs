@@ -33,7 +33,6 @@ int mbuf_6to4(struct rte_mbuf *mbuf,
      */
     if (ip6h->ip6_nxt != IPPROTO_TCP &&
         ip6h->ip6_nxt != IPPROTO_UDP &&
-        ip6h->ip6_nxt != IPPROTO_ICMP &&
         ip6h->ip6_nxt != IPPROTO_ICMPV6) {
         return EDPVS_NOTSUPP;
     }
@@ -43,6 +42,8 @@ int mbuf_6to4(struct rte_mbuf *mbuf,
     next_prot = ip6h->ip6_nxt;
     ttl = ip6h->ip6_hlim;
     ip4h = (struct ipv4_hdr *)rte_pktmbuf_prepend(mbuf, sizeof(struct ipv4_hdr));
+    if (!ip4h)
+        return EDPVS_NOROOM;
 
     memset(ip4h, 0, sizeof(struct ipv4_hdr));
     ip4h->version_ihl     = ((4 << 4) | 5);
@@ -80,6 +81,8 @@ int mbuf_4to6(struct rte_mbuf *mbuf,
     next_prot = ip4h->next_proto_id;
     hops = ip4h->time_to_live;
     ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(mbuf, sizeof(struct ip6_hdr));
+    if (!ip6h)
+        return EDPVS_NOROOM;
 
     memset(ip6h, 0, sizeof(struct ip6_hdr));
     ip6h->ip6_vfc   = 0x60;

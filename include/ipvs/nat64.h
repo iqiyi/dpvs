@@ -21,7 +21,6 @@
 #include "ipv4.h"
 #include "ipv6.h"
 
-/*TODO:support ext_hdr, mbuf offset should not be changed here*/
 static inline int mbuf_nat6to4_len(struct rte_mbuf *mbuf)
 {
     int offset = sizeof(struct ip6_hdr);
@@ -34,10 +33,9 @@ static inline int mbuf_nat6to4_len(struct rte_mbuf *mbuf)
     return len;
 }
 
-/*TODO:support ip_option*/
 static inline int mbuf_nat4to6_len(struct rte_mbuf *mbuf)
 {
-    return (mbuf->l3_len - sizeof(struct ipv4_hdr) + sizeof(struct ip6_hdr));
+    return (mbuf->pkt_len - ip4_hdrlen(mbuf) + sizeof(struct ip6_hdr));
 }
 
 int mbuf_6to4(struct rte_mbuf *mbuf, 

@@ -2273,7 +2273,7 @@ static char *
 addrport_to_anyname(int af, const void *addr, unsigned short port,
 		    unsigned short proto, unsigned int format)
 {
-  char *buf, pbuf[INET6_ADDRSTRLEN];
+ 	char *buf, pbuf[INET6_ADDRSTRLEN];
 
 	if (!(buf=malloc(60)))
 		return NULL;
