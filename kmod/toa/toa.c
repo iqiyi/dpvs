@@ -264,6 +264,8 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 
 	if (NULL != sk->sk_user_data) {
 		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
+			if (!sock_flag(sk,SOCK_NAT64))
+				return -EFAULT;
 			t_ip6_data_ptr = sk->sk_user_data;
 			if (TCPOPT_TOA == t_ip6_data_ptr->opcode &&
 			    TCPOLEN_IP6_TOA == t_ip6_data_ptr->opsize) {
@@ -273,7 +275,7 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 					", port %u -> %u\n",
 					TOA_NIPQUAD(inet->saddr),
 					TOA_NIP6(t_ip6_data_ptr->in6_addr),
-					ntohs(inet->port),
+					ntohs(inet->sport),
 					ntohs(t_ip6_data_ptr->port));
 				uaddr.saddr = t_ip6_data_ptr->in6_addr;
 				uaddr.port  = t_ip6_data_ptr->port;
@@ -405,9 +407,11 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 	/* set our value if need */
 	if (NULL != newsock && NULL == newsock->sk_user_data) {
 		newsock->sk_user_data = get_toa_data(AF_INET, skb, &nat64);
+		sock_reset_flag(newsock, SOCK_NAT64);
 		if (NULL != newsock->sk_user_data) {
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
 			if (nat64) {
+				sock_set_flag(newsock, SOCK_NAT64);
 				newsock->sk_destruct = tcp_v6_sk_destruct_toa;
 			}
 		}
@@ -437,6 +441,7 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 	/* set our value if need */
 	if (NULL != newsock && NULL == newsock->sk_user_data) {
 		newsock->sk_user_data = get_toa_data(AF_INET6, skb, &nat64);
+		sock_reset_flag(newsock, SOCK_NAT64);
 		if (NULL != newsock->sk_user_data) {
 			newsock->sk_destruct = tcp_v6_sk_destruct_toa;
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
