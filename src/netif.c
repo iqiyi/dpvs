@@ -3307,7 +3307,7 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
                 rss[rss_index] = '\0';
                 rss_index = 0;
                 port->dev_conf.rx_adv_conf.rss_conf.rss_hf |= rss_resolve_proc(rss);
-                memset(rss, 0, sizeof(rss))
+                memset(rss, 0, sizeof(rss));
             }
         }
 
