@@ -321,7 +321,8 @@ static void rss_handler(vector_t tokens)
 
     assert(str);
     if (!strcmp(str, "all") || !strcmp(str, "ip") || !strcmp(str, "tcp") || !strcmp(str, "udp") 
-            || !strcmp(str, "sctp") || !strcmp(str, "ether") || !strcmp(str, "port") || !strcmp(str, "tunnel")) {
+            || !strcmp(str, "sctp") || !strcmp(str, "ether") || !strcmp(str, "port") || !strcmp(str, "tunnel")
+            || (strstr(str, "|") && str[0] != '|')) {
         RTE_LOG(INFO, NETIF, "%s:rss = %s\n", current_device->name, str);
         strncpy(current_device->rss, str, sizeof(current_device->rss));
     } else {
@@ -3249,12 +3250,39 @@ inline static int netif_port_fdir_dstport_mask_set(struct netif_port *port)
     return EDPVS_OK;
 }
 
+static int rss_resolve_proc(char *rss)
+{
+    int rss_value = 0;
+
+    if (!strcmp(rss, "all"))
+        rss_value = ETH_RSS_IP | ETH_RSS_TCP | ETH_RSS_UDP;
+    else if (!strcmp(rss, "ip"))
+        rss_value = ETH_RSS_IP;
+    else if (!strcmp(rss, "tcp"))
+        rss_value = ETH_RSS_TCP;
+    else if (!strcmp(rss, "udp"))
+        rss_value = ETH_RSS_UDP;
+    else if (!strcmp(rss, "sctp"))
+        rss_value = ETH_RSS_SCTP;
+    else if (!strcmp(rss, "ether"))
+        rss_value = ETH_RSS_L2_PAYLOAD;
+    else if (!strcmp(rss, "port"))
+        rss_value = ETH_RSS_PORT;
+    else if (!strcmp(rss, "tunnel"))
+        rss_value = ETH_RSS_TUNNEL;
+
+    return rss_value;
+}
+
 /* fill in rx/tx queue configurations, including queue number,
  * decriptor number, bonding device's rss */
 static void fill_port_config(struct netif_port *port, char *promisc_on)
 {
     assert(port);
 
+    char rss[256] = {0};
+    int index = 0;
+    int rss_index = 0;
     struct port_conf_stream *cfg_stream;
 
     if (port->type == PORT_TYPE_BOND_SLAVE) {
@@ -3269,22 +3297,23 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
     cfg_stream = get_port_conf_stream(port->name);
     if (cfg_stream) {
         /* device specific configurations from cfgfile */
-        if (!strcmp(cfg_stream->rss, "all"))
-            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_IP | ETH_RSS_TCP | ETH_RSS_UDP;
-        else if (!strcmp(cfg_stream->rss, "ip"))
-            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_IP;
-        else if (!strcmp(cfg_stream->rss, "tcp"))
-            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_TCP;
-        else if (!strcmp(cfg_stream->rss, "udp"))
-            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_UDP;
-        else if (!strcmp(cfg_stream->rss, "sctp"))
-            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_SCTP;
-        else if (!strcmp(cfg_stream->rss, "ether"))
-            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_L2_PAYLOAD;
-        else if (!strcmp(cfg_stream->rss, "port"))
-            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_PORT;
-        else if (!strcmp(cfg_stream->rss, "tunnel"))
-            port->dev_conf.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_TUNNEL;
+        port->dev_conf.rx_adv_conf.rss_conf.rss_hf = 0;
+        for (index = 0; index < strlen(cfg_stream->rss); index++) {
+            if (cfg_stream->rss[index] == ' ') {
+                continue;
+            } else if (cfg_stream->rss[index] != '|') {
+                rss[rss_index++] = cfg_stream->rss[index];
+            } else {
+                rss[rss_index] = '\0';
+                rss_index = 0;
+                port->dev_conf.rx_adv_conf.rss_conf.rss_hf |= rss_resolve_proc(rss);
+                memset(rss, 0, sizeof(rss));
+            }
+        }
+
+        if (rss[0]) {
+            port->dev_conf.rx_adv_conf.rss_conf.rss_hf |= rss_resolve_proc(rss);
+        }
 
         port->dev_conf.fdir_conf.mode = cfg_stream->fdir_mode;
         port->dev_conf.fdir_conf.pballoc = cfg_stream->fdir_pballoc;
