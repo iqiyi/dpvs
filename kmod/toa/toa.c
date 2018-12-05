@@ -192,7 +192,8 @@ inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 
 	/* set our value if need */
 	if (retval == 0 && NULL != sk->sk_user_data && peer) {
-		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
+		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready &&
+			!sock_flag(sk,SOCK_NAT64)) {
 			memcpy(&tdata, &sk->sk_user_data, sizeof(tdata));
 			if (TCPOPT_TOA == tdata.opcode &&
 			    TCPOLEN_IP4_TOA == tdata.opsize) {
