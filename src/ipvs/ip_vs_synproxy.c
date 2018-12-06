@@ -1161,13 +1161,13 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
 	}
 
 	memcpy(ack_ip6h, reuse_ip6h, sizeof(struct ip6_hdr));
-        ack_ip6h->ip6_vfc = 0x60;  /* IPv6 */
+	ack_ip6h->ip6_vfc = 0x60;  /* IPv6 */
 	ack_ip6h->ip6_plen = htons(sizeof(struct tcphdr));
 	ack_ip6h->ip6_nxt = NEXTHDR_TCP;
     } else {
 	struct ipv4_hdr *ack_iph;
 	struct ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
-        int pkt_ack_len = sizeof(struct tcphdr) + sizeof(struct iphdr);
+	int pkt_ack_len = sizeof(struct tcphdr) + sizeof(struct iphdr);
 	/* Reserve space for ipv4 header */
         ack_iph = (struct ipv4_hdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct ipv4_hdr));
 	if (!ack_iph) {
@@ -1176,12 +1176,12 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
 	    return EDPVS_NOROOM;
 	}
 
-        memcpy(ack_iph, reuse_iph, sizeof(struct ipv4_hdr));
-        /* version and ip header length */
-        ack_iph->version_ihl = 0x45;
-        ack_iph->type_of_service = 0;
-        ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
-        ack_iph->total_length = htons(pkt_ack_len);
+	memcpy(ack_iph, reuse_iph, sizeof(struct ipv4_hdr));
+	/* version and ip header length */
+	ack_iph->version_ihl = 0x45;
+	ack_iph->type_of_service = 0;
+	ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+	ack_iph->total_length = htons(pkt_ack_len);
     }
 
     conn->packet_out_xmit(pp, conn, ack_mbuf);
@@ -1268,7 +1268,7 @@ int dp_vs_synproxy_synack_rcv(int af, struct rte_mbuf *mbuf, struct dp_vs_conn *
         }
 	
         /* Window size has been set to zero in the syn-ack packet to Client.
-	 * If get more than one ack packet here, 
+         * If get more than one ack packet here, 
          * it means client has sent a window probe after one RTO.
          * The probe will be forward to RS and RS will respond a window update.
          * So DPVS has no need to send a window update.
