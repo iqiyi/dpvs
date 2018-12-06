@@ -979,7 +979,7 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
             }
         } else {
             /* Syn-proxy 3 logic: receive syn-ack from rs */
-            if (dp_vs_synproxy_synack_rcv(mbuf, conn, prot,
+            if (dp_vs_synproxy_synack_rcv(af, mbuf, conn, prot,
                                           iph.len, &verdict) == 0) {
                 dp_vs_stats_out(conn, mbuf);
                 dp_vs_conn_put(conn);

@@ -101,7 +101,7 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
         const struct dp_vs_iphdr *iph, int *verdict);
 
 /* Syn-proxy step 3 logic: receive rs's Syn/Ack. */
-int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
+int dp_vs_synproxy_synack_rcv(int af, struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
         struct dp_vs_proto *pp, int th_offset, int *verdict);
 
 /* Syn-proxy conn reuse logic: receive client's Ack */
