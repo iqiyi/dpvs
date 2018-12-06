@@ -21,7 +21,7 @@
 #include <net/transp_v6.h>
 #include <net/sock.h> 
 
-#define TOA_VERSION "1.0.0.0"
+#define TOA_VERSION "2.0.0.0"
 
 //#define TOA_DEBUG_ENABLE
 //#define TOA_IPV6_ENABLE
@@ -56,7 +56,7 @@ struct toa_ip4_data {
 	__u32 ip;
 };
 
-struct  toa_ip6_data{
+struct  toa_ip6_data {
 	__u8 opcode;
 	__u8 opsize;
 	__u16 port;
