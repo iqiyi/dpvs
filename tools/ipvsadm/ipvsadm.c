@@ -2153,10 +2153,26 @@ static void list_acls_print_title()
 }
 
 static void list_acls_print_acl(struct ip_vs_acl_entry *entry) {
-    char pbuf[32];
-
     char svc_name[256];
-    char *rule;
+    char *proto, *rule;
+
+    switch (entry->proto) {
+        case IPPROTO_TCP:
+            proto = "tcp";
+            break;
+        case IPPROTO_UDP:
+            proto = "udp";
+            break;
+        case IPPROTO_ICMP:
+            proto = "icmp";
+            break;
+        case IPPROTO_ICMPV6:
+            proto = "icmp6";
+            break;
+        default:
+            proto = "unknown";
+            break;
+    }
 
     if (entry->rule == IP_VS_ACL_DENY) {
         rule = "deny";
@@ -2165,8 +2181,9 @@ static void list_acls_print_acl(struct ip_vs_acl_entry *entry) {
     }
 
     snprintf(svc_name, sizeof(svc_name),
-             "--acl rule=%s,max-conn=%d,src-range=%s,dst-range=%s",
-             rule, entry->max_conn, entry->srange, entry->drange);
+             "-5 proto=%s,rule=%s,proto=proto,max-conn=%d,src-range=%s,"
+             "dst-range=%s", proto, rule, entry->max_conn, entry->srange,
+             entry->drange);
     printf("%s\n",svc_name);
 #if 0
     int left = sizeof(svc_name);
@@ -2231,7 +2248,7 @@ static int list_all_acls(void)
         print_service_and_acls(acls, title_enable);
     }
 
-    printf("Hello Wlrld\n");
+    return 0;
 }
 
 static void list_blklsts_print_title(void)

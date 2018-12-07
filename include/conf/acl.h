@@ -35,23 +35,6 @@ enum {
     SOCKOPT_GET_ACL_ALL,
 };
 
-// for 'get'
-struct dp_vs_acl_entry {
-    int                    af;
-    struct inet_addr_range srange;
-    struct inet_addr_range drange;
-
-    int                    rule;       /* deny | permit */
-    int                    max_conn;   /* maximum connections */
-    uint32_t               curr_conn;  /* current connection */
-};
-
-struct dp_vs_get_acls {
-    /* for get */
-    uint32_t               num_acls;
-    struct dp_vs_acl_entry entrytable[0];
-};
-
 struct dp_vs_acl_conf {
     /* identify service */
     int                    af;
@@ -71,10 +54,6 @@ struct dp_vs_acl_conf {
     int                    max_conn;     /* maximum connections */
     char                   srange[256];
     char                   drange[256];
-
-    /* for get */
-    uint32_t               num_acls;
-    struct dp_vs_acl_entry acls[0];
 };
 
 #endif /* ifndef __DPVS_ACL_CONF_H__ */

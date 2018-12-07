@@ -49,6 +49,7 @@ struct dp_vs_acl_flow {
 // for 'get'
 struct dp_vs_acl_entry {
     int                    af;
+    uint8_t                proto;
     char                   srange[256];
     char                   drange[256];
 

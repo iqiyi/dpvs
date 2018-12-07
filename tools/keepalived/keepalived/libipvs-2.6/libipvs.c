@@ -434,16 +434,16 @@ static void ipvs_fill_acl_conf(ipvs_service_t *svc, ipvs_acl_t *acl,
     conf->fwmark = svc->fwmark;
 
     /* identify match */
-    strcpy(&conf->m_srange, &svc->srange);
-    strcpy(&conf->m_drange, &svc->drange);
-    strncpy(&conf->iifname, &svc->iifname, IFNAMSIZ);
-    strncpy(&conf->oifname, &svc->oifname, IFNAMSIZ);
+    snprintf(conf->m_srange, sizeof(conf->m_srange), "%s", svc->srange);
+    snprintf(conf->m_drange, sizeof(conf->m_drange), "%s", svc->drange);
+    snprintf(conf->iifname, sizeof(conf->iifname), "%s", svc->iifname);
+    snprintf(conf->oifname, sizeof(conf->oifname), "%s", svc->oifname);
 
     /* identify acl */
     conf->rule     = acl->rule;
     conf->max_conn = acl->max_conn;
-    strcpy(&conf->srange, &acl->srange);
-    strcpy(&conf->drange, &acl->drange);
+    snprintf(conf->srange, sizeof(conf->srange), "%s", svc->srange);
+    snprintf(conf->drange, sizeof(conf->drange), "%s", svc->drange);
 
     return;
 }
@@ -715,8 +715,8 @@ struct ip_vs_get_acls *ipvs_get_allacls(ipvs_service_entry_t *svc)
     }
     struct dp_vs_acl_conf conf;
     struct ip_vs_get_acls *result;
-    struct dp_vs_get_acls *get;
-    size_t res_size, i;
+    struct ip_vs_get_acls *get;
+    size_t res_size;
 
     memset(&conf, 0, sizeof(conf));
     conf.af = svc->af;
@@ -741,7 +741,7 @@ struct ip_vs_get_acls *ipvs_get_allacls(ipvs_service_entry_t *svc)
 
     if (res_size != sizeof(*result) +
                 result->num_acls * sizeof(struct ip_vs_acl_entry)) {
-        printf("res_size !=\n");
+        fprintf(stderr, "%s\n","res_size not match.");
         return NULL;
     }
 

@@ -303,6 +303,7 @@ static int dp_vs_acl_getall(struct dp_vs_service *svc,
         list_for_each_entry(acl, &svc->acl_list, list) {
             assert(i < *num_acls);
             acl_entry[i].af = acl->af;
+            acl_entry[i].proto = svc->proto;
             inet_addr_range_dump(svc->af, &acl->srange, acl_entry[i].srange,
                         sizeof(acl_entry[i].srange));
             inet_addr_range_dump(svc->af, &acl->drange, acl_entry[i].drange,
@@ -407,7 +408,6 @@ static int acl_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     switch (opt) {
         case SOCKOPT_GET_ACL_ALL:
             err = dp_vs_acl_getall(svc, &acls, &num_acls);
-            RTE_LOG(ERR, ACL, "num_acls = %zu\n", num_acls);
             if (err != EDPVS_OK) {
                 break;
             }
@@ -427,6 +427,7 @@ static int acl_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
             for (i = 0; i < num_acls; ++i) {
                 get->entrytable[i].af = acls[i].af;
+                get->entrytable[i].proto = acls[i].proto;
                 snprintf(get->entrytable[i].srange,
                          sizeof(acls[i].srange), "%s", acls[i].srange);
                 snprintf(get->entrytable[i].drange,
