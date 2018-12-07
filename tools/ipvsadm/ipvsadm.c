@@ -1883,7 +1883,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		char *dname;
 		ipvs_dest_entry_t *e = &d->entrytable[i];
 
-		if (!(dname = addrport_to_anyname(se->af, &(e->addr), ntohs(e->port),
+		if (!(dname = addrport_to_anyname(e->af, &(e->addr), ntohs(e->port),
 						  se->protocol, format))) {
 			fprintf(stderr, "addrport_to_anyname fails\n");
 			exit(1);
@@ -1957,7 +1957,7 @@ static void list_laddrs_print_service(struct ip_vs_get_laddrs *d)
 
 static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 {
-	char	pbuf[32];
+	char	pbuf[INET6_ADDRSTRLEN];
 
 	inet_ntop(entry->af, (char *)&entry->addr, pbuf, sizeof(pbuf));
 	
@@ -2273,7 +2273,7 @@ static char *
 addrport_to_anyname(int af, const void *addr, unsigned short port,
 		    unsigned short proto, unsigned int format)
 {
-  char *buf, pbuf[INET6_ADDRSTRLEN];
+ 	char *buf, pbuf[INET6_ADDRSTRLEN];
 
 	if (!(buf=malloc(60)))
 		return NULL;

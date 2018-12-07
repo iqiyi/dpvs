@@ -67,7 +67,7 @@ DEFINE_TOA_STAT(struct toa_stat_mib, ext_stats);
  * @return NULL if we don't get client ip/port;
  *         value of toa_data in ret_ptr if we get client ip/port.
  */
-static void *get_toa_data(int af, struct sk_buff *skb)
+static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 {
 	struct tcphdr *th;
 	int length;
@@ -75,6 +75,7 @@ static void *get_toa_data(int af, struct sk_buff *skb)
 
 	TOA_DBG("get_toa_data called\n");
 
+	*nat64 = 0;
 	if (NULL != skb) {
 		th = tcp_hdr(skb);
 		length = (th->doff * 4) - sizeof(struct tcphdr);
@@ -136,8 +137,7 @@ static void *get_toa_data(int af, struct sk_buff *skb)
 
 #ifdef TOA_IPV6_ENABLE
 				if (TCPOPT_TOA == opcode &&
-				    TCPOLEN_IP6_TOA == opsize &&
-				    af == AF_INET6) {
+				    TCPOLEN_IP6_TOA == opsize) {
 					struct toa_ip6_data *ptr_toa_ip6 =
 						kmalloc(sizeof(struct toa_ip6_data), GFP_ATOMIC);
 					if (!ptr_toa_ip6) {
@@ -152,6 +152,10 @@ static void *get_toa_data(int af, struct sk_buff *skb)
 						ptr_toa_ip6->port,
 						ptr_toa_ip6);
 					TOA_INC_STATS(ext_stats, IP6_ADDR_ALLOC_CNT);
+					if (af == AF_INET6)
+						*nat64 = 0;
+					else
+						*nat64 = 1;
 					return ptr_toa_ip6;
 				}
 #endif
@@ -188,7 +192,8 @@ inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 
 	/* set our value if need */
 	if (retval == 0 && NULL != sk->sk_user_data && peer) {
-		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
+		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready &&
+			!sock_flag(sk, SOCK_NAT64)) {
 			memcpy(&tdata, &sk->sk_user_data, sizeof(tdata));
 			if (TCPOPT_TOA == tdata.opcode &&
 			    TCPOLEN_IP4_TOA == tdata.opsize) {
@@ -218,6 +223,80 @@ inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 	}
 
 	return retval;
+}
+
+/* NAT64 get client ip from socket
+ * Client ip is v6 and socket is v4
+ * Find toa and copy_to_user
+ * This function will not return inet_getname,
+ * so users can get distinctions from normal v4
+ *
+ * Notice:
+ * In fact, we can just use original api inet_getname_toa by uaddr_len judge.
+ * We didn't do this because RS developers may be confused about this api.
+ */
+static int
+inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
+{
+	struct inet_sock *inet;
+	struct toa_ip6_data *t_ip6_data_ptr;
+	struct toa_nat64_peer uaddr;
+
+	if (cmd != TOA_SO_GET_LOOKUP || !sk) {
+		TOA_INFO("%s: bad cmd\n", __func__);
+		return -EINVAL;
+	}
+
+	if (*len < sizeof(struct toa_nat64_peer) ||
+	    NULL == user) {
+		TOA_INFO("%s: bad param len\n", __func__);
+		return -EINVAL;
+	}
+
+	inet = inet_sk(sk);
+	/* refered to inet_getname */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,33)
+	if (!inet->inet_dport || 
+#else
+	if (!inet->dport ||
+#endif
+		((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_SYN_SENT)))
+		return -ENOTCONN;
+
+	if (NULL != sk->sk_user_data) {
+		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
+			if (!sock_flag(sk,SOCK_NAT64))
+				return -EFAULT;
+			t_ip6_data_ptr = sk->sk_user_data;
+			if (TCPOPT_TOA == t_ip6_data_ptr->opcode &&
+			    TCPOLEN_IP6_TOA == t_ip6_data_ptr->opsize) {
+				TOA_INC_STATS(ext_stats, GETNAME_TOA_OK_CNT);
+				TOA_DBG("inet64_getname_toa: set new sockaddr, ip "
+					 TOA_NIPQUAD_FMT" -> "TOA_NIP6_FMT
+					", port %u -> %u\n",
+					TOA_NIPQUAD(inet->saddr),
+					TOA_NIP6(t_ip6_data_ptr->in6_addr),
+					ntohs(inet->sport),
+					ntohs(t_ip6_data_ptr->port));
+				uaddr.saddr = t_ip6_data_ptr->in6_addr;
+				uaddr.port  = t_ip6_data_ptr->port;
+				if (copy_to_user(user, &uaddr, 
+					sizeof(struct toa_nat64_peer)) != 0)
+					return -EFAULT;
+				*len = sizeof(struct toa_nat64_peer);
+				return 0;
+			} else {
+				TOA_INC_STATS(ext_stats,
+						GETNAME_TOA_MISMATCH_CNT);
+			}
+		} else {
+			TOA_INC_STATS(ext_stats, GETNAME_TOA_BYPASS_CNT);
+		}
+	} else {
+		TOA_INC_STATS(ext_stats, GETNAME_TOA_EMPTY_CNT);
+	}
+
+	return -EINVAL;
 }
 
 #ifdef TOA_IPV6_ENABLE
@@ -293,6 +372,16 @@ get_kernel_ipv6_symbol(void)
 	}   
         return 0;    
 }
+
+static void 
+tcp_v6_sk_destruct_toa(struct sock *sk) {
+        if (sk->sk_user_data) {
+                kfree(sk->sk_user_data);
+                sk->sk_user_data = NULL;
+                TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
+        }   
+        inet_sock_destruct(sk);
+}
 #endif
 
 /* The three way handshake has completed - we got a valid synack -
@@ -309,6 +398,7 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 			struct request_sock *req, struct dst_entry *dst)
 {
 	struct sock *newsock = NULL;
+	int nat64 = 0;
 
 	TOA_DBG("tcp_v4_syn_recv_sock_toa called\n");
 
@@ -317,9 +407,15 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 
 	/* set our value if need */
 	if (NULL != newsock && NULL == newsock->sk_user_data) {
-		newsock->sk_user_data = get_toa_data(AF_INET, skb);
-		if (NULL != newsock->sk_user_data)
+		newsock->sk_user_data = get_toa_data(AF_INET, skb, &nat64);
+		sock_reset_flag(newsock, SOCK_NAT64);
+		if (NULL != newsock->sk_user_data) {
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
+			if (nat64) {
+				sock_set_flag(newsock, SOCK_NAT64);
+				newsock->sk_destruct = tcp_v6_sk_destruct_toa;
+			}
+		}
 		else
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_NO_TOA_CNT);
 
@@ -331,21 +427,12 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 }
 
 #ifdef TOA_IPV6_ENABLE
-static void 
-tcp_v6_sk_destruct_toa(struct sock *sk) {
-	if (sk->sk_user_data) {
-		kfree(sk->sk_user_data);
-		sk->sk_user_data = NULL;
-		TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
-	}
-	inet_sock_destruct(sk);
-}
-
 static struct sock *
 tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 			 struct request_sock *req, struct dst_entry *dst)
 {
 	struct sock *newsock = NULL;
+	int nat64 = 0;
 
 	TOA_DBG("tcp_v6_syn_recv_sock_toa called\n");
 
@@ -354,7 +441,8 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 
 	/* set our value if need */
 	if (NULL != newsock && NULL == newsock->sk_user_data) {
-		newsock->sk_user_data = get_toa_data(AF_INET6, skb);
+		newsock->sk_user_data = get_toa_data(AF_INET6, skb, &nat64);
+		sock_reset_flag(newsock, SOCK_NAT64);
 		if (NULL != newsock->sk_user_data) {
 			newsock->sk_destruct = tcp_v6_sk_destruct_toa;
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
@@ -368,8 +456,6 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 	}
 	return newsock;
 }
-
-
 #endif
 
 /*
@@ -490,6 +576,16 @@ static const struct file_operations toa_stats_fops = {
 	.release = single_release,
 };
 
+static struct nf_sockopt_ops toa_sockopts = {
+	.pf	= PF_INET,
+	.owner	= THIS_MODULE,
+	/* Nothing to do in set */
+	/* get */
+	.get_optmin = TOA_BASE_CTL,
+	.get_optmax = TOA_SO_GET_MAX+1,
+	.get        = inet64_getname_toa,
+};
+
 /*
  * TOA module init and destory
  */
@@ -505,7 +601,6 @@ static void proc_net_remove(struct net *net, const char *name)
 	remove_proc_entry(name, net->proc_net);
 }
 #endif
-
 
 /* module init */
 static int __init
@@ -538,7 +633,11 @@ toa_init(void)
 		goto err;
 	}
 #endif
-	
+	if (0 != nf_register_sockopt(&toa_sockopts)) {
+		TOA_INFO("fail to register sockopt\n");
+		goto err;
+	}
+
 	/* hook funcs for parse and get toa */
 	hook_toa_functions();
 
@@ -560,6 +659,7 @@ static void __exit
 toa_exit(void)
 {
 	unhook_toa_functions();
+	nf_unregister_sockopt(&toa_sockopts);
 	synchronize_net();
 
 	proc_net_remove(&init_net, "toa_stats");

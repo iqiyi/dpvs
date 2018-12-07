@@ -463,7 +463,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
                           &match) != EDPVS_OK)
         return EDPVS_INVAL;
 
-    svc = dp_vs_service_lookup(laddr_conf->af, laddr_conf->proto, 
+    svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto, 
                                &laddr_conf->vaddr, laddr_conf->vport,
                                laddr_conf->fwmark, NULL, &match);
     if (!svc)
@@ -471,11 +471,11 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     switch (opt) {
     case SOCKOPT_SET_LADDR_ADD:
-        err = dp_vs_laddr_add(svc, laddr_conf->af, &laddr_conf->laddr,
+        err = dp_vs_laddr_add(svc, laddr_conf->af_l, &laddr_conf->laddr,
                 laddr_conf->ifname);
         break;
     case SOCKOPT_SET_LADDR_DEL:
-        err = dp_vs_laddr_del(svc, laddr_conf->af, &laddr_conf->laddr);
+        err = dp_vs_laddr_del(svc, laddr_conf->af_l, &laddr_conf->laddr);
         break;
     case SOCKOPT_SET_LADDR_FLUSH:
         err = dp_vs_laddr_flush(svc);
@@ -509,7 +509,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         return EDPVS_INVAL;
 
 
-    svc = dp_vs_service_lookup(laddr_conf->af, laddr_conf->proto, 
+    svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto, 
                                &laddr_conf->vaddr, laddr_conf->vport,
                                laddr_conf->fwmark, NULL, &match);
     if (!svc)

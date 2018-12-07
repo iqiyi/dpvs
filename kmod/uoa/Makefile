@@ -7,7 +7,7 @@ KDIR	:= $(KERNDIR)
 endif
 PWD	:= $(shell pwd)
 
-ccflags-y := -I$(src)/../include
+ccflags-y := -I$(src)/../../include
 
 ifeq ($(DEBUG), 1)
 ccflags-y += -g -O0

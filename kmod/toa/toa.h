@@ -19,6 +19,7 @@
 #include <linux/kallsyms.h>
 #include <net/ipv6.h>
 #include <net/transp_v6.h>
+#include <net/sock.h> 
 
 #define TOA_VERSION "1.0.0.0"
 
@@ -62,6 +63,25 @@ struct  toa_ip6_data{
 	struct in6_addr in6_addr;
 };
 
+struct toa_nat64_peer {
+	struct in6_addr saddr;
+	__u16 port;
+};
+
+/* toa socket options, now only for nat64 */
+enum {
+        TOA_BASE_CTL            = 4096,
+        /* set */
+        TOA_SO_SET_MAX          = TOA_BASE_CTL,
+        /* get */
+        TOA_SO_GET_LOOKUP       = TOA_BASE_CTL,
+        TOA_SO_GET_MAX          = TOA_SO_GET_LOOKUP,
+};
+
+/*should be larger than enum sock_flags(net/sock.h)*/ 
+enum toa_sock_flags {
+	SOCK_NAT64 = 64
+};
 
 /* statistics about toa in proc /proc/net/toa_stat */
 enum {

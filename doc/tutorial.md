@@ -770,7 +770,7 @@ host$ curl www.iqiyi.com
 
 # IPv6 Support
 
-DPVS support IPv6 since 1.7-0. You can configure IPv6 fullnat just like IPv4:
+DPVS support IPv6-IPv6 since 1.7-0 which means VIP/client IP/local IP/rs IP can be IPv6. You can configure IPv6 fullnat just like IPv4:
 
 ```bash
 #!/bin/sh -
@@ -899,6 +899,32 @@ virtual_server group 2001-1-80 {
     }
 }
 ```
+
+DPVS support IPv6-IPv4 for fullnat, which means VIP/client IP can be IPv6 and local IP/rs IP can be IPv4, you can configure it like this:
+
+```bash
+#!/bin/sh -
+# add VIP to WAN interface
+./dpip addr add 2001::1/128 dev dpdk1
+
+# route for WAN/LAN access
+# add routes for other network or default route if needed.
+./dpip route -6 add 2001::/64 dev dpdk1
+./dpip route add 10.0.0.0/8 dev dpdk0
+
+# add service <VIP:vport> to forwarding, scheduling mode is RR.
+# use ipvsadm --help for more info.
+./ipvsadm -A -t [2001::1]:80 -s rr
+
+# add two RS for service, forwarding mode is FNAT (-b)
+./ipvsadm -a -t [2001::1]:80 -r 10.0.0.1 -b
+./ipvsadm -a -t [2001::1]:80 -r 10.0.0.2 -b
+
+# add at least one Local-IP (LIP) for FNAT on LAN interface
+./ipvsadm --add-laddr -z 10.0.0.3 -t [2001::1]:80 -F dpdk0
+```
+OSPF can just be configured like IPv6-IPv6. If you prefer keepalived, you can configure it like IPv6-IPv6 except real_server/local_address_group.
+
 
 <a id='virt-dev'/>
 
