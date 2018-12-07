@@ -116,6 +116,7 @@ enum {
     /* positive code for non-error */
     EDPVS_KNICONTINUE   = 1,        /* KNI to continue */
     EDPVS_INPROGRESS    = 2,        /* in progress */
+    EDPVS_ACCEPT        = 3         /* packet accepted */
 };
 
 extern const char *dpvs_strerror(int err);

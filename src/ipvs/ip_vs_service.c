@@ -25,6 +25,7 @@
 #include "ipvs/sched.h"
 #include "ipvs/laddr.h"
 #include "ipvs/blklst.h"
+#include "ipvs/acl.h"
 #include "ctrl.h"
 #include "route.h"
 #include "route6.h"
@@ -359,7 +360,7 @@ int dp_vs_match_parse(const char *srange, const char *drange,
     return EDPVS_OK;
 }
 
-static struct dp_vs_service *
+struct dp_vs_service *
 __dp_vs_svc_match_find(int af, uint8_t proto, const struct dp_vs_match *match)
 {
     struct dp_vs_service *svc;
@@ -381,10 +382,10 @@ __dp_vs_svc_match_find(int af, uint8_t proto, const struct dp_vs_match *match)
 }
 
 struct dp_vs_service *dp_vs_service_lookup(int af, uint16_t protocol,
-                                        const union inet_addr *vaddr, 
-                                        uint16_t vport, uint32_t fwmark,
-                                        const struct rte_mbuf *mbuf,
-                                        const struct dp_vs_match *match)
+                                           const union inet_addr *vaddr,
+                                           uint16_t vport, uint32_t fwmark,
+                                           const struct rte_mbuf *mbuf,
+                                           const struct dp_vs_match *match)
 {
     struct dp_vs_service *svc = NULL;
 
@@ -485,17 +486,17 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     rte_atomic32_set(&svc->usecnt, 1);
     rte_atomic32_set(&svc->refcnt, 0);
 
-    svc->af = u->af;
-    svc->proto = u->protocol;
-    svc->addr = u->addr;
-    svc->port = u->port;
-    svc->fwmark = u->fwmark;
-    svc->flags = u->flags;
-    svc->timeout = u->timeout;
-    svc->conn_timeout = u->conn_timeout;
-    svc->bps = u->bps;
+    svc->af               = u->af;
+    svc->proto            = u->protocol;
+    svc->addr             = u->addr;
+    svc->port             = u->port;
+    svc->fwmark           = u->fwmark;
+    svc->flags            = u->flags;
+    svc->timeout          = u->timeout;
+    svc->conn_timeout     = u->conn_timeout;
+    svc->bps              = u->bps;
     svc->limit_proportion = u->limit_proportion;
-    svc->netmask = u->netmask;
+    svc->netmask          = u->netmask;
     if (!is_empty_match(&u->match)) {
         svc->match = rte_zmalloc(NULL, sizeof(struct dp_vs_match),
                                  RTE_CACHE_LINE_SIZE);
@@ -511,6 +512,10 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     INIT_LIST_HEAD(&svc->laddr_list);
     svc->num_laddrs = 0;
     svc->laddr_curr = &svc->laddr_list;
+
+    rte_rwlock_init(&svc->acl_lock);
+    INIT_LIST_HEAD(&svc->acl_list);
+    svc->acl_all = IP_VS_ACL_PERMIT_ALL;
 
     INIT_LIST_HEAD(&svc->dests);
     rte_rwlock_init(&svc->sched_lock);
@@ -631,6 +636,8 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
     dp_vs_unbind_scheduler(svc);
 
     dp_vs_laddr_flush(svc);
+
+    dp_vs_acl_flush(svc);
 
     dp_vs_blklst_flush(svc);
 
@@ -863,23 +870,23 @@ int dp_vs_zero_all(void)
 
 /*CONTROL PLANE*/
 static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
-                                   struct dp_vs_service_user *user)
+                                  struct dp_vs_service_user *user)
 {
     int err;
-    conf->af = user->af;
+    conf->af       = user->af;
     conf->protocol = user->proto;
-    conf->addr = user->addr;
-    conf->port = user->port;
-    conf->fwmark = user->fwmark;
+    conf->addr     = user->addr;
+    conf->port     = user->port;
+    conf->fwmark   = user->fwmark;
 
     /* Deep copy of sched_name is not needed here */
     conf->sched_name = user->sched_name;
 
-    conf->flags = user->flags;
-    conf->timeout = user->timeout;
-    conf->conn_timeout = user->conn_timeout;
-    conf->netmask = user->netmask;
-    conf->bps = user->bps;
+    conf->flags            = user->flags;
+    conf->timeout          = user->timeout;
+    conf->conn_timeout     = user->conn_timeout;
+    conf->netmask          = user->netmask;
+    conf->bps              = user->bps;
     conf->limit_proportion = user->limit_proportion;
 
     err = dp_vs_match_parse(user->srange, user->drange,
@@ -1013,7 +1020,8 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     return ret;
 }
 
-static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **out, size_t *outlen)
+static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len,
+                         void **out, size_t *outlen)
 {
     int ret = 0;
     switch (opt){

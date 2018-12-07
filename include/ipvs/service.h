@@ -33,6 +33,7 @@
 #include "netif.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/sched.h"
+#include <ipvs/acl.h>
 
 #define RTE_LOGTYPE_SERVICE RTE_LOGTYPE_USER3
 #define DP_VS_SVC_F_PERSISTENT      0x0001      /* peristent port */
@@ -87,6 +88,12 @@ struct dp_vs_service {
     struct list_head    *laddr_curr;
     rte_rwlock_t        laddr_lock;
     uint32_t            num_laddrs;
+
+    /* ACL associate */
+    int                 acl_all;    /* default action for all match */
+    struct list_head    acl_list;   /* head of acl list */
+    rte_rwlock_t        acl_lock;
+    uint32_t            num_acls;
 
     /* ... flags, timer ... */
 } __rte_cache_aligned;
@@ -191,6 +198,10 @@ dp_vs_service_lookup(int af, uint16_t protocol,
 int dp_vs_match_parse(const char *srange, const char *drange,
                       const char *iifname, const char *oifname,
                       struct dp_vs_match *match);
+
+struct dp_vs_service *
+__dp_vs_svc_match_find(int af, uint8_t proto,
+                       const struct dp_vs_match *match);
 
 void __dp_vs_bind_svc(struct dp_vs_dest *dest, struct dp_vs_service *svc);
 

@@ -44,7 +44,8 @@
 #define OPT_SIPHASH		0x10000000
 #define OPT_QIDHASH		0x20000000
 #define OPT_HASHTAG		0x40000000
-#define NUMBER_OF_OPT		31
+#define OPT_ACL         0x80000000
+#define NUMBER_OF_OPT		32
 
 #define MINIMUM_IPVS_VERSION_MAJOR      1
 #define MINIMUM_IPVS_VERSION_MINOR      1
@@ -70,6 +71,7 @@
 typedef struct ip_vs_service_user	ipvs_service_t;
 typedef struct ip_vs_dest_user		ipvs_dest_t;
 typedef struct ip_vs_laddr_user 	ipvs_laddr_t;
+typedef struct ip_vs_acl_user       ipvs_acl_t;
 typedef struct ip_vs_blklst_user        ipvs_blklst_t;
 typedef struct ip_vs_timeout_user	ipvs_timeout_t;
 typedef struct ip_vs_daemon_user	ipvs_daemon_t;
@@ -126,6 +128,11 @@ extern struct ip_vs_conn_array* ip_vs_get_conns(const struct ip_vs_conn_req *req
 extern int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
 extern int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
 extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc);
+
+/* acl associate */
+extern int ipvs_add_acl(ipvs_service_t *svc, ipvs_acl_t *acl);
+extern int ipvs_del_acl(ipvs_service_t *svc, ipvs_acl_t *acl);
+extern struct ip_vs_get_acls *ipvs_get_allacls(ipvs_service_entry_t *svc);
 
 /*for add/delete a blacklist ip*/
 extern int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);

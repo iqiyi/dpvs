@@ -235,6 +235,15 @@ struct ip_vs_blklst_user {
 	union nf_inet_addr      addr;
 };
 
+struct ip_vs_acl_user {
+    int                    rule;            /* deny | permit */
+    int                    max_conn;        /* maximum connections */
+    char                   srange[256];
+    char                   drange[256];
+    char                   iifname[IFNAMSIZ];
+    char                   oifname[IFNAMSIZ];
+};
+
 struct ip_vs_tunnel_user {
 	char            ifname[IFNAMSIZ];
 	char            kind[TNLKINDSIZ];
@@ -420,6 +429,21 @@ struct ip_vs_get_laddrs {
 
 	/* the real servers */
 	struct ip_vs_laddr_entry	entrytable[0];
+};
+
+struct ip_vs_acl_entry {
+    int                    af;
+    char                   srange[256];
+    char                   drange[256];
+
+    int                    rule;       /* deny | permit */
+    int                    max_conn;   /* maximum connections */
+    uint32_t               curr_conn;  /* current connection */
+};
+
+struct ip_vs_get_acls {
+    uint32_t               num_acls;
+    struct ip_vs_acl_entry entrytable[0];
 };
 
 /* The argument to IP_VS_SO_GET_DESTS */

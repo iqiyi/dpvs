@@ -35,6 +35,7 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/blklst.h"
 #include "ipvs/proto_udp.h"
+#include "ipvs/acl.h"
 #include "route6.h"
 
 static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
@@ -174,16 +175,24 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
     return conn;
 }
 
-static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
-                                       const struct dp_vs_iphdr *iph,
-                                       uint16_t *ports,
-                                       struct rte_mbuf *mbuf)
+static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
+                                              struct dp_vs_dest *dest,
+                                              const struct dp_vs_iphdr *iph,
+                                              uint16_t *ports,
+                                              struct rte_mbuf *mbuf)
 {
     int err;
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
     struct sockaddr_storage daddr, saddr;
     uint16_t _ports[2];
+    struct dp_vs_acl_flow acl_flow;
+
+    /* acl flow */
+    memset(&acl_flow, 0, sizeof(acl_flow));
+    acl_flow.af = svc->af;
+    memmove(&acl_flow.saddr, &iph->saddr, sizeof(union inet_addr));
+    memmove(&acl_flow.daddr, &iph->daddr, sizeof(union inet_addr));
 
     if (unlikely(iph->proto == IPPROTO_ICMP)) {
         struct icmphdr *ich, _icmph;
@@ -193,6 +202,13 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
 
         _ports[0] = icmp4_id(ich);
         _ports[1] = ich->type << 8 | ich->code;
+
+        if (dp_vs_acl(&acl_flow, svc) == EDPVS_DROP) {
+#ifdef CONFIG_DPVS_ACL_DEBUG
+            RTE_LOG(ERR, ACL, "%s: connection refused by acl.\n", __func__);
+#endif
+            return NULL;
+        }
 
         /* ID may confict for diff host,
          * need we use ID pool ? */
@@ -209,11 +225,35 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
         _ports[0] = icmp6h_id(ic6h);
         _ports[1] = ic6h->icmp6_type << 8 | ic6h->icmp6_code;
 
+        if (dp_vs_acl(&acl_flow, svc) == EDPVS_DROP) {
+#ifdef CONFIG_DPVS_ACL_DEBUG
+            RTE_LOG(ERR, ACL, "%s: connection refused by acl.\n", __func__);
+#endif
+            return NULL;
+        }
+
         dp_vs_conn_fill_param(iph->af, iph->proto,
                               &iph->daddr, &dest->addr,
                               _ports[1], _ports[0],
                               0, &param);
     } else {
+        struct tcphdr *th, _tcph;
+        th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
+        if (unlikely(!th)) {
+            return NULL;
+        }
+        acl_flow.sport = ntohs(th->source);
+        acl_flow.dport = ntohs(th->dest);
+        if (dp_vs_acl(&acl_flow, svc) == EDPVS_DROP) {
+#ifdef CONFIG_DPVS_ACL_DEBUG
+            /* change to DEBUG when changed to dpdk 17.11, fix me */
+            RTE_LOG(ERR, ACL, "src port = %d, dst port = %d.\n",
+                        ntohs(th->source), ntohs(th->dest));
+            RTE_LOG(ERR, ACL, "%s: connection refused by acl.\n", __func__);
+#endif
+            return NULL;
+        }
+
         /* we cannot inherit dest (host's src port),
          * that may confict for diff hosts,
          * and using dest->port is worse choice. */
@@ -299,7 +339,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     }
         
     if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
-        return dp_vs_snat_schedule(dest, iph, ports, mbuf);
+        return dp_vs_snat_schedule(svc, dest, iph, ports, mbuf);
 
     if (unlikely(iph->proto == IPPROTO_ICMP)) {
         struct icmphdr *ich, _icmph;
@@ -1128,6 +1168,13 @@ int dp_vs_init(void)
         RTE_LOG(ERR, IPVS, "fail to init serv: %s\n", dpvs_strerror(err));
         goto err_serv;
     }
+
+    err = dp_vs_acl_init();
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPVS, "fail to init acl list: %s\n", dpvs_strerror(err));
+        goto err_acl;
+    }
+
     err = dp_vs_blklst_init();
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to init blklst: %s\n", dpvs_strerror(err));
@@ -1163,6 +1210,8 @@ err_conn:
     dp_vs_laddr_term();
 err_laddr:
     dp_vs_proto_term();
+err_acl:
+    dp_vs_acl_term();
 
     return err;
 }
