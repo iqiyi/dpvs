@@ -51,6 +51,13 @@ static struct toa_ip6_list_head
 __toa_ip6_list_tab[TOA_IP6_TAB_SIZE] __cacheline_aligned;
 
 
+/* per-cpu lock of toa of ipv6 destruct */
+struct toa_ip6_destruct_lock {
+	/* lock for destruct ip6 toa */
+	spinlock_t __percpu *lock;
+};
+
+static struct toa_ip6_destruct_lock toa_ip6_destruct_lock;
 
 static struct proto_ops *inet6_stream_ops_p = NULL;
 static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
@@ -134,7 +141,45 @@ toa_ip6_unhash(struct toa_ip6_entry *ptr_ip6_entry)
 }
 
 static void
-init_toa_ip6_list_tab(void)
+lock_all_toa_ip6_destruct(void)
+{
+	int i;
+	for_each_possible_cpu(i) {
+		spinlock_t *lock;
+
+		lock = per_cpu_ptr(toa_ip6_destruct_lock.lock, i);
+		spin_lock_bh(lock);
+	}
+}
+
+static void
+unlock_all_toa_ip6_destruct(void)
+{
+	int i;
+	for_each_possible_cpu(i) {
+		spinlock_t *lock;
+
+		lock = per_cpu_ptr(toa_ip6_destruct_lock.lock, i);
+		spin_unlock_bh(lock);
+	}
+}
+
+static void
+lock_cpu_toa_ip6_destruct(void)
+{
+	spinlock_t *lock = this_cpu_ptr(toa_ip6_destruct_lock.lock);
+	spin_lock_bh(lock);
+}
+
+static void
+unlock_cpu_toa_ip6_destruct(void)
+{
+	spinlock_t *lock = this_cpu_ptr(toa_ip6_destruct_lock.lock);
+	spin_unlock_bh(lock);
+}
+
+static int
+init_toa_ip6(void)
 {
 	int i;
 
@@ -142,47 +187,32 @@ init_toa_ip6_list_tab(void)
 		INIT_LIST_HEAD(&__toa_ip6_list_tab[i].toa_ip6_head);
 		spin_lock_init(&__toa_ip6_list_tab[i].lock);
 	}
-	return;
-}
 
-static void
-exit_destry_ip6_toa_entry(struct sock *sk)
-{
-#ifdef TOA_SK_LOCK_ENABLE
-	// sk may be refereced by user or kernel
-	lock_sock(sk);
-#endif
 
-	if (sk->sk_user_data && (sk->sk_destruct == tcp_v6_sk_destruct_toa)) {
-		struct toa_ip6_entry *ptr_ip6_entry = sk->sk_user_data;
-		sk->sk_destruct = inet_sock_destruct;
-		sk->sk_user_data = NULL;
-
-		toa_ip6_unhash(ptr_ip6_entry);
-
-		TOA_DBG("free ip6_entry in __toa_ip6_list_tab succ. "
-			"ptr_ip6_entry : %p, toa_ip6 : "TOA_NIP6_FMT", toa_port : %u",
-			ptr_ip6_entry,
-			TOA_NIP6(ptr_ip6_entry->toa_data.in6_addr),
-			ptr_ip6_entry->toa_data.port);
-
-		TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
-
-		kfree(ptr_ip6_entry);
+	toa_ip6_destruct_lock.lock = alloc_percpu(spinlock_t);
+	if (toa_ip6_destruct_lock.lock == NULL) {
+		TOA_INFO("fail to alloc per cpu ip6's destruct lock\n");
+		return -ENOMEM;
 	}
 
-#ifdef TOA_SK_LOCK_ENABLE
-	release_sock(sk);
-#endif
+	for_each_possible_cpu(i) {
+		spinlock_t *lock;
+
+		lock = per_cpu_ptr(toa_ip6_destruct_lock.lock, i);
+		spin_lock_init(lock);
+	}
+	return 0;
 }
 
-static void
-exit_toa_ip6_list_tab(void)
+static int
+exit_toa_ip6(void)
 {
 	int i;
 	struct list_head *head;
 	struct toa_ip6_entry *ptr_ip6_entry;
 	struct sock *sk;
+
+	lock_all_toa_ip6_destruct();
 
 	for (i = 0; i < TOA_IP6_TAB_SIZE; ++i) {
 
@@ -193,19 +223,39 @@ exit_toa_ip6_list_tab(void)
 			ptr_ip6_entry = list_first_entry(head, struct toa_ip6_entry, list);
 			sk = ptr_ip6_entry->sk;
 
-			spin_unlock_bh(&__toa_ip6_list_tab[i].lock);
+			if (sk && sk->sk_user_data &&
+				(sk->sk_destruct == tcp_v6_sk_destruct_toa)) {
 
-			if (sk) {
-				exit_destry_ip6_toa_entry(sk);
+				sk->sk_destruct = inet_sock_destruct;
+				sk->sk_user_data = NULL;
+
+				TOA_DBG("free ip6_entry in __toa_ip6_list_tab succ. "
+						"ptr_ip6_entry : %p, toa_ip6 : "TOA_NIP6_FMT", toa_port : %u\n",
+						ptr_ip6_entry,
+						TOA_NIP6(ptr_ip6_entry->toa_data.in6_addr),
+						ptr_ip6_entry->toa_data.port);
+			} else {
+				TOA_INFO("update sk of ip6_entry fail. "
+						"ptr_ip6_entry : %p\n",
+						ptr_ip6_entry);
 			}
 
-			spin_lock_bh(&__toa_ip6_list_tab[i].lock);
+			TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
+
+			list_del(&ptr_ip6_entry->list);
+			kfree(ptr_ip6_entry);
 		}
 
 		spin_unlock_bh(&__toa_ip6_list_tab[i].lock);
 
 	}
 
+	unlock_all_toa_ip6_destruct();
+
+	synchronize_net();
+
+	free_percpu(toa_ip6_destruct_lock.lock);
+	return 0;
 }
 
 #endif
@@ -581,32 +631,19 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 static void 
 tcp_v6_sk_destruct_toa(struct sock *sk) {
 
-#ifdef TOA_SK_LOCK_ENABLE
-	// In logic, no reference of sk except the __toa_ip6_list_tab
-	bh_lock_sock_nested(sk);
+	lock_cpu_toa_ip6_destruct();
 
-	/* Competitive sk.lock only with exit_toa_ip6_list_tab().
-	 * If sock owned by user, so exit_toa_ip6_list_tab() will update sk user and 
-	 * free ptr_ip6_entry.
-	 */
-	if (!sock_owned_by_user(sk)) {
-#endif
-		if (sk->sk_user_data) {
-			struct toa_ip6_entry* ptr_ip6_entry = sk->sk_user_data;
-			toa_ip6_unhash(ptr_ip6_entry);
-			sk->sk_user_data = NULL;
-			kfree(ptr_ip6_entry);
-			TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
-		}
-
-#ifdef TOA_SK_LOCK_ENABLE
+	if (sk->sk_user_data) {
+		struct toa_ip6_entry* ptr_ip6_entry = sk->sk_user_data;
+		toa_ip6_unhash(ptr_ip6_entry);
+		sk->sk_user_data = NULL;
+		kfree(ptr_ip6_entry);
+		TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
 	}
 
-	bh_unlock_sock(sk);
-#endif
-
-
 	inet_sock_destruct(sk);
+
+	unlock_cpu_toa_ip6_destruct();
 }
 
 static struct sock *
@@ -814,7 +851,10 @@ toa_init(void)
 	}
 
 #ifdef TOA_IPV6_ENABLE
-	init_toa_ip6_list_tab();
+	if (0 != init_toa_ip6()) {
+		TOA_INFO("init toa ip6 fail.\n");
+		goto err;
+	}
 
 	if (0 != get_kernel_ipv6_symbol()) {
 		TOA_INFO("get ipv6 struct from kernel fail.\n");
@@ -852,7 +892,9 @@ toa_exit(void)
 	synchronize_net();
 
 #ifdef TOA_IPV6_ENABLE
-	exit_toa_ip6_list_tab();
+	if (0 != exit_toa_ip6()) {
+		TOA_INFO("exit toa ip6 fail.\n");
+	}
 #endif
 
 	proc_net_remove(&init_net, "toa_stats");
