@@ -36,8 +36,8 @@
 #define DPVS_ACL_TAB_MASK    (DPVS_ACL_TAB_SIZE - 1)
 
 static int dp_vs_acl_parse(const char *srange, const char *drange,
-                            int rule, int max_conn,
-                            struct dp_vs_acl *acl)
+                           int rule, int max_conn,
+                           struct dp_vs_acl *acl)
 {
     int err;
 
@@ -66,8 +66,7 @@ static int dp_vs_acl_parse(const char *srange, const char *drange,
     return EDPVS_OK;
 }
 
-static bool dp_vs_acl_equal(struct dp_vs_acl *acl1,
-                            struct dp_vs_acl *acl2)
+static bool dp_vs_acl_equal(struct dp_vs_acl *acl1, struct dp_vs_acl *acl2)
 {
     return acl1->af == acl2->af &&
            !memcmp(&acl1->srange, &acl2->srange, sizeof(struct inet_addr_range)) &&
@@ -75,10 +74,10 @@ static bool dp_vs_acl_equal(struct dp_vs_acl *acl1,
 }
 
 static struct dp_vs_acl *dp_vs_acl_find(int af,
-                                              const char *srange,
-                                              const char *drange,
-                                              int rule, int max_conn,
-                                              struct dp_vs_service *svc)
+                                        const char *srange,
+                                        const char *drange,
+                                        int rule, int max_conn,
+                                        struct dp_vs_service *svc)
 {
     struct dp_vs_acl acl, *acl_iter;
 
@@ -256,29 +255,32 @@ int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
     }
 
     /* if current connections exceeds maximum amount that confirmed */
-    if (acl && acl->curr_conn >= acl->max_conn) {
+    if (acl->p_conn >= acl->max_conn) {
+        ++acl->d_conn;
         rte_rwlock_read_unlock(&svc->acl_lock);
         return EDPVS_DROP;
     }
 
     /* permit for all, except for black names */
     if (svc->acl_all & IP_VS_ACL_PERMIT_ALL) {
-        /* deny */
-        if (acl && !acl->rule) {
+        if (acl->rule == IP_VS_ACL_DENY) {
+            ++acl->d_conn;
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
         }
+        ++acl->p_conn;
         rte_rwlock_read_unlock(&svc->acl_lock);
         return EDPVS_ACCEPT;
     }
 
     /* deny for all, except for white names */
     if (!(svc->acl_all | IP_VS_ACL_DENY_ALL)) {
-        /* permit */
-        if (acl && acl->rule) {
+        if (acl->rule == IP_VS_ACL_PERMIT) {
+            ++acl->p_conn;
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_ACCEPT;
         }
+        ++acl->d_conn;
         rte_rwlock_read_unlock(&svc->acl_lock);
         return EDPVS_DROP;
     }
@@ -320,7 +322,8 @@ static int dp_vs_acl_getall(struct dp_vs_service *svc,
                         sizeof(acl_entry[i].drange));
             acl_entry[i].rule = acl->rule;
             acl_entry[i].max_conn = acl->max_conn;
-            acl_entry[i].curr_conn = acl->curr_conn;
+            acl_entry[i].p_conn = acl->p_conn;
+            acl_entry[i].d_conn = acl->d_conn;
             ++i;
         }
     } else {
@@ -444,7 +447,8 @@ static int acl_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                          sizeof(acls[i].drange), "%s", acls[i].drange);
                 get->entrytable[i].rule = acls[i].rule;
                 get->entrytable[i].max_conn = acls[i].max_conn;
-                get->entrytable[i].curr_conn = acls[i].curr_conn;
+                get->entrytable[i].p_conn = acls[i].p_conn;
+                get->entrytable[i].d_conn = acls[i].d_conn;
             }
 
             if (acls) {

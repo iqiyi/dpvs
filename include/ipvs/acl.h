@@ -56,7 +56,8 @@ struct dp_vs_acl_entry {
 
     int                    rule;       /* deny | permit */
     int                    max_conn;   /* maximum connections */
-    uint32_t               curr_conn;  /* current connection */
+    uint32_t               p_conn;     /* permitted connections */
+    uint32_t               d_conn;     /* denied connections */
 };
 
 struct dp_vs_get_acls {
@@ -72,7 +73,8 @@ struct dp_vs_acl {
 
     int                    rule;       /* deny | permit */
     int                    max_conn;   /* maximum connections */
-    uint32_t               curr_conn;  /* current connection */
+    uint32_t               p_conn;     /* permitted connections */
+    uint32_t               d_conn;     /* denied connections */
     struct list_head       list;
 };
 
