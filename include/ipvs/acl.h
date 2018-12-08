@@ -41,9 +41,10 @@ enum {
 struct dp_vs_acl_flow {
     int                    af;
     union inet_addr        saddr;
-    uint16_t               sport;
+    int                    rule;
+    uint16_t               sport;      /* network byte order */
     union inet_addr        daddr;
-    uint16_t               dport;
+    uint16_t               dport;      /* network byte order */
 };
 
 // for 'get'
@@ -69,8 +70,8 @@ struct dp_vs_acl {
     struct inet_addr_range srange;
     struct inet_addr_range drange;
 
-    int                    rule;     /* deny | permit */
-    int                    max_conn; /* maximum connections */
+    int                    rule;       /* deny | permit */
+    int                    max_conn;   /* maximum connections */
     uint32_t               curr_conn;  /* current connection */
     struct list_head       list;
 };
@@ -90,8 +91,8 @@ struct dp_vs_acl_conf {
     char                   oifname[IFNAMSIZ];
 
     /* identify acl  */
-    int                    rule;         /* deny | permit */
-    int                    max_conn;     /* maximum connections */
+    int                    rule;       /* deny | permit */
+    int                    max_conn;   /* maximum connections */
     char                   srange[256];
     char                   drange[256];
 };

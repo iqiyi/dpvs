@@ -2181,9 +2181,8 @@ static void list_acls_print_acl(struct ip_vs_acl_entry *entry) {
     }
 
     snprintf(svc_name, sizeof(svc_name),
-             "-5 proto=%s,rule=%s,proto=proto,max-conn=%d,src-range=%s,"
-             "dst-range=%s", proto, rule, entry->max_conn, entry->srange,
-             entry->drange);
+             "-5 proto=%s,rule=%s,max-conn=%d,src-range=%s,dst-range=%s",
+             proto, rule, entry->max_conn, entry->srange, entry->drange);
     printf("%s\n",svc_name);
 #if 0
     int left = sizeof(svc_name);

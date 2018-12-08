@@ -240,8 +240,6 @@ struct ip_vs_acl_user {
     int                    max_conn;        /* maximum connections */
     char                   srange[256];
     char                   drange[256];
-    char                   iifname[IFNAMSIZ];
-    char                   oifname[IFNAMSIZ];
 };
 
 struct ip_vs_tunnel_user {

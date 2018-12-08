@@ -246,9 +246,6 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
         acl_flow.dport = ntohs(th->dest);
         if (dp_vs_acl(&acl_flow, svc) == EDPVS_DROP) {
 #ifdef CONFIG_DPVS_ACL_DEBUG
-            /* change to DEBUG when changed to dpdk 17.11, fix me */
-            RTE_LOG(ERR, ACL, "src port = %d, dst port = %d.\n",
-                        ntohs(th->source), ntohs(th->dest));
             RTE_LOG(ERR, ACL, "%s: connection refused by acl.\n", __func__);
 #endif
             return NULL;

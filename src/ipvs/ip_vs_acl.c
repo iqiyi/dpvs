@@ -113,7 +113,7 @@ static inline bool judge_ip_betw(int af, const union inet_addr *addr,
         uint32_t max   = max_addr->in.s_addr;
         return ((laddr >= min) && laddr <= max);
     } else {
-        // ipv6, fix me
+        // ipv6, fix me, pass now
     }
     return true;
 }
@@ -121,6 +121,12 @@ static inline bool judge_ip_betw(int af, const union inet_addr *addr,
 static inline bool judge_port_betw(uint16_t port, uint16_t min_port,
                                    uint16_t max_port)
 {
+/* change to DEBUG when changed to dpdk 17.11, fix me */
+#ifdef CONFIG_DPVS_ACL_DEBUG
+    RTE_LOG(ERR, ACL, "flow port = %d, judge min port = %d, max port = %d.\n",
+                port, min_port, max_port);
+#endif
+
     if (!port || !min_port || !max_port) {
         return true;
     }
@@ -129,12 +135,16 @@ static inline bool judge_port_betw(uint16_t port, uint16_t min_port,
 }
 
 static struct dp_vs_acl *dp_vs_acl_lookup(int af,
-                                                const union inet_addr *saddr,
-                                                const union inet_addr *daddr,
-                                                uint16_t sport, uint16_t dport,
-                                                struct dp_vs_service *svc)
+                                          const union inet_addr *saddr,
+                                          const union inet_addr *daddr,
+                                          uint16_t sport, uint16_t dport,
+                                          struct dp_vs_service *svc)
 {
+    if (!svc) {
+        return NULL;
+    }
 
+    /* port of srange was network byte order */
     struct dp_vs_acl *acl;
     list_for_each_entry(acl, &svc->acl_list, list) {
         if (af == acl->af &&
@@ -142,10 +152,10 @@ static struct dp_vs_acl *dp_vs_acl_lookup(int af,
                                      &acl->srange.max_addr) &&
             judge_ip_betw(af, daddr, &acl->drange.min_addr,
                                      &acl->drange.max_addr) &&
-            judge_port_betw(sport, acl->srange.min_port,
-                                   acl->srange.max_port) &&
-            judge_port_betw(dport, acl->drange.min_port,
-                                   acl->drange.max_port)) {
+            judge_port_betw(sport, ntohs(acl->srange.min_port),
+                                   ntohs(acl->srange.max_port)) &&
+            judge_port_betw(dport, ntohs(acl->drange.min_port),
+                                   ntohs(acl->drange.max_port))) {
             return acl;
         }
     }
@@ -158,29 +168,29 @@ static int dp_vs_acl_add(int af,
                          int rule, int max_conn,
                          struct dp_vs_service *svc)
 {
-    struct dp_vs_acl *new_entry;
+    struct dp_vs_acl *new_acl;
 
     if (!svc || !srange || !drange) {
         return EDPVS_INVAL;
     }
 
-    new_entry = rte_zmalloc("dp_vs_acl", sizeof(*new_entry), 0);
-    if (!new_entry) {
+    new_acl = rte_zmalloc("dp_vs_acl", sizeof(*new_acl), 0);
+    if (!new_acl) {
         return EDPVS_NOMEM;
     }
 
-    if (dp_vs_acl_parse(srange, drange, rule, max_conn, new_entry) != EDPVS_OK) {
-        rte_free(new_entry);
+    if (dp_vs_acl_parse(srange, drange, rule, max_conn, new_acl) != EDPVS_OK) {
+        rte_free(new_acl);
         return EDPVS_INVAL;
     }
 
     rte_rwlock_write_lock(&svc->acl_lock);
     if (dp_vs_acl_find(af, srange, drange, rule, max_conn, svc) != NULL) {
         rte_rwlock_write_unlock(&svc->acl_lock);
-        rte_free(new_entry);
+        rte_free(new_acl);
         return EDPVS_EXIST;
     }
-    list_add_tail(&new_entry->list, &svc->acl_list);
+    list_add_tail(&new_acl->list, &svc->acl_list);
     ++svc->num_acls;
     rte_rwlock_write_unlock(&svc->acl_lock);
 
@@ -308,9 +318,9 @@ static int dp_vs_acl_getall(struct dp_vs_service *svc,
                         sizeof(acl_entry[i].srange));
             inet_addr_range_dump(svc->af, &acl->drange, acl_entry[i].drange,
                         sizeof(acl_entry[i].drange));
-            acl_entry->rule = acl->rule;
-            acl_entry->max_conn = acl->max_conn;
-            acl_entry->curr_conn = acl->curr_conn;
+            acl_entry[i].rule = acl->rule;
+            acl_entry[i].max_conn = acl->max_conn;
+            acl_entry[i].curr_conn = acl->curr_conn;
             ++i;
         }
     } else {

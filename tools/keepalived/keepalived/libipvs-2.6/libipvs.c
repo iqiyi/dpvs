@@ -442,8 +442,8 @@ static void ipvs_fill_acl_conf(ipvs_service_t *svc, ipvs_acl_t *acl,
     /* identify acl */
     conf->rule     = acl->rule;
     conf->max_conn = acl->max_conn;
-    snprintf(conf->srange, sizeof(conf->srange), "%s", svc->srange);
-    snprintf(conf->drange, sizeof(conf->drange), "%s", svc->drange);
+    snprintf(conf->srange, sizeof(conf->srange), "%s", acl->srange);
+    snprintf(conf->drange, sizeof(conf->drange), "%s", acl->drange);
 
     return;
 }
