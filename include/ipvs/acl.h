@@ -55,7 +55,7 @@ struct dp_vs_acl_entry {
     char                   drange[256];
 
     int                    rule;       /* deny | permit */
-    int                    max_conn;   /* maximum connections */
+    uint32_t               max_conn;   /* maximum connections */
     uint32_t               p_conn;     /* permitted connections */
     uint32_t               d_conn;     /* denied connections */
 };
@@ -103,5 +103,6 @@ int dp_vs_acl_init(void);
 int dp_vs_acl_term(void);
 int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc);
 int dp_vs_acl_flush(struct dp_vs_service *svc);
+int dp_vs_acl_flushall(void);
 
 #endif /* ifndef __DPVS_ACL_H__ */

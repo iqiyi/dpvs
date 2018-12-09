@@ -146,7 +146,8 @@
 #define CMD_GETBLKLST		(CMD_NONE+20)
 #define CMD_ADDACL          (CMD_NONE+21)
 #define CMD_DELACL          (CMD_NONE+22)
-#define CMD_GETACL          (CMD_NONE+23)
+#define CMD_FLUSHACL        (CMD_NONE+23)
+#define CMD_GETACL          (CMD_NONE+24)
 #define CMD_MAX             CMD_GETACL
 #define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
 
@@ -405,7 +406,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "get-laddr", 'G', POPT_ARG_NONE, NULL, 'G', NULL, NULL },
 		{ "add-acl", '2', POPT_ARG_NONE, NULL, '2', NULL, NULL },
 		{ "del-acl", '3', POPT_ARG_NONE, NULL, '3', NULL, NULL },
-		{ "get-acl", '4', POPT_ARG_NONE, NULL, '4', NULL, NULL },
+		{ "clear-acl", '4', POPT_ARG_NONE, NULL, '4', NULL, NULL },
+		{ "get-acl", '5', POPT_ARG_NONE, NULL, '5', NULL, NULL },
 		{ "add-blklst", 'U', POPT_ARG_NONE, NULL, 'U', NULL, NULL },
 		{ "del-blklst", 'V', POPT_ARG_NONE, NULL, 'V', NULL, NULL },
 		{ "get-blklst", 'B', POPT_ARG_NONE, NULL, 'B', NULL, NULL },
@@ -464,7 +466,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
 		{ "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
-		{ "acl", '5', POPT_ARG_STRING, &optarg, '5', NULL, NULL },
+		{ "acl", '7', POPT_ARG_STRING, &optarg, '7', NULL, NULL },
 		{ "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
@@ -551,6 +553,9 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		set_command(&ce->cmd, CMD_DELACL);
 		break;
 	case '4':
+		set_command(&ce->cmd, CMD_FLUSHACL);
+		break;
+	case '5':
 		set_command(&ce->cmd, CMD_GETACL);
 		break;
 	case 'U':
@@ -592,7 +597,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			if (parse_match_snat(optarg, &ce->svc) != 0)
 				fail(2, "illegal match specified");
 			break;
-		case '5':
+		case '7':
 			set_option(options, OPT_ACL);
 			if (parse_acl_snat(optarg, &ce->acl) != 0)
 				fail(2, "illegal acl specified");
@@ -1037,6 +1042,10 @@ static int process_options(int argc, char **argv, int reading_stdin)
 
 	case CMD_DELACL:
         result = ipvs_del_acl(&ce.svc, &ce.acl);
+		break;
+
+	case CMD_FLUSHACL:
+        result = ipvs_flush_acl();
 		break;
 
 	case CMD_GETACL:
@@ -1509,7 +1518,8 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --get-blklst      -B        get blacklist address\n"
 		"  --add-acl         -2        add acl entry\n"
 		"  --del-acl         -3        del acl entry\n"
-		"  --get-acl         -4        get acl entry\n"
+		"  --clear-acl       -4        flush all acl entry\n"
+		"  --get-acl         -5        get all acl entry\n"
 		"  --save            -S        save rules to stdout\n"
 		"  --add-server      -a        add real server with options\n"
 		"  --edit-server     -e        edit real server with options\n"
@@ -1563,7 +1573,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --ifname       -F                   nic interface for laddrs\n"
 		"  --synproxy     -j                   TCP syn proxy\n"
 		"  --match        -H MATCH             select service by MATCH 'proto,srange,drange,iif,oif'\n"
-		"  --acl          -5 ACL               select acl by ACL 'rule,srange,drange'\n"
+		"  --acl          -7 ACL               select acl by ACL 'rule,srange,drange'\n"
 		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n",
 		DEF_SCHED);
 
@@ -2144,15 +2154,12 @@ static int list_all_laddrs(void)
 
 static void list_acls_print_title()
 {
-    printf("%-20s %-8s %-20s %-10s %-10s\n",
-           "VIP:VPORT",
-           "TOTAL",
-           "SNAT_IP",
-           "CONFLICTS",
-           "CONNS");
+    printf("Prot LocalAddress:Port Scheduler Flags\n"
+           "  -> RemoteAddress:Port           Forward MaxConn PermitConn DenyConn\n");
 }
 
-static void list_acls_print_acl(struct ip_vs_acl_entry *entry) {
+static void list_acls_print_acl(struct ip_vs_acl_entry *entry)
+{
     char svc_name[256];
     char *proto, *rule;
 
@@ -2180,36 +2187,35 @@ static void list_acls_print_acl(struct ip_vs_acl_entry *entry) {
         rule = "permit";
     }
 
-    snprintf(svc_name, sizeof(svc_name),
-             "-5 proto=%s,rule=%s,max-conn=%d,src-range=%s,dst-range=%s",
-             proto, rule, entry->max_conn, entry->srange, entry->drange);
-    printf("%s\n",svc_name);
 #if 0
+    if (format & FMT_RULE) {
+        snprintf(svc_name, sizeof(svc_name),
+                    "--acl proto=%s,rule=%s,max-conn=%d,src-range=%s,dst-range=%s",
+                    proto, rule, entry->max_conn, entry->srange, entry->drange);
+    }
+#endif
+
+#if 1
     int left = sizeof(svc_name);
     svc_name[0] = '\0';
 
-    left -= snprintf(svc_name + , __size, constchar*__format, ...)
-
     left -= snprintf(svc_name + strlen(svc_name), left,
-                "MATCH %s", proto);
+                "ACL %s,%s", proto, rule);
 
-    if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
-                strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+    if (strcmp(entry->srange, "[::-::]:0-0") != 0 &&
+                strcmp(entry->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
       left -= snprintf(svc_name + strlen(svc_name), left,
-                  ",from=%s", se->srange);
+                  ",from=%s", entry->srange);
 
-    if (strcmp(se->drange, "[::-::]:0-0") != 0 &&
-                strcmp(se->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+    if (strcmp(entry->drange, "[::-::]:0-0") != 0 &&
+                strcmp(entry->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
       left -= snprintf(svc_name + strlen(svc_name), left,
-                  ",to=%s", se->drange);
+                  ",to=%s", entry->drange);
 
-    if (strlen(se->iifname))
-      left -= snprintf(svc_name + strlen(svc_name), left,
-                  ",iif=%s", se->iifname);
+    printf("%-33s\n", svc_name);
+    printf("  -> %-28s %-7s %-7u %-10u %-10u\n", "192.168.10.1:0", "SNAT",
+                entry->max_conn, entry->p_conn, entry->d_conn);
 
-    if (strlen(se->oifname))
-      left -= snprintf(svc_name + strlen(svc_name), left,
-                  ",oif=%s", se->oifname);
 #endif
 }
 
@@ -2244,9 +2250,14 @@ static int list_all_acls(void)
             return -1;
         }
 
+        if (i != 0) {
+            title_enable = 0;
+        }
         print_service_and_acls(acls, title_enable);
+        free(acls);
     }
 
+    free(get);
     return 0;
 }
 

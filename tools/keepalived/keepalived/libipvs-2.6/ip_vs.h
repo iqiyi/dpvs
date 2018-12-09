@@ -436,7 +436,7 @@ struct ip_vs_acl_entry {
     char                   drange[256];
 
     int                    rule;       /* deny | permit */
-    int                    max_conn;   /* maximum connections */
+    uint32_t               max_conn;   /* maximum connections */
     uint32_t               p_conn;     /* permitted connections */
     uint32_t               d_conn;     /* denied connections */
 };

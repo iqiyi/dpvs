@@ -46,7 +46,7 @@ static struct list_head dp_vs_svc_table[DP_VS_SVC_TAB_SIZE];
 
 static struct list_head dp_vs_svc_fwm_table[DP_VS_SVC_TAB_SIZE];
 
-static struct list_head dp_vs_svc_match_list;
+struct list_head dp_vs_svc_match_list;
 
 static inline unsigned dp_vs_svc_hashkey(int af, unsigned proto, const union inet_addr *addr)
 {

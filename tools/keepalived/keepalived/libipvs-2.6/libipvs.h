@@ -132,6 +132,7 @@ extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc);
 /* acl associate */
 extern int ipvs_add_acl(ipvs_service_t *svc, ipvs_acl_t *acl);
 extern int ipvs_del_acl(ipvs_service_t *svc, ipvs_acl_t *acl);
+extern int ipvs_flush_acl(void);
 extern struct ip_vs_get_acls *ipvs_get_allacls(ipvs_service_entry_t *svc);
 
 /*for add/delete a blacklist ip*/

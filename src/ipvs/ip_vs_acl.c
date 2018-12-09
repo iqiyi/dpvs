@@ -238,6 +238,23 @@ int dp_vs_acl_flush(struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
+int dp_vs_acl_flushall(void)
+{
+    struct dp_vs_service *svc;
+    struct dp_vs_acl *acl_curr, *acl_next;
+
+    list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
+        rte_rwlock_write_lock(&svc->acl_lock);
+        list_for_each_entry_safe(acl_curr, acl_next, &svc->acl_list, list) {
+            list_del(&acl_curr->list);
+            rte_free(acl_curr);
+        }
+        rte_rwlock_write_unlock(&svc->acl_lock);
+    }
+
+    return EDPVS_OK;
+}
+
 int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
 {
     if (!acl_flow || !svc) {
@@ -340,11 +357,14 @@ static int dp_vs_acl_getall(struct dp_vs_service *svc,
  */
 static int acl_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
-
     const struct dp_vs_acl_conf *acl_conf = conf;
     struct dp_vs_service *svc;
     struct dp_vs_match match;
     int err;
+
+    if (opt == SOCKOPT_SET_ACL_FLUSH) {
+        return dp_vs_acl_flushall();
+    }
 
     if (!conf || size < sizeof(*acl_conf)) {
         return EDPVS_INVAL;
@@ -375,9 +395,6 @@ static int acl_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
                                 acl_conf->srange, acl_conf->drange,
                                 acl_conf->rule, acl_conf->max_conn,
                                 svc);
-            break;
-        case SOCKOPT_SET_ACL_FLUSH:
-            err = dp_vs_acl_flush(svc);
             break;
         default:
             err = EDPVS_NOTSUPP;

@@ -464,6 +464,10 @@ int ipvs_del_acl(ipvs_service_t *svc, ipvs_acl_t *acl)
     return dpvs_setsockopt(SOCKOPT_SET_ACL_DEL, &conf, sizeof(conf));
 }
 
+int ipvs_flush_acl(void) {
+    return dpvs_setsockopt(DPVS_SO_SET_FLUSH, NULL, 0);
+}
+
 /* for tunnel entry */
 static void ipvs_fill_tunnel_conf(ipvs_tunnel_t* tunnel_entry,
                                  struct ip_tunnel_param *conf)
