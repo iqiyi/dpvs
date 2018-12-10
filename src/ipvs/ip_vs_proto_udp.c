@@ -64,7 +64,7 @@ static int udp_timeouts[DPVS_UDP_S_LAST + 1] = {
 inline void udp4_send_csum(struct ipv4_hdr *iph, struct udphdr *uh)
 {
     uh->check = 0;
-    uh->check = rte_ipv4_udptcp_cksum(iph, uh);
+    uh->check = ip4_udptcp_cksum(iph, uh);
 }
 
 inline void udp6_send_csum(struct ipv6_hdr *iph, struct udphdr *uh)

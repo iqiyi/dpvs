@@ -140,7 +140,7 @@ inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
 inline void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th)
 {
     th->check = 0;
-    th->check = rte_ipv4_udptcp_cksum(iph, th);
+    th->check = ip4_udptcp_cksum(iph, th);
 }
 
 /*
@@ -680,7 +680,7 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
+            th->check = ip4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
         }
     } else {
         if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
@@ -748,7 +748,7 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
+            th->check = ip4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
         }
     } else {
         if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
@@ -801,7 +801,7 @@ static int tcp_snat_in_handler(struct dp_vs_proto *proto,
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
+            th->check = ip4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
         }
     } else {
         if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
@@ -854,7 +854,7 @@ static int tcp_snat_out_handler(struct dp_vs_proto *proto,
             mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
+            th->check = ip4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
         }
     } else {
         if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
