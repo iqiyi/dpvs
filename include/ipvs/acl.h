@@ -40,11 +40,11 @@ enum {
 
 struct dp_vs_acl_flow {
     int                    af;
-    union inet_addr        saddr;
     int                    rule;
-    uint16_t               sport;      /* network byte order */
+    union inet_addr        saddr;
     union inet_addr        daddr;
-    uint16_t               dport;      /* network byte order */
+    __be16                 sport;
+    __be16                 dport;
 };
 
 // for 'get'

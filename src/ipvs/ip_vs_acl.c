@@ -29,11 +29,42 @@
 #include "ctrl.h"
 #include "math.h"
 #include "dpdk.h"
+#include "linux_ipv6.h"
 #include "ipvs/ipvs.h"
 
 #define DPVS_ACL_TAB_BITS    16
 #define DPVS_ACL_TAB_SIZE    (1 << DPVS_ACL_TAB_BITS)
 #define DPVS_ACL_TAB_MASK    (DPVS_ACL_TAB_SIZE - 1)
+
+static int dp_vs_acl_parse(const char *srange, const char *drange,
+                           int rule, int max_conn,
+                           struct dp_vs_acl *acl);
+static bool dp_vs_acl_equal(struct dp_vs_acl *acl1, struct dp_vs_acl *acl2);
+static inline bool __flow_in_range(int af,
+                                   const union inet_addr *addr, __be16 port,
+                                   const struct inet_addr_range *range);
+static struct dp_vs_acl *dp_vs_acl_find(int af,
+                                        const char *srange,
+                                        const char *drange,
+                                        int rule, int max_conn,
+                                        struct dp_vs_service *svc);
+static struct dp_vs_acl *dp_vs_acl_lookup(int af,
+                                          const union inet_addr *saddr,
+                                          const union inet_addr *daddr,
+                                          __be16 sport, __be16 dport,
+                                          struct dp_vs_service *svc);
+static int dp_vs_acl_add(int af,
+                         const char *srange, const char *drange,
+                         int rule, int max_conn,
+                         struct dp_vs_service *svc);
+static int dp_vs_acl_del(int af,
+                         const char *srange, const char *drange,
+                         int rule, int max_conn,
+                         struct dp_vs_service *svc);
+int dp_vs_acl_flush(struct dp_vs_service *svc);
+int dp_vs_acl_flushall(void);
+static int dp_vs_acl_getall(struct dp_vs_service *svc,
+                            struct dp_vs_acl_entry **acls, size_t *num_acls);
 
 static int dp_vs_acl_parse(const char *srange, const char *drange,
                            int rule, int max_conn,
@@ -73,6 +104,43 @@ static bool dp_vs_acl_equal(struct dp_vs_acl *acl1, struct dp_vs_acl *acl2)
            !memcmp(&acl1->drange, &acl2->drange, sizeof(struct inet_addr_range));
 }
 
+static inline bool __flow_in_range(int af,
+                                   const union inet_addr *addr, __be16 port,
+                                   const struct inet_addr_range *range)
+{
+    if (unlikely((af == AF_INET) &&
+        (ntohl(range->min_addr.in.s_addr) > ntohl(range->max_addr.in.s_addr))))
+        return false;
+
+    if (unlikely((af == AF_INET6) &&
+        ipv6_addr_cmp(&range->min_addr.in6, &range->max_addr.in6) > 0))
+        return false;
+
+    if (unlikely(ntohs(range->min_port) > ntohs(range->max_port)))
+        return false;
+
+    /* if both min/max are zero, means need not check. */
+    if (!inet_is_addr_any(af, &range->max_addr)) {
+        if (af == AF_INET) {
+            if (ntohl(addr->in.s_addr) < ntohl(range->min_addr.in.s_addr) ||
+                ntohl(addr->in.s_addr) > ntohl(range->max_addr.in.s_addr))
+                return false;
+        } else {
+            if (ipv6_addr_cmp(&range->min_addr.in6, &addr->in6) > 0 ||
+                ipv6_addr_cmp(&range->max_addr.in6, &addr->in6) < 0)
+                return false;
+        }
+    }
+
+    if (range->max_port != 0) {
+        if (ntohs(port) < ntohs(range->min_port) ||
+            ntohs(port) > ntohs(range->max_port))
+            return false;
+    }
+
+    return true;
+}
+
 static struct dp_vs_acl *dp_vs_acl_find(int af,
                                         const char *srange,
                                         const char *drange,
@@ -94,67 +162,44 @@ static struct dp_vs_acl *dp_vs_acl_find(int af,
     return NULL;
 }
 
-static inline bool judge_ip_betw(int af, const union inet_addr *addr,
-                                 const union inet_addr *min_addr,
-                                 const union inet_addr *max_addr)
-{
-    if (!addr || !min_addr || !max_addr) {
-        return false;
-    }
-
-    if (inet_is_addr_any(af, min_addr) || inet_is_addr_any(af, max_addr)) {
-        return true;
-    }
-
-    if (AF_INET == af) {
-        uint32_t laddr = addr->in.s_addr;
-        uint32_t min   = min_addr->in.s_addr;
-        uint32_t max   = max_addr->in.s_addr;
-        return ((laddr >= min) && laddr <= max);
-    } else {
-        // ipv6, fix me, pass now
-    }
-    return true;
-}
-
-static inline bool judge_port_betw(uint16_t port, uint16_t min_port,
-                                   uint16_t max_port)
-{
-/* change to DEBUG when changed to dpdk 17.11, fix me */
-#ifdef CONFIG_DPVS_ACL_DEBUG
-    RTE_LOG(ERR, ACL, "flow port = %d, judge min port = %d, max port = %d.\n",
-                port, min_port, max_port);
-#endif
-
-    if (!port || !min_port || !max_port) {
-        return true;
-    }
-
-    return ((port >= min_port) && (port <= max_port));
-}
-
 static struct dp_vs_acl *dp_vs_acl_lookup(int af,
                                           const union inet_addr *saddr,
                                           const union inet_addr *daddr,
-                                          uint16_t sport, uint16_t dport,
+                                          __be16 sport, __be16 dport,
                                           struct dp_vs_service *svc)
 {
     if (!svc) {
         return NULL;
     }
 
+    /* change to DEBUG when changed to dpdk 17.11, fix me */
+#ifdef CONFIG_DPVS_ACL_DEBUG
+    char buf[64], sbuf[64], dbuf[64];
+    const struct inet_addr_range *range;
+#endif
+
     /* port of srange was network byte order */
     struct dp_vs_acl *acl;
     list_for_each_entry(acl, &svc->acl_list, list) {
+#ifdef CONFIG_DPVS_ACL_DEBUG
+    range = &acl->srange;
+    RTE_LOG(ERR, ACL, "acl lookup: %s:%u <- %s:%u -> %s:%u\n",
+            inet_ntop(af, &range->min_addr, buf, sizeof(buf)) ? buf : "::",
+            ntohs(range->min_port),
+            inet_ntop(af, saddr, sbuf, sizeof(sbuf)) ? sbuf : "::", ntohs(sport),
+            inet_ntop(af, &range->max_addr, dbuf, sizeof(dbuf)) ? dbuf : "::",
+            ntohs(range->max_port));
+    range = &acl->drange;
+    RTE_LOG(ERR, ACL, "            %s:%u <- %s:%u -> %s:%u\n",
+            inet_ntop(af, &range->min_addr, buf, sizeof(buf)) ? buf : "::",
+            ntohs(range->min_port),
+            inet_ntop(af, daddr, sbuf, sizeof(sbuf)) ? sbuf : "::", ntohs(dport),
+            inet_ntop(af, &range->max_addr, dbuf, sizeof(dbuf)) ? dbuf : "::",
+            ntohs(range->max_port));
+#endif
         if (af == acl->af &&
-            judge_ip_betw(af, saddr, &acl->srange.min_addr,
-                                     &acl->srange.max_addr) &&
-            judge_ip_betw(af, daddr, &acl->drange.min_addr,
-                                     &acl->drange.max_addr) &&
-            judge_port_betw(sport, ntohs(acl->srange.min_port),
-                                   ntohs(acl->srange.max_port)) &&
-            judge_port_betw(dport, ntohs(acl->drange.min_port),
-                                   ntohs(acl->drange.max_port))) {
+            __flow_in_range(af, saddr, sport, &acl->srange) &&
+            __flow_in_range(af, daddr, dport, &acl->drange)) {
             return acl;
         }
     }
@@ -264,8 +309,8 @@ int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
 
     rte_rwlock_read_lock(&svc->acl_lock);
     acl = dp_vs_acl_lookup(acl_flow->af, &acl_flow->saddr,
-                                 &acl_flow->daddr, acl_flow->sport,
-                                 acl_flow->dport, svc);
+                           &acl_flow->daddr, acl_flow->sport,
+                           acl_flow->dport, svc);
     if (acl == NULL) {
         rte_rwlock_read_unlock(&svc->acl_lock);
         return EDPVS_OK;
