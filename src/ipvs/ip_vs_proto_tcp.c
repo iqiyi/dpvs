@@ -1175,6 +1175,7 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
             ip6h->ip6_dst   = conn->laddr.in6;
 
             tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
+
             mbuf->l3_len = sizeof(*ip6h);
         }
 
