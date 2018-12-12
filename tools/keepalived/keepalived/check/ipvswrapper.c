@@ -389,7 +389,7 @@ ipvs_start(void)
 	laddr_rule = (ipvs_laddr_t *) MALLOC(sizeof(ipvs_laddr_t));
 	blklst_rule = (ipvs_blklst_t *) MALLOC(sizeof(ipvs_blklst_t));
 	tunnel_rule = (ipvs_tunnel_t *) MALLOC(sizeof(ipvs_tunnel_t));
-    acl_rule = (ipvs_acl_t *) MALLOC(sizeof(ipvs_acl_t));
+	acl_rule = (ipvs_acl_t *) MALLOC(sizeof(ipvs_acl_t));
 
 	return IPVS_SUCCESS;
 }

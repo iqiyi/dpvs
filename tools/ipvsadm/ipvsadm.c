@@ -268,7 +268,7 @@ struct ipvs_command_entry {
 	ipvs_daemon_t		daemon;
 	ipvs_laddr_t		laddr;
 	ipvs_blklst_t		blklst;
-	ipvs_acl_t          acl;
+	ipvs_acl_t		acl;
 	ipvs_sockpair_t		sockpair;
 };
 
@@ -1574,7 +1574,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --ifname       -F                   nic interface for laddrs\n"
 		"  --synproxy     -j                   TCP syn proxy\n"
 		"  --match        -H MATCH             select service by MATCH 'proto,srange,drange,iif,oif'\n"
-		"  --acl          -7 ACL               select acl by ACL 'rule,srange,drange'\n"
+		"  --acl          -7 ACL               select acl by ACL 'rule,max-conn,srange,drange'\n"
 		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n",
 		DEF_SCHED);
 

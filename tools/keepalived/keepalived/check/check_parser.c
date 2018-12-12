@@ -476,7 +476,15 @@ rule_handler(vector_t *strvec)
 {
     virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
     access_control_t *acl = LIST_TAIL_DATA(vs->acl);
-    acl->rule = atoi(vector_slot(strvec, 1));
+    char *str = vector_slot(strvec, 1);
+
+    if (!strcmp(str, "deny")) {
+        acl->rule = IP_VS_ACL_DENY;
+    } else if (!strcmp(str, "permit")) {
+        acl->rule = IP_VS_ACL_PERMIT;
+    } else {
+        log_message(LOG_INFO, "PARSER : unknown [%s] rule strategy.", str);
+    }
 }
 
 static void
