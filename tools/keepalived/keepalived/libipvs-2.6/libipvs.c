@@ -464,8 +464,76 @@ int ipvs_del_acl(ipvs_service_t *svc, ipvs_acl_t *acl)
     return dpvs_setsockopt(SOCKOPT_SET_ACL_DEL, &conf, sizeof(conf));
 }
 
-int ipvs_flush_acl(void) {
-    return dpvs_setsockopt(DPVS_SO_SET_FLUSH, NULL, 0);
+struct ip_vs_get_acls *ipvs_get_allacls(ipvs_service_entry_t *svc)
+{
+    if (!svc)
+        return NULL;
+
+    struct dp_vs_acl_conf conf;
+    struct ip_vs_get_acls *result;
+    struct ip_vs_get_acls *get;
+    size_t res_size;
+
+    memset(&conf, 0, sizeof(conf));
+    conf.af = svc->af;
+    conf.proto = svc->protocol;
+    if (svc->af == AF_INET) {
+        conf.vaddr.in = svc->addr.in;
+    } else {
+        conf.vaddr.in6 = svc->addr.in6;
+    }
+    conf.vport = svc->port;
+    conf.fwmark = svc->fwmark;
+
+    snprintf(conf.m_srange, sizeof(conf.m_srange), "%s", svc->srange);
+    snprintf(conf.m_drange, sizeof(conf.m_drange), "%s", svc->drange);
+    snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
+    snprintf(conf.oifname, sizeof(conf.oifname), "%s", svc->oifname);
+
+    if (dpvs_getsockopt(SOCKOPT_GET_ACL_ALL, &conf, sizeof(conf),
+                        ((void **)&result), &res_size) != 0) {
+        return NULL;
+    }
+
+    if (res_size != sizeof(*result) +
+                result->num_acls * sizeof(struct ip_vs_acl_entry)) {
+        fprintf(stderr, "%s\n","res_size not match.");
+        return NULL;
+    }
+
+    get = malloc(res_size);
+    if (!get) {
+        dpvs_sockopt_msg_free(result);
+        return NULL;
+    }
+
+    memmove(get, result, res_size);
+    return get;
+}
+
+int ipvs_flush_acl(ipvs_service_entry_t *svc)
+{
+    if (!svc)
+        return ESOCKOPT_INVAL;
+
+    struct dp_vs_acl_conf conf;
+    memset(&conf, 0, sizeof(conf));
+    conf.af = svc->af;
+    conf.proto = svc->protocol;
+    if (svc->af == AF_INET) {
+        conf.vaddr.in = svc->addr.in;
+    } else {
+        conf.vaddr.in6 = svc->addr.in6;
+    }
+    conf.vport = svc->port;
+    conf.fwmark = svc->fwmark;
+
+    snprintf(conf.m_srange, sizeof(conf.m_srange), "%s", svc->srange);
+    snprintf(conf.m_drange, sizeof(conf.m_drange), "%s", svc->drange);
+    snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
+    snprintf(conf.oifname, sizeof(conf.oifname), "%s", svc->oifname);
+
+    return dpvs_setsockopt(SOCKOPT_SET_ACL_FLUSH, &conf, sizeof(conf));
 }
 
 /* for tunnel entry */
@@ -709,55 +777,6 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
 
 	dpvs_sockopt_msg_free(result);
 	return laddrs;
-}
-
-struct ip_vs_get_acls *ipvs_get_allacls(ipvs_service_entry_t *svc)
-{
-    if (!svc) {
-        return NULL;
-
-    }
-    struct dp_vs_acl_conf conf;
-    struct ip_vs_get_acls *result;
-    struct ip_vs_get_acls *get;
-    size_t res_size;
-
-    memset(&conf, 0, sizeof(conf));
-    conf.af = svc->af;
-    conf.proto = svc->protocol;
-    if (svc->af == AF_INET) {
-        conf.vaddr.in = svc->addr.in;
-    } else {
-        conf.vaddr.in6 = svc->addr.in6;
-    }
-    conf.vport = svc->port;
-    conf.fwmark = svc->fwmark;
-
-    snprintf(conf.m_srange, sizeof(conf.m_srange), "%s", svc->srange);
-    snprintf(conf.m_drange, sizeof(conf.m_drange), "%s", svc->drange);
-    snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
-    snprintf(conf.oifname, sizeof(conf.oifname), "%s", svc->oifname);
-
-    if (dpvs_getsockopt(SOCKOPT_GET_ACL_ALL, &conf, sizeof(conf),
-                        ((void **)&result), &res_size) != 0) {
-        return NULL;
-    }
-
-    if (res_size != sizeof(*result) +
-                result->num_acls * sizeof(struct ip_vs_acl_entry)) {
-        fprintf(stderr, "%s\n","res_size not match.");
-        return NULL;
-    }
-
-    get = malloc(res_size);
-    if (!get) {
-        dpvs_sockopt_msg_free(result);
-        return NULL;
-    }
-
-    memmove(get, result, res_size);
-
-    return get;
 }
 
 void ipvs_free_lddrs(struct ip_vs_get_laddrs* p)

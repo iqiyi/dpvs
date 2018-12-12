@@ -84,7 +84,10 @@
 #define IP_VS_SO_SET_DELBLKLST  (IP_VS_BASE_CTL+19)
 #define IP_VS_SO_SET_ADDTUNNEL	 (IP_VS_BASE_CTL+20)
 #define IP_VS_SO_SET_DELTUNNEL	 (IP_VS_BASE_CTL+21)
-#define IP_VS_SO_SET_MAX	IP_VS_SO_SET_DELTUNNEL
+#define IP_VS_SO_SET_ADDACL	 (IP_VS_BASE_CTL+22)
+#define IP_VS_SO_SET_DELACL	 (IP_VS_BASE_CTL+23)
+#define IP_VS_SO_SET_GETACL	 (IP_VS_BASE_CTL+24)
+#define IP_VS_SO_SET_MAX	 IP_VS_SO_SETGETACL
 
 #define IP_VS_SO_GET_VERSION	IP_VS_BASE_CTL
 #define IP_VS_SO_GET_INFO	(IP_VS_BASE_CTL+1)
@@ -237,7 +240,7 @@ struct ip_vs_blklst_user {
 
 struct ip_vs_acl_user {
     int                    rule;            /* deny | permit */
-    int                    max_conn;        /* maximum connections */
+    u_int32_t              max_conn;        /* maximum connections */
     char                   srange[256];
     char                   drange[256];
 };

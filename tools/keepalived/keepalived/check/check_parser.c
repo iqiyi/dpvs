@@ -465,6 +465,44 @@ hash_target_handler(vector_t *strvec)
 	}
 }
 
+static void
+acl_handler(vector_t *strvec)
+{
+    alloc_acl(vector_slot(strvec, 1));
+}
+
+static void
+rule_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *acl = LIST_TAIL_DATA(vs->acl);
+    acl->rule = atoi(vector_slot(strvec, 1));
+}
+
+static void
+max_conn_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *acl = LIST_TAIL_DATA(vs->acl);
+    acl->max_conn = atoi(vector_slot(strvec, 1));
+}
+
+static void
+acl_srange_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *acl = LIST_TAIL_DATA(vs->acl);
+    snprintf(acl->srange, sizeof(acl->srange), "%s", (char *)vector_slot(strvec, 1));
+}
+
+static void
+acl_drange_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *acl = LIST_TAIL_DATA(vs->acl);
+    snprintf(acl->drange, sizeof(acl->drange), "%s", (char *)vector_slot(strvec, 1));
+}
+
 vector_t *
 check_init_keywords(void)
 {
@@ -515,6 +553,15 @@ check_init_keywords(void)
 	install_keyword("dst-range", &dst_range_handler);
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
+    /* Access control list mapping */
+    install_keyword("access_control", &acl_handler);
+    install_sublevel();
+    install_keyword("rule", &rule_handler);
+    install_keyword("max_conn", &max_conn_handler);
+    install_keyword("srange", &acl_srange_handler);
+    install_keyword("drange", &acl_drange_handler);
+    install_sublevel_end();
+    /* Hash target */
 	install_keyword("hash_target", &hash_target_handler);
 
 	/* Pool regression detection and handling. */

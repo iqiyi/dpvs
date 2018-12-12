@@ -184,6 +184,23 @@ init_service_rs(virtual_server_t * vs)
 	return 1;
 }
 
+/* Set a access control IVPS rules */
+static int init_service_acl(virtual_server_t *vs)
+{
+    element e;
+    access_control_t *acl;
+
+    for (e = LIST_HEAD(vs->acl); e; ELEMENT_NEXT(e)) {
+        acl = ELEMENT_DATA(e);
+        if (!ipvs_acl_cmd(LVS_CMD_ADD_ACL, acl)) {
+            log_message(LOG_ERR, "%s create acl entry error.", __FUNCTION__);
+            return IPVS_ERROR;
+        }
+    }
+
+    return IPVS_SUCCESS;
+}
+
 /* Set a virtualserver IPVS rules */
 static int
 init_service_vs(virtual_server_t * vs)
@@ -213,6 +230,12 @@ init_service_vs(virtual_server_t * vs)
 		if (!init_service_rs(vs))
 			return 0;
 	}
+
+    if (!LIST_ISEMPTY(vs->acl)) {
+        if (!init_service_acl(vs)) {
+            return 0;
+        }
+    }
 
 	/* if the service was reloaded, we may have got/lost quorum due to quorum setting changed */
 	if (vs->reloaded)

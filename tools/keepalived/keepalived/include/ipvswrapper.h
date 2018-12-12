@@ -102,6 +102,7 @@ extern int ipvs_syncd_cmd(int, char *, int, int);
 extern void ipvs_syncd_master(char *, int);
 extern void ipvs_syncd_backup(char *, int);
 extern int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry);
+extern int ipvs_acl_cmd(int, access_control_t *);
 
 #ifdef _KRNL_2_6_
 /* Refresh statistics at most every 5 seconds */

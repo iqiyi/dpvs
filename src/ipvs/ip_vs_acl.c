@@ -168,9 +168,8 @@ static struct dp_vs_acl *dp_vs_acl_lookup(int af,
                                           __be16 sport, __be16 dport,
                                           struct dp_vs_service *svc)
 {
-    if (!svc) {
+    if (!svc)
         return NULL;
-    }
 
     /* change to DEBUG when changed to dpdk 17.11, fix me */
 #ifdef CONFIG_DPVS_ACL_DEBUG
@@ -268,9 +267,9 @@ static int dp_vs_acl_del(int af,
 
 int dp_vs_acl_flush(struct dp_vs_service *svc)
 {
-    if (!svc) {
+    if (!svc)
         return EDPVS_INVAL;
-    }
+
     struct dp_vs_acl *acl_curr, *acl_next;
 
     rte_rwlock_write_lock(&svc->acl_lock);
@@ -283,28 +282,11 @@ int dp_vs_acl_flush(struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
-int dp_vs_acl_flushall(void)
-{
-    struct dp_vs_service *svc;
-    struct dp_vs_acl *acl_curr, *acl_next;
-
-    list_for_each_entry(svc, &dp_vs_svc_match_list, m_list) {
-        rte_rwlock_write_lock(&svc->acl_lock);
-        list_for_each_entry_safe(acl_curr, acl_next, &svc->acl_list, list) {
-            list_del(&acl_curr->list);
-            rte_free(acl_curr);
-        }
-        rte_rwlock_write_unlock(&svc->acl_lock);
-    }
-
-    return EDPVS_OK;
-}
-
 int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
 {
-    if (!acl_flow || !svc) {
+    if (!acl_flow || !svc)
         return EDPVS_INVAL;
-    }
+
     struct dp_vs_acl *acl = NULL;
 
     rte_rwlock_read_lock(&svc->acl_lock);
@@ -316,16 +298,15 @@ int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
         return EDPVS_OK;
     }
 
-    /* if current connections exceeds maximum amount that confirmed */
-    if (acl->p_conn >= acl->max_conn) {
-        ++acl->d_conn;
-        rte_rwlock_read_unlock(&svc->acl_lock);
-        return EDPVS_DROP;
-    }
-
     /* permit for all, except for black names */
     if (svc->acl_all & IP_VS_ACL_PERMIT_ALL) {
         if (acl->rule == IP_VS_ACL_DENY) {
+            ++acl->d_conn;
+            rte_rwlock_read_unlock(&svc->acl_lock);
+            return EDPVS_DROP;
+        }
+        /* max_conn only take effect when not 0 */
+        if (acl->max_conn && acl->p_conn >= acl->max_conn) {
             ++acl->d_conn;
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
@@ -338,6 +319,11 @@ int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
     /* deny for all, except for white names */
     if (!(svc->acl_all | IP_VS_ACL_DENY_ALL)) {
         if (acl->rule == IP_VS_ACL_PERMIT) {
+            if (acl->max_conn && acl->p_conn >= acl->max_conn) {
+                ++acl->d_conn;
+                rte_rwlock_read_unlock(&svc->acl_lock);
+                return EDPVS_DROP;
+            }
             ++acl->p_conn;
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_ACCEPT;
@@ -354,9 +340,8 @@ int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
 static int dp_vs_acl_getall(struct dp_vs_service *svc,
                             struct dp_vs_acl_entry **acls, size_t *num_acls)
 {
-    if (!svc || !acls || !num_acls) {
+    if (!svc || !acls || !num_acls)
         return EDPVS_INVAL;
-    }
 
     struct dp_vs_acl *acl;
     struct dp_vs_acl_entry *acl_entry;
@@ -407,10 +392,6 @@ static int acl_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     struct dp_vs_match match;
     int err;
 
-    if (opt == SOCKOPT_SET_ACL_FLUSH) {
-        return dp_vs_acl_flushall();
-    }
-
     if (!conf || size < sizeof(*acl_conf)) {
         return EDPVS_INVAL;
     }
@@ -421,7 +402,7 @@ static int acl_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         return EDPVS_INVAL;
     }
 
-    svc = dp_vs_service_lookup(acl_conf->af, acl_conf->proto,
+    svc = dp_vs_service_lookup(match.af, acl_conf->proto,
                                &acl_conf->vaddr, acl_conf->vport,
                                acl_conf->fwmark, NULL, &match);
     if (!svc) {
@@ -441,13 +422,15 @@ static int acl_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
                                 acl_conf->rule, acl_conf->max_conn,
                                 svc);
             break;
+        case SOCKOPT_SET_ACL_FLUSH:
+            err = dp_vs_acl_flush(svc);
+            break;
         default:
             err = EDPVS_NOTSUPP;
             break;
     }
 
     dp_vs_service_put(svc);
-
     return err;
 }
 

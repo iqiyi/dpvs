@@ -95,6 +95,13 @@ typedef struct _real_server {
 #endif
 } real_server_t;
 
+typedef struct _access_control_t {
+    int                    rule;       /* deny | permit */
+    uint32_t               max_conn;   /* maximum connections */
+    char                   srange[256];
+    char                   drange[256];
+} access_control_t;
+
 /* local ip address group definition */
 typedef struct _local_addr_entry {
 	struct sockaddr_storage addr;
@@ -168,6 +175,7 @@ typedef struct _virtual_server {
 	uint32_t			granularity_persistence;
 	char				*virtualhost;
 	list				rs;
+	list				acl;
 	int				alive;
 	unsigned			alpha;		/* Alpha mode enabled. */
 	unsigned			omega;		/* Omega mode enabled. */
@@ -200,9 +208,9 @@ typedef struct _check_data {
 	ssl_data_t			*ssl;
 	list				vs_group;
 	list				vs;
-	list laddr_group;
-	list blklst_group;
-	list tunnel_group;
+	list				laddr_group;
+	list				blklst_group;
+	list				tunnel_group;
 } check_data_t;
 
 /* inline stuff */
@@ -320,6 +328,7 @@ extern void alloc_vsg(char *);
 extern void alloc_vsg_entry(vector_t *);
 extern void alloc_vs(char *, char *);
 extern void alloc_rs(char *, char *);
+extern void alloc_acl(char *);
 extern void alloc_ssvr(char *, char *);
 extern void alloc_group(char *);
 extern void alloc_rsgroup(char *, char *);

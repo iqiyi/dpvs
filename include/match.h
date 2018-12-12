@@ -26,8 +26,6 @@
 #include <net/if.h>
 #include "inet.h"
 
-extern struct list_head dp_vs_svc_match_list;
-
 struct dp_vs_match {
     /* TODO: add proto, ... */
     int  af;

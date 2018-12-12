@@ -149,7 +149,7 @@
 #define CMD_FLUSHACL        (CMD_NONE+23)
 #define CMD_GETACL          (CMD_NONE+24)
 #define CMD_MAX             CMD_GETACL
-#define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
+#define NUMBER_OF_CMD       (CMD_MAX - CMD_NONE)
 
 static const char* cmdnames[] = {
 	"add-service",
@@ -334,6 +334,7 @@ static int list_laddrs(ipvs_service_t *svc, int with_title);
 static int list_all_laddrs(void);
 static void list_acls_print_title(void);
 static int list_all_acls(void);
+static int flush_all_acls(void);
 static void print_service_and_acls(struct ip_vs_get_acls *acls, int with_title);
 static void list_blklsts_print_title(void);
 static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
@@ -1045,7 +1046,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		break;
 
 	case CMD_FLUSHACL:
-        result = ipvs_flush_acl();
+        result = flush_all_acls();
 		break;
 
 	case CMD_GETACL:
@@ -2255,6 +2256,27 @@ static int list_all_acls(void)
         }
         print_service_and_acls(acls, title_enable);
         free(acls);
+    }
+
+    free(get);
+    return 0;
+}
+
+static int flush_all_acls(void)
+{
+    struct ip_vs_get_services *get;
+    int i;
+
+    if (!(get = ipvs_get_services())) {
+        fprintf(stderr, "%s\n", ipvs_strerror(errno));
+        return -1;
+    }
+
+    for (i = 0; i < get->num_services; ++i) {
+        if (!ipvs_flush_acl(&(get->entrytable[i]))) {
+            /* free(get); */
+            /* fprintf(stderr, "%s\n", ipvs_strerror(errno)); */
+        }
     }
 
     free(get);

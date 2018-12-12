@@ -71,8 +71,8 @@
 typedef struct ip_vs_service_user	ipvs_service_t;
 typedef struct ip_vs_dest_user		ipvs_dest_t;
 typedef struct ip_vs_laddr_user 	ipvs_laddr_t;
-typedef struct ip_vs_acl_user       ipvs_acl_t;
-typedef struct ip_vs_blklst_user        ipvs_blklst_t;
+typedef struct ip_vs_acl_user   	ipvs_acl_t;
+typedef struct ip_vs_blklst_user   	ipvs_blklst_t;
 typedef struct ip_vs_timeout_user	ipvs_timeout_t;
 typedef struct ip_vs_daemon_user	ipvs_daemon_t;
 typedef struct ip_vs_tunnel_user	ipvs_tunnel_t;
@@ -132,7 +132,7 @@ extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc);
 /* acl associate */
 extern int ipvs_add_acl(ipvs_service_t *svc, ipvs_acl_t *acl);
 extern int ipvs_del_acl(ipvs_service_t *svc, ipvs_acl_t *acl);
-extern int ipvs_flush_acl(void);
+extern int ipvs_flush_acl(ipvs_service_entry_t *svc);
 extern struct ip_vs_get_acls *ipvs_get_allacls(ipvs_service_entry_t *svc);
 
 /*for add/delete a blacklist ip*/

@@ -368,6 +368,7 @@ static ipvs_daemon_t *daemonrule;
 static ipvs_laddr_t *laddr_rule;
 static ipvs_blklst_t *blklst_rule;
 static ipvs_tunnel_t *tunnel_rule;
+static ipvs_acl_t *acl_rule;
 
 /* Initialization helpers */
 int
@@ -388,6 +389,7 @@ ipvs_start(void)
 	laddr_rule = (ipvs_laddr_t *) MALLOC(sizeof(ipvs_laddr_t));
 	blklst_rule = (ipvs_blklst_t *) MALLOC(sizeof(ipvs_blklst_t));
 	tunnel_rule = (ipvs_tunnel_t *) MALLOC(sizeof(ipvs_tunnel_t));
+    acl_rule = (ipvs_acl_t *) MALLOC(sizeof(ipvs_acl_t));
 
 	return IPVS_SUCCESS;
 }
@@ -460,6 +462,12 @@ ipvs_talk(int cmd)
 		case IP_VS_SO_SET_DELTUNNEL:
 			result = ipvs_del_tunnel(tunnel_rule);
 			break;
+        case IP_VS_SO_SET_ADDACL:
+            return ipvs_add_acl(srule, acl_rule);
+            break;
+        case IP_VS_SO_SET_DELACL:
+            result = ipvs_del_acl(srule, acl_rule);
+            break;
 	}
 
 	if (result) {
@@ -981,6 +989,20 @@ int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry)
 
     return IPVS_SUCCESS;
 }
+
+int
+ipvs_acl_cmd(int cmd, access_control_t *acl)
+{
+    memset(acl_rule, 0, sizeof(ipvs_acl_t));
+    acl_rule->rule = acl->rule;
+    acl_rule->max_conn  = acl->max_conn;
+    snprintf(acl_rule->srange, 256, "%s", acl->srange);
+    snprintf(acl_rule->drange, 256, "%s", acl->drange);
+    ipvs_talk(cmd);
+
+    return IPVS_SUCCESS;
+}
+
 
 /* Set/Remove a RS or a local/deny address group from a VS */
 int
