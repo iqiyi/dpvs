@@ -1110,9 +1110,12 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
             ip4h->src_addr        = conn->caddr.in.s_addr;
             ip4h->dst_addr        = conn->vaddr.in.s_addr;
 
+            mbuf->l3_len = sizeof(*ip4h);
+
             ip4h->hdr_checksum = 0;
             tcp4_send_csum(ip4h, th);
             ip4_send_csum(ip4h);
+
         } else {
             int plen = mbuf->pkt_len;
             ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(mbuf, 
@@ -1123,9 +1126,12 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
             }
             ip6h->ip6_vfc   = 0x60;
             ip6h->ip6_plen  = htons(plen);
+            ip6h->ip6_hlim  = 64;
             ip6h->ip6_nxt   = IPPROTO_TCP;
             ip6h->ip6_src   = conn->caddr.in6;
             ip6h->ip6_dst   = conn->vaddr.in6;
+
+            mbuf->l3_len = sizeof(*ip6h);
 
             tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
         }
@@ -1149,9 +1155,12 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
             ip4h->src_addr        = conn->daddr.in.s_addr;
             ip4h->dst_addr        = conn->laddr.in.s_addr;
 
+            mbuf->l3_len = sizeof(*ip4h);
+
             ip4h->hdr_checksum = 0; 
             tcp4_send_csum(ip4h, th); 
             ip4_send_csum(ip4h);
+
         } else {
             int plen = mbuf->pkt_len;
             ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(mbuf, 
@@ -1162,11 +1171,14 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
             }    
             ip6h->ip6_vfc   = 0x60;
             ip6h->ip6_plen  = htons(plen);
+            ip6h->ip6_hlim  = 64;
             ip6h->ip6_nxt   = IPPROTO_TCP;
-            ip6h->ip6_src  = conn->daddr.in6;
-            ip6h->ip6_dst  = conn->laddr.in6;
+            ip6h->ip6_src   = conn->daddr.in6;
+            ip6h->ip6_dst   = conn->laddr.in6;
 
-            tcp6_send_csum((struct ipv6_hdr *)ip6h, th); 
+            mbuf->l3_len = sizeof(*ip6h);
+
+            tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
         }
 
         conn->packet_out_xmit(proto, conn, mbuf);
