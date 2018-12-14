@@ -50,6 +50,7 @@ void handle_reply(int efd, int fd)
     struct uoa_param_map map;
     socklen_t len, mlen;
     int n;
+    uint8_t af = AF_INET;
 
     len = sizeof(peer);
     n = recvfrom(fd, buff, sizeof(buff), 0, (SA *)&peer, &len);
@@ -58,8 +59,9 @@ void handle_reply(int efd, int fd)
         exit(1);
     }
     buff[n]='\0';
+    af = ((SA *)&peer)->sa_family;
 
-    if (((SA *)&peer)->sa_family == AF_INET) {
+    if (AF_INET == af) {
         sin = (struct sockaddr_in *)&peer;
         inet_ntop(AF_INET, &sin->sin_addr.s_addr, from, sizeof(from));
         printf("Receive %d bytes from %s:%d -- %s\n",
@@ -72,10 +74,11 @@ void handle_reply(int efd, int fd)
          * lookup for daddr (or local IP) is supported.
          * */
         memset(&map, 0, sizeof(map));
-        map.saddr = sin->sin_addr.s_addr;
+        map.af    = af;
         map.sport = sin->sin_port;
-        map.daddr = htonl(INADDR_ANY);
         map.dport = htons(SERV_PORT);
+        memmove(&map.saddr, &sin->sin_addr.s_addr, sizeof(struct in_addr));
+        memmove(&map.daddr, INADDR_ANY, sizeof(struct in_addr));
         mlen = sizeof(map);
         if (getsockopt(fd, IPPROTO_IP, UOA_SO_GET_LOOKUP, &map, &mlen) == 0) {
             inet_ntop(AF_INET, &map.real_saddr, from, sizeof(from));

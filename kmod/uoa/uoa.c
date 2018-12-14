@@ -44,6 +44,7 @@
 #include <linux/proc_fs.h>
 #include <linux/kallsyms.h>
 #include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <linux/atomic.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
@@ -51,6 +52,7 @@
 #include <linux/vmalloc.h>
 #include <asm/pgtable_types.h>
 
+#include "uoa_extra.h"
 #include "uoa.h"
 
 /* uoa mapping hash table */
@@ -60,8 +62,9 @@ struct uoa_map {
 	struct timer_list	timer;
 
 	/* tuples as hash key */
-	__be32			saddr;
-	__be32			daddr;
+	__be16          af;
+    union inet_addr saddr;
+    union inet_addr daddr;
 	__be16			sport;
 	__be16			dport;
 
@@ -271,17 +274,22 @@ static inline void uoa_map_dump(const struct uoa_map *um, const char *pref)
 		atomic_read(&um->refcnt));
 }
 
-static inline unsigned int __uoa_map_hash_key(__be32 saddr, __be32 daddr,
-					      __be16 sport, __be16 dport)
+static inline unsigned int __uoa_map_hash_key(__be16 af,
+                                              const union inet_addr *saddr,
+                                              const union inet_addr *daddr,
+                                              __be16 sport, __be16 dport)
 {
 	/* do not cal daddr, it could be zero for wildcard lookup */
-	return jhash_3words(saddr, sport, dport, uoa_map_rnd) &
+    uint32_t saddr_fold;
+    saddr_fold = inet_addr_fold(af, saddr);
+	return jhash_3words(saddr_fold, sport, dport, uoa_map_rnd) &
 		uoa_map_tab_mask;
 }
 
 static inline unsigned int uoa_map_hash_key(const struct uoa_map *um)
 {
-	return __uoa_map_hash_key(um->saddr, um->daddr, um->sport, um->dport);
+	return __uoa_map_hash_key(um->af, &um->saddr, &um->daddr,
+                um->sport, um->dport);
 }
 
 static inline void uoa_map_hash(struct uoa_map *um)
@@ -301,13 +309,13 @@ static inline void uoa_map_hash(struct uoa_map *um)
 #else
 	hlist_for_each_entry_rcu(cur, node, head, hlist) {
 #endif
-		if (um->saddr == cur->saddr &&
-		    um->daddr == cur->daddr &&
+		if (um->af == cur->af &&
+            inet_addr_equal(um->af, &um->saddr, &cur->saddr) &&
+            inet_addr_equal(um->af, &um->daddr, &cur->daddr) &&
 		    um->sport == cur->sport &&
 		    um->dport == cur->dport) {
 			/* update */
-			memcpy(&cur->optuoa, &um->optuoa, IPOLEN_UOA_IPV4);
-
+            memmove(&cur->optuoa, &um->optuoa, um->optuoa.op_len);
 			mod_timer(&cur->timer, jiffies + uoa_map_timeout * HZ);
 
 			kmem_cache_free(uoa_map_cache, um);
@@ -350,10 +358,12 @@ static inline int uoa_map_unhash(struct uoa_map *um)
 	return err;
 }
 
-static inline struct uoa_map *uoa_map_get(__be32 saddr, __be32 daddr,
-					  __be16 sport, __be16 dport)
+static inline struct uoa_map *uoa_map_get(__be16 af,
+                                          union inet_addr *saddr,
+                                          union inet_addr *daddr,
+					                      __be16 sport, __be16 dport)
 {
-	unsigned int hash = __uoa_map_hash_key(saddr, daddr, sport, dport);
+	unsigned int hash = __uoa_map_hash_key(af, saddr, daddr, sport, dport);
 	struct hlist_head *head = &uoa_map_tab[hash];
 	struct uoa_map *um = NULL;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
@@ -369,7 +379,10 @@ static inline struct uoa_map *uoa_map_get(__be32 saddr, __be32 daddr,
 #endif
 		/* we allow daddr being set to wildcard (zero),
 		 * since UDP server may bind INADDR_ANY */
-		if (um->saddr == saddr && (daddr == 0 || um->daddr == daddr) &&
+		if (um->af == af &&
+            inet_addr_equal(af, &um->saddr, saddr) &&
+                (inet_is_addr_any(af, &um->daddr) ||
+                 inet_addr_equal(af, &um->daddr, daddr)) &&
 		    um->sport == sport && um->dport == dport) {
 			mod_timer(&um->timer, jiffies + uoa_map_timeout * HZ);
 			atomic_inc(&um->refcnt);
@@ -490,12 +503,21 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 		return -EFAULT;
 
 	/* lookup uap mapping table */
-	um = uoa_map_get(map.saddr, map.daddr, map.sport, map.dport);
+	um = uoa_map_get(map.af, &map.saddr, &map.daddr, map.sport, map.dport);
+
 	if (!um) {
 		if (uoa_debug) {
-			pr_warn("%s: not found: %pI4:%d->%pI4:%d\n", __func__,
-				&map.saddr, ntohs(map.sport),
-				&map.daddr, ntohs(map.dport));
+            if (AF_INET == map.af) {
+                pr_warn("%s: not found: af = %d, %pI4:%d->%pI4:%d\n", __func__,
+                            map.af,
+                            &map.saddr.in, ntohs(map.sport),
+                            &map.daddr.in, ntohs(map.dport));
+            } else {
+                pr_warn("%s: not found: af = %d, %pI6:%d->%pI6:%d\n", __func__,
+                            map.af,
+                            &map.saddr.in6, ntohs(map.sport),
+                            &map.daddr.in6, ntohs(map.dport));
+            }
 		}
 		UOA_STATS_INC(miss);
 		return -ENOENT;
@@ -503,16 +525,29 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 
 	uoa_map_dump(um, "hit:");
 
-	if (likely(um->optuoa.op_code == IPOPT_UOA &&
-		   um->optuoa.op_len == IPOLEN_UOA_IPV4)) {
-		memcpy(&map.real_saddr, um->optuoa.op_addr, sizeof(map.real_saddr));
-		map.real_sport = um->optuoa.op_port;
-		UOA_STATS_INC(success);
-		err = 0;
-	} else {
-		UOA_STATS_INC(invalid);
-		err = -EFAULT;
-	}
+    if (likely(um->optuoa.op_code == IPOPT_UOA)) {
+        if (um->optuoa.op_len == IPOLEN_UOA_IPV4) {
+            memmove(&map.real_saddr.in, um->optuoa.op_addr,
+                        sizeof(map.real_saddr.in));
+            map.real_sport = um->optuoa.op_port;
+            UOA_STATS_INC(success);
+            err = 0;
+        } else {
+            if (um->optuoa.op_len == IPOLEN_UOA_IPV6) {
+                memmove(&map.real_saddr.in6, um->optuoa.op_addr,
+                            sizeof(map.real_saddr.in6));
+                map.real_sport = um->optuoa.op_port;
+                UOA_STATS_INC(success);
+                err = 0;
+            } else {
+                UOA_STATS_INC(invalid);
+                err = -EFAULT;
+            }
+        }
+    } else {
+        UOA_STATS_INC(invalid);
+        err = -EFAULT;
+    }
 
 	if (copy_to_user(user, &map, sizeof(struct uoa_param_map)) != 0)
 		err = -EFAULT;
@@ -561,8 +596,8 @@ static int uoa_map_init(void)
 
 	/* mapping cache */
 	uoa_map_cache = kmem_cache_create("uoa_map",
-					  sizeof(struct uoa_map), 0,
-					  SLAB_HWCACHE_ALIGN, NULL);
+					                  sizeof(struct uoa_map) + 16, 0,
+					                  SLAB_HWCACHE_ALIGN, NULL);
 	if (!uoa_map_cache) {
 		pr_err("fail to create uoa_map cache\n");
 		vfree(uoa_map_tab);
@@ -600,9 +635,9 @@ static int uoa_send_ack(const struct sk_buff *oskb)
 	return 0;
 }
 
-static struct uoa_map *uoa_parse_ipopt(unsigned char *optptr, int optlen,
-				       __be32 saddr, __be32 daddr,
-				       __be16 sport, __be16 dport)
+static struct uoa_map *uoa_parse_ipopt(uint8_t af, unsigned char *optptr,
+                                       int optlen, void *iph,
+				                       __be16 sport, __be16 dport)
 {
 	int l;
 	struct uoa_map *um = NULL;
@@ -624,26 +659,36 @@ static struct uoa_map *uoa_parse_ipopt(unsigned char *optptr, int optlen,
 		if (unlikely(optlen < 2 || optlen > l))
 			goto out; /* invalid */
 
-		if (*optptr == IPOPT_UOA && optlen == IPOLEN_UOA_IPV4) {
-			UOA_STATS_INC(uoa_got);
+        if (*optptr == IPOPT_UOA) {
+            UOA_STATS_INC(uoa_got);
+            um = kmem_cache_alloc(uoa_map_cache, GFP_ATOMIC);
+            if (!um) {
+                UOA_STATS_INC(uoa_miss);
+                goto out;
+            }
 
-			um = kmem_cache_alloc(uoa_map_cache, GFP_ATOMIC);
-			if (!um) {
-				UOA_STATS_INC(uoa_miss);
-				goto out;
-			}
+            atomic_set(&um->refcnt, 0);
+            um->af = af;
+            if (optlen == IPOLEN_UOA_IPV4) {
+                memmove(&um->saddr.in, &((struct iphdr *)iph)->saddr,
+                            sizeof(struct in_addr));
+                memmove(&um->daddr.in6, &((struct ipv6hdr *)iph)->daddr,
+                            sizeof(struct in_addr));
+            }
+            else {
+                /* ipv6 */
+                memmove(&um->saddr.in6, &((struct ipv6hdr *)iph)->saddr,
+                            sizeof(struct in6_addr));
+                memmove(&um->daddr.in6, &((struct ipv6hdr *)iph)->daddr,
+                            sizeof(struct in6_addr));
+            }
+            um->sport = sport;
+            um->dport = dport;
+            memcpy(&um->optuoa, optptr, optlen);
 
-			atomic_set(&um->refcnt, 0);
-			um->saddr = saddr;
-			um->daddr = daddr;
-			um->sport = sport;
-			um->dport = dport;
-
-			memcpy(&um->optuoa, optptr, IPOLEN_UOA_IPV4);
-
-			UOA_STATS_INC(uoa_saved);
-			return um;
-		}
+            UOA_STATS_INC(uoa_saved);
+            return um;
+        }
 
 		l -= optlen;
 		optptr += optlen;
@@ -673,8 +718,7 @@ static struct uoa_map *uoa_iph_rcv(const struct iphdr *iph, struct sk_buff *skb)
 	optlen = ip_hdrlen(skb) - sizeof(struct iphdr);
 	optptr = (unsigned char *)(iph + 1);
 
-	um = uoa_parse_ipopt(optptr, optlen, iph->saddr, iph->daddr,
-			     uh->source, uh->dest);
+	um = uoa_parse_ipopt(AF_INET, optptr, optlen, (void *)iph, uh->source, uh->dest);
 
 	if (um && uoa_send_ack(skb) != 0) {
 		UOA_STATS_INC(uoa_ack_fail);
@@ -685,36 +729,36 @@ static struct uoa_map *uoa_iph_rcv(const struct iphdr *iph, struct sk_buff *skb)
 }
 
 /* get uoa info from private option protocol. */
-static struct uoa_map *uoa_opp_rcv(struct iphdr *iph, struct sk_buff *skb)
+static struct uoa_map *uoa_opp_rcv(uint8_t af, void *iph, struct sk_buff *skb)
 {
 	struct opphdr *opph;
 	struct udphdr *uh;
 	int optlen, opplen;
 	unsigned char *optptr;
 	struct uoa_map *um = NULL;
+    int iphdrlen = ((AF_INET6 == af) ? ipv6_hdrlen(skb) : ip_hdrlen(skb));
 
-	if (!pskb_may_pull(skb, ip_hdrlen(skb) + sizeof(struct opphdr)))
+	if (!pskb_may_pull(skb, iphdrlen + sizeof(struct opphdr)))
 		return NULL;
 
-	opph = (void *)iph + ip_hdrlen(skb);
+	opph = iph + iphdrlen;
 	opplen = ntohs(opph->length);
 
-	if (unlikely(opph->version != 0x01 || opph->protocol != IPPROTO_UDP)) {
+	if (unlikely(opph->protocol != IPPROTO_UDP)) {
 		pr_warn("bad opp header\n");
 		return NULL;
 	}
 
-	if (!pskb_may_pull(skb, ip_hdrlen(skb) + opplen + sizeof(*uh)))
+	if (!pskb_may_pull(skb, iphdrlen + opplen + sizeof(*uh)))
 		return NULL;
 
-	uh = (void *)iph + ip_hdrlen(skb) + opplen;
+	uh = iph + iphdrlen + opplen;
 
 	optlen = opplen - sizeof(*opph);
 	optptr = (unsigned char *)(opph + 1);
 
 	/* try parse UOA option from ip-options */
-	um = uoa_parse_ipopt(optptr, optlen, iph->saddr, iph->daddr,
-			     uh->source, uh->dest);
+	um = uoa_parse_ipopt(af, optptr, optlen, iph, uh->source, uh->dest);
 
 	if (um && uoa_send_ack(skb) != 0) {
 		UOA_STATS_INC(uoa_ack_fail);
@@ -725,38 +769,53 @@ static struct uoa_map *uoa_opp_rcv(struct iphdr *iph, struct sk_buff *skb)
 	 * "remove" private option protocol, then adjust IP header
 	 * protocol, tot_len and checksum. these could be slow ?
 	 */
-	skb_set_transport_header(skb, ip_hdrlen(skb) + opplen);
+	skb_set_transport_header(skb, iphdrlen + opplen);
 
 	/* Old kernel like 2.6.32 use "iph->ihl" rather "skb->transport_header"
 	 * to get UDP header offset. The UOA private protocol data should be
 	 * erased here, but this should move skb data and harm perfomance. As a
 	 * compromise, we convert the private protocol data into NOP IP option
 	 * data if possible.*/
-	if (iph->ihl + (opplen >> 2) < 16) {
-		iph->ihl = (iph->ihl) + (opplen >> 2);
-		memset(opph, opplen, IPOPT_NOOP);
-	} else {
-		pr_warn("IP header has no room to convert uoa data into option.\n");
-	}
+    if (AF_INET == af) {
+        if (((struct iphdr *)iph)->ihl + (opplen >> 2) < 16) {
+            ((struct iphdr *)iph)->ihl += (opplen >> 2);
+            memset(opph, opplen, IPOPT_NOOP);
 
-	/* need change it to parse transport layer */
-	iph->protocol = opph->protocol;
-	ip_send_check(iph);
+            /* need change it to parse transport layer */
+            ((struct iphdr *)iph)->protocol = opph->protocol;
+        } else {
+            pr_warn("IP header has no room to convert uoa data into option.\n");
+        }
+        /* re-calc checksum */
+        ip_send_check(iph);
+    } else {
+        /* fix me, check if ipv6 need do upper change as v4
+         * if need re-calc chesum */
+        ((struct ipv6hdr *)iph)->nexthdr = opph->protocol;
+    }
 
 	return um;
 }
 
 static struct uoa_map *uoa_skb_rcv_opt(struct sk_buff *skb)
 {
-	struct iphdr *iph = ip_hdr(skb);
+    struct iphdr *iph = ip_hdr(skb);
+    uint8_t af = ((6 == iph->version) ? AF_INET6 : AF_INET);
 
-	if (unlikely(iph->ihl > 5) && iph->protocol == IPPROTO_UDP)
-		return uoa_iph_rcv(iph, skb);
-	else if (unlikely(iph->protocol == IPPROTO_OPT))
-		return uoa_opp_rcv(iph, skb);
+    if (AF_INET6 == af) {
+        struct ipv6hdr *iph6 = ipv6_hdr(skb);
+        if (unlikely(iph6->nexthdr == IPPROTO_OPT)) {
+            return uoa_opp_rcv(af, (void *)iph6, skb);
+        }
+    } else {
+        if (unlikely(iph->ihl > 5) && iph->protocol == IPPROTO_UDP)
+            return uoa_iph_rcv(iph, skb);
+        else if (unlikely(iph->protocol == IPPROTO_OPT))
+            return uoa_opp_rcv(af, (void *)iph, skb);
+    }
 
-	UOA_STATS_INC(uoa_none);
-	return NULL;
+    UOA_STATS_INC(uoa_none);
+    return NULL;
 }
 
 /*
