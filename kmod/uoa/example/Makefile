@@ -21,7 +21,7 @@
 
 all: udp_serv uperf opp
 
-CFLAGS = -g -O0
+CFLAGS = -g3 -O0
 CFLAGS += -I ../../../include
 
 udp_serv: udp_serv.c

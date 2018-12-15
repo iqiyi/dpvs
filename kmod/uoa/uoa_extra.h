@@ -27,8 +27,8 @@ static inline uint32_t inet_addr_fold(int af, const union inet_addr *addr)
     return addr_fold;
 }
 
-bool inet_addr_equal(int af, const union inet_addr *a1,
-            const union inet_addr *a2)
+static inline bool inet_addr_equal(int af, const union inet_addr *a1,
+                     const union inet_addr *a2)
 {
     switch (af) {
         case AF_INET:
@@ -46,7 +46,7 @@ bool inet_addr_equal(int af, const union inet_addr *a1,
      && (((const uint32_t *) (a))[2] == ((const uint32_t *) (b))[2])      \
      && (((const uint32_t *) (a))[3] == ((const uint32_t *) (b))[3]))
 
-bool inet_is_addr_any(int af, const union inet_addr *addr)
+static inline bool inet_is_addr_any(int af, const union inet_addr *addr)
 {
     switch (af) {
         case AF_INET:

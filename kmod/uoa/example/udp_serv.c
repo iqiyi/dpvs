@@ -34,6 +34,7 @@
 #include <sys/epoll.h>
 #include "common.h" /* for __u8, __be16, __be32, __u64 only,
                just define them if not want common.h */
+#include "inet.h"
 #include "uoa.h"
 
 #define MAX_SUPP_AF         2
@@ -78,10 +79,9 @@ void handle_reply(int efd, int fd)
         map.sport = sin->sin_port;
         map.dport = htons(SERV_PORT);
         memmove(&map.saddr, &sin->sin_addr.s_addr, sizeof(struct in_addr));
-        memmove(&map.daddr, INADDR_ANY, sizeof(struct in_addr));
         mlen = sizeof(map);
         if (getsockopt(fd, IPPROTO_IP, UOA_SO_GET_LOOKUP, &map, &mlen) == 0) {
-            inet_ntop(AF_INET, &map.real_saddr, from, sizeof(from));
+            inet_ntop(AF_INET, &map.real_saddr.in, from, sizeof(from));
             printf("  real client %s:%d\n", from, ntohs(map.real_sport));
         }
 
