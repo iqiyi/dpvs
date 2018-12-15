@@ -627,6 +627,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
      * However, UDP checksum is not mandatory, to make things easier, when OPP
      * header exist, we just not calc UDP checksum.
      */
+    ((struct udp_hdr *)uh)->dgram_cksum = 0;
     if (!opp) {
         if (AF_INET6 == af) {
             udp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), (struct udphdr*)uh);
