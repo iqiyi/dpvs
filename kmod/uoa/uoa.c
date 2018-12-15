@@ -56,10 +56,10 @@
 #include "uoa.h"
 
 struct kr_ipopt_uoa {
-    __u8                   op_code;
-    __u8                   op_len;
-    __be16                 op_port;
-    union inet_addr       op_addr;
+    __u8                    op_code;
+    __u8                    op_len;
+    __be16                  op_port;
+    union inet_addr         op_addr;
 } __attribute__((__packed__));
 
 /* uoa mapping hash table */

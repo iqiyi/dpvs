@@ -28,6 +28,8 @@
 #include <netinet/udp.h>
 #include <arpa/inet.h>
 #include "common.h"
+
+#include "inet.h"
 #include "uoa.h"
 
 /**
