@@ -606,11 +606,13 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     if (conn != NULL) {
         if (th->ack) {
             if ((*direct == DPVS_CONN_DIR_INBOUND) && conn->out_dev 
-                 && (!inet_is_addr_any(conn->af, &conn->out_nexthop))) {
-                neigh_confirm(conn->af, &conn->out_nexthop, conn->out_dev);
+                 && (!inet_is_addr_any(tuplehash_in(conn).af, &conn->out_nexthop))) {
+                neigh_confirm(tuplehash_in(conn).af, &conn->out_nexthop, 
+                              conn->out_dev);
             } else if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
-                        && (!inet_is_addr_any(conn->af, &conn->in_nexthop))) {
-                neigh_confirm(conn->af, &conn->in_nexthop, conn->in_dev);
+                        && (!inet_is_addr_any(tuplehash_out(conn).af, &conn->in_nexthop))) {
+                neigh_confirm(tuplehash_out(conn).af, &conn->in_nexthop, 
+                              conn->in_dev);
             }
         }
     }
@@ -986,13 +988,19 @@ tcp_state_out:
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir)
 {
     struct netif_port *dev;
+    int af;
 
     /* we need oif for correct rte_mempoll, 
      * most likely oif is conn->in/out_dev (fast-xmit),
      * if not, determine output device by route. */
     dev = ((dir == DPVS_CONN_DIR_INBOUND) ? conn->in_dev : conn->out_dev);
+
     if (unlikely(!dev)) {
-        if (AF_INET == conn->af) {
+    /* dir is mbuf to revieve, route/af is mbuf to send
+     * their in/out may be reversed */
+        af = ((dir == DPVS_CONN_DIR_INBOUND) ? \
+              tuplehash_out(conn).af : tuplehash_in(conn).af);
+        if (AF_INET == af) {
             struct route_entry *rt = NULL;
             struct flow4 fl4;
             memset(&fl4, 0, sizeof(struct flow4));

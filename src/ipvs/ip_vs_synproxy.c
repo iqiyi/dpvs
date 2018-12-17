@@ -890,6 +890,8 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         syn_ip6h->ip6_plen = htons(tcp_hdr_size);
         syn_ip6h->ip6_nxt = NEXTHDR_TCP;
         syn_ip6h->ip6_hlim = IPV6_DEFAULT_HOPLIMIT;
+
+        syn_mbuf->l3_len = sizeof(*syn_ip6h);
     } else {
         struct iphdr *ack_iph;
         struct iphdr *syn_iph;
@@ -910,6 +912,8 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         syn_iph->protocol = IPPROTO_TCP;
         syn_iph->saddr = ack_iph->saddr;
         syn_iph->daddr = ack_iph->daddr;
+
+        syn_mbuf->l3_len = sizeof(*syn_iph);
 
         /* checksum is done by fnat_in_handler */
         syn_iph->check = 0;
@@ -1164,6 +1168,7 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
 	ack_ip6h->ip6_vfc = 0x60;  /* IPv6 */
 	ack_ip6h->ip6_plen = htons(sizeof(struct tcphdr));
 	ack_ip6h->ip6_nxt = NEXTHDR_TCP;
+        ack_mbuf->l3_len = sizeof(*ack_ip6h);
     } else {
 	struct ipv4_hdr *ack_iph;
 	struct ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
@@ -1182,6 +1187,7 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
 	ack_iph->type_of_service = 0;
 	ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
 	ack_iph->total_length = htons(pkt_ack_len);
+        ack_mbuf->l3_len = sizeof(*ack_iph);
     }
 
     conn->packet_out_xmit(pp, conn, ack_mbuf);
@@ -1191,7 +1197,7 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
 
 /* Syn-proxy step 3 logic: receive rs's Syn/Ack.
  * Update syn_proxy_seq.delta and send stored ack mbufs to rs. */
-int dp_vs_synproxy_synack_rcv(int af, struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
+int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
         struct dp_vs_proto *pp, int th_offset, int *verdict)
 {
     struct tcphdr _tcph, *th;
@@ -1274,7 +1280,7 @@ int dp_vs_synproxy_synack_rcv(int af, struct rte_mbuf *mbuf, struct dp_vs_conn *
          * So DPVS has no need to send a window update.
          */
         if (cp->ack_num == 1)
-            syn_proxy_send_window_update(af, mbuf, cp, pp, th);
+            syn_proxy_send_window_update(tuplehash_out(cp).af, mbuf, cp, pp, th);
 
         list_for_each_entry_safe(tmbuf, tmbuf2, &cp->ack_mbuf, list) {
             list_del_init(&tmbuf->list);
