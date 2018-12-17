@@ -95,14 +95,14 @@ enum {
 
 struct uoa_param_map {
 	/* input */
-    __be16  af;
-    union inet_addr saddr;
-    union inet_addr daddr;
-	__be16	sport;
-	__be16	dport;
+    __be16           af;
+    union inet_addr  saddr;
+    union inet_addr  daddr;
+    __be16           sport;
+    __be16           dport;
 	/* output */
-    union inet_addr real_saddr;
-	__be16	real_sport;
+    union inet_addr  real_saddr;
+    __be16           real_sport;
 } __attribute__((__packed__));
 
 /**

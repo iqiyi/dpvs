@@ -294,17 +294,17 @@ static inline unsigned int __uoa_map_hash_key(__be16 af,
                                               const union inet_addr *daddr,
                                               __be16 sport, __be16 dport)
 {
-	/* do not cal daddr, it could be zero for wildcard lookup */
+    /* do not cal daddr, it could be zero for wildcard lookup */
     uint32_t saddr_fold;
     saddr_fold = inet_addr_fold(af, saddr);
-	return jhash_3words(saddr_fold, sport, dport, uoa_map_rnd) &
-		uoa_map_tab_mask;
+    return jhash_3words(saddr_fold, sport, dport, uoa_map_rnd) &
+        uoa_map_tab_mask;
 }
 
 static inline unsigned int uoa_map_hash_key(const struct uoa_map *um)
 {
-	return __uoa_map_hash_key(um->af, &um->saddr, &um->daddr,
-                um->sport, um->dport);
+    return __uoa_map_hash_key(um->af, &um->saddr, &um->daddr,
+                              um->sport, um->dport);
 }
 
 static inline void uoa_map_hash(struct uoa_map *um)
@@ -749,7 +749,7 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
 	int optlen, opplen;
 	unsigned char *optptr;
 	struct uoa_map *um = NULL;
-    int iphdrlen = ((AF_INET6 == af) ? ipv6_hdrlen(skb) : ip_hdrlen(skb));
+	int iphdrlen = ((AF_INET6 == af) ? ipv6_hdrlen(skb) : ip_hdrlen(skb));
 
 	if (!pskb_may_pull(skb, iphdrlen + sizeof(struct opphdr)))
 		return NULL;
@@ -782,7 +782,7 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
 	 * protocol, tot_len and checksum. these could be slow ?
 	 */
 
-    skb_set_transport_header(skb, iphdrlen + opplen);
+	skb_set_transport_header(skb, iphdrlen + opplen);
 
 	/* Old kernel like 2.6.32 use "iph->ihl" rather "skb->transport_header"
 	 * to get UDP header offset. The UOA private protocol data should be

@@ -16,7 +16,7 @@ static inline uint32_t inet_addr_fold(int af, const union inet_addr *addr)
         addr_fold = addr->in.s_addr;
     } else if (af == AF_INET6) {
         addr_fold = addr->in6.s6_addr32[0] ^ addr->in6.s6_addr32[1] ^
-            addr->in6.s6_addr32[2] ^ addr->in6.s6_addr32[3];
+                    addr->in6.s6_addr32[2] ^ addr->in6.s6_addr32[3];
     } else {
         return 0;
     }
@@ -38,9 +38,9 @@ static inline bool inet_addr_equal(int af, const union inet_addr *a1,
 }
 
 # define IN6_ARE_ADDR_EQUAL(a,b) \
-    ((((const uint32_t *) (a))[0] == ((const uint32_t *) (b))[0])	      \
-     && (((const uint32_t *) (a))[1] == ((const uint32_t *) (b))[1])      \
-     && (((const uint32_t *) (a))[2] == ((const uint32_t *) (b))[2])      \
+    ((((const uint32_t *) (a))[0] == ((const uint32_t *) (b))[0])     \
+     && (((const uint32_t *) (a))[1] == ((const uint32_t *) (b))[1])  \
+     && (((const uint32_t *) (a))[2] == ((const uint32_t *) (b))[2])  \
      && (((const uint32_t *) (a))[3] == ((const uint32_t *) (b))[3]))
 
 static inline bool inet_is_addr_any(int af, const union inet_addr *addr)
