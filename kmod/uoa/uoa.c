@@ -72,13 +72,13 @@ struct uoa_map {
     __be16                  af;
     union inet_addr         saddr;
     union inet_addr         daddr;
-    __be16			        sport;
-    __be16			        dport;
+    __be16                  sport;
+    __be16                  dport;
 
     struct kr_ipopt_uoa     optuoa;
 };
 
-static int uoa_debug = 1;
+static int uoa_debug = 0;
 module_param_named(uoa_debug, uoa_debug, int, 0444);
 MODULE_PARM_DESC(uoa_debug, "enable UOA debug by setting it to 1");
 
@@ -324,18 +324,18 @@ static inline void uoa_map_hash(struct uoa_map *um)
 	hlist_for_each_entry_rcu(cur, node, head, hlist) {
 #endif
 		if (um->af == cur->af &&
-            inet_addr_equal(um->af, &um->saddr, &cur->saddr) &&
-            inet_addr_equal(um->af, &um->daddr, &cur->daddr) &&
+		    inet_addr_equal(um->af, &um->saddr, &cur->saddr) &&
+		    inet_addr_equal(um->af, &um->daddr, &cur->daddr) &&
 		    um->sport == cur->sport &&
 		    um->dport == cur->dport) {
 			/* update */
-            memmove(&cur->optuoa, &um->optuoa, sizeof(cur->optuoa));
-			mod_timer(&cur->timer, jiffies + uoa_map_timeout * HZ);
+		    memmove(&cur->optuoa, &um->optuoa, sizeof(cur->optuoa));
+		    mod_timer(&cur->timer, jiffies + uoa_map_timeout * HZ);
 
-			kmem_cache_free(uoa_map_cache, um);
+		    kmem_cache_free(uoa_map_cache, um);
 
-			uoa_map_dump(cur, "udp:");
-			goto hashed;
+		    uoa_map_dump(cur, "udp:");
+		    goto hashed;
 		}
 	}
 
@@ -375,41 +375,41 @@ static inline int uoa_map_unhash(struct uoa_map *um)
 static inline struct uoa_map *uoa_map_get(__be16 af,
                                           union inet_addr *saddr,
                                           union inet_addr *daddr,
-					                      __be16 sport, __be16 dport)
+                                          __be16 sport, __be16 dport)
 {
-	unsigned int hash = __uoa_map_hash_key(af, saddr, daddr, sport, dport);
-	struct hlist_head *head = &uoa_map_tab[hash];
-	struct uoa_map *um = NULL;
+    unsigned int hash = __uoa_map_hash_key(af, saddr, daddr, sport, dport);
+    struct hlist_head *head = &uoa_map_tab[hash];
+    struct uoa_map *um = NULL;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
-	struct hlist_node *node;
+    struct hlist_node *node;
 #endif
 
-	um_lock_bh(hash);
+    um_lock_bh(hash);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
-	hlist_for_each_entry_rcu(um, head, hlist) {
+    hlist_for_each_entry_rcu(um, head, hlist) {
 #else
-	hlist_for_each_entry_rcu(um, node, head, hlist) {
+        hlist_for_each_entry_rcu(um, node, head, hlist) {
 #endif
-		/* we allow daddr being set to wildcard (zero),
-		 * since UDP server may bind INADDR_ANY */
-		if (um->af == af &&
-            inet_addr_equal(af, &um->saddr, saddr) &&
-                (inet_is_addr_any(af, daddr) ||
-                 inet_addr_equal(af, &um->daddr, daddr)) &&
-		    um->sport == sport && um->dport == dport) {
-			mod_timer(&um->timer, jiffies + uoa_map_timeout * HZ);
-			atomic_inc(&um->refcnt);
+            /* we allow daddr being set to wildcard (zero),
+             * since UDP server may bind INADDR_ANY */
+            if (um->af == af &&
+                inet_addr_equal(af, &um->saddr, saddr) &&
+                    (inet_is_addr_any(af, daddr) ||
+                    inet_addr_equal(af, &um->daddr, daddr)) &&
+                um->sport == sport && um->dport == dport) {
+                mod_timer(&um->timer, jiffies + uoa_map_timeout * HZ);
+                atomic_inc(&um->refcnt);
 
-			um_unlock_bh(hash);
-			return um;
-		}
-	}
+                um_unlock_bh(hash);
+                return um;
+            }
+        }
 
-	um_unlock_bh(hash);
+        um_unlock_bh(hash);
 
-	return NULL;
-}
+        return NULL;
+    }
 
 static inline void uoa_map_put(struct uoa_map *um)
 {
@@ -608,8 +608,8 @@ static int uoa_map_init(void)
 
 	/* mapping cache */
 	uoa_map_cache = kmem_cache_create("uoa_map",
-					                  sizeof(struct uoa_map), 0,
-					                  SLAB_HWCACHE_ALIGN, NULL);
+	                                  sizeof(struct uoa_map), 0,
+	                                  SLAB_HWCACHE_ALIGN, NULL);
 	if (!uoa_map_cache) {
 		pr_err("fail to create uoa_map cache\n");
 		vfree(uoa_map_tab);
@@ -649,7 +649,7 @@ static int uoa_send_ack(const struct sk_buff *oskb)
 
 static struct uoa_map *uoa_parse_ipopt(__be16 af, unsigned char *optptr,
                                        int optlen, void *iph,
-				                       __be16 sport, __be16 dport)
+                                       __be16 sport, __be16 dport)
 {
 	int l;
 	struct uoa_map *um = NULL;
@@ -765,7 +765,6 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
 		return NULL;
 
 	uh = iph + iphdrlen + opplen;
-
 	optlen = opplen - sizeof(*opph);
 	optptr = (unsigned char *)(opph + 1);
 
@@ -802,9 +801,16 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
         /* re-calc checksum */
         ip_send_check(iph);
     } else {
-        /* fix me, check if ipv6 need do upper change as v4
-         * if need re-calc chesum */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,0,0)
+        /* do as upper ipv4, handle for old kernel version */
+        int payload_len = ntohs(((struct ipv6hdr *)iph)->payload_len);
+        ((struct ipv6hdr *)iph)->payload_len = htons(payload_len - opplen);
         ((struct ipv6hdr *)iph)->nexthdr = opph->protocol;
+        memmove(iph + iphdrlen, uh, ntohs(uh->len));
+        skb_set_transport_header(skb, iphdrlen);
+#else
+        ((struct ipv6hdr *)iph)->nexthdr = opph->protocol;
+#endif
     }
 
 	return um;
@@ -813,7 +819,7 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
 static struct uoa_map *uoa_skb_rcv_opt(struct sk_buff *skb)
 {
     struct iphdr *iph = ip_hdr(skb);
-    __be16 af = ((6 == iph->version) ? AF_INET6 : AF_INET);
+    __be16 af = ((4 == iph->version) ? AF_INET : AF_INET6);
 
     if (AF_INET6 == af) {
         struct ipv6hdr *iph6 = ipv6_hdr(skb);
@@ -869,7 +875,16 @@ static unsigned int uoa_ip_local_in(unsigned int hooknum,
 static struct nf_hook_ops uoa_nf_hook_ops[] __read_mostly = {
 	{
 		.hook		= uoa_ip_local_in,
-		.pf		= NFPROTO_IPV4,
+		.pf 		= NFPROTO_IPV4,
+		.hooknum	= NF_INET_LOCAL_IN,
+		.priority	= NF_IP_PRI_NAT_SRC + 1,
+	},
+};
+
+static struct nf_hook_ops uoa_nf_hook_ops6[] __read_mostly = {
+	{
+		.hook		= uoa_ip_local_in,
+		.pf 		= NFPROTO_IPV6,
 		.hooknum	= NF_INET_LOCAL_IN,
 		.priority	= NF_IP_PRI_NAT_SRC + 1,
 	},
@@ -896,8 +911,11 @@ static __init int uoa_init(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
 	err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops,
 				    ARRAY_SIZE(uoa_nf_hook_ops));
+	err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops6,
+				    ARRAY_SIZE(uoa_nf_hook_ops6));
 #else
 	err = nf_register_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
+	err = nf_register_hooks(uoa_nf_hook_ops6, ARRAY_SIZE(uoa_nf_hook_ops6));
 #endif
 	if (err < 0) {
 		pr_err("fail to register netfilter hooks.\n");
@@ -919,8 +937,11 @@ static __exit void uoa_exit(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
 	nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops,
 				ARRAY_SIZE(uoa_nf_hook_ops));
+	nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops6,
+				ARRAY_SIZE(uoa_nf_hook_ops6));
 #else
 	nf_unregister_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
+	nf_unregister_hooks(uoa_nf_hook_ops6, ARRAY_SIZE(uoa_nf_hook_ops6));
 #endif
 	synchronize_net();
 

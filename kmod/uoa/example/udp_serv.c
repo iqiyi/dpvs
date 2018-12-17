@@ -92,9 +92,22 @@ void handle_reply(int efd, int fd)
         inet_ntop(AF_INET6, &sin6->sin6_addr, from, sizeof(from));
         printf("Receive %d bytes from %s:%d -- %s\n",
                 n, from, ntohs(sin6->sin6_port), buff);
+        /* get real client address */
+        memset(&map, 0, sizeof(map));
+        map.af    = af;
+        map.sport = sin6->sin6_port;
+        map.dport = htons(SERV_PORT);
+        memmove(&map.saddr, &sin6->sin6_addr, sizeof(struct in6_addr));
+        mlen = sizeof(map);
 
-        /* Todo: IPv6 uoa support */
+        if (getsockopt(fd, IPPROTO_IP, UOA_SO_GET_LOOKUP, &map, &mlen) == 0) {
+            inet_ntop(AF_INET6, &map.real_saddr.in6, from, sizeof(from));
+            printf("  real client %s:%d\n", from, ntohs(map.real_sport));
+        } else {
+            printf("  sorry, getsockopt error.\n");
+        }
 
+        len = sizeof(peer);
         sendto(fd, buff, n, 0, (SA *)&peer, len);
     }
 }
