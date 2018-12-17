@@ -1120,9 +1120,9 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
     struct rte_mbuf *ack_mbuf;
     struct rte_mempool *pool;
     struct tcphdr *ack_th;
-	
+
     if (!conn->packet_out_xmit) {
-	return EDPVS_INVAL;
+        return EDPVS_INVAL;
     }
 
     pool = get_mbuf_pool(conn, DPVS_CONN_DIR_OUTBOUND);
@@ -1151,42 +1151,42 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
     /* add one to seq and seq will be adjust later */
     ack_th->seq = htonl(ntohl(ack_th->seq)+1);
     ack_th->doff = sizeof(struct tcphdr) >> 2;
-	
-    if (AF_INET6 == af) {
-	struct ip6_hdr *ack_ip6h;
-	struct ip6_hdr *reuse_ip6h = (struct ip6_hdr *)ip6_hdr(mbuf);
-	/* Reserve space for ipv6 header */
-	ack_ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(ack_mbuf,
-			sizeof(struct ip6_hdr));
-	if (!ack_ip6h) {
-	    rte_pktmbuf_free(ack_mbuf);
-	    RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
-	    return EDPVS_NOROOM;
-	}
 
-	memcpy(ack_ip6h, reuse_ip6h, sizeof(struct ip6_hdr));
-	ack_ip6h->ip6_vfc = 0x60;  /* IPv6 */
-	ack_ip6h->ip6_plen = htons(sizeof(struct tcphdr));
-	ack_ip6h->ip6_nxt = NEXTHDR_TCP;
+    if (AF_INET6 == af) {
+        struct ip6_hdr *ack_ip6h;
+        struct ip6_hdr *reuse_ip6h = (struct ip6_hdr *)ip6_hdr(mbuf);
+        /* Reserve space for ipv6 header */
+        ack_ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(ack_mbuf,
+                                         sizeof(struct ip6_hdr));
+        if (!ack_ip6h) {
+            rte_pktmbuf_free(ack_mbuf);
+            RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
+            return EDPVS_NOROOM;
+        }
+
+        memcpy(ack_ip6h, reuse_ip6h, sizeof(struct ip6_hdr));
+        ack_ip6h->ip6_vfc = 0x60;  /* IPv6 */
+        ack_ip6h->ip6_plen = htons(sizeof(struct tcphdr));
+        ack_ip6h->ip6_nxt = NEXTHDR_TCP;
         ack_mbuf->l3_len = sizeof(*ack_ip6h);
     } else {
-	struct ipv4_hdr *ack_iph;
-	struct ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
-	int pkt_ack_len = sizeof(struct tcphdr) + sizeof(struct iphdr);
-	/* Reserve space for ipv4 header */
+        struct ipv4_hdr *ack_iph;
+        struct ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
+        int pkt_ack_len = sizeof(struct tcphdr) + sizeof(struct iphdr);
+        /* Reserve space for ipv4 header */
         ack_iph = (struct ipv4_hdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct ipv4_hdr));
-	if (!ack_iph) {
-	    rte_pktmbuf_free(ack_mbuf);
-	    RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
-	    return EDPVS_NOROOM;
-	}
+        if (!ack_iph) {
+            rte_pktmbuf_free(ack_mbuf);
+            RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
+            return EDPVS_NOROOM;
+        }
 
-	memcpy(ack_iph, reuse_iph, sizeof(struct ipv4_hdr));
-	/* version and ip header length */
-	ack_iph->version_ihl = 0x45;
-	ack_iph->type_of_service = 0;
-	ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
-	ack_iph->total_length = htons(pkt_ack_len);
+        memcpy(ack_iph, reuse_iph, sizeof(struct ipv4_hdr));
+        /* version and ip header length */
+        ack_iph->version_ihl = 0x45;
+        ack_iph->type_of_service = 0;
+        ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+        ack_iph->total_length = htons(pkt_ack_len);
         ack_mbuf->l3_len = sizeof(*ack_iph);
     }
 
