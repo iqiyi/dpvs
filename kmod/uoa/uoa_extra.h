@@ -1,15 +1,12 @@
 #ifndef __UOA_EXTRA_H__
 #define __UOA_EXTRA_H__
 
+#include <linux/ipv6.h>
+
 union inet_addr {
     struct in_addr      in;
     struct in6_addr     in6;
 };
-
-int ipv6_hdrlen(const struct sk_buff *skb)
-{
-    return 40;
-}
 
 static inline uint32_t inet_addr_fold(int af, const union inet_addr *addr)
 {

@@ -98,6 +98,7 @@ static struct kmem_cache *uoa_map_cache __read_mostly;
 static unsigned int uoa_map_rnd __read_mostly;
 
 static atomic_t uoa_map_count = ATOMIC_INIT(0);
+static int ipv6_hdrlen(const struct sk_buff *skb);
 
 /* uoa mapping table lock array */
 #define UOA_MAP_LOCKARR_BITS	5
@@ -809,7 +810,7 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
         memmove(iph + iphdrlen, uh, ntohs(uh->len));
         skb_set_transport_header(skb, iphdrlen);
 #else
-        ((struct ipv6hdr *)iph)->nexthdr = opph->protocol;
+         ((struct ipv6hdr *)iph)->nexthdr = opph->protocol;
 #endif
     }
 
@@ -819,12 +820,17 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
 static struct uoa_map *uoa_skb_rcv_opt(struct sk_buff *skb)
 {
     struct iphdr *iph = ip_hdr(skb);
-    __be16 af = ((4 == iph->version) ? AF_INET : AF_INET6);
+    __be16 af = ((6 == iph->version) ? AF_INET6 : AF_INET);
 
     if (AF_INET6 == af) {
-        struct ipv6hdr *iph6 = ipv6_hdr(skb);
-        if (unlikely(iph6->nexthdr == IPPROTO_OPT)) {
-            return uoa_opp_rcv(af, (void *)iph6, skb);
+        struct ipv6hdr *ip6h = ipv6_hdr(skb);
+        if (ipv6_hdrlen(skb) != sizeof(struct ipv6hdr)) {
+            if (uoa_debug) {
+                pr_info("we not support uoa with ipv6 ext header now.");
+            }
+        }
+        if (unlikely(ip6h->nexthdr == IPPROTO_OPT)) {
+            return uoa_opp_rcv(af, (void *)ip6h, skb);
         }
     } else {
         if (unlikely(iph->ihl > 5) && iph->protocol == IPPROTO_UDP)
@@ -951,6 +957,17 @@ static __exit void uoa_exit(void)
 	uoa_map_exit();
 
 	pr_info("UOA module removed\n");
+}
+
+static int ipv6_hdrlen(const struct sk_buff *skb)
+{
+    struct ipv6hdr *ip6h = ipv6_hdr(skb);
+    __be16 frag_off;
+    uint8_t ip6nxt = ip6h->nexthdr;
+    int ip6_hdrlen = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), &ip6nxt,
+                                      &frag_off);
+
+    return (ip6_hdrlen >= 0) ? ip6_hdrlen : sizeof(struct ipv6hdr);
 }
 
 module_init(uoa_init);

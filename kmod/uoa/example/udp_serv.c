@@ -103,8 +103,6 @@ void handle_reply(int efd, int fd)
         if (getsockopt(fd, IPPROTO_IP, UOA_SO_GET_LOOKUP, &map, &mlen) == 0) {
             inet_ntop(AF_INET6, &map.real_saddr.in6, from, sizeof(from));
             printf("  real client %s:%d\n", from, ntohs(map.real_sport));
-        } else {
-            printf("  sorry, getsockopt error.\n");
         }
 
         len = sizeof(peer);

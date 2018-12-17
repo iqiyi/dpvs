@@ -253,12 +253,12 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
         /* UOA_M_OPP */
         if (AF_INET6 == af) {
             ((struct ip6_hdr *)iph)->ip6_plen =
-                                sizeof(*opp) + sizeof(*uoa) + sizeof(*uh);
+                                sizeof(*opp) + ipolen_uoa + sizeof(*uh);
             ((struct ip6_hdr *)iph)->ip6_nxt = IPPROTO_OPT;
         } else {
             ((struct iphdr *)iph)->ihl = sizeof(struct iphdr) / 4;
             ((struct iphdr *)iph)->tot_len = htons(sizeof(struct iphdr) +
-                                sizeof(*opp) + sizeof(*uoa) + sizeof(*uh));
+                                sizeof(*opp) + ipolen_uoa + sizeof(*uh));
             ((struct iphdr *)iph)->protocol = IPPROTO_OPT;
         }
 
@@ -471,13 +471,23 @@ static int insert_opp_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     opph->length = htons(sizeof(*opph) + ipolen_uoa);
 
     uoa = (void *)opph->options;
-    memset(uoa, 0, sizeof(struct ipopt_uoa));
+    memset(uoa, 0, ipolen_uoa);
     uoa->op_code = IPOPT_UOA;
     uoa->op_len  = ipolen_uoa;
     uoa->op_port = uh->source;
     if (AF_INET6 == af) {
         memcpy(&uoa->op_addr, &((struct ip6_hdr *)niph)->ip6_src, 
                                                     IPV6_ADDR_LEN_IN_BYTES);
+        /*
+         * we should set the 'nexthdr' of the last ext header to IPPROTO_OPT here
+         * but seems no efficient method to set that one
+         * ip6_skip_exthdr was only used to get the value
+         * so we send_standalone_uoa when has ip ext headers
+         */
+        if (iphdrlen != sizeof(struct ipv6_hdr)) {
+            goto standalone_uoa;
+        }
+
         ((struct ip6_hdr *)niph)->ip6_nxt = IPPROTO_OPT;
         /* Update ipv6 payload length */
         ((struct ip6_hdr *)niph)->ip6_plen =
@@ -628,17 +638,18 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
      * header exist, we just not calc UDP checksum.
      */
     ((struct udp_hdr *)uh)->dgram_cksum = 0;
-    if (!opp) {
-        if (AF_INET6 == af) {
-            udp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), (struct udphdr*)uh);
-        } else {
-            udp4_send_csum(ip4_hdr(mbuf), (struct udphdr *)uh);
-        }
+    if (!opp && AF_INET == af) {
+        udp4_send_csum(ip4_hdr(mbuf), (struct udphdr *)uh);
     }
-    /* FIXME:
-     * 1. IPv6 UDP checksum is a must, packets with OPP header also need checksum.
-     * 2. UDP checksum offload is to be supported.
+
+    /* 
+     * IPv6 UDP checksum is a must, packets with OPP header also need checksum.
+     * if udp checksum error here, may cause tcpdump & uoa moudule parse packets
+     * correctly, however socket can not receive L4 data.
      */
+    if (AF_INET6 == af) {
+        udp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), (struct udphdr*)uh);
+    }
 
     return EDPVS_OK;
 }
