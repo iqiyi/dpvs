@@ -168,8 +168,11 @@ static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
     p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
 
     weight = rte_atomic16_read(&dest->weight);
-    if (weight <= 0)
-        return EDPVS_OK;
+    if (weight < 0) {
+        RTE_LOG(ERR, SERVICE, "%s: add dest with weight(%d) less than 0\n",
+                __func__, weight);
+        return EDPVS_INVAL;
+    }
 
     p_conhash_node = rte_zmalloc(NULL, sizeof(struct conhash_node),
             RTE_CACHE_LINE_SIZE);
@@ -186,10 +189,6 @@ static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
 
     // add node to conhash
     p_node = &(p_conhash_node->node);
-
-    rte_atomic32_inc(&dest->refcnt);
-    p_node->data = dest;
-
     addr_fold = inet_addr_fold(dest->af, &dest->addr);
     snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
 
@@ -200,6 +199,10 @@ static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
         rte_free(p_conhash_node);
         return EDPVS_INVAL;
     }
+
+    // set node data
+    rte_atomic32_inc(&dest->refcnt);
+    p_node->data = dest;
 
     // add conhash node to list
     list_add(&(p_conhash_node->list), &(p_sched_data->nodes));
@@ -265,13 +268,8 @@ static int dp_vs_conhash_edit_dest(struct dp_vs_service *svc,
                 return EDPVS_INVAL;
             }
 
-            // del from node list if weight is 0
-            if (weight == 0) {
-                node_fini(p_node);
-                return EDPVS_OK;
-            }
-
             // adjust weight
+            p_conhash_node->weight = weight;
             addr_fold = inet_addr_fold(dest->af, &dest->addr);
             snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
             conhash_set_node(p_node, str, weight * REPLICA);
