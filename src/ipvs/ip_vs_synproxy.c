@@ -648,7 +648,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
             mbuf->l3_len = iphlen;
             mbuf->l4_len = ntohs(iph->tot_len) - iphlen;
-            th->check = rte_ipv4_phdr_cksum((struct ipv4_hdr*)iph, mbuf->ol_flags);
+            th->check = ip4_phdr_cksum((struct ipv4_hdr*)iph, mbuf->ol_flags);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return;

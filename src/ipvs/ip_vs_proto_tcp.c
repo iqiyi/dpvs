@@ -140,7 +140,7 @@ inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
 inline void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th)
 {
     th->check = 0;
-    th->check = rte_ipv4_udptcp_cksum(iph, th);
+    th->check = ip4_udptcp_cksum(iph, th);
 }
 
 /*
@@ -153,6 +153,52 @@ inline void tcp6_send_csum(struct ipv6_hdr *iph, struct tcphdr *th) {
     th->check = 0;
     th->check = ip6_udptcp_cksum((struct ip6_hdr *)iph, th,
             (void *)th - (void *)iph, IPPROTO_TCP);
+}
+
+static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
+        const struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
+{
+    /* leverage HW TX TCP csum offload if possible */
+
+    struct netif_port *dev = NULL;
+
+    if (AF_INET6 == af) {
+        struct route6 *rt6 = mbuf->userdata;
+        struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+        if (rt6 && rt6->rt6_dev)
+            dev = rt6->rt6_dev;
+        else if (conn->out_dev)
+            dev = conn->out_dev;
+        if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+            mbuf->l3_len = iphdrlen;
+            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
+            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
+        } else {
+            if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
+                return EDPVS_INVPKT;
+            tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
+        }
+    } else { /* AF_INET */
+        struct route_entry *rt = mbuf->userdata;
+        struct ipv4_hdr *iph = ip4_hdr(mbuf);
+        if (rt && rt->port)
+            dev = rt->port;
+        else if (conn->out_dev)
+            dev = conn->out_dev;
+        if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+            mbuf->l4_len = ntohs(iph->total_length) - iphdrlen;
+            mbuf->l3_len = iphdrlen;
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+            th->check = ip4_phdr_cksum(iph, mbuf->ol_flags);
+        } else {
+            if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
+                return EDPVS_INVPKT;
+            tcp4_send_csum(iph, th);
+        }
+    }
+
+    return EDPVS_OK;
 }
 
 static inline uint32_t seq_scale(uint32_t seq)
@@ -624,8 +670,6 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    struct route_entry *rt = mbuf->userdata;
-    struct netif_port *dev = NULL;
     /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
     int af = tuplehash_out(conn).af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
@@ -666,43 +710,14 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
     th->source  = conn->lport;
     th->dest    = conn->dport;
 
-    if (rt && rt->port)
-        dev = rt->port;
-    else if (conn->in_dev)
-        dev = conn->in_dev;
 
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-        if (AF_INET6 == af) {
-            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-            mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
-        } else {
-            mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
-            mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
-        }
-    } else {
-        if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
-            return EDPVS_INVPKT;
-        if (AF_INET6 == af) {
-            tcp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), th);
-        } else {
-            tcp4_send_csum(ip4_hdr(mbuf), th);
-        }
-    }
-
-    return EDPVS_OK;
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
 }
 
 static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    struct route_entry *rt = mbuf->userdata;
-    struct netif_port *dev = NULL;
     /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4*/
     int af = tuplehash_in(conn).af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
@@ -734,43 +749,13 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
     if (th->syn && th->ack)
         tcp_out_init_seq(conn, th);
 
-    if (rt && rt->port)
-        dev = rt->port;
-    else if (conn->out_dev)
-        dev = conn->out_dev;
-
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-        if (AF_INET6 == af) {
-            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-            mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
-        } else {
-            mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
-            mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
-        }
-    } else {
-        if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
-            return EDPVS_INVPKT;
-        if (AF_INET6 == af) {
-            tcp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), th);
-        } else {
-            tcp4_send_csum(ip4_hdr(mbuf), th);
-        }
-    }
-
-    return EDPVS_OK;
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
 }
 
 static int tcp_snat_in_handler(struct dp_vs_proto *proto,
                                struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    struct netif_port *dev = NULL;
-    struct route_entry *rt = mbuf->userdata;
     int af = conn->af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
@@ -788,42 +773,13 @@ static int tcp_snat_in_handler(struct dp_vs_proto *proto,
     th->dest = conn->dport;
 
     /* L4 re-checksum */
-    if (rt && rt->port)
-        dev = rt->port;
-
-    /* leverage HW TX TCP csum offload if possible */
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-        if (AF_INET6 == af) {
-            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-            mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
-        } else {
-            mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
-            mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
-        }
-    } else {
-        if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
-            return EDPVS_INVPKT;
-        if (AF_INET6 == af) {
-            tcp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), th);
-        } else {
-            tcp4_send_csum(ip4_hdr(mbuf), th);
-        }
-    }
-
-    return EDPVS_OK;
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
 }
 
 static int tcp_snat_out_handler(struct dp_vs_proto *proto,
                                 struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    struct netif_port *dev = NULL;
-    struct route_entry *rt = mbuf->userdata;
     int af = conn->af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
@@ -841,34 +797,7 @@ static int tcp_snat_out_handler(struct dp_vs_proto *proto,
     th->source = conn->vport;
 
     /* L4 re-checksum */
-    if (rt && rt->port)
-        dev = rt->port;
-
-    /* leverage HW TX TCP csum offload if possible */
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-        if (AF_INET6 == af) {
-            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-            mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
-        } else {
-            mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
-            mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
-        }
-    } else {
-        if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
-            return EDPVS_INVPKT;
-        if (AF_INET6 == af) {
-            tcp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), th);
-        } else {
-            tcp4_send_csum(ip4_hdr(mbuf), th);
-        }
-    }
-
-    return EDPVS_OK;
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
 }
 
 static inline int tcp_state_idx(struct tcphdr *th)
