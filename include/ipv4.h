@@ -144,4 +144,56 @@ static inline bool ip4_is_frag(struct ipv4_hdr *iph)
             & htons(IPV4_HDR_MF_FLAG | IPV4_HDR_OFFSET_MASK)) != 0;
 }
 
+/*
+ * Process the pseudo-header checksum of an IPv4 header.
+ *
+ * Different from "rte_ipv4_phdr_cksum", "ip4_phdr_cksum" allows for ipv4 options.
+ * The checksum field must be set to 0 by the caller.
+ *
+ * @param iph
+ *   The pointer to the contiguous IPv4 header.
+ * @param ol_flags
+ *   The ol_flags of the associated mbuf.
+ * @return
+ *   The non-complemented pseudo checksum to set in the L4 header.
+ */
+static inline uint16_t ip4_phdr_cksum(struct ipv4_hdr *iph, uint64_t ol_flags)
+{
+    uint16_t csum;
+    uint16_t total_length = iph->total_length;
+
+    iph->total_length = htons(ntohs(total_length) -
+            ((iph->version_ihl & 0xf) << 2) + sizeof(struct ipv4_hdr));
+    csum = rte_ipv4_phdr_cksum(iph, ol_flags);
+
+    iph->total_length = total_length;
+    return csum;
+}
+
+/*
+ * Process the IPv4 UDP or TCP checksum.
+ *
+ * Different from "rte_ipv4_udptcp_cksum", "ip4_udptcp_cksum" allows for ipv4 options.
+ * The IP and layer 4 checksum must be set to 0 in the packet by the caller.
+ *
+ * @param iph
+ *   The pointer to the contiguous IPv4 header.
+ * @param l4_hdr
+ *   The pointer to the beginning of the L4 header.
+ * @return
+ *   The complemented checksum to set in the L4 header.
+ */
+static inline uint16_t ip4_udptcp_cksum(struct ipv4_hdr *iph, const void *l4_hdr)
+{
+    uint16_t csum;
+    uint16_t total_length = iph->total_length;
+
+    iph->total_length = htons(ntohs(total_length) -
+            ((iph->version_ihl & 0xf) << 2) + sizeof(struct ipv4_hdr));
+    csum = rte_ipv4_udptcp_cksum(iph, l4_hdr);
+
+    iph->total_length = total_length;
+    return csum;
+}
+
 #endif /* __DPVS_IPV4_H__ */
