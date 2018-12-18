@@ -641,6 +641,9 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
 
     dp_vs_blklst_flush(svc);
 
+    /* flush acl */
+    dp_vs_acl_flush(svc);
+
     /*
      *    Unlink the whole destination list
      */

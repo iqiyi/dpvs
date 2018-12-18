@@ -32,10 +32,6 @@
 #include "linux_ipv6.h"
 #include "ipvs/ipvs.h"
 
-#define DPVS_ACL_TAB_BITS    16
-#define DPVS_ACL_TAB_SIZE    (1 << DPVS_ACL_TAB_BITS)
-#define DPVS_ACL_TAB_MASK    (DPVS_ACL_TAB_SIZE - 1)
-
 static int dp_vs_acl_parse(const char *srange, const char *drange,
                            int rule, int max_conn,
                            struct dp_vs_acl *acl);
@@ -276,6 +272,7 @@ int dp_vs_acl_flush(struct dp_vs_service *svc)
     list_for_each_entry_safe(acl_curr, acl_next, &svc->acl_list, list) {
         list_del(&acl_curr->list);
         rte_free(acl_curr);
+        --svc->num_acls;
     }
     rte_rwlock_write_unlock(&svc->acl_lock);
 
