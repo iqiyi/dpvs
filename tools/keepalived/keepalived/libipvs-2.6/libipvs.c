@@ -464,7 +464,7 @@ int ipvs_del_acl(ipvs_service_t *svc, ipvs_acl_t *acl)
     return dpvs_setsockopt(SOCKOPT_SET_ACL_DEL, &conf, sizeof(conf));
 }
 
-struct ip_vs_get_acls *ipvs_get_allacls(ipvs_service_entry_t *svc)
+struct ip_vs_get_acls *ipvs_get_acls(ipvs_service_entry_t *svc)
 {
     if (!svc)
         return NULL;

@@ -382,9 +382,6 @@ static int dp_vs_acl_getall(struct dp_vs_service *svc,
     return EDPVS_OK;
 }
 
-/*
- * for control plane
- */
 static int acl_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
     const struct dp_vs_acl_conf *acl_conf = conf;

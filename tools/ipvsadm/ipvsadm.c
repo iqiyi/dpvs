@@ -335,7 +335,9 @@ static int list_all_laddrs(void);
 static void list_acls_print_title(void);
 static int list_all_acls(void);
 static int flush_all_acls(void);
-static void print_service_and_acls(struct ip_vs_get_acls *acls, int with_title);
+static void print_service_and_acls(struct ip_vs_service_entry *svc_entry,
+                                   struct ip_vs_get_acls *acls,
+                                   int with_title);
 static void list_blklsts_print_title(void);
 static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
 static int list_all_blklsts(void);
@@ -1050,10 +1052,6 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		break;
 
 	case CMD_GETACL:
-		/* if(options & OPT_SERVICE) */
-			/* result = list_laddrs(&ce.svc , 1); */
-		/* else */
-			/* result = list_all_laddrs(); */
         result = list_all_acls();
 		break;
 
@@ -2159,12 +2157,16 @@ static void list_acls_print_title()
            "  -> RemoteAddress:Port           Forward MaxConn PermitConn DenyConn\n");
 }
 
-static void list_acls_print_acl(struct ip_vs_acl_entry *entry)
+static void list_acls_print_acl(ipvs_service_entry_t *svc_entry,
+                                ipvs_acl_entry_t     *acl_entry,
+                                unsigned int format)
 {
+    struct ip_vs_get_dests *d;
     char svc_name[256];
     char *proto, *rule;
+    int i;
 
-    switch (entry->proto) {
+    switch (acl_entry->proto) {
         case IPPROTO_TCP:
             proto = "tcp";
             break;
@@ -2181,46 +2183,55 @@ static void list_acls_print_acl(struct ip_vs_acl_entry *entry)
             proto = "unknown";
             break;
     }
-
-    if (entry->rule == IP_VS_ACL_DENY) {
+    if (acl_entry->rule == IP_VS_ACL_DENY) {
         rule = "deny";
-    } else if (entry->rule == IP_VS_ACL_PERMIT) {
+    } else if (acl_entry->rule == IP_VS_ACL_PERMIT) {
         rule = "permit";
     }
 
-#if 0
-    if (format & FMT_RULE) {
-        snprintf(svc_name, sizeof(svc_name),
-                    "--acl proto=%s,rule=%s,max-conn=%d,src-range=%s,dst-range=%s",
-                    proto, rule, entry->max_conn, entry->srange, entry->drange);
-    }
-#endif
-
-#if 1
     int left = sizeof(svc_name);
     svc_name[0] = '\0';
 
     left -= snprintf(svc_name + strlen(svc_name), left,
                 "ACL %s,%s", proto, rule);
 
-    if (strcmp(entry->srange, "[::-::]:0-0") != 0 &&
-                strcmp(entry->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+    if (strcmp(acl_entry->srange, "[::-::]:0-0") != 0 &&
+                strcmp(acl_entry->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
       left -= snprintf(svc_name + strlen(svc_name), left,
-                  ",from=%s", entry->srange);
+                  ",from=%s", acl_entry->srange);
 
-    if (strcmp(entry->drange, "[::-::]:0-0") != 0 &&
-                strcmp(entry->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+    if (strcmp(acl_entry->drange, "[::-::]:0-0") != 0 &&
+                strcmp(acl_entry->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
       left -= snprintf(svc_name + strlen(svc_name), left,
-                  ",to=%s", entry->drange);
+                  ",to=%s", acl_entry->drange);
 
     printf("%-33s\n", svc_name);
-    printf("  -> %-28s %-7s %-7u %-10u %-10u\n", "192.168.10.1:0", "SNAT",
-                entry->max_conn, entry->p_conn, entry->d_conn);
 
-#endif
+    /* get and print dest info */
+    if (!(d = ipvs_get_dests(svc_entry))) {
+       fprintf(stderr, "%s\n", ipvs_strerror(errno));
+       exit(1);
+    }
+    ipvs_sort_dests(d, ipvs_cmp_dests);
+
+    for (i = 0; i < d->num_dests; ++i) {
+        char *dname;
+        ipvs_dest_entry_t *e = &d->entrytable[i];
+        if (!(dname = addrport_to_anyname(e->af, &(e->addr), ntohs(e->port),
+                            svc_entry->protocol, format))) {
+            fprintf(stderr, "addrport_to_anyname fails\n");
+            exit(1);
+        }
+        printf("  -> %-28s %-7s %-7u %-10u %-10u\n", dname, "SNAT",
+                    acl_entry->max_conn, acl_entry->p_conn, acl_entry->d_conn);
+        free(dname);
+    }
+    free(d);
 }
 
-static void print_service_and_acls(struct ip_vs_get_acls *acls, int with_title)
+static void print_service_and_acls(struct ip_vs_service_entry *svc_entry,
+                                   struct ip_vs_get_acls *acls,
+                                   int with_title)
 {
     int i = 0;
     if (with_title) {
@@ -2228,7 +2239,7 @@ static void print_service_and_acls(struct ip_vs_get_acls *acls, int with_title)
     }
 
     for (i = 0; i < acls->num_acls; ++i) {
-        list_acls_print_acl(acls->entrytable + i);
+        list_acls_print_acl(svc_entry, acls->entrytable + i, FMT_NONE);
     }
 }
 
@@ -2236,6 +2247,7 @@ static int list_all_acls(void)
 {
     struct ip_vs_get_services *get;
     struct ip_vs_get_acls *acls;
+    ipvs_service_entry_t *svc_entry;
     int i;
     int title_enable = 1;
 
@@ -2245,7 +2257,8 @@ static int list_all_acls(void)
     }
 
     for (i = 0; i < get->num_services; ++i) {
-        if (!(acls = ipvs_get_allacls(&(get->entrytable[i])))) {
+        svc_entry = &get->entrytable[i];
+        if (!(acls = ipvs_get_acls(svc_entry))) {
             free(get);
             fprintf(stderr, "%s\n", ipvs_strerror(errno));
             return -1;
@@ -2254,7 +2267,7 @@ static int list_all_acls(void)
         if (i != 0) {
             title_enable = 0;
         }
-        print_service_and_acls(acls, title_enable);
+        print_service_and_acls(svc_entry, acls, title_enable);
         free(acls);
     }
 
