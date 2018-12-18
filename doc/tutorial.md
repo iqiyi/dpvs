@@ -813,7 +813,7 @@ virtual_server match SNAT {
     }
 
     access_control acl2 {
-        rule deny
+        rule permit
         max_conn 6
         srange 192.168.9.10
         drange 192.168.10.11:80
@@ -836,6 +836,8 @@ ACL tcp,permit,from=192.168.9.10-192.168.9.10:0-0,to=0.0.0.0-0.0.0.0:80-80
   -> 192.168.10.1:0               SNAT    6       5          0
   -> 192.168.10.2:0               SNAT    6       0          0
 ```
+
+use `./ipvsadm --clear-acl` to clear all existing ACL.
 
 <a id='ipv6_support'/>
 

@@ -336,6 +336,8 @@ struct ip_vs_service_entry {
 	unsigned int		num_dests;
 	/* number of local address*/
 	unsigned int		num_laddrs;
+    /* number of acls */
+	unsigned int		num_acls;
 
 	/* statistics */
 	struct ip_vs_stats_user stats;

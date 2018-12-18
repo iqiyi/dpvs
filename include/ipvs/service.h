@@ -142,6 +142,8 @@ struct dp_vs_service_entry {
     char                drange[256];
     char                iifname[IFNAMSIZ];
     char                oifname[IFNAMSIZ];
+
+    uint32_t            num_acls;
 };
 
 struct dp_vs_get_services {

@@ -708,6 +708,7 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     dst->netmask = src->netmask;
     dst->num_dests = src->num_dests;
     dst->num_laddrs = src->num_laddrs;
+    dst->num_acls = src->num_acls;
 
     err = dp_vs_copy_stats(&dst->stats, src->stats);
 

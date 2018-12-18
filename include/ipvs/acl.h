@@ -101,7 +101,7 @@ struct dp_vs_acl_conf {
 
 int dp_vs_acl_init(void);
 int dp_vs_acl_term(void);
-int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc);
+int dp_vs_acl_judge(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc);
 int dp_vs_acl_flush(struct dp_vs_service *svc);
 
 #endif /* ifndef __DPVS_ACL_H__ */

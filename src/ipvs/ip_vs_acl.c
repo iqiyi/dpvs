@@ -279,7 +279,7 @@ int dp_vs_acl_flush(struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
-int dp_vs_acl(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
+int dp_vs_acl_judge(struct dp_vs_acl_flow *acl_flow, struct dp_vs_service *svc)
 {
     if (!acl_flow || !svc)
         return EDPVS_INVAL;

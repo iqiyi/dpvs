@@ -2278,6 +2278,7 @@ static int list_all_acls(void)
 static int flush_all_acls(void)
 {
     struct ip_vs_get_services *get;
+    ipvs_service_entry_t *svc_entry;
     int i;
 
     if (!(get = ipvs_get_services())) {
@@ -2286,9 +2287,9 @@ static int flush_all_acls(void)
     }
 
     for (i = 0; i < get->num_services; ++i) {
-        if (!ipvs_flush_acl(&(get->entrytable[i]))) {
-            /* free(get); */
-            /* fprintf(stderr, "%s\n", ipvs_strerror(errno)); */
+        svc_entry = &get->entrytable[i];
+        if (svc_entry->num_acls) {
+            ipvs_flush_acl(svc_entry);
         }
     }
 

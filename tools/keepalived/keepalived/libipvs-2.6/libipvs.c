@@ -85,6 +85,7 @@ typedef struct dpvs_servicedest_s {
 	SVC_CONVERT(X, Y) 					\
 	X->num_dests        = Y->num_dests;			\
 	X->num_laddrs       = Y->num_laddrs;			\
+	X->num_acls         = Y->num_acls;			\
 	memcpy(&X->stats, &Y->stats, sizeof(X->stats));		\
 	X->protocol = Y->proto;}
 
