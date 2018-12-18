@@ -61,17 +61,84 @@ static int udp_timeouts[DPVS_UDP_S_LAST + 1] = {
     [DPVS_UDP_S_LAST]   = 2,
 };
 
-inline void udp4_send_csum(struct ipv4_hdr *iph, struct udphdr *uh)
+inline void udp4_send_csum(struct ipv4_hdr *iph, struct udp_hdr *uh)
 {
-    uh->check = 0;
-    uh->check = rte_ipv4_udptcp_cksum(iph, uh);
+    uh->dgram_cksum = 0;
+    uh->dgram_cksum = ip4_udptcp_cksum(iph, uh);
 }
 
-inline void udp6_send_csum(struct ipv6_hdr *iph, struct udphdr *uh)
+inline void udp6_send_csum(struct ipv6_hdr *iph, struct udp_hdr *uh)
 {
-    uh->check = 0;
-    uh->check = ip6_udptcp_cksum((struct ip6_hdr *)iph, uh,
+    uh->dgram_cksum = 0;
+    uh->dgram_cksum = ip6_udptcp_cksum((struct ip6_hdr *)iph, (struct udphdr *)uh,
             (void *)uh - (void *)iph, IPPROTO_UDP);
+}
+
+static inline int udp_send_csum(int af, int iphdrlen, struct udp_hdr *uh,
+                                const struct dp_vs_conn *conn,
+                                struct rte_mbuf *mbuf, const struct opphdr *opp)
+{
+    /* leverage HW TX UDP csum offload if possible */
+
+    struct netif_port *dev = NULL;
+
+    if (AF_INET6 == af) {
+        /* UDP checksum is mandatory for IPv6.[RFC 2460] */
+        struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+        if (unlikely(opp != NULL)) {
+            udp6_send_csum((struct ipv6_hdr*)ip6h, uh);
+        } else {
+            struct route6 *rt6 = mbuf->userdata;
+            if (rt6 && rt6->rt6_dev)
+                dev = rt6->rt6_dev;
+            else if (conn->out_dev)
+                dev = conn->out_dev;
+            if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
+                mbuf->l3_len = iphdrlen;
+                mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) -iphdrlen;
+                mbuf->ol_flags |= (PKT_TX_UDP_CKSUM | PKT_TX_IPV6);
+                uh->dgram_cksum = ip6_phdr_cksum(ip6h, mbuf->ol_flags,
+                        iphdrlen, IPPROTO_UDP);
+            } else {
+                if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
+                    return EDPVS_INVPKT;
+                udp6_send_csum((struct ipv6_hdr*)ip6h, uh);
+            }
+        }
+    } else { /* AF_INET */
+        /* UDP checksum is not mandatory for IPv4. */
+        struct ipv4_hdr *iph = ip4_hdr(mbuf);
+        if (unlikely(opp != NULL)) {
+            /* 
+             * XXX: UDP pseudo header need UDP length, but the common helper function
+             * rte_ipv4_udptcp_cksum() use (IP.tot_len - IP.header_len), it's not
+             * correct if OPP header insterted between IP header and UDP header.
+             * We can modify the function, or change IP.tot_len before use
+             * rte_ipv4_udptcp_cksum() and restore it after.
+             *
+             * However, UDP checksum is not mandatory, to make things easier, when OPP
+             * header exist, we just not calc UDP checksum.
+             */
+            uh->dgram_cksum = 0;
+        } else {
+            struct route_entry *rt = mbuf->userdata;
+            if (rt && rt->port)
+                dev = rt->port;
+            else if (conn->out_dev)
+                dev = conn->out_dev;
+            if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
+                mbuf->l3_len = iphdrlen;
+                mbuf->l4_len = ntohs(iph->total_length) - iphdrlen;
+                mbuf->ol_flags |= (PKT_TX_UDP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+                uh->dgram_cksum = ip4_phdr_cksum(iph, mbuf->ol_flags);
+            } else {
+                if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
+                    return EDPVS_INVPKT;
+                udp4_send_csum(iph, uh);
+            }
+        }
+    }
+    return EDPVS_OK;
 }
 
 static int udp_conn_sched(struct dp_vs_proto *proto,
@@ -314,7 +381,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
          * if udp checksum error here, may cause tcpdump & uoa moudule parse packets
          * correctly, however socket can not receive L4 data.
          */
-        udp6_send_csum((struct ipv6_hdr *)iph, (struct udphdr*)uh);
+        udp6_send_csum((struct ipv6_hdr *)iph, (struct udp_hdr*)uh);
         mbuf->userdata = rt6 = (struct route6*)ombuf->userdata;
         route6_get(rt6);
         return ip6_local_out(mbuf);
@@ -627,31 +694,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
     uh->src_port = conn->lport;
     uh->dst_port = conn->dport;
 
-    /*
-     * XXX: UDP pseudo header need UDP length, but the common helper function
-     * rte_ipv4_udptcp_cksum() use (IP.tot_len - IP.header_len), it's not
-     * correct if OPP header insterted between IP header and UDP header.
-     * We can modify the function, or change IP.tot_len before use
-     * rte_ipv4_udptcp_cksum() and restore it after.
-     *
-     * However, UDP checksum is not mandatory, to make things easier, when OPP
-     * header exist, we just not calc UDP checksum.
-     */
-    ((struct udp_hdr *)uh)->dgram_cksum = 0;
-    if (!opp && AF_INET == af) {
-        udp4_send_csum(ip4_hdr(mbuf), (struct udphdr *)uh);
-    }
-
-    /*
-     * IPv6 UDP checksum is a must, packets with OPP header also need checksum.
-     * if udp checksum error here, may cause tcpdump & uoa moudule parse packets
-     * correctly, however socket can not receive L4 data.
-     */
-    if (AF_INET6 == af) {
-        udp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), (struct udphdr*)uh);
-    }
-
-    return EDPVS_OK;
+    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, opp);
 }
 
 static int udp_fnat_out_handler(struct dp_vs_proto *proto,
@@ -659,7 +702,7 @@ static int udp_fnat_out_handler(struct dp_vs_proto *proto,
                     struct rte_mbuf *mbuf)
 {
     struct udp_hdr *uh;
-    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4*/
+    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
     int af = tuplehash_in(conn).af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
@@ -673,13 +716,7 @@ static int udp_fnat_out_handler(struct dp_vs_proto *proto,
     uh->src_port = conn->vport;
     uh->dst_port = conn->cport;
 
-    if (AF_INET6 == af) {
-        udp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), (struct udphdr*)uh);
-    } else {
-        udp4_send_csum(ip4_hdr(mbuf), (struct udphdr *)uh);
-    }
-
-    return EDPVS_OK;
+    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL);
 }
 
 static int udp_fnat_in_pre_handler(struct dp_vs_proto *proto,
@@ -709,15 +746,9 @@ static int udp_snat_in_handler(struct dp_vs_proto *proto,
     if (unlikely(!uh))
         return EDPVS_INVPKT;
 
-    uh->dst_port    = conn->dport;
+    uh->dst_port = conn->dport;
 
-    if (AF_INET6 == af) {
-        udp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), (struct udphdr*)uh);
-    } else {
-        udp4_send_csum(ip4_hdr(mbuf), (struct udphdr *)uh);
-    }
-
-    return EDPVS_OK;
+    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL);
 }
 
 static int udp_snat_out_handler(struct dp_vs_proto *proto,
@@ -735,15 +766,9 @@ static int udp_snat_out_handler(struct dp_vs_proto *proto,
     if (unlikely(!uh))
         return EDPVS_INVPKT;
 
-    uh->src_port    = conn->vport;
+    uh->src_port = conn->vport;
 
-    if (AF_INET6 == af) {
-        udp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), (struct udphdr*)uh);
-    } else {
-        udp4_send_csum(ip4_hdr(mbuf), (struct udphdr *)uh);
-    }
-
-    return EDPVS_OK;
+    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL);
 }
 
 struct dp_vs_proto dp_vs_proto_udp = {
