@@ -12,6 +12,7 @@ DPVS Tutorial
 * [DR Mode (one-arm)](#dr)
 * [Tunnel Mode(one-arm)](#tunnel)
 * [NAT Mode(one-arm)](#nat)
+    - [ACL Support](#acl)
 * [SNAT Mode (two-arm)](#snat)
 * [IPv6 Support](#ipv6_support)
 * [Virtual devices](#virt-dev)
@@ -764,6 +765,76 @@ Then try Internet access from hosts through SNAT `DPVS` server.
 ```bash
 host$ ping www.iqiyi.com
 host$ curl www.iqiyi.com
+```
+
+<a id=acl></a>
+## ACL Support
+> `acl` supports `rule`,`max-conn`,`src-range`,`dst-range`. For example:`rule=deny,max-conn=0,src-range=192.168.9.11-192.168.9.240,dst-range=0.0.0.0-0.0.0.0:80-80`
+
+The ACL (with SNAT) setting could be:
+
+```bash
+MATCH0='proto=tcp,src-range=192.168.9.10-192.168.9.254,oif=dpdk0'
+MATCH1='proto=icmp,src-range=192.168.9.0-192.168.9.254,oif=dpdk0'
+
+./ipvsadm -A -s rr -H $MATCH0
+./ipvsadm -a -H $MATCH0 -r $WAN_IP:0 -w 100 -J
+
+./ipvsadm -A -s rr -H $MATCH1
+./ipvsadm -a -H $MATCH1 -r $WAN_IP:0 -w 100 -J
+
+ACL0='rule=deny,max-conn=0,src-range=192.168.9.11-192.168.9.240,dst-range=0.0.0.0-0.0.0.0:80-80'
+ACL1='rule=permit,max-conn=0,src-range=192.168.9.10,dst-range=0.0.0.0:80'
+ACL2='rule=deny,max-conn=100,src-range=192.168.9.1-192.168.9.240'
+./ipvsadm --add-acl --acl $ACL0 -H $MATCH0
+./ipvsadm --add-acl --acl $ACL1 -H $MATCH0
+./ipvsadm --add-acl --acl $ACL2 -H $MATCH1
+```
+
+You can also use `keepalived` to configure ACL instead of `ipvsadm`, the keyword was `access_control`. Every ACL entry must be embed in a `match`.
+
+```bash
+virtual_server match SNAT {
+    protocol TCP
+    lb_algo rr
+    lb_kind SNAT
+    src-range 192.168.9.10-192.168.9.254
+    oif dpdk0
+
+    real_server 192.168.10.1 0 {
+        weight 100
+    }
+
+    access_control acl1 {
+        rule deny
+        max_conn 10
+        srange 192.168.9.11-192.168.9.240
+        drange 0.0.0.0-0.0.0.0:80-80
+    }
+
+    access_control acl2 {
+        rule deny
+        max_conn 6
+        srange 192.168.9.10
+        drange 192.168.10.11:80
+    }
+}
+```
+
+you can use `./ipvsadm --get-acl` to get the ACL info, here is an example output:
+
+```bash
+# ./ipvsadm --get-acl
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward MaxConn PermitConn DenyConn
+ACL icmp,deny,from=192.168.9.1-192.168.9.240:0-0
+  -> 192.168.10.1:0               SNAT    100     0          0
+ACL tcp,deny,from=192.168.9.11-192.168.9.240:0-0,to=0.0.0.0-0.0.0.0:80-80
+  -> 192.168.10.1:0               SNAT    0       0          0
+  -> 192.168.10.2:0               SNAT    0       0          0
+ACL tcp,permit,from=192.168.9.10-192.168.9.10:0-0,to=0.0.0.0-0.0.0.0:80-80
+  -> 192.168.10.1:0               SNAT    6       5          0
+  -> 192.168.10.2:0               SNAT    6       0          0
 ```
 
 <a id='ipv6_support'/>
