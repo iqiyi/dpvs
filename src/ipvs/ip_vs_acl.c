@@ -38,39 +38,19 @@
 
 static uint32_t dp_vs_acl_rnd; /* hash random */
 
-static struct dp_vs_acl *dp_vs_acl_find(struct dp_vs_acl *acl,
-                                        struct list_head *head,
-                                        enum DP_VS_ACL_FIND_TYPE type);
+static struct dp_vs_acl *
+dp_vs_acl_find(struct dp_vs_acl *acl, struct dp_vs_service *svc,
+               uint32_t hashkey, enum DP_VS_ACL_FIND_TYPE type);
 
-#if 0
-static inline bool __flow_in_range(int af,
-                                   const union inet_addr *addr, __be16 port,
-                                   const struct inet_addr_range *range)
+static inline bool
+judge_addr_matched(int af, union inet_addr *addr1, union inet_addr *addr2)
 {
-    if (unlikely((af == AF_INET) &&
-        (ntohl(range->min_addr.in.s_addr) > ntohl(range->max_addr.in.s_addr))))
-        return false;
-
-    if (unlikely((af == AF_INET6) &&
-        ipv6_addr_cmp(&range->min_addr.in6, &range->max_addr.in6) > 0))
-        return false;
-
-    if (unlikely(ntohs(range->min_port) > ntohs(range->max_port)))
-        return false;
-
-    /* if both min/max are zero, means need not check. */
-    if (!inet_is_addr_any(af, &range->max_addr)) {
-        if (af == AF_INET) {
-            if (ntohl(addr->in.s_addr) < ntohl(range->min_addr.in.s_addr) ||
-                ntohl(addr->in.s_addr) > ntohl(range->max_addr.in.s_addr))
-                return false;
-        } else {
-            if (ipv6_addr_cmp(&range->min_addr.in6, &addr->in6) > 0 ||
-                ipv6_addr_cmp(&range->max_addr.in6, &addr->in6) < 0)
-                return false;
-        }
+    /* if addr2 is zero, means need not check. */
+    if (!inet_is_addr_any(af, addr2)) {
+        return inet_addr_equal(af, addr1, addr1);
     }
-#endif
+    return true;
+}
 
 static inline bool
 judge_port_betw(__be16 port, __be16 min_port, __be16 max_port)
@@ -78,6 +58,7 @@ judge_port_betw(__be16 port, __be16 min_port, __be16 max_port)
     if (unlikely(ntohs(min_port) > ntohs(max_port)))
         return false;
 
+    /* if both min/max are zero, means need not check. */
     if (max_port != 0) {
         if (ntohs(port) < ntohs(min_port) ||
             ntohs(port) > ntohs(max_port)) {
@@ -91,56 +72,109 @@ judge_port_betw(__be16 port, __be16 min_port, __be16 max_port)
  * addr & port was network bytes order
  */
 static inline uint32_t
-dp_vs_acl_hashkey(int af, union inet_addr *addr)
+dp_vs_acl_hashkey(int src_af, union inet_addr *saddr,
+                  int dst_af, union inet_addr *daddr)
 {
-    if (!addr)
+    if (!saddr || !daddr)
         return 0;
 
     uint32_t hashkey;
+    uint32_t saddr_fold, daddr_fold;
 
-    if (AF_INET == af) {
-        hashkey = rte_jhash(&addr->in, sizeof(addr->in), dp_vs_acl_rnd)
-            & DPVS_ACL_TAB_MASK;
-    } else {
-        hashkey = rte_jhash(&addr->in6, sizeof(addr->in6), dp_vs_acl_rnd)
-            & DPVS_ACL_TAB_MASK;
+    saddr_fold = inet_addr_fold(src_af, saddr);
+    daddr_fold = inet_addr_fold(dst_af, daddr);
+
+    if (!saddr_fold && !daddr_fold) {
+        RTE_LOG(DEBUG, ACL, "%s: IP proto not support in acl.\n", __func__);
+        return 0;
     }
+
+    hashkey = rte_jhash_2words(saddr_fold, daddr_fold, dp_vs_acl_rnd) &
+        DPVS_ACL_TAB_MASK;
 
     return hashkey;
 }
 
+/*
+ * ipv4 support: 192.168.0.1-192.168.0.254
+ * ipv6 support: 2001::1-2001::FFFF, only the last 4 bit range
+ */
 static int
-__acl_parse_add(const char *range, int rule, int max_conn,
-                struct dp_vs_service *svc, enum DPVS_ACL_EDGE edge)
+__calc_addr_cnt(int af, union inet_addr *min_addr, union inet_addr *max_addr)
 {
-    if (!range || !strlen(range) || !svc)
+    if (!min_addr || !max_addr)
+        return 0;
+
+    int addr_cnt = 0;
+
+    if (AF_INET == af) {
+        addr_cnt = ntohl(max_addr->in.s_addr) - ntohl(min_addr->in.s_addr) + 1;
+    } else {
+        addr_cnt = ntohs(max_addr->in6.s6_addr16[0]) -
+                                         ntohs(min_addr->in6.s6_addr16[0]) + 1;
+    }
+
+    return (addr_cnt >= 0) ? addr_cnt : 0;
+}
+
+static void
+__make_curr_addr(int af, union inet_addr *addr, int inc, union inet_addr *ret)
+{
+    if (!addr)
+        return;
+
+    memmove(ret, addr, sizeof(union inet_addr));
+
+    if (AF_INET == af) {
+        ret->in.s_addr = htonl(ntohl(addr->in.s_addr) + inc);
+    } else {
+        ret->in6.s6_addr16[0] = htons(ntohs(addr->in6.s6_addr16[0]) + inc);
+    }
+}
+
+static int
+__acl_parse_add(const char *srange, const char *drange,
+                int rule, int max_conn, struct dp_vs_service *svc)
+{
+    if (!srange || !strlen(srange) || !drange || !strlen(drange) || !svc)
         return EDPVS_INVAL;
 
     struct dp_vs_acl *new_acl, *acl;
-    struct inet_addr_range addr_range;
-    union inet_addr min_addr, max_addr;
-    __be16 min_port, max_port;
-    int af, err;
-    uint32_t ip_cnt = 0, i, hashkey;
+    struct inet_addr_range saddr_range, daddr_range;
+    union inet_addr curr_saddr, curr_daddr;
+    int src_af = AF_INET, dst_af = AF_INET, err;    /* in case of Nat64 */
+    uint32_t i, j, hashkey;
+    uint32_t saddr_cnt, daddr_cnt;
+#ifdef CONFIG_DPVS_ACL_DEBUG
+    uint32_t fail_cnt = 0, success_cnt = 0;
+#endif
 
-    memset(&addr_range, 0, sizeof(addr_range));
-    err = inet_addr_range_parse(range, &addr_range, &af);
+    memset(&saddr_range, 0, sizeof(saddr_range));
+    memset(&daddr_range, 0, sizeof(daddr_range));
+
+    err = inet_addr_range_parse(srange, &saddr_range, &src_af);
     if (err != EDPVS_OK)
         return err;
 
-    memmove(&min_addr, &addr_range.min_addr, sizeof(union inet_addr));
-    memmove(&max_addr, &addr_range.max_addr, sizeof(union inet_addr));
-    min_port = addr_range.min_port;
-    max_port = addr_range.max_port;
+    err = inet_addr_range_parse(drange, &daddr_range, &dst_af);
+    if (err != EDPVS_OK)
+        return err;
 
-    if (AF_INET == af) {
-        union inet_addr curr_addr;
-        memset(&curr_addr, 0, sizeof(curr_addr));
+    saddr_cnt = __calc_addr_cnt(src_af, &saddr_range.min_addr,
+                                        &saddr_range.max_addr);
+    daddr_cnt = __calc_addr_cnt(dst_af, &daddr_range.min_addr,
+                                        &daddr_range.max_addr);
 
-        ip_cnt = ntohl(max_addr.in.s_addr) - ntohl(min_addr.in.s_addr);
-        for (i = 0; i <= ip_cnt; ++i) {
-            curr_addr.in.s_addr = htonl(ntohl(min_addr.in.s_addr) + i);
-            hashkey = dp_vs_acl_hashkey(af, &curr_addr);
+    rte_rwlock_write_lock(&svc->acl_lock);
+    for (i = 0; i < saddr_cnt; ++i) {
+        for (j = 0; j < daddr_cnt; ++j) {
+            memset(&curr_saddr, 0, sizeof(curr_saddr));
+            memset(&curr_daddr, 0, sizeof(curr_daddr));
+            __make_curr_addr(src_af, &saddr_range.min_addr, i, &curr_saddr);
+            __make_curr_addr(dst_af, &daddr_range.min_addr, j, &curr_daddr);
+
+            hashkey = dp_vs_acl_hashkey(src_af, &curr_saddr,
+                                        dst_af, &curr_daddr);
 
             new_acl = rte_zmalloc("dp_vs_acl", sizeof(*new_acl), 0);
             if (!new_acl) {
@@ -148,28 +182,37 @@ __acl_parse_add(const char *range, int rule, int max_conn,
             }
 
             new_acl->rule           = rule;
-            new_acl->af             = af;
-            memmove(&new_acl->addr, &curr_addr, sizeof(union inet_addr));
-            new_acl->min_port       = min_port;
-            new_acl->max_port       = max_port;
             new_acl->max_conn       = max_conn;
+            new_acl->saddr.af       = src_af;
+            memmove(&new_acl->saddr.addr, &curr_saddr, sizeof(union inet_addr));
+            new_acl->saddr.min_port = saddr_range.min_port;
+            new_acl->saddr.max_port = saddr_range.max_port;
+            new_acl->daddr.af       = dst_af;
+            memmove(&new_acl->daddr.addr, &curr_daddr, sizeof(union inet_addr));
+            new_acl->daddr.min_port = daddr_range.min_port;
+            new_acl->daddr.max_port = daddr_range.max_port;
 
-            rte_rwlock_write_lock(&svc->acl_lock);
-            acl = dp_vs_acl_find(new_acl, &aclhash_src(svc)[hashkey], DP_VS_ACL_ADD);
+            acl = dp_vs_acl_find(new_acl, svc, hashkey, DP_VS_ACL_ADD);
             if (acl != NULL) {
 #ifdef CONFIG_DPVS_ACL_DEBUG
-                RTE_LOG(DEBUG, ACL, "%s: address with acl already exist.\n", __func__);
+                ++fail_cnt;
 #endif
-                rte_rwlock_write_unlock(&svc->acl_lock);
                 rte_free(new_acl);
-                return EDPVS_EXIST;
+                continue;
             }
-            list_add_tail(&new_acl->list, &svc->acl_list[edge][hashkey]);
-            rte_rwlock_write_unlock(&svc->acl_lock);
+#ifdef CONFIG_DPVS_ACL_DEBUG
+            ++success_cnt;
+#endif
+            list_add_tail(&new_acl->list, &svc->acl_list[hashkey]);
         }
-    } else {
-        /* fix me, support ipv6 later */
     }
+
+    rte_rwlock_write_unlock(&svc->acl_lock);
+
+#ifdef CONFIG_DPVS_ACL_DEBUG
+    RTE_LOG(DEBUG, ACL, "%s: %u acls has been successfully added, %u already in.\n",
+                __func__, success_cnt, fail_cnt);
+#endif
 
     return EDPVS_OK;
 }
@@ -182,28 +225,54 @@ dp_vs_acl_add(const char *srange, const char *drange,
         return EDPVS_INVAL;
 
     int err = EDPVS_OK;
-    err = __acl_parse_add(srange, rule, max_conn, svc, DPVS_ACL_EDGE_SRC);
+
+    err = __acl_parse_add(srange, drange, rule, max_conn, svc);
     if (err != EDPVS_OK)
         return EDPVS_INVAL;
 
-    err = __acl_parse_add(drange, rule, max_conn, svc, DPVS_ACL_EDGE_DST);
-    if (err != EDPVS_OK)
-        return EDPVS_INVAL;
+    return err;
+}
 
-    return EDPVS_OK;
+static inline bool
+__acl_add_judge_equal(struct dp_vs_acl *acl1, struct dp_vs_acl *acl2)
+{
+    if (!acl1 || !acl2)
+        return false;
+
+    return acl1->saddr.af == acl2->saddr.af &&
+           inet_addr_equal(acl1->saddr.af, &acl1->saddr.addr,
+                                        &acl2->saddr.addr) &&
+           acl1->daddr.af == acl2->daddr.af &&
+           inet_addr_equal(acl1->daddr.af, &acl1->daddr.addr,
+                                        &acl2->daddr.addr);
+}
+
+static inline bool
+__acl_del_judge_equal(struct dp_vs_acl *acl1, struct dp_vs_acl *acl2)
+{
+    if (!acl1 || !acl2)
+        return false;
+    return acl1->rule == acl2->rule &&
+           acl1->max_conn == acl2->max_conn &&
+           !memcmp(&acl1->saddr, &acl2->saddr, sizeof(acl1->saddr)) &&
+           !memcmp(&acl1->daddr, &acl2->daddr, sizeof(acl1->daddr));
+
 }
 
 static struct dp_vs_acl *
-dp_vs_acl_find(struct dp_vs_acl *acl, struct list_head *head,
-               enum DP_VS_ACL_FIND_TYPE type)
+dp_vs_acl_find(struct dp_vs_acl *acl, struct dp_vs_service *svc,
+               uint32_t hashkey, enum DP_VS_ACL_FIND_TYPE type)
 {
+    if (!acl || !svc || !(svc->acl_hashed | DP_VS_MATCH_ACL_NOTHASHED))
+        return NULL;
+
     struct dp_vs_acl *acl_iter;
+    struct list_head *head = &svc->acl_list[hashkey];
 
     switch (type) {
         case DP_VS_ACL_ADD:
             list_for_each_entry(acl_iter, head, list) {
-                if (acl_iter->af == acl->af &&
-                    inet_addr_equal(acl->af, &acl_iter->addr, &acl->addr)) {
+                if (__acl_add_judge_equal(acl_iter, acl)) {
                     return acl_iter;
                 }
             }
@@ -211,12 +280,7 @@ dp_vs_acl_find(struct dp_vs_acl *acl, struct list_head *head,
 
         case DP_VS_ACL_DEL:
             list_for_each_entry(acl_iter, head, list) {
-                if (acl_iter->rule == acl->rule &&
-                    acl_iter->af   == acl->af   &&
-                    inet_addr_equal(acl->af, &acl_iter->addr, &acl->addr) &&
-                    acl_iter->min_port == acl->min_port &&
-                    acl_iter->max_port == acl->max_port &&
-                    acl_iter->max_conn == acl->max_conn) {
+                if (__acl_del_judge_equal(acl_iter, acl)) {
                     return acl_iter;
                 }
             }
@@ -227,28 +291,43 @@ dp_vs_acl_find(struct dp_vs_acl *acl, struct list_head *head,
 }
 
 static struct dp_vs_acl *
-dp_vs_acl_lookup(int af, union inet_addr *addr, __be16 port,
-                 struct list_head *hash_table, uint32_t hashkey)
+dp_vs_acl_lookup(struct dp_vs_acl_flow *flow,
+                 struct dp_vs_service *svc, uint32_t hashkey)
 {
-    if (!addr || !hash_table)
+    if (!flow || !svc || !(svc->acl_hashed | DP_VS_MATCH_ACL_NOTHASHED))
         return NULL;
 
-    struct list_head *head = &hash_table[hashkey];
+    struct list_head *head = &svc->acl_list[hashkey];
     struct dp_vs_acl *acl;
 
     list_for_each_entry(acl, head, list) {
 #ifdef CONFIG_DPVS_ACL_DEBUG
-        char buf[64], sbuf[64];
-        RTE_LOG(DEBUG, ACL, "acl lookup: %s:%u <- %s:%u -> %s:%u\n",
-                inet_ntop(af, &acl->addr, buf, sizeof(buf)) ? buf : "::",
-                ntohs(acl->min_port),
-                inet_ntop(af, addr, sbuf, sizeof(sbuf)) ? sbuf : "::",
-                ntohs(port),
-                buf, ntohs(acl->max_port));
+        char sbuf[64], dbuf[64];
+        RTE_LOG(DEBUG, ACL, "flow info : %s:%u -> %s:%u\n",
+                inet_ntop(flow->saddr.af,
+                    &flow->saddr.addr, sbuf, sizeof(sbuf)) ? sbuf : "::",
+                ntohs(flow->sport),
+                inet_ntop(flow->daddr.af,
+                    &flow->daddr.addr, dbuf, sizeof(dbuf)) ? dbuf : "::",
+                ntohs(flow->dport));
+        RTE_LOG(DEBUG, ACL, "acl lookup: %s:%u-%u -> %s:%u-%u rule = deny\n",
+                inet_ntop(acl->saddr.af,
+                    &acl->saddr.addr, sbuf, sizeof(sbuf)) ? sbuf : "::",
+                ntohs(acl->saddr.min_port), ntohs(acl->saddr.max_port),
+                inet_ntop(acl->daddr.af,
+                    &acl->daddr.addr, dbuf, sizeof(dbuf)) ? dbuf : "::",
+                ntohs(acl->daddr.min_port), ntohs(acl->daddr.max_port));
 #endif
-        if (acl->af == af &&
-            inet_addr_equal(af, &acl->addr, addr) &&
-            judge_port_betw(port, acl->min_port, acl->max_port)) {
+        if (acl->saddr.af == flow->saddr.af &&
+            judge_addr_matched(acl->saddr.af, &flow->saddr.addr,
+                &acl->saddr.addr) &&
+            judge_port_betw(flow->sport, acl->saddr.min_port,
+                acl->saddr.max_port) &&
+            acl->daddr.af == flow->daddr.af &&
+            judge_addr_matched(acl->daddr.af, &flow->daddr.addr,
+                &acl->daddr.addr) &&
+            judge_port_betw(flow->dport, acl->daddr.min_port,
+                            acl->daddr.max_port)) {
             return acl;
         }
     }
@@ -257,71 +336,83 @@ dp_vs_acl_lookup(int af, union inet_addr *addr, __be16 port,
 }
 
 static int
-__acl_parse_del(const char *range, int rule, int max_conn,
-                struct dp_vs_service *svc, enum DPVS_ACL_EDGE edge)
+__acl_parse_del(const char *srange, const char *drange,
+                int rule, int max_conn, struct dp_vs_service *svc)
 {
-    if (!range || !strlen(range) || !svc)
+    if (!srange || !strlen(srange) || !drange || !strlen(drange) || !svc)
         return EDPVS_INVAL;
 
-    struct dp_vs_acl *new_acl, *acl;
-    struct inet_addr_range addr_range;
-    union inet_addr min_addr, max_addr;
-    __be16 min_port, max_port;
-    int af, err;
-    uint32_t ip_cnt = 0, i, hashkey;
+    struct dp_vs_acl new_acl, *acl;
+    struct inet_addr_range saddr_range, daddr_range;
+    union inet_addr curr_saddr, curr_daddr;
+    int src_af = AF_INET, dst_af = AF_INET, err;    /* in case of Nat64 */
+    uint32_t i, j, hashkey;
+    uint32_t saddr_cnt, daddr_cnt;
+#ifdef CONFIG_DPVS_ACL_DEBUG
+    uint32_t fail_cnt = 0, success_cnt = 0;
+#endif
 
-    memset(&addr_range, 0, sizeof(addr_range));
-    err = inet_addr_range_parse(range, &addr_range, &af);
+    memset(&saddr_range, 0, sizeof(saddr_range));
+    memset(&daddr_range, 0, sizeof(daddr_range));
+
+    err = inet_addr_range_parse(srange, &saddr_range, &src_af);
     if (err != EDPVS_OK)
         return err;
 
-    memmove(&min_addr, &addr_range.min_addr, sizeof(union inet_addr));
-    memmove(&max_addr, &addr_range.max_addr, sizeof(union inet_addr));
-    min_port = addr_range.min_port;
-    max_port = addr_range.max_port;
+    err = inet_addr_range_parse(drange, &daddr_range, &dst_af);
+    if (err != EDPVS_OK)
+        return err;
 
-    if (AF_INET == af) {
-        union inet_addr curr_addr;
-        memset(&curr_addr, 0, sizeof(curr_addr));
+    saddr_cnt = __calc_addr_cnt(src_af, &saddr_range.min_addr,
+                                        &saddr_range.max_addr);
+    daddr_cnt = __calc_addr_cnt(dst_af, &daddr_range.min_addr,
+                                        &daddr_range.max_addr);
 
-        ip_cnt = ntohl(max_addr.in.s_addr) - ntohl(min_addr.in.s_addr);
-        for (i = 0; i <= ip_cnt; ++i) {
-            curr_addr.in.s_addr = htonl(ntohl(min_addr.in.s_addr) + i);
-            hashkey = dp_vs_acl_hashkey(af, &curr_addr);
+    rte_rwlock_write_lock(&svc->acl_lock);
+    for (i = 0; i < saddr_cnt; ++i) {
+        for (j = 0; j < daddr_cnt; ++j) {
+            memset(&curr_saddr, 0, sizeof(curr_saddr));
+            memset(&curr_daddr, 0, sizeof(curr_daddr));
+            __make_curr_addr(src_af, &saddr_range.min_addr, i, &curr_saddr);
+            __make_curr_addr(dst_af, &daddr_range.min_addr, j, &curr_daddr);
 
-            new_acl = rte_zmalloc("dp_vs_acl", sizeof(*new_acl), 0);
-            if (!new_acl) {
-                return EDPVS_NOMEM;
-            }
+            hashkey = dp_vs_acl_hashkey(src_af, &curr_saddr,
+                                        dst_af, &curr_daddr);
 
-            new_acl->rule           = rule;
-            new_acl->af             = af;
-            memmove(&new_acl->addr, &curr_addr, sizeof(union inet_addr));
-            new_acl->min_port       = min_port;
-            new_acl->max_port       = max_port;
-            new_acl->max_conn       = max_conn;
+            memset(&new_acl, 0, sizeof(new_acl));
+            new_acl.rule           = rule;
+            new_acl.max_conn       = max_conn;
+            new_acl.saddr.af       = src_af;
+            memmove(&new_acl.saddr.addr, &curr_saddr, sizeof(union inet_addr));
+            new_acl.saddr.min_port = saddr_range.min_port;
+            new_acl.saddr.max_port = saddr_range.max_port;
+            new_acl.daddr.af       = dst_af;
+            memmove(&new_acl.daddr.addr, &curr_daddr, sizeof(union inet_addr));
+            new_acl.daddr.min_port = daddr_range.min_port;
+            new_acl.daddr.max_port = daddr_range.max_port;
 
-            rte_rwlock_write_lock(&svc->acl_lock);
-            acl = dp_vs_acl_find(new_acl, &aclhash_src(svc)[hashkey], DP_VS_ACL_DEL);
+            acl = dp_vs_acl_find(&new_acl, svc, hashkey, DP_VS_ACL_DEL);
+
             if (acl == NULL) {
 #ifdef CONFIG_DPVS_ACL_DEBUG
-                RTE_LOG(DEBUG, ACL, "%s: not find acl to del.\n", __func__);
+                ++fail_cnt;
 #endif
-                rte_rwlock_write_unlock(&svc->acl_lock);
-                rte_free(new_acl);
-                return EDPVS_NOTEXIST;
+                continue;
             }
-#ifdef CONFIG_DPVS_ACL_DEBUG
-            RTE_LOG(DEBUG, ACL, "%s: find acl to del.\n", __func__);
-#endif
             list_del(&acl->list);
             rte_free(acl);
-            rte_free(new_acl);
-            rte_rwlock_write_unlock(&svc->acl_lock);
+#ifdef CONFIG_DPVS_ACL_DEBUG
+            ++success_cnt;
+#endif
         }
-    } else {
-        /* fix me, support ipv6 later */
     }
+
+    rte_rwlock_write_unlock(&svc->acl_lock);
+
+#ifdef CONFIG_DPVS_ACL_DEBUG
+    RTE_LOG(DEBUG, ACL, "%s: %u acls has been successfully deleted, %u not found.\n",
+                __func__, success_cnt, fail_cnt);
+#endif
 
     return EDPVS_OK;
 }
@@ -334,11 +425,7 @@ dp_vs_acl_del(const char *srange, const char *drange,
         return EDPVS_INVAL;
 
     int err = EDPVS_OK;
-    err = __acl_parse_del(srange, rule, max_conn, svc, DPVS_ACL_EDGE_SRC);
-    if (err != EDPVS_OK)
-        return EDPVS_INVAL;
-
-    err = __acl_parse_del(drange, rule, max_conn, svc, DPVS_ACL_EDGE_DST);
+    err = __acl_parse_del(srange, drange, rule, max_conn, svc);
     if (err != EDPVS_OK)
         return EDPVS_INVAL;
 
@@ -350,7 +437,7 @@ int dp_vs_acl_flush(struct dp_vs_service *svc)
     if (!svc)
         return EDPVS_INVAL;
 
-    if (svc->acl_hashed == DP_VS_MATCH_ACL_NOTHASHED)
+    if (!(svc->acl_hashed | DP_VS_MATCH_ACL_NOTHASHED))
         return EDPVS_OK;
 
     struct dp_vs_acl *acl_curr, *acl_next;
@@ -358,12 +445,7 @@ int dp_vs_acl_flush(struct dp_vs_service *svc)
 
     rte_rwlock_write_lock(&svc->acl_lock);
     for (i = 0; i < DPVS_ACL_TAB_SIZE; ++i) {
-        list_for_each_entry_safe(acl_curr, acl_next, &aclhash_src(svc)[i], list) {
-            list_del(&acl_curr->list);
-            rte_free(acl_curr);
-        }
-
-        list_for_each_entry_safe(acl_curr, acl_next, &aclhash_dst(svc)[i], list) {
+        list_for_each_entry_safe(acl_curr, acl_next, &svc->acl_list[i], list) {
             list_del(&acl_curr->list);
             rte_free(acl_curr);
         }
@@ -375,9 +457,9 @@ int dp_vs_acl_flush(struct dp_vs_service *svc)
 }
 
 static int
-__acl_judge(struct dp_vs_service *svc, struct dp_vs_acl *acl)
+__acl_verdict(struct dp_vs_service *svc, struct dp_vs_acl *acl)
 {
-    if (!acl)
+    if (!acl || !svc)
         return EDPVS_INVAL;
 
     rte_rwlock_read_lock(&svc->acl_lock);
@@ -421,32 +503,46 @@ __acl_judge(struct dp_vs_service *svc, struct dp_vs_acl *acl)
     return EDPVS_OK;
 }
 
-int dp_vs_acl_judge(struct dp_vs_acl_flow *flow, struct dp_vs_service *svc)
+int dp_vs_acl_verdict(struct dp_vs_acl_flow *flow, struct dp_vs_service *svc)
 {
     if (!flow || !svc)
         return EDPVS_INVAL;
 
     struct dp_vs_acl *acl = NULL;
     uint32_t hashkey;
+    union inet_addr zero_addr;
 
-    /* judge for src & port */
-    hashkey = dp_vs_acl_hashkey(flow->af, &flow->saddr);
+    hashkey = dp_vs_acl_hashkey(flow->saddr.af, &flow->saddr.addr,
+                flow->daddr.af, &flow->daddr.addr);
 
     rte_rwlock_read_lock(&svc->acl_lock);
-    acl = dp_vs_acl_lookup(flow->af, &flow->saddr, flow->sport,
-                           aclhash_src(svc), hashkey);
+    acl = dp_vs_acl_lookup(flow, svc, hashkey);
     if (acl) {
-        if (__acl_judge(svc, acl) != EDPVS_OK) {
+        if (__acl_verdict(svc, acl) != EDPVS_OK) {
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
         }
     }
 
-    hashkey = dp_vs_acl_hashkey(flow->af, &flow->daddr);
-    acl = dp_vs_acl_lookup(flow->af, &flow->daddr, flow->dport,
-                           aclhash_dst(svc), hashkey);
+    /* if hashed dst addr was zero */
+    memset(&zero_addr, 0, sizeof(zero_addr));
+    hashkey = dp_vs_acl_hashkey(flow->saddr.af, &flow->saddr.addr,
+                flow->daddr.af, &zero_addr);
+    acl = dp_vs_acl_lookup(flow, svc, hashkey);
     if (acl) {
-        if (__acl_judge(svc, acl) != EDPVS_OK) {
+        if (__acl_verdict(svc, acl) != EDPVS_OK) {
+            rte_rwlock_read_unlock(&svc->acl_lock);
+            return EDPVS_DROP;
+        }
+    }
+
+    /* if hashed source addr was zero */
+    memset(&zero_addr, 0, sizeof(zero_addr));
+    hashkey = dp_vs_acl_hashkey(flow->saddr.af, &zero_addr,
+                flow->daddr.af, &flow->daddr.addr);
+    acl = dp_vs_acl_lookup(flow, svc, hashkey);
+    if (acl) {
+        if (__acl_verdict(svc, acl) != EDPVS_OK) {
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
         }
@@ -509,16 +605,12 @@ static void acl_init_hash_table(struct dp_vs_service *svc)
         return;
 
     int i;
-    aclhash_src(svc) = rte_malloc_socket(NULL,
-                sizeof(struct list_head) * DPVS_ACL_TAB_SIZE,
-                RTE_CACHE_LINE_SIZE, rte_socket_id());
-    aclhash_dst(svc) = rte_malloc_socket(NULL,
+    svc->acl_list = rte_malloc_socket(NULL,
                 sizeof(struct list_head) * DPVS_ACL_TAB_SIZE,
                 RTE_CACHE_LINE_SIZE, rte_socket_id());
 
     for (i = 0; i < DPVS_ACL_TAB_SIZE; ++i) {
-        INIT_LIST_HEAD(&aclhash_src(svc)[i]);
-        INIT_LIST_HEAD(&aclhash_dst(svc)[i]);
+        INIT_LIST_HEAD(&svc->acl_list[i]);
     }
 
     svc->acl_hashed |= DP_VS_MATCH_ACL_HASHED;
