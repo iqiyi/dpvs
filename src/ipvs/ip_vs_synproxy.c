@@ -890,6 +890,8 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         syn_ip6h->ip6_plen = htons(tcp_hdr_size);
         syn_ip6h->ip6_nxt = NEXTHDR_TCP;
         syn_ip6h->ip6_hlim = IPV6_DEFAULT_HOPLIMIT;
+
+        syn_mbuf->l3_len = sizeof(*syn_ip6h);
     } else {
         struct iphdr *ack_iph;
         struct iphdr *syn_iph;
@@ -910,6 +912,8 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         syn_iph->protocol = IPPROTO_TCP;
         syn_iph->saddr = ack_iph->saddr;
         syn_iph->daddr = ack_iph->daddr;
+
+        syn_mbuf->l3_len = sizeof(*syn_iph);
 
         /* checksum is done by fnat_in_handler */
         syn_iph->check = 0;
@@ -1116,9 +1120,9 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
     struct rte_mbuf *ack_mbuf;
     struct rte_mempool *pool;
     struct tcphdr *ack_th;
-	
+
     if (!conn->packet_out_xmit) {
-	return EDPVS_INVAL;
+        return EDPVS_INVAL;
     }
 
     pool = get_mbuf_pool(conn, DPVS_CONN_DIR_OUTBOUND);
@@ -1147,41 +1151,43 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
     /* add one to seq and seq will be adjust later */
     ack_th->seq = htonl(ntohl(ack_th->seq)+1);
     ack_th->doff = sizeof(struct tcphdr) >> 2;
-	
+
     if (AF_INET6 == af) {
-	struct ip6_hdr *ack_ip6h;
-	struct ip6_hdr *reuse_ip6h = (struct ip6_hdr *)ip6_hdr(mbuf);
-	/* Reserve space for ipv6 header */
-	ack_ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(ack_mbuf,
-			sizeof(struct ip6_hdr));
-	if (!ack_ip6h) {
-	    rte_pktmbuf_free(ack_mbuf);
-	    RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
-	    return EDPVS_NOROOM;
-	}
+        struct ip6_hdr *ack_ip6h;
+        struct ip6_hdr *reuse_ip6h = (struct ip6_hdr *)ip6_hdr(mbuf);
+        /* Reserve space for ipv6 header */
+        ack_ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(ack_mbuf,
+                                         sizeof(struct ip6_hdr));
+        if (!ack_ip6h) {
+            rte_pktmbuf_free(ack_mbuf);
+            RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
+            return EDPVS_NOROOM;
+        }
 
-	memcpy(ack_ip6h, reuse_ip6h, sizeof(struct ip6_hdr));
-	ack_ip6h->ip6_vfc = 0x60;  /* IPv6 */
-	ack_ip6h->ip6_plen = htons(sizeof(struct tcphdr));
-	ack_ip6h->ip6_nxt = NEXTHDR_TCP;
+        memcpy(ack_ip6h, reuse_ip6h, sizeof(struct ip6_hdr));
+        ack_ip6h->ip6_vfc = 0x60;  /* IPv6 */
+        ack_ip6h->ip6_plen = htons(sizeof(struct tcphdr));
+        ack_ip6h->ip6_nxt = NEXTHDR_TCP;
+        ack_mbuf->l3_len = sizeof(*ack_ip6h);
     } else {
-	struct ipv4_hdr *ack_iph;
-	struct ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
-	int pkt_ack_len = sizeof(struct tcphdr) + sizeof(struct iphdr);
-	/* Reserve space for ipv4 header */
+        struct ipv4_hdr *ack_iph;
+        struct ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
+        int pkt_ack_len = sizeof(struct tcphdr) + sizeof(struct iphdr);
+        /* Reserve space for ipv4 header */
         ack_iph = (struct ipv4_hdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct ipv4_hdr));
-	if (!ack_iph) {
-	    rte_pktmbuf_free(ack_mbuf);
-	    RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
-	    return EDPVS_NOROOM;
-	}
+        if (!ack_iph) {
+            rte_pktmbuf_free(ack_mbuf);
+            RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
+            return EDPVS_NOROOM;
+        }
 
-	memcpy(ack_iph, reuse_iph, sizeof(struct ipv4_hdr));
-	/* version and ip header length */
-	ack_iph->version_ihl = 0x45;
-	ack_iph->type_of_service = 0;
-	ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
-	ack_iph->total_length = htons(pkt_ack_len);
+        memcpy(ack_iph, reuse_iph, sizeof(struct ipv4_hdr));
+        /* version and ip header length */
+        ack_iph->version_ihl = 0x45;
+        ack_iph->type_of_service = 0;
+        ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+        ack_iph->total_length = htons(pkt_ack_len);
+        ack_mbuf->l3_len = sizeof(*ack_iph);
     }
 
     conn->packet_out_xmit(pp, conn, ack_mbuf);
@@ -1191,7 +1197,7 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
 
 /* Syn-proxy step 3 logic: receive rs's Syn/Ack.
  * Update syn_proxy_seq.delta and send stored ack mbufs to rs. */
-int dp_vs_synproxy_synack_rcv(int af, struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
+int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
         struct dp_vs_proto *pp, int th_offset, int *verdict)
 {
     struct tcphdr _tcph, *th;
@@ -1274,7 +1280,7 @@ int dp_vs_synproxy_synack_rcv(int af, struct rte_mbuf *mbuf, struct dp_vs_conn *
          * So DPVS has no need to send a window update.
          */
         if (cp->ack_num == 1)
-            syn_proxy_send_window_update(af, mbuf, cp, pp, th);
+            syn_proxy_send_window_update(tuplehash_out(cp).af, mbuf, cp, pp, th);
 
         list_for_each_entry_safe(tmbuf, tmbuf2, &cp->ack_mbuf, list) {
             list_del_init(&tmbuf->list);

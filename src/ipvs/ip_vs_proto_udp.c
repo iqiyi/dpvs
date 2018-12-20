@@ -233,18 +233,10 @@ udp_conn_lookup(struct dp_vs_proto *proto,
      * UDP has no ack, we don't know pkt from client is response or not
      * UDP can only confirm neighbour to RS
      */
-    int af = iph->af;
     if (conn != NULL) {
-        if (AF_INET6 == af) {
-            if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev
-                        && !ipv6_addr_any(&conn->in_nexthop.in6)) {
-                neigh_confirm(AF_INET6, &conn->in_nexthop, conn->in_dev);
-            }
-        } else {
-            if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev
-                       && (conn->in_nexthop.in.s_addr != htonl(INADDR_ANY))) {
-                neigh_confirm(AF_INET, &conn->in_nexthop, conn->in_dev);
-            }
+        if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev
+             && (!inet_is_addr_any(tuplehash_out(conn).af, &conn->in_nexthop))) {
+            neigh_confirm(tuplehash_out(conn).af, &conn->in_nexthop, conn->in_dev);
         }
     }
 
