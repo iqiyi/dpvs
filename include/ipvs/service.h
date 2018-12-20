@@ -90,10 +90,12 @@ struct dp_vs_service {
     uint32_t            num_laddrs;
 
     /* ACL associate */
-    int                 acl_all;    /* default action for all match */
-    struct list_head    acl_list;   /* head of acl list */
+    int                 rule_all;    /* rule for whole match */
     rte_rwlock_t        acl_lock;
     uint32_t            num_acls;
+
+    struct list_head    *acl_list[DPVS_ACL_EDGE_MAX];
+    int                 acl_hashed; /* acl hash table flag */
 
     /* ... flags, timer ... */
 } __rte_cache_aligned;

@@ -205,7 +205,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
 
         if (dp_vs_acl_judge(&acl_flow, svc) == EDPVS_DROP) {
 #ifdef CONFIG_DPVS_ACL_DEBUG
-            RTE_LOG(ERR, ACL, "%s: connection refused by acl.\n", __func__);
+            RTE_LOG(DEBUG, ACL, "%s: connection refused by acl.\n", __func__);
 #endif
             return NULL;
         }
@@ -227,7 +227,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
 
         if (dp_vs_acl_judge(&acl_flow, svc) == EDPVS_DROP) {
 #ifdef CONFIG_DPVS_ACL_DEBUG
-            RTE_LOG(ERR, ACL, "%s: connection refused by acl.\n", __func__);
+            RTE_LOG(DEBUG, ACL, "%s: connection refused by acl.\n", __func__);
 #endif
             return NULL;
         }
@@ -246,7 +246,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
         acl_flow.dport = th->dest;
         if (dp_vs_acl_judge(&acl_flow, svc) == EDPVS_DROP) {
 #ifdef CONFIG_DPVS_ACL_DEBUG
-            RTE_LOG(ERR, ACL, "%s: connection refused by acl.\n", __func__);
+            RTE_LOG(DEBUG, ACL, "%s: connection refused by acl.\n", __func__);
 #endif
             return NULL;
         }

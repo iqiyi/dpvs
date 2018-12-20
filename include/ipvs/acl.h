@@ -38,6 +38,22 @@ enum {
     SOCKOPT_GET_ACL_ALL,
 };
 
+enum DP_VS_ACL_FIND_TYPE {
+    DP_VS_ACL_ADD,
+    DP_VS_ACL_DEL,
+};
+
+enum DPVS_ACL_EDGE {
+    DPVS_ACL_EDGE_SRC = 0,
+    DPVS_ACL_EDGE_DST,
+    DPVS_ACL_EDGE_MAX,
+};
+
+#define DP_VS_MATCH_ACL_NOTHASHED     0x0000
+#define DP_VS_MATCH_ACL_HASHED        0x0001
+#define aclhash_src(c) ((c)->acl_list[DPVS_ACL_EDGE_SRC])
+#define aclhash_dst(c) ((c)->acl_list[DPVS_ACL_EDGE_DST])
+
 struct dp_vs_acl_flow {
     int                    af;
     int                    rule;
@@ -66,13 +82,27 @@ struct dp_vs_get_acls {
     struct dp_vs_acl_entry entrytable[0];
 };
 
-struct dp_vs_acl {
-    int                    af;
-    struct inet_addr_range srange;
-    struct inet_addr_range drange;
+// struct dp_vs_acl {
+//     int                    af;
+//     struct inet_addr_range srange;
+//     struct inet_addr_range drange;
+//
+//     int                    rule;       /* deny | permit */
+//     int                    max_conn;   /* maximum connections */
+//     uint32_t               p_conn;     /* permitted connections */
+//     uint32_t               d_conn;     /* denied connections */
+//     struct list_head       list;
+// };
 
-    int                    rule;       /* deny | permit */
-    int                    max_conn;   /* maximum connections */
+struct dp_vs_acl {
+    uint8_t                rule;       /* deny | permit */
+
+    int                    af;
+    union inet_addr        addr;
+    __be16                 min_port;
+    __be16                 max_port;
+
+    uint32_t               max_conn;   /* maximum connections */
     uint32_t               p_conn;     /* permitted connections */
     uint32_t               d_conn;     /* denied connections */
     struct list_head       list;

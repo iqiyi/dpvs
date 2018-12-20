@@ -514,8 +514,8 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     svc->laddr_curr = &svc->laddr_list;
 
     rte_rwlock_init(&svc->acl_lock);
-    INIT_LIST_HEAD(&svc->acl_list);
-    svc->acl_all = IP_VS_ACL_PERMIT_ALL;
+    svc->rule_all = IP_VS_ACL_PERMIT_ALL;
+    svc->acl_hashed = DP_VS_MATCH_ACL_NOTHASHED;
 
     INIT_LIST_HEAD(&svc->dests);
     rte_rwlock_init(&svc->sched_lock);
