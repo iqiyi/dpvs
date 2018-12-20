@@ -56,6 +56,7 @@ static int set_all_thread_affinity(void)
 
     s = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
     if (s != 0) {
+        errno = s;
         perror("fail to set thread affinty");
         return -1;
     }
@@ -63,6 +64,7 @@ static int set_all_thread_affinity(void)
     CPU_ZERO(&cpuset);
     s = pthread_getaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
     if (s != 0) {
+        errno = s;
         perror("fail to get thread affinity");
         return -2;
     }
