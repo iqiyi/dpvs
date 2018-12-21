@@ -42,6 +42,22 @@ static struct dp_vs_acl *
 dp_vs_acl_find(struct dp_vs_acl *acl, struct dp_vs_service *svc,
                uint32_t hashkey, enum DP_VS_ACL_FIND_TYPE type);
 
+static inline char* get_acl_rule_name(int rule)
+{
+    switch (rule) {
+        case IP_VS_ACL_PERMIT:
+            return "Permit";
+            break;
+
+        case IP_VS_ACL_DENY:
+            return "Deny";
+            break;
+
+        default:
+            return "Unknown";
+    }
+}
+
 static inline bool
 judge_addr_matched(int af, union inet_addr *addr1, union inet_addr *addr2)
 {
@@ -145,9 +161,7 @@ __acl_parse_add(const char *srange, const char *drange,
     int src_af = AF_INET, dst_af = AF_INET, err;    /* in case of Nat64 */
     uint32_t i, j, hashkey;
     uint32_t saddr_cnt, daddr_cnt;
-#ifdef CONFIG_DPVS_ACL_DEBUG
     uint32_t fail_cnt = 0, success_cnt = 0;
-#endif
 
     memset(&saddr_range, 0, sizeof(saddr_range));
     memset(&daddr_range, 0, sizeof(daddr_range));
@@ -194,20 +208,18 @@ __acl_parse_add(const char *srange, const char *drange,
 
             acl = dp_vs_acl_find(new_acl, svc, hashkey, DP_VS_ACL_ADD);
             if (acl != NULL) {
-#ifdef CONFIG_DPVS_ACL_DEBUG
                 ++fail_cnt;
-#endif
                 rte_free(new_acl);
                 continue;
             }
-#ifdef CONFIG_DPVS_ACL_DEBUG
             ++success_cnt;
-#endif
             list_add_tail(&new_acl->list, &svc->acl_list[hashkey]);
         }
     }
 
+    svc->num_acls += success_cnt;
     rte_rwlock_write_unlock(&svc->acl_lock);
+
 
 #ifdef CONFIG_DPVS_ACL_DEBUG
     RTE_LOG(DEBUG, ACL, "%s: %u acls has been successfully added, %u already in.\n",
@@ -310,13 +322,14 @@ dp_vs_acl_lookup(struct dp_vs_acl_flow *flow,
                 inet_ntop(flow->daddr.af,
                     &flow->daddr.addr, dbuf, sizeof(dbuf)) ? dbuf : "::",
                 ntohs(flow->dport));
-        RTE_LOG(DEBUG, ACL, "acl lookup: %s:%u-%u -> %s:%u-%u rule = deny\n",
+        RTE_LOG(DEBUG, ACL, "acl lookup: %s:%u-%u -> %s:%u-%u rule = %s\n",
                 inet_ntop(acl->saddr.af,
                     &acl->saddr.addr, sbuf, sizeof(sbuf)) ? sbuf : "::",
                 ntohs(acl->saddr.min_port), ntohs(acl->saddr.max_port),
                 inet_ntop(acl->daddr.af,
                     &acl->daddr.addr, dbuf, sizeof(dbuf)) ? dbuf : "::",
-                ntohs(acl->daddr.min_port), ntohs(acl->daddr.max_port));
+                ntohs(acl->daddr.min_port), ntohs(acl->daddr.max_port),
+                get_acl_rule_name(acl->rule));
 #endif
         if (acl->saddr.af == flow->saddr.af &&
             judge_addr_matched(acl->saddr.af, &flow->saddr.addr,
@@ -348,9 +361,7 @@ __acl_parse_del(const char *srange, const char *drange,
     int src_af = AF_INET, dst_af = AF_INET, err;    /* in case of Nat64 */
     uint32_t i, j, hashkey;
     uint32_t saddr_cnt, daddr_cnt;
-#ifdef CONFIG_DPVS_ACL_DEBUG
     uint32_t fail_cnt = 0, success_cnt = 0;
-#endif
 
     memset(&saddr_range, 0, sizeof(saddr_range));
     memset(&daddr_range, 0, sizeof(daddr_range));
@@ -394,19 +405,20 @@ __acl_parse_del(const char *srange, const char *drange,
             acl = dp_vs_acl_find(&new_acl, svc, hashkey, DP_VS_ACL_DEL);
 
             if (acl == NULL) {
-#ifdef CONFIG_DPVS_ACL_DEBUG
                 ++fail_cnt;
-#endif
                 continue;
             }
             list_del(&acl->list);
             rte_free(acl);
-#ifdef CONFIG_DPVS_ACL_DEBUG
             ++success_cnt;
-#endif
         }
     }
 
+    if (svc->num_acls < success_cnt) {
+        RTE_LOG(ERR, ACL, "%s: svc->num_acls = %u < %u to delete.\n",
+                    __func__, svc->num_acls, success_cnt);
+    }
+    svc->num_acls -= success_cnt;
     rte_rwlock_write_unlock(&svc->acl_lock);
 
 #ifdef CONFIG_DPVS_ACL_DEBUG
@@ -552,21 +564,27 @@ int dp_vs_acl_verdict(struct dp_vs_acl_flow *flow, struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
-#if 0
 static int dp_vs_acl_getall(struct dp_vs_service *svc,
                             struct dp_vs_acl_entry **acls, size_t *num_acls)
 {
     if (!svc || !acls || !num_acls)
         return EDPVS_INVAL;
 
+    if (!(svc->acl_hashed | DP_VS_MATCH_ACL_NOTHASHED)) {
+        *num_acls = 0;
+        *acls = NULL;
+        return EDPVS_OK;
+    }
+
     struct dp_vs_acl *acl;
     struct dp_vs_acl_entry *acl_entry;
-    int i;
+    int i = 0, index = 0;
 
     rte_rwlock_read_lock(&svc->acl_lock);
     if (svc->num_acls > 0) {
         *num_acls = svc->num_acls;
-        *acls = rte_malloc_socket(0, sizeof(struct dp_vs_acl_entry) * svc->num_acls,
+        *acls = rte_malloc_socket(NULL,
+                    sizeof(struct dp_vs_acl_entry) * svc->num_acls,
                     RTE_CACHE_LINE_SIZE, rte_socket_id());
         if (!(*acls)) {
             rte_rwlock_read_unlock(&svc->acl_lock);
@@ -574,20 +592,24 @@ static int dp_vs_acl_getall(struct dp_vs_service *svc,
         }
 
         i = 0;
+        index = 0;
         acl_entry = *acls;
-        list_for_each_entry(acl, &svc->acl_list, list) {
-            assert(i < *num_acls);
-            acl_entry[i].af = acl->af;
-            acl_entry[i].proto = svc->proto;
-            inet_addr_range_dump(svc->af, &acl->srange, acl_entry[i].srange,
-                        sizeof(acl_entry[i].srange));
-            inet_addr_range_dump(svc->af, &acl->drange, acl_entry[i].drange,
-                        sizeof(acl_entry[i].drange));
-            acl_entry[i].rule = acl->rule;
-            acl_entry[i].max_conn = acl->max_conn;
-            acl_entry[i].p_conn = acl->p_conn;
-            acl_entry[i].d_conn = acl->d_conn;
-            ++i;
+
+        for (i = 0; i < DPVS_ACL_TAB_SIZE; ++i) {
+            list_for_each_entry(acl, &svc->acl_list[i], list) {
+                assert(index < *num_acls);
+
+                acl_entry[index].rule     = acl->rule;
+                acl_entry[index].max_conn = acl->max_conn;
+                acl_entry[index].p_conn   = acl->p_conn;
+                acl_entry[index].d_conn   = acl->d_conn;
+                memmove(&acl_entry[index].saddr,
+                            &acl->saddr, sizeof(acl->saddr));
+                memmove(&acl_entry[index].daddr,
+                            &acl->daddr, sizeof(acl->daddr));
+
+                ++index;
+            }
         }
     } else {
         *num_acls = 0;
@@ -597,7 +619,6 @@ static int dp_vs_acl_getall(struct dp_vs_service *svc,
     rte_rwlock_read_unlock(&svc->acl_lock);
     return EDPVS_OK;
 }
-#endif
 
 static void acl_init_hash_table(struct dp_vs_service *svc)
 {
@@ -635,8 +656,7 @@ acl_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     }
 
     svc = dp_vs_service_lookup(match.af, acl_conf->proto,
-                               &acl_conf->vaddr, acl_conf->vport,
-                               acl_conf->fwmark, NULL, &match);
+                               NULL, 0, 0, NULL, &match);
     if (!svc) {
         return EDPVS_NOSERV;
     }
@@ -674,9 +694,6 @@ static int
 acl_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                 void **out, size_t *outsize)
 {
-    return EDPVS_OK;
-
-#if 0
     const struct dp_vs_acl_conf *acl_conf = conf;
     struct dp_vs_get_acls *get;
     struct dp_vs_acl_entry *acls;
@@ -697,8 +714,7 @@ acl_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     }
 
     svc = dp_vs_service_lookup(acl_conf->af, acl_conf->proto,
-                               &acl_conf->vaddr, acl_conf->vport,
-                               acl_conf->fwmark, NULL, &match);
+                               NULL, 0, 0, NULL, &match);
     if (!svc) {
         return EDPVS_NOSERV;
     }
@@ -711,7 +727,8 @@ acl_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             }
 
             *outsize = sizeof(*get) + num_acls * sizeof(struct dp_vs_acl_entry);
-            *out = rte_malloc_socket(0, *outsize, RTE_CACHE_LINE_SIZE, rte_socket_id());
+            *out = rte_malloc_socket(NULL, *outsize,
+                        RTE_CACHE_LINE_SIZE, rte_socket_id());
             if (!*out) {
                 if (acls) {
                     rte_free(acls);
@@ -724,30 +741,29 @@ acl_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             get->num_acls = num_acls;
 
             for (i = 0; i < num_acls; ++i) {
-                get->entrytable[i].af = acls[i].af;
-                get->entrytable[i].proto = acls[i].proto;
-                snprintf(get->entrytable[i].srange,
-                         sizeof(acls[i].srange), "%s", acls[i].srange);
-                snprintf(get->entrytable[i].drange,
-                         sizeof(acls[i].drange), "%s", acls[i].drange);
                 get->entrytable[i].rule = acls[i].rule;
                 get->entrytable[i].max_conn = acls[i].max_conn;
                 get->entrytable[i].p_conn = acls[i].p_conn;
                 get->entrytable[i].d_conn = acls[i].d_conn;
+                memmove(&get->entrytable[i].saddr,
+                            &acls[i].saddr, sizeof(struct dp_vs_acl_addr));
+                memmove(&get->entrytable[i].daddr,
+                            &acls[i].daddr, sizeof(struct dp_vs_acl_addr));
             }
 
             if (acls) {
                 rte_free(acls);
             }
             break;
+
         default:
             err = EDPVS_NOTSUPP;
             break;
     }
 
     dp_vs_service_put(svc);
+
     return err;
-#endif
 }
 
 struct dpvs_sockopts acl_sockopts = {

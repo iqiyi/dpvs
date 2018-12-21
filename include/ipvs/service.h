@@ -89,13 +89,12 @@ struct dp_vs_service {
     rte_rwlock_t        laddr_lock;
     uint32_t            num_laddrs;
 
-    /* ACL associate */
+    /* ACL */
     int                 rule_all;    /* rule for whole match */
     rte_rwlock_t        acl_lock;
     uint32_t            num_acls;
-
     struct list_head    *acl_list;
-    int                 acl_hashed; /* acl hash table flag */
+    int                 acl_hashed;  /* acl hash table flag */
 
     /* ... flags, timer ... */
 } __rte_cache_aligned;

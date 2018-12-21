@@ -323,6 +323,8 @@ static void version(FILE *stream);
 static void fail(int err, char *msg, ...);
 
 /* various listing functions */
+static inline int ipvs_acl_addr_dump(int af,
+            const struct ip_vs_acl_addr *, char *, size_t);
 static void list_conn(int is_template, unsigned int format);
 static void list_conn_sockpair(int is_template,
 		ipvs_sockpair_t *sockpair, unsigned int format);
@@ -332,7 +334,8 @@ static void list_timeout(void);
 static void list_daemon(void);
 static int list_laddrs(ipvs_service_t *svc, int with_title);
 static int list_all_laddrs(void);
-static void list_acls_print_title(void);
+static void list_acls_print_match(ipvs_service_entry_t *svc,
+            int with_title, unsigned int format);
 static int list_all_acls(void);
 static int flush_all_acls(void);
 static void print_service_and_acls(struct ip_vs_service_entry *svc_entry,
@@ -2151,22 +2154,89 @@ static int list_all_laddrs(void)
 
 }
 
-static void list_acls_print_title()
+static inline int
+ipvs_acl_addr_dump(int af, const struct ip_vs_acl_addr *acl_addr,
+                   char *buf, size_t size)
 {
-    printf("Prot LocalAddress:Port Scheduler Flags\n"
-           "  -> RemoteAddress:Port           Forward MaxConn PermitConn DenyConn\n");
+    char ip[64];
+    char min_port[16], max_port[16];
+
+    inet_ntop(acl_addr->af, &acl_addr->addr, ip, sizeof(ip));
+    snprintf(min_port, sizeof(min_port), "%u", ntohs(acl_addr->min_port));
+    snprintf(max_port, sizeof(max_port), "%u", ntohs(acl_addr->max_port));
+
+    if (af == AF_INET) {
+        return snprintf(buf, size, "%s:%s-%s", ip, min_port, max_port);
+    }
+    return snprintf(buf, size, "[%s]:%s-%s", ip, min_port, max_port);
 }
 
 static void list_acls_print_acl(ipvs_service_entry_t *svc_entry,
-                                ipvs_acl_entry_t     *acl_entry,
+                                ipvs_acl_entry_t     *acl,
                                 unsigned int format)
+{
+    char srange[256], drange[256];
+    char svc_name[256], *rule;
+    int left = sizeof(svc_name);
+    svc_name[0] = '\0';
+
+    if (acl->rule == IP_VS_ACL_DENY) {
+        rule = "deny";
+    } else if (acl->rule == IP_VS_ACL_PERMIT) {
+        rule = "permit";
+    }
+
+    ipvs_acl_addr_dump(acl->saddr.af, &acl->saddr, srange, sizeof(srange));
+    ipvs_acl_addr_dump(acl->daddr.af, &acl->daddr, drange, sizeof(drange));
+
+    left -= snprintf(svc_name + strlen(svc_name), left, "  ");
+
+    /* -40s for ipv6, -25s for ipv4 */
+    if (strcmp(srange, "[::-::]:0-0") != 0 &&
+                strcmp(srange, "0.0.0.0-0.0.0.0:0-0") != 0) {
+        if (AF_INET == acl->saddr.af) {
+            left -= snprintf(svc_name + strlen(svc_name), left,
+                        "%-25s", srange);
+        } else {
+            left -= snprintf(svc_name + strlen(svc_name), left,
+                        "%-40s", srange);
+        }
+    }
+
+    if (strcmp(drange, "[::-::]:0-0") != 0 &&
+                strcmp(drange, "0.0.0.0-0.0.0.0:0-0") != 0) {
+        if (AF_INET == acl->daddr.af) {
+            left -= snprintf(svc_name + strlen(svc_name), left,
+                        " %-25s", drange);
+        } else {
+            left -= snprintf(svc_name + strlen(svc_name), left,
+                        " %-40s", drange);
+        }
+    }
+
+    left -= snprintf(svc_name + strlen(svc_name), left, "%-7u %-7u %-7u",
+                acl->max_conn, acl->p_conn, acl->d_conn);
+
+    printf("%s\n", svc_name);
+}
+
+static void list_acls_print_match(ipvs_service_entry_t *svc,
+                                  int with_title, unsigned int format)
 {
     struct ip_vs_get_dests *d;
     char svc_name[256];
     char *proto, *rule;
     int i;
 
-    switch (acl_entry->proto) {
+    if (format != FMT_NONE)
+        return;
+
+    if (!(d = ipvs_get_dests(svc))) {
+       fprintf(stderr, "%s\n", ipvs_strerror(errno));
+       exit(1);
+    }
+
+    switch (svc->protocol) {
         case IPPROTO_TCP:
             proto = "tcp";
             break;
@@ -2183,60 +2253,59 @@ static void list_acls_print_acl(ipvs_service_entry_t *svc_entry,
             proto = "unknown";
             break;
     }
-    if (acl_entry->rule == IP_VS_ACL_DENY) {
-        rule = "deny";
-    } else if (acl_entry->rule == IP_VS_ACL_PERMIT) {
-        rule = "permit";
-    }
 
     int left = sizeof(svc_name);
     svc_name[0] = '\0';
 
     left -= snprintf(svc_name + strlen(svc_name), left,
-                "ACL %s,%s", proto, rule);
+                "MATCH %s", proto);
 
-    if (strcmp(acl_entry->srange, "[::-::]:0-0") != 0 &&
-                strcmp(acl_entry->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+    if (strcmp(svc->srange, "[::-::]:0-0") != 0 &&
+                strcmp(svc->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
       left -= snprintf(svc_name + strlen(svc_name), left,
-                  ",from=%s", acl_entry->srange);
+                  ",from=%s", svc->srange);
 
-    if (strcmp(acl_entry->drange, "[::-::]:0-0") != 0 &&
-                strcmp(acl_entry->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+    if (strcmp(svc->drange, "[::-::]:0-0") != 0 &&
+                strcmp(svc->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
       left -= snprintf(svc_name + strlen(svc_name), left,
-                  ",to=%s", acl_entry->drange);
+                  ",to=%s", svc->drange);
 
-    printf("%-33s\n", svc_name);
+    if (strlen(svc->iifname))
+      left -= snprintf(svc_name + strlen(svc_name), left,
+                  ",iif=%s", svc->iifname);
 
-    /* get and print dest info */
-    if (!(d = ipvs_get_dests(svc_entry))) {
-       fprintf(stderr, "%s\n", ipvs_strerror(errno));
-       exit(1);
-    }
+    if (strlen(svc->oifname))
+      left -= snprintf(svc_name + strlen(svc_name), left,
+                  ",oif=%s", svc->oifname);
+
+    printf("%s %s\n", svc_name, svc->sched_name);
+    copy_stats_from_dest(svc, d);
     ipvs_sort_dests(d, ipvs_cmp_dests);
 
     for (i = 0; i < d->num_dests; ++i) {
         char *dname;
         ipvs_dest_entry_t *e = &d->entrytable[i];
         if (!(dname = addrport_to_anyname(e->af, &(e->addr), ntohs(e->port),
-                            svc_entry->protocol, format))) {
+                            svc->protocol, format))) {
             fprintf(stderr, "addrport_to_anyname fails\n");
             exit(1);
         }
-        printf("  -> %-28s %-7s %-7u %-10u %-10u\n", dname, "SNAT",
-                    acl_entry->max_conn, acl_entry->p_conn, acl_entry->d_conn);
+        printf("  -> %-28s %-7s %-6d %-10u %-10u\n",
+               dname, fwd_name(e->conn_flags),
+               e->weight, e->activeconns, e->inactconns);
         free(dname);
     }
     free(d);
+
+    printf("  =>> ACL  From        To   Rule   MaxConn PermitConn DenyConn\n");
 }
 
 static void print_service_and_acls(struct ip_vs_service_entry *svc_entry,
                                    struct ip_vs_get_acls *acls,
                                    int with_title)
 {
-    int i = 0;
-    if (with_title) {
-        list_acls_print_title();
-    }
+    int i;
+    list_acls_print_match(svc_entry, FMT_NONE, with_title);
 
     for (i = 0; i < acls->num_acls; ++i) {
         list_acls_print_acl(svc_entry, acls->entrytable + i, FMT_NONE);

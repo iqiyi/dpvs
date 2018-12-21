@@ -58,42 +58,28 @@ struct dp_vs_acl_flow {
     __be16                 dport;
 };
 
-// for 'get'
-struct dp_vs_acl_entry {
-    int                    af;
-    uint8_t                proto;
-    char                   srange[256];
-    char                   drange[256];
-
-    int                    rule;       /* deny | permit */
-    uint32_t               max_conn;   /* maximum connections */
-    uint32_t               p_conn;     /* permitted connections */
-    uint32_t               d_conn;     /* denied connections */
-};
-
-struct dp_vs_get_acls {
-    /* for get */
-    uint32_t               num_acls;
-    struct dp_vs_acl_entry entrytable[0];
-};
-
-// struct dp_vs_acl {
-//     int                    af;
-//     struct inet_addr_range srange;
-//     struct inet_addr_range drange;
-//
-//     int                    rule;       /* deny | permit */
-//     int                    max_conn;   /* maximum connections */
-//     uint32_t               p_conn;     /* permitted connections */
-//     uint32_t               d_conn;     /* denied connections */
-//     struct list_head       list;
-// };
-
 struct dp_vs_acl_addr {
     int                    af;
     union inet_addr        addr;
     __be16                 min_port;
     __be16                 max_port;
+};
+
+// for 'get'
+struct dp_vs_acl_entry {
+    uint8_t                rule;       /* deny | permit */
+    uint32_t               max_conn;   /* maximum connections */
+    uint32_t               p_conn;     /* permitted connections */
+    uint32_t               d_conn;     /* denied connections */
+
+    struct dp_vs_acl_addr  saddr;
+    struct dp_vs_acl_addr  daddr;
+};
+
+/* for get */
+struct dp_vs_get_acls {
+    uint32_t               num_acls;
+    struct dp_vs_acl_entry entrytable[0];
 };
 
 struct dp_vs_acl {
@@ -109,14 +95,9 @@ struct dp_vs_acl {
 };
 
 struct dp_vs_acl_conf {
-    /* identify service */
+    /* match used for identify service */
     int                    af;
     uint8_t                proto;
-    union inet_addr        vaddr;
-    uint16_t               vport;
-    uint32_t               fwmark;
-
-    /* identify match */
     char                   m_srange[256];
     char                   m_drange[256];
     char                   iifname[IFNAMSIZ];

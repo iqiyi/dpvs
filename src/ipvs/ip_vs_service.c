@@ -117,6 +117,9 @@ struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol,
                                           const union inet_addr *vaddr, 
                                           uint16_t vport)
 {
+    if (!vaddr)
+        return NULL;
+
     unsigned hash;
     struct dp_vs_service *svc;
 

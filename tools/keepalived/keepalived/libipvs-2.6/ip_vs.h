@@ -434,16 +434,21 @@ struct ip_vs_get_laddrs {
 	struct ip_vs_laddr_entry	entrytable[0];
 };
 
-struct ip_vs_acl_entry {
+struct ip_vs_acl_addr {
     int                    af;
-    uint8_t                proto;
-    char                   srange[256];
-    char                   drange[256];
+    union inet_addr        addr;
+    __be16                 min_port;
+    __be16                 max_port;
+};
 
+struct ip_vs_acl_entry {
     int                    rule;       /* deny | permit */
     uint32_t               max_conn;   /* maximum connections */
     uint32_t               p_conn;     /* permitted connections */
     uint32_t               d_conn;     /* denied connections */
+
+    struct ip_vs_acl_addr  saddr;
+    struct ip_vs_acl_addr  daddr;
 };
 
 struct ip_vs_get_acls {

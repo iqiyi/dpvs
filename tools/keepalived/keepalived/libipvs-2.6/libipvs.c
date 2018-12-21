@@ -430,9 +430,6 @@ static void ipvs_fill_acl_conf(ipvs_service_t *svc, ipvs_acl_t *acl,
     memset(conf, 0, sizeof(*conf));
     conf->af     = svc->af;
     conf->proto  = svc->protocol;
-    memmove(&conf->vaddr, &svc->addr, sizeof(union inet_addr));
-    conf->vport  = svc->port;
-    conf->fwmark = svc->fwmark;
 
     /* identify match */
     snprintf(conf->m_srange, sizeof(conf->m_srange), "%s", svc->srange);
@@ -476,16 +473,8 @@ struct ip_vs_get_acls *ipvs_get_acls(ipvs_service_entry_t *svc)
     size_t res_size;
 
     memset(&conf, 0, sizeof(conf));
-    conf.af = svc->af;
+    conf.af    = svc->af;
     conf.proto = svc->protocol;
-    if (svc->af == AF_INET) {
-        conf.vaddr.in = svc->addr.in;
-    } else {
-        conf.vaddr.in6 = svc->addr.in6;
-    }
-    conf.vport = svc->port;
-    conf.fwmark = svc->fwmark;
-
     snprintf(conf.m_srange, sizeof(conf.m_srange), "%s", svc->srange);
     snprintf(conf.m_drange, sizeof(conf.m_drange), "%s", svc->drange);
     snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
@@ -495,6 +484,9 @@ struct ip_vs_get_acls *ipvs_get_acls(ipvs_service_entry_t *svc)
                         ((void **)&result), &res_size) != 0) {
         return NULL;
     }
+
+    if (!result || !res_size)
+        return NULL;
 
     if (res_size != sizeof(*result) +
                 result->num_acls * sizeof(struct ip_vs_acl_entry)) {
@@ -519,16 +511,8 @@ int ipvs_flush_acl(ipvs_service_entry_t *svc)
 
     struct dp_vs_acl_conf conf;
     memset(&conf, 0, sizeof(conf));
-    conf.af = svc->af;
+    conf.af    = svc->af;
     conf.proto = svc->protocol;
-    if (svc->af == AF_INET) {
-        conf.vaddr.in = svc->addr.in;
-    } else {
-        conf.vaddr.in6 = svc->addr.in6;
-    }
-    conf.vport = svc->port;
-    conf.fwmark = svc->fwmark;
-
     snprintf(conf.m_srange, sizeof(conf.m_srange), "%s", svc->srange);
     snprintf(conf.m_drange, sizeof(conf.m_drange), "%s", svc->drange);
     snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);

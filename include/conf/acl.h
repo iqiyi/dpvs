@@ -36,14 +36,9 @@ enum {
 };
 
 struct dp_vs_acl_conf {
-    /* identify service */
+    /* match used for identify service */
     int                    af;
     uint8_t                proto;
-    union inet_addr        vaddr;
-    uint16_t               vport;
-    uint32_t               fwmark;
-
-    /* identify match */
     char                   m_srange[256];
     char                   m_drange[256];
     char                   iifname[IFNAMSIZ];
