@@ -883,6 +883,44 @@ void ipvs_sort_dests(struct ip_vs_get_dests *d, ipvs_dest_cmp_t f)
 	      sizeof(ipvs_dest_entry_t), (qsort_cmp_t)f);
 }
 
+int ipvs_cmp_acls(ipvs_acl_entry_t *acl1, ipvs_acl_entry_t *acl2)
+{
+    int r = 0, i;
+
+    /* first compare source ip, then dst ip, finally min port */
+    if (AF_INET == acl1->saddr.af) {
+        r = ntohl(acl1->saddr.addr.in.s_addr) - ntohl(acl2->saddr.addr.in.s_addr);
+    } else {
+        for (i = 0; !r && (i < 4); ++i) {
+            r = ntohl(acl1->saddr.addr.in6.s6_addr32[i]) -
+                ntohl(acl2->saddr.addr.in6.s6_addr32[i]);
+        }
+    }
+
+    if (r != 0)
+        return r;
+
+    if (AF_INET == acl1->daddr.af) {
+        r = ntohl(acl1->daddr.addr.in.s_addr) - ntohl(acl2->daddr.addr.in.s_addr);
+
+    } else {
+        for (i = 0; !r && (i < 4); ++i) {
+            r = ntohl(acl1->daddr.addr.in6.s6_addr32[i]) -
+                ntohl(acl2->daddr.addr.in6.s6_addr32[i]);
+        }
+    }
+
+    if (r != 0)
+        return r;
+
+    return ntohs(acl1->saddr.min_port) - ntohs(acl1->saddr.min_port);
+}
+
+void ipvs_sort_acls(struct ip_vs_get_acls *acls, ipvs_acl_cmp_t f)
+{
+    qsort(acls->entrytable, acls->num_acls,
+                sizeof(ipvs_acl_entry_t), (qsort_cmp_t)f);
+}
 
 ipvs_service_entry_t *
 ipvs_get_service(struct ip_vs_service_user *hint)

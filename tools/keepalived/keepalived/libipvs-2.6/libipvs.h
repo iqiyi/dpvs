@@ -176,6 +176,11 @@ extern int ipvs_cmp_dests(ipvs_dest_entry_t *d1,
 extern void ipvs_sort_dests(struct ip_vs_get_dests *d,
 			    ipvs_dest_cmp_t f);
 
+/* sort acls before print */
+typedef int (*ipvs_acl_cmp_t)(ipvs_acl_entry_t *a1, ipvs_acl_entry_t *a2);
+extern int ipvs_cmp_acls(ipvs_acl_entry_t *a1, ipvs_acl_entry_t *a2);
+extern void ipvs_sort_acls(struct ip_vs_get_acls *acls, ipvs_acl_cmp_t f);
+
 /* get an ipvs service entry */
 extern ipvs_service_entry_t *ipvs_get_service(struct ip_vs_service_user *hint);
 

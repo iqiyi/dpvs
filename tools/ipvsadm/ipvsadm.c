@@ -2214,8 +2214,8 @@ static void list_acls_print_acl(ipvs_service_entry_t *svc_entry,
         }
     }
 
-    left -= snprintf(svc_name + strlen(svc_name), left, "%-7u %-7u %-7u",
-                acl->max_conn, acl->p_conn, acl->d_conn);
+    left -= snprintf(svc_name + strlen(svc_name), left, "%-7s %-7u %-7u %-7u",
+                rule, acl->max_conn, acl->p_conn, acl->d_conn);
 
     printf("%s\n", svc_name);
 }
@@ -2297,7 +2297,7 @@ static void list_acls_print_match(ipvs_service_entry_t *svc,
     }
     free(d);
 
-    printf("  =>> ACL  From        To   Rule   MaxConn PermitConn DenyConn\n");
+    printf("  ->> ACL  From        To   Rule   MaxConn PermitConn DenyConn\n");
 }
 
 static void print_service_and_acls(struct ip_vs_service_entry *svc_entry,
@@ -2307,6 +2307,7 @@ static void print_service_and_acls(struct ip_vs_service_entry *svc_entry,
     int i;
     list_acls_print_match(svc_entry, FMT_NONE, with_title);
 
+    ipvs_sort_acls(acls, ipvs_cmp_acls);
     for (i = 0; i < acls->num_acls; ++i) {
         list_acls_print_acl(svc_entry, acls->entrytable + i, FMT_NONE);
     }
