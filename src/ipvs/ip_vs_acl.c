@@ -152,7 +152,10 @@ static int
 __acl_parse_add(const char *srange, const char *drange,
                 int rule, int max_conn, struct dp_vs_service *svc)
 {
-    if (!srange || !strlen(srange) || !drange || !strlen(drange) || !svc)
+    if (!svc)
+        return EDPVS_INVAL;
+
+    if ((!srange || !strlen(srange)) && (!drange || !strlen(drange)))
         return EDPVS_INVAL;
 
     struct dp_vs_acl *new_acl, *acl;
@@ -352,8 +355,12 @@ static int
 __acl_parse_del(const char *srange, const char *drange,
                 int rule, int max_conn, struct dp_vs_service *svc)
 {
-    if (!srange || !strlen(srange) || !drange || !strlen(drange) || !svc)
+    if (!svc)
         return EDPVS_INVAL;
+
+    if ((!srange || !strlen(srange)) && (!drange || !strlen(drange)))
+        return EDPVS_INVAL;
+
 
     struct dp_vs_acl new_acl, *acl;
     struct inet_addr_range saddr_range, daddr_range;

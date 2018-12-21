@@ -335,11 +335,11 @@ static void list_daemon(void);
 static int list_laddrs(ipvs_service_t *svc, int with_title);
 static int list_all_laddrs(void);
 static void list_acls_print_match(ipvs_service_entry_t *svc,
-            int with_title, unsigned int format);
+            unsigned int format);
 static int list_all_acls(void);
 static int flush_all_acls(void);
-static void print_service_and_acls(struct ip_vs_service_entry *svc_entry,
-                                   struct ip_vs_get_acls *acls,
+static void print_service_and_acls(struct ip_vs_service_entry *,
+                                   struct ip_vs_get_acls *,
                                    int with_title);
 static void list_blklsts_print_title(void);
 static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
@@ -2214,18 +2214,18 @@ static void list_acls_print_acl(ipvs_service_entry_t *svc_entry,
         }
     }
 
-    left -= snprintf(svc_name + strlen(svc_name), left, "%-7s %-7u %-7u %-7u",
+    left -= snprintf(svc_name + strlen(svc_name), left, "%-7s %-7u %-7u   %-7u",
                 rule, acl->max_conn, acl->p_conn, acl->d_conn);
 
     printf("%s\n", svc_name);
 }
 
 static void list_acls_print_match(ipvs_service_entry_t *svc,
-                                  int with_title, unsigned int format)
+                                  unsigned int format)
 {
     struct ip_vs_get_dests *d;
     char svc_name[256];
-    char *proto, *rule;
+    char *proto;
     int i;
 
     if (format != FMT_NONE)
@@ -2297,19 +2297,29 @@ static void list_acls_print_match(ipvs_service_entry_t *svc,
     }
     free(d);
 
-    printf("  ->> ACL  From        To   Rule   MaxConn PermitConn DenyConn\n");
+    printf("  ->> ACL  From                   To                 Rule"
+           " MaxConn PermitConn DenyConn\n");
 }
 
-static void print_service_and_acls(struct ip_vs_service_entry *svc_entry,
+static void print_service_and_acls(struct ip_vs_service_entry *svc,
                                    struct ip_vs_get_acls *acls,
                                    int with_title)
 {
-    int i;
-    list_acls_print_match(svc_entry, FMT_NONE, with_title);
+    if (!svc || !acls || svc->num_acls <= 0)
+        return;
 
+    if (with_title) {
+		printf("Prot LocalAddress:Port Scheduler Flags\n"
+               "  -> RemoteAddress:Port           "
+               "Forward Weight ActiveConn InActConn\n");
+    }
+
+    list_acls_print_match(svc, FMT_NONE);
     ipvs_sort_acls(acls, ipvs_cmp_acls);
+
+    int i;
     for (i = 0; i < acls->num_acls; ++i) {
-        list_acls_print_acl(svc_entry, acls->entrytable + i, FMT_NONE);
+        list_acls_print_acl(svc, acls->entrytable + i, FMT_NONE);
     }
 }
 
