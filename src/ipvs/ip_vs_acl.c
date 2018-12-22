@@ -32,7 +32,7 @@
 #include "linux_ipv6.h"
 #include "ipvs/ipvs.h"
 
-#define DPVS_ACL_TAB_BITS    16
+#define DPVS_ACL_TAB_BITS    18
 #define DPVS_ACL_TAB_SIZE    (1 << DPVS_ACL_TAB_BITS)
 #define DPVS_ACL_TAB_MASK    (DPVS_ACL_TAB_SIZE - 1)
 
@@ -114,7 +114,9 @@ dp_vs_acl_hashkey(int src_af, union inet_addr *saddr,
         return 0;
     }
 
-    hashkey = rte_jhash_2words(saddr_fold, daddr_fold, dp_vs_acl_rnd) &
+    /* jhash hurts performance, we do not use rte_jhash_2words here */
+    hashkey = ((rte_be_to_cpu_32(saddr_fold) * 31 +
+                    rte_be_to_cpu_32(daddr_fold)) * 31 + dp_vs_acl_rnd) &
         DPVS_ACL_TAB_MASK;
 
     return hashkey;
