@@ -944,7 +944,7 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
      * or route can't be deleted when there is conn ref
      * this is for neighbour confirm
      */
-    dp_vs_conn_cache_rt6(conn, rt6, true);
+    dp_vs_conn_cache_rt6(conn, rt6, false);
 
     /*   
      * mbuf is from IPv6, icmp should send by icmp6
