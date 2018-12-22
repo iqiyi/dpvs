@@ -578,14 +578,16 @@ check_init_keywords(void)
 	install_keyword("dst-range", &dst_range_handler);
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
-    /* Access control list mapping */
-    install_keyword("acl_entry", &acl_handler);
-    install_sublevel();
-    install_keyword("rule", &rule_handler);
-    install_keyword("max_conn", &max_conn_handler);
-    install_keyword("srange", &acl_srange_handler);
-    install_keyword("drange", &acl_drange_handler);
-    install_sublevel_end();
+
+	/* Access Control List mapping */
+	install_keyword("acl_entry", &acl_handler);
+	install_sublevel();
+	install_keyword("rule", &rule_handler);
+	install_keyword("max_conn", &max_conn_handler);
+	install_keyword("srange", &acl_srange_handler);
+	install_keyword("drange", &acl_drange_handler);
+	install_sublevel_end();
+
     /* Hash target */
 	install_keyword("hash_target", &hash_target_handler);
 

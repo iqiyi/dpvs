@@ -122,7 +122,7 @@ dp_vs_acl_hashkey(int src_af, union inet_addr *saddr,
 
 /*
  * ipv4 support: 192.168.0.1-192.168.0.254
- * ipv6 support: 2001::1-2001::FFFF, only the last 4 bit range
+ * ipv6 support: 2001::1-2001::FFFF, only the last 16 bit range
  */
 static int
 __calc_addr_cnt(int af, union inet_addr *min_addr, union inet_addr *max_addr)

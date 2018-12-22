@@ -1530,7 +1530,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --get-blklst      -B        get blacklist address\n"
 		"  --add-acl         -2        add acl entry\n"
 		"  --del-acl         -3        del acl entry\n"
-		"  --clear-acl       -4        flush all acl entry\n"
+		"  --clear-acl       -4        clear all existing acl\n"
 		"  --get-acl         -5        get all acl entry\n"
 		"  --save            -S        save rules to stdout\n"
 		"  --add-server      -a        add real server with options\n"

@@ -184,7 +184,7 @@ struct ip_vs_service_user {
 	char			drange[256];
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
-	int		        rule_all;          /* action for all this match */
+	int		        rule_all;          /* default action for whole match */
 
 	u_int16_t		af;
 	union nf_inet_addr	addr;
@@ -346,7 +346,7 @@ struct ip_vs_service_entry {
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
 	unsigned int		num_acls;  /* number of acls */
-	int			rule_all;  /* number of acls */
+	int			rule_all;  /* default action for whole match */
 
 	u_int16_t		af;
 	union nf_inet_addr	addr;

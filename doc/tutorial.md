@@ -12,7 +12,7 @@ DPVS Tutorial
 * [DR Mode (one-arm)](#dr)
 * [Tunnel Mode(one-arm)](#tunnel)
 * [NAT Mode(one-arm)](#nat)
-    - [ACL Support](#acl)
+    - [Configure ACL with Match](#acl)
 * [SNAT Mode (two-arm)](#snat)
 * [IPv6 Support](#ipv6_support)
 * [Virtual devices](#virt-dev)
@@ -768,17 +768,15 @@ host$ curl www.iqiyi.com
 ```
 
 <a id=acl></a>
-## ACL Support
+## Configure ACL with Match
 
-we add keyword `rule-all` for MATCH, which the default action for whole Match
-
-default value is `permit` if not set
+New keyword `rule-all` was introduced to MATCH, whose value is `permit` or `deny`. `permit` was set if this keyword was not specified.
 
 > `acl` supports `rule`,`max-conn`,`src-range`,`dst-range`. For example:`rule=permit,max-conn=5,src-range=192.168.9.5-192.168.9.10,dst-range=0.0.0.0-0.0.0.0:80-80`
 
-`acl` can be configuread through `ipvsadm` or `keepalived`
+ACL can be configuread by `ipvsadm` or `keepalived`
 
-### configure ACL through `ipvsadm`
+### Configure ACL by `ipvsadm`
 
 ```bash
 MATCH0='proto=tcp,rule-all=deny,src-range=192.168.9.10-192.168.9.254,oif=dpdk0'
@@ -792,7 +790,7 @@ ACL1='rule=permit,max-conn=0,src-range=192.168.9.15-192.168.9.18,dst-range=192.1
 ./ipvsadm --add-acl --acl $ACL1 -H $MATCH0
 ```
 
-### configure ACL through `keepalived`
+### Configure ACL by `keepalived`
 
 You can also use `keepalived` to configure ACL instead of `ipvsadm`, whose keyword was `acl_entry `. Every ACL entry must be embeded in a `match`.
 
@@ -825,7 +823,7 @@ virtual_server match SNAT {
 }
 ```
 
-### show acl
+### Show ACL
 
 Default `deny` action of Match with white list
 
@@ -848,17 +846,17 @@ MATCH tcp,deny,from=192.168.9.10-192.168.9.254:0-0,oif=dpdk0 rr
   192.168.9.18:0-0          192.168.10.11:80-80      permit  0       0         0
 ```
 
-### clear acl
-support three methods to clear acl
+### Clear ACL
+support three methods to clear the ACL
 
 ```bash
-# delete all associated acls specified by ACL0 of MATCH0
+# delete all associated ACLs specified by ACL0 of MATCH0
 $ ./ipvsadm --del-acl --acl $ACL0 -H $MATCH0
 
-# clear all existing acls
+# clear all existing ACLs
 $ ./ipvsadm --clear-acl
 
-# clear the whole table, including all existing acls  
+# clear the whole table, including all existing ACLs  
 $ ./ipvsadm -C
 ```
 

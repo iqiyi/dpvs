@@ -77,7 +77,7 @@ typedef struct ip_vs_timeout_user	ipvs_timeout_t;
 typedef struct ip_vs_daemon_user	ipvs_daemon_t;
 typedef struct ip_vs_tunnel_user	ipvs_tunnel_t;
 typedef struct ip_vs_service_entry	ipvs_service_entry_t;
-typedef struct ip_vs_acl_entry	    ipvs_acl_entry_t;
+typedef struct ip_vs_acl_entry		ipvs_acl_entry_t;
 typedef struct ip_vs_dest_entry		ipvs_dest_entry_t;
 typedef struct ip_vs_laddr_entry	ipvs_laddr_entry_t;
 typedef struct ip_vs_blklst_entry       ipvs_blklst_entry_t;
