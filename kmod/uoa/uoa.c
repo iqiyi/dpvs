@@ -52,6 +52,7 @@
 #include <linux/vmalloc.h>
 #include <asm/pgtable_types.h>
 
+#define UOA_NEED_EXTRA
 #include "uoa_extra.h"
 #include "uoa.h"
 
@@ -917,10 +918,18 @@ static __init int uoa_init(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
 	err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops,
 				    ARRAY_SIZE(uoa_nf_hook_ops));
+	if (err < 0) {
+		pr_err("fail to register netfilter hooks.\n");
+		goto hook_failed;
+	}
 	err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops6,
 				    ARRAY_SIZE(uoa_nf_hook_ops6));
 #else
 	err = nf_register_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
+	if (err < 0) {
+		pr_err("fail to register netfilter hooks.\n");
+		goto hook_failed;
+	}
 	err = nf_register_hooks(uoa_nf_hook_ops6, ARRAY_SIZE(uoa_nf_hook_ops6));
 #endif
 	if (err < 0) {

@@ -29,7 +29,8 @@
 #include <arpa/inet.h>
 #include "common.h"
 
-#include "inet.h"
+/* for union inet_addr only */
+#include "uoa_extra.h"
 #include "uoa.h"
 
 /**
