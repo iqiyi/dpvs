@@ -114,5 +114,6 @@ int dp_vs_acl_init(void);
 int dp_vs_acl_term(void);
 int dp_vs_acl_verdict(struct dp_vs_acl_flow *, struct dp_vs_service *);
 int dp_vs_acl_flush(struct dp_vs_service *svc);
+void print_acl_verdict_result(int verdict);
 
 #endif /* ifndef __DPVS_ACL_H__ */

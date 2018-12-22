@@ -46,15 +46,24 @@ static inline char* get_acl_rule_name(int rule)
 {
     switch (rule) {
         case IP_VS_ACL_PERMIT:
-            return "Permit";
+            return "permit";
             break;
 
         case IP_VS_ACL_DENY:
-            return "Deny";
+            return "deny";
             break;
 
         default:
-            return "Unknown";
+            return "unknown";
+    }
+}
+
+inline void print_acl_verdict_result(int verdict)
+{
+    if (verdict == EDPVS_DROP) {
+        RTE_LOG(DEBUG, ACL, "%s: connection denied by acl.\n", __func__);
+    } else  {
+        RTE_LOG(DEBUG, ACL, "%s: connection permitted by acl.\n", __func__);
     }
 }
 
@@ -318,13 +327,13 @@ dp_vs_acl_lookup(struct dp_vs_acl_flow *flow,
     list_for_each_entry(acl, head, list) {
 #ifdef CONFIG_DPVS_ACL_DEBUG
         char sbuf[64], dbuf[64];
-        RTE_LOG(DEBUG, ACL, "flow info : %s:%u -> %s:%u\n",
+        RTE_LOG(DEBUG, ACL, "flow info : %s:%u -> %s:%u %s\n",
                 inet_ntop(flow->saddr.af,
                     &flow->saddr.addr, sbuf, sizeof(sbuf)) ? sbuf : "::",
                 ntohs(flow->sport),
                 inet_ntop(flow->daddr.af,
                     &flow->daddr.addr, dbuf, sizeof(dbuf)) ? dbuf : "::",
-                ntohs(flow->dport));
+                ntohs(flow->dport), inet_proto_name(svc->proto));
         RTE_LOG(DEBUG, ACL, "acl lookup: %s:%u-%u -> %s:%u-%u rule = %s\n",
                 inet_ntop(acl->saddr.af,
                     &acl->saddr.addr, sbuf, sizeof(sbuf)) ? sbuf : "::",
@@ -541,6 +550,8 @@ int dp_vs_acl_verdict(struct dp_vs_acl_flow *flow, struct dp_vs_service *svc)
         if (__acl_verdict(svc, acl) != EDPVS_OK) {
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
+        } else {
+            goto out;
         }
     }
 
@@ -553,6 +564,8 @@ int dp_vs_acl_verdict(struct dp_vs_acl_flow *flow, struct dp_vs_service *svc)
         if (__acl_verdict(svc, acl) != EDPVS_OK) {
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
+        } else {
+            goto out;
         }
     }
 
@@ -565,9 +578,18 @@ int dp_vs_acl_verdict(struct dp_vs_acl_flow *flow, struct dp_vs_service *svc)
         if (__acl_verdict(svc, acl) != EDPVS_OK) {
             rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
+        } else  {
+            goto out;
         }
     }
 
+    /* if rule of match was defalt 'deny' */
+    if (svc->rule_all == IP_VS_ACL_DENY_ALL) {
+        rte_rwlock_read_unlock(&svc->acl_lock);
+        return EDPVS_DROP;
+    }
+
+out:
     rte_rwlock_read_unlock(&svc->acl_lock);
     return EDPVS_OK;
 }

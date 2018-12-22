@@ -187,6 +187,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
     struct sockaddr_storage daddr, saddr;
     uint16_t _ports[2];
     struct dp_vs_acl_flow acl_flow;
+    int verdict;
 
     memset(&acl_flow, 0, sizeof(acl_flow));
     acl_flow.saddr.af = iph->af;
@@ -203,10 +204,11 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
         _ports[0] = icmp4_id(ich);
         _ports[1] = ich->type << 8 | ich->code;
 
-        if (dp_vs_acl_verdict(&acl_flow, svc) == EDPVS_DROP) {
+        verdict = dp_vs_acl_verdict(&acl_flow, svc);
 #ifdef CONFIG_DPVS_ACL_DEBUG
-            RTE_LOG(DEBUG, ACL, "%s: connection refused by acl.\n", __func__);
+        print_acl_verdict_result(verdict);
 #endif
+        if (verdict == EDPVS_DROP) {
             return NULL;
         }
 
@@ -225,10 +227,11 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
         _ports[0] = icmp6h_id(ic6h);
         _ports[1] = ic6h->icmp6_type << 8 | ic6h->icmp6_code;
 
-        if (dp_vs_acl_verdict(&acl_flow, svc) == EDPVS_DROP) {
+        verdict = dp_vs_acl_verdict(&acl_flow, svc);
 #ifdef CONFIG_DPVS_ACL_DEBUG
-            RTE_LOG(DEBUG, ACL, "%s: connection refused by acl.\n", __func__);
+        print_acl_verdict_result(verdict);
 #endif
+        if (verdict == EDPVS_DROP) {
             return NULL;
         }
 
@@ -244,10 +247,12 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_service *svc,
         }
         acl_flow.sport = th->source;
         acl_flow.dport = th->dest;
-        if (dp_vs_acl_verdict(&acl_flow, svc) == EDPVS_DROP) {
+
+        verdict = dp_vs_acl_verdict(&acl_flow, svc);
 #ifdef CONFIG_DPVS_ACL_DEBUG
-            RTE_LOG(DEBUG, ACL, "%s: connection refused by acl.\n", __func__);
+        print_acl_verdict_result(verdict);
 #endif
+        if (verdict == EDPVS_DROP) {
             return NULL;
         }
 

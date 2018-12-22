@@ -769,75 +769,98 @@ host$ curl www.iqiyi.com
 
 <a id=acl></a>
 ## ACL Support
-> `acl` supports `rule`,`max-conn`,`src-range`,`dst-range`. For example:`rule=deny,max-conn=0,src-range=192.168.9.11-192.168.9.240,dst-range=0.0.0.0-0.0.0.0:80-80`
 
-The ACL (with SNAT) setting could be:
+we add keyword `rule-all` for MATCH, which the default action for whole Match
+
+default value is `permit` if not set
+
+> `acl` supports `rule`,`max-conn`,`src-range`,`dst-range`. For example:`rule=permit,max-conn=5,src-range=192.168.9.5-192.168.9.10,dst-range=0.0.0.0-0.0.0.0:80-80`
+
+`acl` can be configuread through `ipvsadm` or `keepalived`
+
+### configure ACL through `ipvsadm`
 
 ```bash
-MATCH0='proto=tcp,src-range=192.168.9.10-192.168.9.254,oif=dpdk0'
-MATCH1='proto=icmp,src-range=192.168.9.0-192.168.9.254,oif=dpdk0'
-
+MATCH0='proto=tcp,rule-all=deny,src-range=192.168.9.10-192.168.9.254,oif=dpdk0'
 ./ipvsadm -A -s rr -H $MATCH0
 ./ipvsadm -a -H $MATCH0 -r $WAN_IP:0 -w 100 -J
 
-./ipvsadm -A -s rr -H $MATCH1
-./ipvsadm -a -H $MATCH1 -r $WAN_IP:0 -w 100 -J
+ACL0='rule=permit,max-conn=5,src-range=192.168.9.5-192.168.9.10,dst-range=0.0.0.0-0.0.0.0:80-80'
+ACL1='rule=permit,max-conn=0,src-range=192.168.9.15-192.168.9.18,dst-range=192.168.10.11:80'
 
-ACL0='rule=deny,max-conn=0,src-range=192.168.9.11-192.168.9.240,dst-range=0.0.0.0-0.0.0.0:80-80'
-ACL1='rule=permit,max-conn=0,src-range=192.168.9.10,dst-range=0.0.0.0:80'
-ACL2='rule=deny,max-conn=100,src-range=192.168.9.1-192.168.9.240'
 ./ipvsadm --add-acl --acl $ACL0 -H $MATCH0
 ./ipvsadm --add-acl --acl $ACL1 -H $MATCH0
-./ipvsadm --add-acl --acl $ACL2 -H $MATCH1
 ```
 
-You can also use `keepalived` to configure ACL instead of `ipvsadm`, the keyword was `access_control`. Every ACL entry must be embed in a `match`.
+### configure ACL through `keepalived`
+
+You can also use `keepalived` to configure ACL instead of `ipvsadm`, whose keyword was `acl_entry `. Every ACL entry must be embeded in a `match`.
 
 ```bash
 virtual_server match SNAT {
     protocol TCP
     lb_algo rr
     lb_kind SNAT
+    rule_all deny
     src-range 192.168.9.10-192.168.9.254
     oif dpdk0
 
     real_server 192.168.10.1 0 {
-        weight 100
+        weight 20
     }
 
-    access_control acl1 {
-        rule deny
-        max_conn 10
-        srange 192.168.9.11-192.168.9.240
+    acl_entry acl1 {
+        rule permit
+        max_conn 5
+        srange 192.168.9.5-192.168.9.10
         drange 0.0.0.0-0.0.0.0:80-80
     }
 
-    access_control acl2 {
+    acl_entry acl2 {
         rule permit
-        max_conn 6
-        srange 192.168.9.10
+        max_conn 0
+        srange 192.168.9.15-192.168.9.18
         drange 192.168.10.11:80
     }
 }
 ```
 
-you can use `./ipvsadm --get-acl` to get the ACL info, here is an example output:
+### show acl
+
+Default `deny` action of Match with white list
 
 ```bash
-# ./ipvsadm --get-acl
+$ ./ipvsadm --get-acl
 Prot LocalAddress:Port Scheduler Flags
-  -> RemoteAddress:Port           Forward MaxConn PermitConn DenyConn
-ACL icmp,deny,from=192.168.9.1-192.168.9.240:0-0
-  -> 192.168.10.1:0               SNAT    100     0          0
-ACL tcp,deny,from=192.168.9.11-192.168.9.240:0-0,to=0.0.0.0-0.0.0.0:80-80
-  -> 192.168.10.1:0               SNAT    0       0          0
-  -> 192.168.10.2:0               SNAT    0       0          0
-ACL tcp,permit,from=192.168.9.10-192.168.9.10:0-0,to=0.0.0.0-0.0.0.0:80-80
-  -> 192.168.10.1:0               SNAT    6       5          0
-  -> 192.168.10.2:0               SNAT    6       0          0
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+MATCH tcp,deny,from=192.168.9.10-192.168.9.254:0-0,oif=dpdk0 rr
+  -> 192.168.10.1:0               SNAT    100    0          0
+ [ACL]     From                   To                 Rule MaxConn PermitConn DenyConn
+  192.168.9.5:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.6:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.7:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.8:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.9:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.10:0-0          0.0.0.0:80-80            permit  5       5         4
+  192.168.9.15:0-0          192.168.10.11:80-80      permit  0       0         0
+  192.168.9.16:0-0          192.168.10.11:80-80      permit  0       0         0
+  192.168.9.17:0-0          192.168.10.11:80-80      permit  0       0         0
+  192.168.9.18:0-0          192.168.10.11:80-80      permit  0       0         0
 ```
 
-use `./ipvsadm --clear-acl` to clear all existing ACL.
+### clear acl
+support three methods to clear acl
+
+```bash
+# delete all associated acls specified by ACL0 of MATCH0
+$ ./ipvsadm --del-acl --acl $ACL0 -H $MATCH0
+
+# clear all existing acls
+$ ./ipvsadm --clear-acl
+
+# clear the whole table, including all existing acls  
+$ ./ipvsadm -C
+```
 
 <a id='ipv6_support'/>
 

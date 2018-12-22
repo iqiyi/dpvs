@@ -90,7 +90,7 @@ struct dp_vs_service {
     uint32_t            num_laddrs;
 
     /* ACL */
-    int                 rule_all;    /* rule for whole match */
+    int                 rule_all;    /* default action for whole match */
     rte_rwlock_t        acl_lock;
     uint32_t            num_acls;
     struct list_head    *acl_list;
@@ -108,7 +108,7 @@ struct dp_vs_service_conf {
     uint16_t            port;
     uint32_t            fwmark;     /* firwall mark of service */
     struct dp_vs_match  match;
-    int                 rule_all;    /* rule for whole match */
+    int                 rule_all;    /* default action for whole match */
 
     /* virtual service options */
     char                *sched_name;
@@ -172,7 +172,7 @@ struct dp_vs_service_user{
     char              drange[256];
     char              iifname[IFNAMSIZ];
     char              oifname[IFNAMSIZ];
-    int               rule_all;    /* rule for whole match */
+    int               rule_all;    /* default action for whole match */
 };
 
 struct dp_vs_getinfo {
