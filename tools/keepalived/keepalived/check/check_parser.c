@@ -422,6 +422,22 @@ establish_timeout_handler(vector_t *strvec)
 }
 
 static void
+rule_all_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    char *str = vector_slot(strvec, 1);
+    vs->rule_all = IP_VS_ACL_PERMIT_ALL;
+
+    if (!strcmp(str, "permit")) {
+        vs->rule_all = IP_VS_ACL_PERMIT_ALL;
+    } else if(!strcmp(str, "deny")) {
+        vs->rule_all = IP_VS_ACL_DENY_ALL;
+    } else {
+        log_message(LOG_INFO, "PARSER : unknown [%s] rule strategy.", str);
+    }
+}
+
+static void
 src_range_handler(vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -557,12 +573,13 @@ check_init_keywords(void)
 	install_keyword("ha_suspend", &hasuspend_handler);
 	install_keyword("ops", &ops_handler);
 	install_keyword("virtualhost", &virtualhost_handler);
+	install_keyword("rule_all", &rule_all_handler);
 	install_keyword("src-range", &src_range_handler);
 	install_keyword("dst-range", &dst_range_handler);
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
     /* Access control list mapping */
-    install_keyword("access_control", &acl_handler);
+    install_keyword("acl_entry", &acl_handler);
     install_sublevel();
     install_keyword("rule", &rule_handler);
     install_keyword("max_conn", &max_conn_handler);

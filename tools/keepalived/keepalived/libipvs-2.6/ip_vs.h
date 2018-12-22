@@ -184,6 +184,7 @@ struct ip_vs_service_user {
 	char			drange[256];
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
+	int		        rule_all;          /* action for all this match */
 
 	u_int16_t		af;
 	union nf_inet_addr	addr;
@@ -336,8 +337,6 @@ struct ip_vs_service_entry {
 	unsigned int		num_dests;
 	/* number of local address*/
 	unsigned int		num_laddrs;
-    /* number of acls */
-	unsigned int		num_acls;
 
 	/* statistics */
 	struct ip_vs_stats_user stats;
@@ -346,6 +345,8 @@ struct ip_vs_service_entry {
 	char			drange[256];
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
+	unsigned int		num_acls;  /* number of acls */
+	int			rule_all;  /* number of acls */
 
 	u_int16_t		af;
 	union nf_inet_addr	addr;

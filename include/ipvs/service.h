@@ -108,6 +108,7 @@ struct dp_vs_service_conf {
     uint16_t            port;
     uint32_t            fwmark;     /* firwall mark of service */
     struct dp_vs_match  match;
+    int                 rule_all;    /* rule for whole match */
 
     /* virtual service options */
     char                *sched_name;
@@ -143,7 +144,7 @@ struct dp_vs_service_entry {
     char                drange[256];
     char                iifname[IFNAMSIZ];
     char                oifname[IFNAMSIZ];
-
+    int                 rule_all;
     uint32_t            num_acls;
 };
 
@@ -171,6 +172,7 @@ struct dp_vs_service_user{
     char              drange[256];
     char              iifname[IFNAMSIZ];
     char              oifname[IFNAMSIZ];
+    int               rule_all;    /* rule for whole match */
 };
 
 struct dp_vs_getinfo {

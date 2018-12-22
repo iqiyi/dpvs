@@ -191,6 +191,7 @@ typedef struct _virtual_server {
 	char				*vip_bind_dev;		/* the interface name,vip bindto */
 	char				*blklst_addr_gname;	/* black list ip group name */
 
+	int			        rule_all;
 	char				srange[256];
 	char				drange[256];
 	char				iifname[IFNAMSIZ];

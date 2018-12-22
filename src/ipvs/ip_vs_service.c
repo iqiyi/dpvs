@@ -517,7 +517,7 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     svc->laddr_curr = &svc->laddr_list;
 
     rte_rwlock_init(&svc->acl_lock);
-    svc->rule_all = IP_VS_ACL_PERMIT_ALL;
+    svc->rule_all = u->rule_all;
     svc->acl_hashed = DP_VS_MATCH_ACL_NOTHASHED;
 
     INIT_LIST_HEAD(&svc->dests);
@@ -698,20 +698,21 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     struct dp_vs_match *m;
 
     memset(dst, 0, sizeof(*dst));
-    dst->af = src->af;
-    dst->proto = src->proto;
-    dst->addr = src->addr;
-    dst->port = src->port;
+    dst->af     = src->af;
+    dst->proto  = src->proto;
+    dst->addr   = src->addr;
+    dst->port   = src->port;
     dst->fwmark = src->fwmark;
     snprintf(dst->sched_name, sizeof(dst->sched_name),
              "%s", src->scheduler->name);
-    dst->flags = src->flags;
-    dst->timeout = src->timeout;
+    dst->flags        = src->flags;
+    dst->timeout      = src->timeout;
     dst->conn_timeout = src->conn_timeout;
-    dst->netmask = src->netmask;
-    dst->num_dests = src->num_dests;
-    dst->num_laddrs = src->num_laddrs;
-    dst->num_acls = src->num_acls;
+    dst->netmask      = src->netmask;
+    dst->num_dests    = src->num_dests;
+    dst->num_laddrs   = src->num_laddrs;
+    dst->num_acls     = src->num_acls;
+    dst->rule_all     = src->rule_all;
 
     err = dp_vs_copy_stats(&dst->stats, src->stats);
 
@@ -895,6 +896,7 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
     conf->netmask          = user->netmask;
     conf->bps              = user->bps;
     conf->limit_proportion = user->limit_proportion;
+    conf->rule_all         = user->rule_all;
 
     err = dp_vs_match_parse(user->srange, user->drange,
                             user->iifname, user->oifname, &conf->match);

@@ -467,6 +467,7 @@ int dp_vs_acl_flush(struct dp_vs_service *svc)
         list_for_each_entry_safe(acl_curr, acl_next, &svc->acl_list[i], list) {
             list_del(&acl_curr->list);
             rte_free(acl_curr);
+            --svc->num_acls;
         }
     }
 

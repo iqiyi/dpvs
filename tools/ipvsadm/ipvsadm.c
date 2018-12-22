@@ -1294,6 +1294,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
  * comma separated parameters list, all fields is used to match packets.
  *
  *   proto      := tcp | udp | icmp |icmpv6
+ *   rule-all   := IP_VS_ACL_PERMIT_ALL | IP_VS_ACL_DENY_ALL
  *   src-range  := RANGE
  *   dst-range  := RANGE
  *   iif        := IFNAME
@@ -1302,17 +1303,19 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
  *
  * example:
  *
- *   proto=tcp,src-range=192.168.0.1-10:80-100,dst-range=10.0.0.1:1024,iif=eth0
+ * proto=tcp,rule-all=permit,
+ *  src-range=192.168.0.1-10:80-100,dst-range=10.0.0.1:1024,oif=dpdk0
  */
 static int parse_match_snat(const char *buf, ipvs_service_t *svc)
 {
     char params[256];
     char *arg, *start, *sp, key[32], val[128];
     int r;
+    svc->rule_all = IP_VS_ACL_PERMIT_ALL;  /* default permit all for match */
 
     snprintf(params, sizeof(params), "%s", buf);
 
-    svc->af = AF_INET; /* now IPv4 only */
+    svc->af = AF_INET;
     svc->protocol = IPPROTO_NONE;
 
     for (start = params; (arg = strtok_r(start, ",", &sp)); start = NULL) {
@@ -1332,6 +1335,13 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
                 svc->protocol = IPPROTO_ICMP;
             else if (strcmp(val, "icmpv6") == 0)
                 svc->protocol = IPPROTO_ICMPV6;
+            else
+                return -1;
+        } else if (strcmp(key, "rule-all") == 0) {
+            if (strcmp(val, "permit") == 0)
+                svc->rule_all = IP_VS_ACL_PERMIT_ALL;
+            else if (strcmp(val, "deny") == 0)
+                svc->rule_all = IP_VS_ACL_DENY_ALL;
             else
                 return -1;
         } else if (strcmp(key, "src-range") == 0) {
@@ -1876,7 +1886,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		}
 		free(vname);
 	} else { /* match */
-		char *proto;
+		char *proto, *rule_all;
 
 		if (se->protocol == IPPROTO_TCP)
 			proto = "tcp";
@@ -1886,6 +1896,12 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 			proto = "icmp";
 		else
 			proto = "icmpv6";
+
+        if (se->rule_all == IP_VS_ACL_PERMIT_ALL) {
+            rule_all = "permit";
+        } else if (se->rule_all == IP_VS_ACL_DENY_ALL) {
+            rule_all = "deny";
+        }
 			
 		if (format & FMT_RULE) {
 			snprintf(svc_name, sizeof(svc_name),
@@ -1897,7 +1913,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 			svc_name[0] = '\0';
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
-				"MATCH %s", proto);
+				"MATCH %s,%s", proto, rule_all);
             
 			if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
                             strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
@@ -2225,9 +2241,10 @@ static void list_acls_print_match(ipvs_service_entry_t *svc,
 {
     struct ip_vs_get_dests *d;
     char svc_name[256];
-    char *proto;
+    char *proto, *rule_all;
     int i;
 
+    /* temporary not support other print format */
     if (format != FMT_NONE)
         return;
 
@@ -2254,11 +2271,21 @@ static void list_acls_print_match(ipvs_service_entry_t *svc,
             break;
     }
 
+    switch (svc->rule_all) {
+        case IP_VS_ACL_PERMIT_ALL:
+            rule_all = "permit";
+            break;
+
+        case IP_VS_ACL_DENY_ALL:
+            rule_all = "deny";
+            break;
+    }
+
     int left = sizeof(svc_name);
     svc_name[0] = '\0';
 
     left -= snprintf(svc_name + strlen(svc_name), left,
-                "MATCH %s", proto);
+                "MATCH %s,%s", proto, rule_all);
 
     if (strcmp(svc->srange, "[::-::]:0-0") != 0 &&
                 strcmp(svc->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
@@ -2297,7 +2324,7 @@ static void list_acls_print_match(ipvs_service_entry_t *svc,
     }
     free(d);
 
-    printf("  ->> ACL  From                   To                 Rule"
+    printf(" [ACL]     From                   To                 Rule"
            " MaxConn PermitConn DenyConn\n");
 }
 

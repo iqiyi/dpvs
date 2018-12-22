@@ -617,6 +617,7 @@ ipvs_set_rule(int cmd, virtual_server_t * vs, real_server_t * rs)
 	srule->netmask = (vs->addr.ss_family == AF_INET6) ? 128 : ((u_int32_t) 0xffffffff);
 	srule->protocol = vs->service_type;
 	srule->conn_timeout = vs->conn_timeout;
+	srule->rule_all     = vs->rule_all;
 	snprintf(srule->srange, 256, "%s", vs->srange);
 	snprintf(srule->drange, 256, "%s", vs->drange);
 	snprintf(srule->iifname, IFNAMSIZ, "%s", vs->iifname);

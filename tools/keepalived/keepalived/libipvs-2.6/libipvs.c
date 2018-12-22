@@ -72,6 +72,7 @@ typedef struct dpvs_servicedest_s {
 	X->netmask          = Y->netmask; 			\
 	X->bps              = Y->bps; 				\
 	X->limit_proportion = Y->limit_proportion; 		\
+	X->rule_all         = Y->rule_all; 			\
 	snprintf(X->srange, sizeof(X->srange), "%s", Y->srange); \
 	snprintf(X->drange, sizeof(X->drange), "%s", Y->drange); \
 	snprintf(X->iifname, sizeof(X->iifname), "%s", Y->iifname); \
