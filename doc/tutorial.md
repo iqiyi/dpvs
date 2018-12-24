@@ -12,8 +12,8 @@ DPVS Tutorial
 * [DR Mode (one-arm)](#dr)
 * [Tunnel Mode(one-arm)](#tunnel)
 * [NAT Mode(one-arm)](#nat)
-    - [Configure ACL with Match](#acl)
 * [SNAT Mode (two-arm)](#snat)
+    - [Configure ACL with Match](#acl)
 * [IPv6 Support](#ipv6_support)
 * [Virtual devices](#virt-dev)
   - [Bonding Device](#vdev-bond)
@@ -772,7 +772,7 @@ host$ curl www.iqiyi.com
 
 New keyword `rule-all` was introduced to MATCH, whose value is `permit` or `deny`. `permit` was set if this keyword was not specified.
 
-> `acl` supports `rule`,`max-conn`,`src-range`,`dst-range`. For example:`rule=permit,max-conn=5,src-range=192.168.9.5-192.168.9.10,dst-range=0.0.0.0-0.0.0.0:80-80`
+> `acl` supports `rule`,`max-conn`,`src-range`,`dst-range`(set `max-conn` to 0 to disable it). For example:`rule=permit,max-conn=5,src-range=192.168.9.5-192.168.9.10,dst-range=0.0.0.0-0.0.0.0:80-80`
 
 ACL can be configuread by `ipvsadm` or `keepalived`
 
