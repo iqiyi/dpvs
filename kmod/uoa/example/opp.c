@@ -28,6 +28,9 @@
 #include <netinet/udp.h>
 #include <arpa/inet.h>
 #include "common.h"
+
+/* for union inet_addr only */
+#include "uoa_extra.h"
 #include "uoa.h"
 
 /**

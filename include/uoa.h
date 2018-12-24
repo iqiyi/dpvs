@@ -39,7 +39,7 @@
 /* 
  * UOA IP option
  * @op_code: operation code
- * @op_len:  length of struct ipopt_uoa + real op_addr (v4/v6) length
+ * @op_len:  length of (struct ipopt_uoa) + real op_addr (v4/v6) length
  *           i.e. IPOLEN_UOA_IPV4 or IPOLEN_UOA_IPV6
  * @op_port: port number
  * @op_addr: real ipv4 or ipv6 address following it
@@ -95,13 +95,14 @@ enum {
 
 struct uoa_param_map {
 	/* input */
-	__be32	saddr;
-	__be32	daddr;
-	__be16	sport;
-	__be16	dport;
+    __be16           af;
+    union inet_addr  saddr;
+    union inet_addr  daddr;
+    __be16           sport;
+    __be16           dport;
 	/* output */
-	__be32	real_saddr;
-	__be16	real_sport;
+    union inet_addr  real_saddr;
+    __be16           real_sport;
 } __attribute__((__packed__));
 
 /**
