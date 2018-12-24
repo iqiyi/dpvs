@@ -447,17 +447,15 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
 {
     struct arp_hdr *arp = rte_pktmbuf_mtod(m, struct arp_hdr *);
     struct ether_hdr *eth;
-
     uint32_t ipaddr;
     struct neighbour_entry *neighbour = NULL;
     unsigned int hashkey;
-    struct route_entry *rt = NULL;
+    struct inet_ifaddr *ifa;
 
-    rt = route4_local(arp->arp_data.arp_tip, port);
-    if(!rt){
-       return EDPVS_KNICONTINUE;
-    }
-    route4_put(rt);
+    ifa = inet_addr_ifa_get(AF_INET, port, (union inet_addr*)&arp->arp_data.arp_tip);
+    if (!ifa)
+        return EDPVS_KNICONTINUE;
+    inet_addr_ifa_put(ifa);
 
     eth = (struct ether_hdr *)rte_pktmbuf_prepend(m,
                                      (uint16_t)sizeof(struct ether_hdr));

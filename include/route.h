@@ -64,7 +64,9 @@ int route_flush(void);
 static inline void route4_put(struct route_entry *route)
 {
     if(route){
-        rte_atomic32_dec(&route->refcnt);
+        if (rte_atomic32_dec_and_test(&route->refcnt)) {
+            rte_free(route);
+        }
     }
 }
 
