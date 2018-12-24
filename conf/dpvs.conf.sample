@@ -66,7 +66,7 @@ netif_defs {
     !    primary     dpdk0
     !    kni_name    bond0.kni
     !}
-
+}
 
 ! worker config (lcores)
 worker_defs {
