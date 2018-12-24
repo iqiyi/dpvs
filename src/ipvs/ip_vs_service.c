@@ -363,7 +363,7 @@ int dp_vs_match_parse(const char *srange, const char *drange,
     return EDPVS_OK;
 }
 
-struct dp_vs_service *
+static struct dp_vs_service *
 __dp_vs_svc_match_find(int af, uint8_t proto, const struct dp_vs_match *match)
 {
     struct dp_vs_service *svc;

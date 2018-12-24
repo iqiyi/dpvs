@@ -204,10 +204,6 @@ int dp_vs_match_parse(const char *srange, const char *drange,
                       const char *iifname, const char *oifname,
                       struct dp_vs_match *match);
 
-struct dp_vs_service *
-__dp_vs_svc_match_find(int af, uint8_t proto,
-                       const struct dp_vs_match *match);
-
 void __dp_vs_bind_svc(struct dp_vs_dest *dest, struct dp_vs_service *svc);
 
 void __dp_vs_unbind_svc(struct dp_vs_dest *dest);

@@ -1584,7 +1584,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --numeric      -n                   numeric output of addresses and ports\n"
 		"  --ifname       -F                   nic interface for laddrs\n"
 		"  --synproxy     -j                   TCP syn proxy\n"
-		"  --match        -H MATCH             select service by MATCH 'proto,srange,drange,iif,oif'\n"
+		"  --match        -H MATCH             select service by MATCH 'proto,rule-all,srange,drange,iif,oif'\n"
 		"  --acl          -7 ACL               select acl by ACL 'rule,max-conn,srange,drange'\n"
 		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n",
 		DEF_SCHED);
