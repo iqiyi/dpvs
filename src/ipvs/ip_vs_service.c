@@ -1090,8 +1090,12 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
 
                 output = rte_zmalloc("get_service",
                                      sizeof(struct dp_vs_service_entry), 0);
-                if (unlikely(NULL == output))
+                if (unlikely(NULL == output)) {
+                    if (svc) {
+                        dp_vs_service_put(svc);
+                    }
                     return EDPVS_NOMEM;
+                }
                 memcpy(output, entry, sizeof(struct dp_vs_service_entry));
                 if(svc) {
                     ret = dp_vs_copy_service(output, svc);
@@ -1100,6 +1104,9 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     *outlen = sizeof(struct dp_vs_service_entry);
                 }else{
                     *outlen = 0;
+                    if (output) {
+                        rte_free(output);
+                    }
                     ret = EDPVS_NOTEXIST;
                 }
             }
@@ -1142,8 +1149,12 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     }
                 }
 
-                if (!svc)
+                if (!svc) {
+                    if (output) {
+                        rte_free(output);
+                    }
                     ret = EDPVS_NOTEXIST;
+                }
                 else {
                     ret = dp_vs_get_dest_entries(svc, get, output);
                     dp_vs_service_put(svc);
