@@ -2310,13 +2310,16 @@ static void list_acls_print_match(ipvs_service_entry_t *svc,
     ipvs_sort_dests(d, ipvs_cmp_dests);
 
     for (i = 0; i < d->num_dests; ++i) {
-        char *dname;
+        char *dname = NULL;
         ipvs_dest_entry_t *e = &d->entrytable[i];
+
         if (!(dname = addrport_to_anyname(e->af, &(e->addr), ntohs(e->port),
                             svc->protocol, format))) {
             fprintf(stderr, "addrport_to_anyname fails\n");
+            free(d);
             exit(1);
         }
+
         printf("  -> %-28s %-7s %-6d %-10u %-10u\n",
                dname, fwd_name(e->conn_flags),
                e->weight, e->activeconns, e->inactconns);

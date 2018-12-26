@@ -492,6 +492,7 @@ struct ip_vs_get_acls *ipvs_get_acls(ipvs_service_entry_t *svc)
     if (res_size != sizeof(*result) +
                 result->num_acls * sizeof(struct ip_vs_acl_entry)) {
         fprintf(stderr, "%s\n","res_size not match.");
+        dpvs_sockopt_msg_free(result);
         return NULL;
     }
 
@@ -502,6 +503,7 @@ struct ip_vs_get_acls *ipvs_get_acls(ipvs_service_entry_t *svc)
     }
 
     memmove(get, result, res_size);
+    dpvs_sockopt_msg_free(result);
     return get;
 }
 
