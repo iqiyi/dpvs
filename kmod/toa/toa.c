@@ -450,7 +450,6 @@ static int
 inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 {
 	struct inet_sock *inet;
-	struct toa_ip6_data *t_ip6_data_ptr;
 	struct toa_nat64_peer uaddr;
 	int ret;
 
@@ -478,7 +477,11 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 	ret = -EINVAL;
 
 	lock_cpu_toa_ip6_sk();
+
 	if (NULL != sk->sk_user_data) {
+		struct toa_ip6_entry *ptr_ip6_entry;
+		struct toa_ip6_data *t_ip6_data_ptr;
+
 		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
 
 			if (!sock_flag(sk,SOCK_NAT64)) {
@@ -486,16 +489,18 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 				goto out;
 			}
 
-			t_ip6_data_ptr = sk->sk_user_data;
+			ptr_ip6_entry = sk->sk_user_data;
+			t_ip6_data_ptr = &ptr_ip6_entry->toa_data;
+
 			if (TCPOPT_TOA == t_ip6_data_ptr->opcode &&
 			    TCPOLEN_IP6_TOA == t_ip6_data_ptr->opsize) {
 				TOA_INC_STATS(ext_stats, GETNAME_TOA_OK_CNT);
 				TOA_DBG("inet64_getname_toa: set new sockaddr, ip "
 					 TOA_NIPQUAD_FMT" -> "TOA_NIP6_FMT
 					", port %u -> %u\n",
-					TOA_NIPQUAD(inet->saddr),
+					TOA_NIPQUAD(inet->inet_saddr),
 					TOA_NIP6(t_ip6_data_ptr->in6_addr),
-					ntohs(inet->sport),
+					ntohs(inet->inet_sport),
 					ntohs(t_ip6_data_ptr->port));
 				uaddr.saddr = t_ip6_data_ptr->in6_addr;
 				uaddr.port  = t_ip6_data_ptr->port;
@@ -542,6 +547,7 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 
 	/* set our value if need */
 	lock_cpu_toa_ip6_sk();
+
 	if (retval == 0 && NULL != sk->sk_user_data && peer) {
 		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
 			struct toa_ip6_entry* t_ip6_entry_ptr = sk->sk_user_data;
@@ -570,6 +576,7 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 	} else { /* no need to get client ip */
 		TOA_INC_STATS(ext_stats, GETNAME_TOA_EMPTY_CNT);
 	}
+
 	unlock_cpu_toa_ip6_sk();
 
 	return retval;
@@ -632,8 +639,13 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 		if (NULL != newsock->sk_user_data) {
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
 			if (nat64) {
-				sock_set_flag(newsock, SOCK_NAT64);
+				struct toa_ip6_entry *ptr_ip6_entry = newsock->sk_user_data;
+				ptr_ip6_entry->sk = newsock;
+				toa_ip6_hash(ptr_ip6_entry);
+
 				newsock->sk_destruct = tcp_v6_sk_destruct_toa;
+				sock_set_flag(newsock, SOCK_NAT64);
+				TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
 			}
 		}
 		else
