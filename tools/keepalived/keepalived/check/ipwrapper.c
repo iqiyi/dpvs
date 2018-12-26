@@ -196,16 +196,20 @@ init_service_vs(virtual_server_t * vs)
 			SET_ALIVE(vs);
 	}
 
-	/*Set local ip address in "FNAT" mode of IPVS */
-	if ((vs->loadbalancing_kind == IP_VS_CONN_F_FULLNAT) && vs->local_addr_gname) { 
+	/* Set local ip address in "FNAT" mode of IPVS */
+	if (vs->local_addr_gname &&
+        (vs->loadbalancing_kind == IP_VS_CONN_F_FULLNAT ||
+         vs->loadbalancing_kind == IP_VS_CONN_F_SNAT)) {
 		if (!ipvs_cmd(LVS_CMD_ADD_LADDR, check_data->vs_group, vs, NULL))
 			return 0; 
 	}
-        /*Set blacklist ip address */
-        if (vs->blklst_addr_gname) {
-                if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, check_data->vs_group, vs, NULL))
-                        return 0;
-        }
+    
+    /*Set blacklist ip address */
+    if (vs->blklst_addr_gname) {
+        if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, check_data->vs_group, vs, NULL))
+            return 0;
+    }
+        
 	/* Processing real server queue */
 	if (!LIST_ISEMPTY(vs->rs)) {
 		if (vs->alpha && ! vs->reloaded)
