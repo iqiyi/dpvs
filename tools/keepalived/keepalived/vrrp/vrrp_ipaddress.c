@@ -43,7 +43,6 @@ static void dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct 
         param->addr.in  = ipaddress->u.sin.sin_addr;
     else
         param->addr.in6 = ipaddress->u.sin6_addr;
-    strcpy(param->ifname, dpdk_port);
     param->plen = ipaddress->ifa.ifa_prefixlen;
     param->flags &= ~IFA_F_SAPOOL;
 }
