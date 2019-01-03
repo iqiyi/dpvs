@@ -40,11 +40,11 @@ struct conhash_sched_data {
 #define REPLICA 160
 #define QUIC_PACKET_8BYTE_CONNECTION_ID  (1 << 3)
 
-/* 
+/*
  * QUIC CID hash target for quic*
  * QUIC CID(qid) should be configured in UDP service
  */
-static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf, 
+static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
                                 uint64_t *quic_cid)
 {
     uint8_t pub_flags;
@@ -59,14 +59,14 @@ static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
     }
     else
         udphoff = ip4_hdrlen(mbuf);
-    
+
     quic_len = udphoff + sizeof(struct udp_hdr) +
                sizeof(pub_flags) + sizeof(*quic_cid);
 
     if (mbuf_may_pull((struct rte_mbuf *)mbuf, quic_len) != 0)
         return EDPVS_NOTEXIST;
 
-    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *, 
+    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *,
                                         udphoff + sizeof(struct udp_hdr));
     pub_flags = *((uint8_t *)quic_data);
 
@@ -82,7 +82,7 @@ static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
 }
 
 /*source ip hash target*/
-static int get_sip_hash_target(int af, const struct rte_mbuf *mbuf, 
+static int get_sip_hash_target(int af, const struct rte_mbuf *mbuf,
                                uint32_t *addr_fold)
 {
     if (af == AF_INET) {
@@ -396,15 +396,7 @@ dp_vs_conhash_schedule(struct dp_vs_service *svc, const struct rte_mbuf *mbuf)
 
     dest = dp_vs_conhash_get(svc, sched_data->conhash, mbuf);
 
-    if (!dest
-        || !(dest->flags & DPVS_DEST_F_AVAILABLE)
-        || rte_atomic16_read(&dest->weight) <= 0
-        || is_overloaded(dest)) {
-
-        return NULL;
-    }
-    else
-        return dest;
+    return dp_vs_dest_is_valid(dest) ? dest : NULL;
 }
 
 /*
