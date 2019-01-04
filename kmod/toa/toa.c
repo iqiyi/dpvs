@@ -484,7 +484,7 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 
 		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
 
-			if (!sock_flag(sk,SOCK_NAT64)) {
+			if (!sock_flag(sk, SOCK_NAT64)) {
 				ret = -EFAULT;
 				goto out;
 			}
@@ -644,8 +644,8 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 				toa_ip6_hash(ptr_ip6_entry);
 
 				newsock->sk_destruct = tcp_v6_sk_destruct_toa;
+
 				sock_set_flag(newsock, SOCK_NAT64);
-				TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
 			}
 		}
 		else

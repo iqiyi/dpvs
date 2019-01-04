@@ -80,7 +80,11 @@ enum {
 
 /*should be larger than enum sock_flags(net/sock.h)*/ 
 enum toa_sock_flags {
-	SOCK_NAT64 = 64
+#if defined(__x86_64__)
+	SOCK_NAT64 = 63
+#else
+	SOCK_NAT64 = 31
+#endif
 };
 
 /* statistics about toa in proc /proc/net/toa_stat */
