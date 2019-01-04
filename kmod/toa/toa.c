@@ -498,9 +498,17 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 				TOA_DBG("inet64_getname_toa: set new sockaddr, ip "
 					 TOA_NIPQUAD_FMT" -> "TOA_NIP6_FMT
 					", port %u -> %u\n",
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,33)
 					TOA_NIPQUAD(inet->inet_saddr),
+#else
+					TOA_NIPQUAD(inet->saddr),
+#endif
 					TOA_NIP6(t_ip6_data_ptr->in6_addr),
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,33)
 					ntohs(inet->inet_sport),
+#else
+					ntohs(inet->sport),
+#endif
 					ntohs(t_ip6_data_ptr->port));
 				uaddr.saddr = t_ip6_data_ptr->in6_addr;
 				uaddr.port  = t_ip6_data_ptr->port;
