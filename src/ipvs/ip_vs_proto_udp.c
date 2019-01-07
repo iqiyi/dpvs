@@ -29,6 +29,7 @@
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
 #include "ipvs/blklst.h"
+#include "ipvs/redirect.h"
 #include "parser/parser.h"
 #include "uoa.h"
 #include "neigh.h"
@@ -109,7 +110,7 @@ static inline int udp_send_csum(int af, int iphdrlen, struct udp_hdr *uh,
         /* UDP checksum is not mandatory for IPv4. */
         struct ipv4_hdr *iph = ip4_hdr(mbuf);
         if (unlikely(opp != NULL)) {
-            /* 
+            /*
              * XXX: UDP pseudo header need UDP length, but the common helper function
              * rte_ipv4_udptcp_cksum() use (IP.tot_len - IP.header_len), it's not
              * correct if OPP header insterted between IP header and UDP header.
@@ -196,7 +197,7 @@ static struct dp_vs_conn *
 udp_conn_lookup(struct dp_vs_proto *proto,
                 const struct dp_vs_iphdr *iph,
                 struct rte_mbuf *mbuf, int *direct,
-                bool reverse, bool *drop)
+                bool reverse, bool *drop, lcoreid_t *peer_cid)
 {
     struct udp_hdr *uh, _udph;
     struct dp_vs_conn *conn;
@@ -210,11 +211,11 @@ udp_conn_lookup(struct dp_vs_proto *proto,
                             &iph->saddr)) {
         *drop = true;
         return NULL;
-    }  
+    }
 
-    conn = dp_vs_conn_get(iph->af, iph->proto, 
-                          &iph->saddr, &iph->daddr, 
-                          uh->src_port, uh->dst_port, 
+    conn = dp_vs_conn_get(iph->af, iph->proto,
+                          &iph->saddr, &iph->daddr,
+                          uh->src_port, uh->dst_port,
                           direct, reverse);
 
     /*
@@ -226,6 +227,15 @@ udp_conn_lookup(struct dp_vs_proto *proto,
         if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev
              && (!inet_is_addr_any(tuplehash_out(conn).af, &conn->in_nexthop))) {
             neigh_confirm(tuplehash_out(conn).af, &conn->in_nexthop, conn->in_dev);
+        }
+    } else {
+        struct dp_vs_redirect *r;
+
+        r = dp_vs_redirect_get(iph->af, iph->proto,
+                               &iph->saddr, &iph->daddr,
+                               uh->src_port, uh->dst_port);
+        if (r) {
+            *peer_cid = r->cid;
         }
     }
 
@@ -539,7 +549,7 @@ static int insert_opp_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     uoa->op_len  = ipolen_uoa;
     uoa->op_port = uh->source;
     if (AF_INET6 == af) {
-        memcpy(&uoa->op_addr, &((struct ip6_hdr *)niph)->ip6_src, 
+        memcpy(&uoa->op_addr, &((struct ip6_hdr *)niph)->ip6_src,
                                                     IPV6_ADDR_LEN_IN_BYTES);
         /*
          * we should set the 'nexthdr' of the last ext header to IPPROTO_OPT here
