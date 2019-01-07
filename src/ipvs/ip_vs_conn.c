@@ -88,7 +88,7 @@ static struct dp_vs_conn *dp_vs_conn_alloc(void)
     struct dp_vs_conn *conn;
 
     if (unlikely(rte_mempool_get(this_conn_cache, (void **)&conn) != 0)) {
-        RTE_LOG(ERR, IPVS, "%s: no memory\n", __func__);
+        RTE_LOG(ERR, IPVS, "%s: no memory for connection\n", __func__);
         return NULL;
     }
 
