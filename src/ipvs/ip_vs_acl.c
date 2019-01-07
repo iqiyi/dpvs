@@ -492,23 +492,18 @@ __acl_verdict(struct dp_vs_service *svc, struct dp_vs_acl *acl)
     if (!acl || !svc)
         return EDPVS_INVAL;
 
-    rte_rwlock_read_lock(&svc->acl_lock);
-
     /* permit for all, except for black names */
     if (svc->rule_all & IP_VS_ACL_PERMIT_ALL) {
         if (acl->rule == IP_VS_ACL_DENY) {
             ++acl->d_conn;
-            rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
         }
         /* max_conn only take effect when not 0 */
         if (acl->max_conn && acl->p_conn >= acl->max_conn) {
             ++acl->d_conn;
-            rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_DROP;
         }
         ++acl->p_conn;
-        rte_rwlock_read_unlock(&svc->acl_lock);
         return EDPVS_OK;
     }
 
@@ -517,19 +512,15 @@ __acl_verdict(struct dp_vs_service *svc, struct dp_vs_acl *acl)
         if (acl->rule == IP_VS_ACL_PERMIT) {
             if (acl->max_conn && acl->p_conn >= acl->max_conn) {
                 ++acl->d_conn;
-                rte_rwlock_read_unlock(&svc->acl_lock);
                 return EDPVS_DROP;
             }
             ++acl->p_conn;
-            rte_rwlock_read_unlock(&svc->acl_lock);
             return EDPVS_OK;
         }
         ++acl->d_conn;
-        rte_rwlock_read_unlock(&svc->acl_lock);
         return EDPVS_DROP;
     }
 
-    rte_rwlock_read_unlock(&svc->acl_lock);
     return EDPVS_OK;
 }
 
