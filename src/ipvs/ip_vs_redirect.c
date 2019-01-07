@@ -23,7 +23,7 @@
 #define DPVS_CR_TBL_SIZE   (1 << DPVS_CR_TBL_BITS)
 #define DPVS_CR_TBL_MASK   (DPVS_CR_TBL_SIZE)
 
-static struct list_head   *dp_vs_cr_tab;
+static struct list_head   *dp_vs_ct_tbl;
 static rte_spinlock_t      dp_vs_cr_lock[DPVS_CR_TBL_SIZE];
 static struct rte_mempool *dp_vs_cr_cache[DPVS_MAX_SOCKET];
 #define this_cr_cache      (dp_vs_cr_cache[rte_socket_id()])
@@ -109,7 +109,7 @@ void dp_vs_redirect_hash(struct dp_vs_conn *conn)
                     DPVS_CR_TBL_MASK);
 
     rte_spinlock_lock(&dp_vs_cr_lock[hash]);
-    list_add(&r->list, &dp_vs_cr_tab[hash]);
+    list_add(&r->list, &dp_vs_ct_tbl[hash]);
     rte_spinlock_unlock(&dp_vs_cr_lock[hash]);
 
     dp_vs_conn_set_redirect_hashed(conn);
@@ -175,7 +175,7 @@ void dp_vs_redirect_init(struct dp_vs_conn *conn)
 }
 
 /**
- * try lookup dp_vs_cr_tab{} by packet tuple
+ * try lookup dp_vs_ct_tbl{} by packet tuple
  *
  *  <af, proto, saddr, sport, daddr, dport>.
  *
@@ -192,7 +192,7 @@ dp_vs_redirect_get(int af, uint16_t proto,
     hash = dp_vs_conn_hashkey(af, saddr, sport, daddr, dport, DPVS_CR_TBL_MASK);
 
     rte_spinlock_lock(&dp_vs_cr_lock[hash]);
-    list_for_each_entry(r, &dp_vs_cr_tab[hash], list) {
+    list_for_each_entry(r, &dp_vs_ct_tbl[hash], list) {
         if (r->af == af
             && r->proto == proto
             && r->sport == sport
@@ -285,16 +285,16 @@ static int dp_vs_redirect_table_create(void)
     }
 
     /* allocate the global redirect hash table, per socket? */
-    dp_vs_cr_tab =
+    dp_vs_ct_tbl =
         rte_malloc_socket(NULL, sizeof(struct list_head ) * DPVS_CR_TBL_SIZE,
                           RTE_CACHE_LINE_SIZE, rte_socket_id());
-    if (!dp_vs_cr_tab) {
+    if (!dp_vs_ct_tbl) {
         return EDPVS_NOMEM;
     }
 
     /* init the global redirect hash table */
     for (i = 0; i < DPVS_CR_TBL_SIZE; i++) {
-        INIT_LIST_HEAD(&dp_vs_cr_tab[i]);
+        INIT_LIST_HEAD(&dp_vs_ct_tbl[i]);
         rte_spinlock_init(&dp_vs_cr_lock[i]);
     }
 
@@ -310,7 +310,7 @@ static void dp_vs_redirect_table_free(void)
     }
 
     /* release the global redirect hash table */
-    rte_free(dp_vs_cr_tab);
+    rte_free(dp_vs_ct_tbl);
 }
 
 /*
