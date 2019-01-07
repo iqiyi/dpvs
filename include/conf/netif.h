@@ -278,4 +278,6 @@ typedef struct netif_bond_set {
     } opt;
 } netif_bond_set_t;
 
+void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
+                           lcoreid_t cid, uint16_t count, bool pkts_from_ring);
 #endif
