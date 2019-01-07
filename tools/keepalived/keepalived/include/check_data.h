@@ -303,6 +303,7 @@ static inline int inaddr_equal(sa_family_t family, void *addr1, void *addr2)
 			 (((X)->blklst_addr_gname && (Y)->blklst_addr_gname &&		\
 			   !strcmp((X)->blklst_addr_gname, (Y)->blklst_addr_gname)) ||	\
 			 (!(X)->blklst_addr_gname && !(Y)->blklst_addr_gname))		&&\
+			 (X)->rule_all == (Y)->rule_all  &&\
 			 !strcmp((X)->srange, (Y)->srange)				&&\
 			 !strcmp((X)->drange, (Y)->drange)				&&\
 			 !strcmp((X)->iifname, (Y)->iifname)				&&\

@@ -192,7 +192,7 @@ static int init_service_acl(virtual_server_t *vs)
 
     for (e = LIST_HEAD(vs->acl); e; ELEMENT_NEXT(e)) {
         acl = ELEMENT_DATA(e);
-        if (!ipvs_acl_cmd(LVS_CMD_ADD_ACL, acl)) {
+        if (!ipvs_acl_cmd(LVS_CMD_ADD_ACL, vs, acl)) {
             log_message(LOG_ERR, "%s create acl entry error.", __FUNCTION__);
             return IPVS_ERROR;
         }
@@ -231,7 +231,7 @@ init_service_vs(virtual_server_t * vs)
 			return 0;
 	}
 
-    if (!LIST_ISEMPTY(vs->acl)) {
+    if (!LIST_ISEMPTY(vs->acl) && !vs->reloaded) {
         if (!init_service_acl(vs)) {
             return 0;
         }
@@ -848,6 +848,88 @@ clear_diff_laddr(virtual_server_t * old_vs)
 	return 1;
 }
 
+static int
+acl_entry_equal(access_control_t *old_acl, access_control_t *acl)
+{
+    return old_acl->rule == acl->rule &&
+           old_acl->max_conn == acl->max_conn &&
+           !strcmp(old_acl->srange, acl->srange) &&
+           !strcmp(old_acl->drange, acl->drange);
+}
+
+static access_control_t *
+acl_exist(access_control_t *old_acl, list l)
+{
+    element e;
+    access_control_t *acl;
+
+    for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+        acl = ELEMENT_DATA(e);
+        if (acl_entry_equal(old_acl, acl)) {
+            return acl;
+        }
+    }
+    return NULL;
+}
+
+static int
+clear_acl_entry(access_control_t *acl, virtual_server_t *vs)
+{
+    return ipvs_acl_cmd(LVS_CMD_DEL_ACL, vs, acl);
+}
+
+/* get acl list for a specific vs */
+static list
+get_acl_list(virtual_server_t *vs)
+{
+    element e;
+    list l = check_data->vs;
+    virtual_server_t *vsvr;
+
+    if (LIST_ISEMPTY(l))
+        return NULL;
+
+    for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+        vsvr = ELEMENT_DATA(e);
+        if (VS_ISEQ(vs, vsvr))
+            return vsvr->acl;
+    }
+
+    /* most of the time never reached */
+    return NULL;
+}
+
+static int
+clear_diff_acl(access_control_t *old_acl, virtual_server_t *old_vs)
+{
+    list l = get_acl_list(old_vs);
+
+    if (!acl_exist(old_acl, l)) {
+        clear_acl_entry(old_acl, old_vs);
+    }
+
+    return IPVS_SUCCESS;
+}
+
+static int
+clear_diff_acls(virtual_server_t *old_vs)
+{
+    element e;
+    access_control_t *old_acl;
+    list l = old_vs->acl;
+
+    /* if old config didn't own acl, just return */
+    if (LIST_ISEMPTY(l))
+        return IPVS_SUCCESS;
+
+    for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+        old_acl = ELEMENT_DATA(e);
+        clear_diff_acl(old_acl, old_vs);
+    }
+
+    return IPVS_SUCCESS;
+}
+
 /* Check if a blacklist address entry is in list */
 static int
 blklst_entry_exist(blklst_addr_entry *blklst_entry, list l)
@@ -967,9 +1049,12 @@ clear_diff_services(void)
 			/* perform local address diff */
 			if (!clear_diff_laddr(vs))
 				return 0;
-                        /* perform blacklist address diff */
-                        if (!clear_diff_blklst(vs))
-                                return 0;
+			/* perform blacklist address diff */
+			if (!clear_diff_blklst(vs))
+				return 0;
+			/* perform acl list diff */
+			if (!clear_diff_acls(vs))
+				return 0;
 		}
 	}
 

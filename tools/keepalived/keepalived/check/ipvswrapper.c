@@ -404,6 +404,7 @@ ipvs_stop(void)
 	FREE(laddr_rule);
 	FREE(blklst_rule);
 	FREE(tunnel_rule);
+	FREE(acl_rule);
 
 	ipvs_close();
 }
@@ -992,18 +993,24 @@ int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry)
 }
 
 int
-ipvs_acl_cmd(int cmd, access_control_t *acl)
+ipvs_acl_cmd(int cmd, virtual_server_t *vs, access_control_t *acl)
 {
+    /* identify match */
+    srule->protocol = vs->service_type;
+    snprintf(srule->srange, sizeof(srule->srange), "%s", vs->srange);
+    snprintf(srule->drange, sizeof(srule->drange), "%s", vs->drange);
+    snprintf(srule->iifname, sizeof(srule->iifname), "%s", vs->iifname);
+    snprintf(srule->oifname, sizeof(srule->oifname), "%s", vs->oifname);
+
     memset(acl_rule, 0, sizeof(ipvs_acl_t));
     acl_rule->rule = acl->rule;
-    acl_rule->max_conn  = acl->max_conn;
+    acl_rule->max_conn = acl->max_conn;
     snprintf(acl_rule->srange, 256, "%s", acl->srange);
     snprintf(acl_rule->drange, 256, "%s", acl->drange);
     ipvs_talk(cmd);
 
     return IPVS_SUCCESS;
 }
-
 
 /* Set/Remove a RS or a local/deny address group from a VS */
 int

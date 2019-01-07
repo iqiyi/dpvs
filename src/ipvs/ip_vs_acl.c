@@ -234,7 +234,6 @@ __acl_parse_add(const char *srange, const char *drange,
     svc->num_acls += success_cnt;
     rte_rwlock_write_unlock(&svc->acl_lock);
 
-
 #ifdef CONFIG_DPVS_ACL_DEBUG
     RTE_LOG(DEBUG, ACL, "%s: %u acls has been successfully added, %u already in.\n",
                 __func__, success_cnt, fail_cnt);

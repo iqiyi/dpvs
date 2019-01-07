@@ -429,10 +429,10 @@ static void ipvs_fill_acl_conf(ipvs_service_t *svc, ipvs_acl_t *acl,
                                struct dp_vs_acl_conf *conf)
 {
     memset(conf, 0, sizeof(*conf));
-    conf->af     = svc->af;
-    conf->proto  = svc->protocol;
+    conf->af = svc->af;
 
     /* identify match */
+    conf->proto = svc->protocol;
     snprintf(conf->m_srange, sizeof(conf->m_srange), "%s", svc->srange);
     snprintf(conf->m_drange, sizeof(conf->m_drange), "%s", svc->drange);
     snprintf(conf->iifname, sizeof(conf->iifname), "%s", svc->iifname);
