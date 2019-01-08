@@ -1,9 +1,10 @@
-This patch is for Nginx to get real client ip when you are using
-NAT64 mode(VIP is IPv6 while RS is IPv4).
+This patch is for Nginx to get real client ip by 'toa_remote_addr' 
+when you are using NAT64 mode(VIP is IPv6 while RS is IPv4).
 You can use this patch only when toa module is installed.
 
 Here is an exampe to configure http block in nginx.conf:
 
+```
 http {
     include       mime.types;
     default_type  application/octet-stream;
@@ -27,5 +28,5 @@ http {
             proxy_pass http://192.168.1.1;
         }   
     }   
-
 }
+```

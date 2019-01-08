@@ -338,7 +338,8 @@ static int route_add_del(bool add, struct in_addr* dest,
         /* ignore timeout for msg, or keepalived will cause a lot bug. 
          * Timeout error is ok because route can still be set,
          * no mem is another possible err, but problem will not just be here */
-        RTE_LOG(INFO, ROUTE, "[%s] fail to send multicast message\n", __func__);
+        RTE_LOG(INFO, ROUTE, "[%s] fail to send multicast message, error code = %d\n",
+                                                                      __func__, err);
     }
     msg_destroy(&msg);
 
