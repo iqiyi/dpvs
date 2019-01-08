@@ -1,4 +1,5 @@
 #include "toa.h"
+#include <linux/list.h>
 
 /*
  *	TOA: Address is a new TCP Option
@@ -28,6 +29,34 @@ unsigned long sk_data_ready_addr = 0;
     ntohs((addr).s6_addr16[6]), \
     ntohs((addr).s6_addr16[7])
 
+/* ipv6's toa list table array */
+#define TOA_IP6_TAB_BITS	12
+#define TOA_IP6_TAB_SIZE	(1 << TOA_IP6_TAB_BITS)
+#define TOA_IP6_TAB_MASK	(TOA_IP6_TAB_SIZE - 1)
+
+struct toa_ip6_entry {
+	struct toa_ip6_data toa_data;
+	struct sock *sk;
+
+	struct list_head list;
+};
+
+struct toa_ip6_list_head {
+	struct list_head toa_ip6_head;
+	spinlock_t lock;
+} __attribute__((__aligned__(SMP_CACHE_BYTES)));
+
+static struct toa_ip6_list_head
+__toa_ip6_list_tab[TOA_IP6_TAB_SIZE] __cacheline_aligned;
+
+/* per-cpu lock for toa of ipv6  */
+struct toa_ip6_sk_lock {
+	/* lock for sk of ip6 toa */
+	spinlock_t __percpu *lock;
+};
+
+static struct toa_ip6_sk_lock toa_ip6_sk_lock;
+
 static struct proto_ops *inet6_stream_ops_p = NULL;
 static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
 
@@ -36,12 +65,13 @@ typedef struct sock *(*syn_recv_sock_func_pt)(
 		struct request_sock *req,
 		struct dst_entry *dst);
 static syn_recv_sock_func_pt tcp_v6_syn_recv_sock_org_pt = NULL;
+
+static void tcp_v6_sk_destruct_toa(struct sock *sk);
 #endif
 
 /*
  * Statistics of toa in proc /proc/net/toa_stats
  */
-
 struct toa_stats_entry toa_stats[] = {
 	TOA_STAT_ITEM("syn_recv_sock_toa", SYN_RECV_SOCK_TOA_CNT),
 	TOA_STAT_ITEM("syn_recv_sock_no_toa", SYN_RECV_SOCK_NO_TOA_CNT),
@@ -57,6 +87,172 @@ struct toa_stats_entry toa_stats[] = {
 };
 
 DEFINE_TOA_STAT(struct toa_stat_mib, ext_stats);
+
+#ifdef TOA_IPV6_ENABLE
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,4,103)
+/* more secured version of ipv6_addr_hash() */
+static inline u32
+__ipv6_addr_jhash(const struct in6_addr *a, const u32 initval)
+{
+	u32 v = (__force u32)a->s6_addr32[0] ^ (__force u32)a->s6_addr32[1];
+
+	return jhash_3words(v,
+			    (__force u32)a->s6_addr32[2],
+			    (__force u32)a->s6_addr32[3],
+			    initval);
+}
+#endif
+
+static void
+toa_ip6_hash(struct toa_ip6_entry *ptr_ip6_entry)
+{
+	struct toa_ip6_data *ptr_toa_data = &ptr_ip6_entry->toa_data;
+	__u32 hash_key =
+		__ipv6_addr_jhash(&ptr_toa_data->in6_addr, ptr_toa_data->port) & TOA_IP6_TAB_MASK;
+
+	spin_lock_bh(&__toa_ip6_list_tab[hash_key].lock);
+
+	list_add(&ptr_ip6_entry->list, &__toa_ip6_list_tab[hash_key].toa_ip6_head);
+
+	spin_unlock_bh(&__toa_ip6_list_tab[hash_key].lock);
+
+	return;
+}
+
+static void
+toa_ip6_unhash(struct toa_ip6_entry *ptr_ip6_entry)
+{
+	struct toa_ip6_data *ptr_toa_data = &ptr_ip6_entry->toa_data;
+	__u32 hash_key =
+		__ipv6_addr_jhash(&ptr_toa_data->in6_addr, ptr_toa_data->port) & TOA_IP6_TAB_MASK;
+
+	spin_lock_bh(&__toa_ip6_list_tab[hash_key].lock);
+
+	list_del(&ptr_ip6_entry->list);
+
+	spin_unlock_bh(&__toa_ip6_list_tab[hash_key].lock);
+}
+
+static void
+lock_all_toa_ip6_sk(void)
+{
+	int i;
+	for_each_possible_cpu(i) {
+		spinlock_t *lock;
+
+		lock = per_cpu_ptr(toa_ip6_sk_lock.lock, i);
+		spin_lock_bh(lock);
+	}
+}
+
+static void
+unlock_all_toa_ip6_sk(void)
+{
+	int i;
+	for_each_possible_cpu(i) {
+		spinlock_t *lock;
+
+		lock = per_cpu_ptr(toa_ip6_sk_lock.lock, i);
+		spin_unlock_bh(lock);
+	}
+}
+
+static void
+lock_cpu_toa_ip6_sk(void)
+{
+	spinlock_t *lock = this_cpu_ptr(toa_ip6_sk_lock.lock);
+	spin_lock_bh(lock);
+}
+
+static void
+unlock_cpu_toa_ip6_sk(void)
+{
+	spinlock_t *lock = this_cpu_ptr(toa_ip6_sk_lock.lock);
+	spin_unlock_bh(lock);
+}
+
+static int
+init_toa_ip6(void)
+{
+	int i;
+
+	for_each_possible_cpu(i) {
+		spinlock_t *lock;
+
+		lock = per_cpu_ptr(toa_ip6_sk_lock.lock, i);
+		spin_lock_init(lock);
+	}
+
+	for (i = 0; i < TOA_IP6_TAB_SIZE; ++i) {
+		INIT_LIST_HEAD(&__toa_ip6_list_tab[i].toa_ip6_head);
+		spin_lock_init(&__toa_ip6_list_tab[i].lock);
+	}
+
+	toa_ip6_sk_lock.lock = alloc_percpu(spinlock_t);
+	if (toa_ip6_sk_lock.lock == NULL) {
+		TOA_INFO("fail to alloc per cpu ip6's destruct lock\n");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static int
+exit_toa_ip6(void)
+{
+	int i;
+	struct list_head *head;
+	struct toa_ip6_entry *ptr_ip6_entry;
+	struct sock *sk;
+
+	lock_all_toa_ip6_sk();
+
+	for (i = 0; i < TOA_IP6_TAB_SIZE; ++i) {
+
+		spin_lock_bh(&__toa_ip6_list_tab[i].lock);
+
+		head = &__toa_ip6_list_tab[i].toa_ip6_head;
+		while (!list_empty(head)) {
+			ptr_ip6_entry = list_first_entry(head, struct toa_ip6_entry, list);
+			sk = ptr_ip6_entry->sk;
+
+			if (sk && sk->sk_user_data &&
+				(sk->sk_destruct == tcp_v6_sk_destruct_toa)) {
+
+				sk->sk_destruct = inet_sock_destruct;
+				sk->sk_user_data = NULL;
+
+				TOA_DBG("free ip6_entry in __toa_ip6_list_tab succ. "
+						"ptr_ip6_entry : %p, toa_ip6 : "TOA_NIP6_FMT", toa_port : %u\n",
+						ptr_ip6_entry,
+						TOA_NIP6(ptr_ip6_entry->toa_data.in6_addr),
+						ptr_ip6_entry->toa_data.port);
+			} else {
+				TOA_DBG("update sk of ip6_entry fail. "
+						"ptr_ip6_entry : %p\n",
+						ptr_ip6_entry);
+			}
+
+			TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
+
+			list_del(&ptr_ip6_entry->list);
+			kfree(ptr_ip6_entry);
+		}
+
+		spin_unlock_bh(&__toa_ip6_list_tab[i].lock);
+
+	}
+
+	unlock_all_toa_ip6_sk();
+
+	synchronize_net();
+
+	free_percpu(toa_ip6_sk_lock.lock);
+	return 0;
+}
+
+#endif
+
 
 /*
  * Funcs for toa hooks
@@ -118,11 +314,14 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 					}
 #ifdef TOA_IPV6_ENABLE
 					else if (af == AF_INET6) {
-						struct toa_ip6_data *ptr_toa_ip6 =
-							kmalloc(sizeof(struct toa_ip6_data), GFP_ATOMIC);
-						if (!ptr_toa_ip6) {
+						struct toa_ip6_data *ptr_toa_ip6;
+						struct toa_ip6_entry *ptr_toa_entry =
+							kzalloc(sizeof(struct toa_ip6_entry), GFP_ATOMIC);
+						if (!ptr_toa_entry) {
 							return NULL;
 						}
+
+						ptr_toa_ip6 = &ptr_toa_entry->toa_data;
 						ptr_toa_ip6->opcode = opcode;
 						ptr_toa_ip6->opsize = TCPOLEN_IP6_TOA;
 						ipv6_addr_set(&ptr_toa_ip6->in6_addr, 0, 0,
@@ -130,7 +329,7 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 						TOA_DBG("coded ip6 toa data: %p\n",
 							ptr_toa_ip6);
 						TOA_INC_STATS(ext_stats, IP6_ADDR_ALLOC_CNT);
-						return ptr_toa_ip6;
+						return ptr_toa_entry;
 					}
 #endif
 				}
@@ -138,11 +337,14 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 #ifdef TOA_IPV6_ENABLE
 				if (TCPOPT_TOA == opcode &&
 				    TCPOLEN_IP6_TOA == opsize) {
-					struct toa_ip6_data *ptr_toa_ip6 =
-						kmalloc(sizeof(struct toa_ip6_data), GFP_ATOMIC);
-					if (!ptr_toa_ip6) {
+					struct toa_ip6_data *ptr_toa_ip6;
+					struct toa_ip6_entry *ptr_toa_entry =
+						kzalloc(sizeof(struct toa_ip6_entry), GFP_ATOMIC);
+					if (!ptr_toa_entry) {
 							return NULL;
 					}
+
+					ptr_toa_ip6 = &ptr_toa_entry->toa_data;
 					memcpy(ptr_toa_ip6, ptr - 2, sizeof(struct toa_ip6_data));
 
 					TOA_DBG("find toa_v6 data : ip = "
@@ -156,7 +358,8 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 						*nat64 = 0;
 					else
 						*nat64 = 1;
-					return ptr_toa_ip6;
+
+					return ptr_toa_entry;
 				}
 #endif
 				ptr += opsize - 2;
@@ -239,8 +442,8 @@ static int
 inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 {
 	struct inet_sock *inet;
-	struct toa_ip6_data *t_ip6_data_ptr;
 	struct toa_nat64_peer uaddr;
+	int ret;
 
 	if (cmd != TOA_SO_GET_LOOKUP || !sk) {
 		TOA_INFO("%s: bad cmd\n", __func__);
@@ -263,28 +466,54 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 		((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_SYN_SENT)))
 		return -ENOTCONN;
 
+	ret = -EINVAL;
+
+	lock_cpu_toa_ip6_sk();
+
 	if (NULL != sk->sk_user_data) {
+		struct toa_ip6_entry *ptr_ip6_entry;
+		struct toa_ip6_data *ptr_ip6_data;
+
 		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
-			if (!sock_flag(sk,SOCK_NAT64))
-				return -EFAULT;
-			t_ip6_data_ptr = sk->sk_user_data;
-			if (TCPOPT_TOA == t_ip6_data_ptr->opcode &&
-			    TCPOLEN_IP6_TOA == t_ip6_data_ptr->opsize) {
+
+			if (!sock_flag(sk, SOCK_NAT64)) {
+				ret = -EFAULT;
+				goto out;
+			}
+
+			ptr_ip6_entry = sk->sk_user_data;
+			ptr_ip6_data = &ptr_ip6_entry->toa_data;
+
+			if (TCPOPT_TOA == ptr_ip6_data->opcode &&
+			    TCPOLEN_IP6_TOA == ptr_ip6_data->opsize) {
 				TOA_INC_STATS(ext_stats, GETNAME_TOA_OK_CNT);
 				TOA_DBG("inet64_getname_toa: set new sockaddr, ip "
 					 TOA_NIPQUAD_FMT" -> "TOA_NIP6_FMT
 					", port %u -> %u\n",
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,33)
+					TOA_NIPQUAD(inet->inet_saddr),
+#else
 					TOA_NIPQUAD(inet->saddr),
-					TOA_NIP6(t_ip6_data_ptr->in6_addr),
+#endif
+					TOA_NIP6(ptr_ip6_data->in6_addr),
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,33)
+					ntohs(inet->inet_sport),
+#else
 					ntohs(inet->sport),
-					ntohs(t_ip6_data_ptr->port));
-				uaddr.saddr = t_ip6_data_ptr->in6_addr;
-				uaddr.port  = t_ip6_data_ptr->port;
+#endif
+					ntohs(ptr_ip6_data->port));
+				uaddr.saddr = ptr_ip6_data->in6_addr;
+				uaddr.port  = ptr_ip6_data->port;
+
 				if (copy_to_user(user, &uaddr, 
-					sizeof(struct toa_nat64_peer)) != 0)
-					return -EFAULT;
+					sizeof(struct toa_nat64_peer)) != 0) {
+					ret = -EFAULT;
+					goto out;
+				}
+
 				*len = sizeof(struct toa_nat64_peer);
-				return 0;
+				ret = 0;
+				goto out;
 			} else {
 				TOA_INC_STATS(ext_stats,
 						GETNAME_TOA_MISMATCH_CNT);
@@ -296,7 +525,9 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 		TOA_INC_STATS(ext_stats, GETNAME_TOA_EMPTY_CNT);
 	}
 
-	return -EINVAL;
+out:
+	unlock_cpu_toa_ip6_sk();
+	return ret;
 }
 
 #ifdef TOA_IPV6_ENABLE
@@ -307,7 +538,6 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 	int retval = 0;
 	struct sock *sk = sock->sk;
 	struct sockaddr_in6 *sin = (struct sockaddr_in6 *) uaddr;
-	struct toa_ip6_data* t_ip6_data_ptr;
 
 	TOA_DBG("inet6_getname_toa called, sk->sk_user_data is %p\n",
 		sk->sk_user_data);
@@ -316,21 +546,26 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 	retval = inet6_getname(sock, uaddr, uaddr_len, peer);
 
 	/* set our value if need */
+	lock_cpu_toa_ip6_sk();
+
 	if (retval == 0 && NULL != sk->sk_user_data && peer) {
 		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
-			t_ip6_data_ptr = sk->sk_user_data;
-			if (TCPOPT_TOA == t_ip6_data_ptr->opcode &&
-			    TCPOLEN_IP6_TOA == t_ip6_data_ptr->opsize) {
+			struct toa_ip6_entry* ptr_ip6_entry  = sk->sk_user_data;
+			struct toa_ip6_data* ptr_ip6_data = &ptr_ip6_entry->toa_data;
+
+			if (sk == ptr_ip6_entry->sk &&
+				TCPOPT_TOA == ptr_ip6_data->opcode &&
+				TCPOLEN_IP6_TOA == ptr_ip6_data->opsize) {
 				TOA_INC_STATS(ext_stats, GETNAME_TOA_OK_CNT);
 				TOA_DBG("inet6_getname_toa: set new sockaddr, ip " 
 					TOA_NIP6_FMT" -> "TOA_NIP6_FMT
 					", port %u -> %u\n",
 					TOA_NIP6(sin->sin6_addr),
-					TOA_NIP6(t_ip6_data_ptr->in6_addr),
+					TOA_NIP6(ptr_ip6_data->in6_addr),
 					ntohs(sin->sin6_port),
-					ntohs(t_ip6_data_ptr->port));
-				sin->sin6_port = t_ip6_data_ptr->port;
-				sin->sin6_addr = t_ip6_data_ptr->in6_addr;
+					ntohs(ptr_ip6_data->port));
+				sin->sin6_port = ptr_ip6_data->port;
+				sin->sin6_addr = ptr_ip6_data->in6_addr;
 			} else { /* sk_user_data doesn't belong to us */
 				TOA_INC_STATS(ext_stats,
 					      GETNAME_TOA_MISMATCH_CNT);
@@ -341,6 +576,8 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 	} else { /* no need to get client ip */
 		TOA_INC_STATS(ext_stats, GETNAME_TOA_EMPTY_CNT);
 	}
+
+	unlock_cpu_toa_ip6_sk();
 
 	return retval;
 }
@@ -372,16 +609,6 @@ get_kernel_ipv6_symbol(void)
 	}   
         return 0;    
 }
-
-static void 
-tcp_v6_sk_destruct_toa(struct sock *sk) {
-        if (sk->sk_user_data) {
-                kfree(sk->sk_user_data);
-                sk->sk_user_data = NULL;
-                TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
-        }   
-        inet_sock_destruct(sk);
-}
 #endif
 
 /* The three way handshake has completed - we got a valid synack -
@@ -412,8 +639,13 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 		if (NULL != newsock->sk_user_data) {
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
 			if (nat64) {
-				sock_set_flag(newsock, SOCK_NAT64);
+				struct toa_ip6_entry *ptr_ip6_entry = newsock->sk_user_data;
+				ptr_ip6_entry->sk = newsock;
+				toa_ip6_hash(ptr_ip6_entry);
+
 				newsock->sk_destruct = tcp_v6_sk_destruct_toa;
+
+				sock_set_flag(newsock, SOCK_NAT64);
 			}
 		}
 		else
@@ -427,6 +659,25 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 }
 
 #ifdef TOA_IPV6_ENABLE
+static void 
+tcp_v6_sk_destruct_toa(struct sock *sk) {
+
+	lock_cpu_toa_ip6_sk();
+
+	if (sk->sk_user_data) {
+		struct toa_ip6_entry* ptr_ip6_entry = sk->sk_user_data;
+		toa_ip6_unhash(ptr_ip6_entry);
+		sk->sk_destruct = inet_sock_destruct;
+		sk->sk_user_data = NULL;
+		kfree(ptr_ip6_entry);
+		TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
+	}
+
+	inet_sock_destruct(sk);
+
+	unlock_cpu_toa_ip6_sk();
+}
+
 static struct sock *
 tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 			 struct request_sock *req, struct dst_entry *dst)
@@ -444,6 +695,10 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 		newsock->sk_user_data = get_toa_data(AF_INET6, skb, &nat64);
 		sock_reset_flag(newsock, SOCK_NAT64);
 		if (NULL != newsock->sk_user_data) {
+			struct toa_ip6_entry *ptr_ip6_entry = newsock->sk_user_data;
+			ptr_ip6_entry->sk = newsock;
+			toa_ip6_hash(ptr_ip6_entry);
+
 			newsock->sk_destruct = tcp_v6_sk_destruct_toa;
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
 		} else {
@@ -589,7 +844,7 @@ static struct nf_sockopt_ops toa_sockopts = {
 /*
  * TOA module init and destory
  */
-#if LINUX_VERSION_CODE >=KERNEL_VERSION(3,9,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
 static struct proc_dir_entry *proc_net_fops_create(struct net *net,
 	const char *name, mode_t mode, const struct file_operations *fops)
 {
@@ -607,7 +862,7 @@ static int __init
 toa_init(void)
 {
 
-	TOA_INFO("TOA " TOA_VERSION " by pukong.wjm\n");
+	TOA_INFO("TOA " TOA_VERSION " by qlb of iqiyi.\n");
 
 	/* alloc statistics array for toa */
 	ext_stats = alloc_percpu(struct toa_stat_mib);
@@ -628,6 +883,11 @@ toa_init(void)
 	}
 
 #ifdef TOA_IPV6_ENABLE
+	if (0 != init_toa_ip6()) {
+		TOA_INFO("init toa ip6 fail.\n");
+		goto err;
+	}
+
 	if (0 != get_kernel_ipv6_symbol()) {
 		TOA_INFO("get ipv6 struct from kernel fail.\n");
 		goto err;
@@ -661,6 +921,12 @@ toa_exit(void)
 	unhook_toa_functions();
 	nf_unregister_sockopt(&toa_sockopts);
 	synchronize_net();
+
+#ifdef TOA_IPV6_ENABLE
+	if (0 != exit_toa_ip6()) {
+		TOA_INFO("exit toa ip6 fail.\n");
+	}
+#endif
 
 	proc_net_remove(&init_net, "toa_stats");
 	if (NULL != ext_stats) {
