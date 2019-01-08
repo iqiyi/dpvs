@@ -29,7 +29,6 @@ unsigned long sk_data_ready_addr = 0;
     ntohs((addr).s6_addr16[6]), \
     ntohs((addr).s6_addr16[7])
 
-
 /* ipv6's toa list table array */
 #define TOA_IP6_TAB_BITS	12
 #define TOA_IP6_TAB_SIZE	(1 << TOA_IP6_TAB_BITS)
@@ -49,7 +48,6 @@ struct toa_ip6_list_head {
 
 static struct toa_ip6_list_head
 __toa_ip6_list_tab[TOA_IP6_TAB_SIZE] __cacheline_aligned;
-
 
 /* per-cpu lock for toa of ipv6  */
 struct toa_ip6_sk_lock {
@@ -74,7 +72,6 @@ static void tcp_v6_sk_destruct_toa(struct sock *sk);
 /*
  * Statistics of toa in proc /proc/net/toa_stats
  */
-
 struct toa_stats_entry toa_stats[] = {
 	TOA_STAT_ITEM("syn_recv_sock_toa", SYN_RECV_SOCK_TOA_CNT),
 	TOA_STAT_ITEM("syn_recv_sock_no_toa", SYN_RECV_SOCK_NO_TOA_CNT),
@@ -91,11 +88,7 @@ struct toa_stats_entry toa_stats[] = {
 
 DEFINE_TOA_STAT(struct toa_stat_mib, ext_stats);
 
-
-
-
 #ifdef TOA_IPV6_ENABLE
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,4,103)
 /* more secured version of ipv6_addr_hash() */
 static inline u32
@@ -194,7 +187,6 @@ init_toa_ip6(void)
 		INIT_LIST_HEAD(&__toa_ip6_list_tab[i].toa_ip6_head);
 		spin_lock_init(&__toa_ip6_list_tab[i].lock);
 	}
-
 
 	toa_ip6_sk_lock.lock = alloc_percpu(spinlock_t);
 	if (toa_ip6_sk_lock.lock == NULL) {
@@ -480,7 +472,7 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 
 	if (NULL != sk->sk_user_data) {
 		struct toa_ip6_entry *ptr_ip6_entry;
-		struct toa_ip6_data *t_ip6_data_ptr;
+		struct toa_ip6_data *ptr_ip6_data;
 
 		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
 
@@ -490,10 +482,10 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 			}
 
 			ptr_ip6_entry = sk->sk_user_data;
-			t_ip6_data_ptr = &ptr_ip6_entry->toa_data;
+			ptr_ip6_data = &ptr_ip6_entry->toa_data;
 
-			if (TCPOPT_TOA == t_ip6_data_ptr->opcode &&
-			    TCPOLEN_IP6_TOA == t_ip6_data_ptr->opsize) {
+			if (TCPOPT_TOA == ptr_ip6_data->opcode &&
+			    TCPOLEN_IP6_TOA == ptr_ip6_data->opsize) {
 				TOA_INC_STATS(ext_stats, GETNAME_TOA_OK_CNT);
 				TOA_DBG("inet64_getname_toa: set new sockaddr, ip "
 					 TOA_NIPQUAD_FMT" -> "TOA_NIP6_FMT
@@ -503,15 +495,15 @@ inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 #else
 					TOA_NIPQUAD(inet->saddr),
 #endif
-					TOA_NIP6(t_ip6_data_ptr->in6_addr),
+					TOA_NIP6(ptr_ip6_data->in6_addr),
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,33)
 					ntohs(inet->inet_sport),
 #else
 					ntohs(inet->sport),
 #endif
-					ntohs(t_ip6_data_ptr->port));
-				uaddr.saddr = t_ip6_data_ptr->in6_addr;
-				uaddr.port  = t_ip6_data_ptr->port;
+					ntohs(ptr_ip6_data->port));
+				uaddr.saddr = ptr_ip6_data->in6_addr;
+				uaddr.port  = ptr_ip6_data->port;
 
 				if (copy_to_user(user, &uaddr, 
 					sizeof(struct toa_nat64_peer)) != 0) {
@@ -558,22 +550,22 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 
 	if (retval == 0 && NULL != sk->sk_user_data && peer) {
 		if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
-			struct toa_ip6_entry* t_ip6_entry_ptr = sk->sk_user_data;
-			struct toa_ip6_data* t_ip6_data_ptr = &t_ip6_entry_ptr->toa_data;
+			struct toa_ip6_entry* ptr_ip6_entry  = sk->sk_user_data;
+			struct toa_ip6_data* ptr_ip6_data = &ptr_ip6_entry->toa_data;
 
-			if (sk == t_ip6_entry_ptr->sk &&
-				TCPOPT_TOA == t_ip6_data_ptr->opcode &&
-				TCPOLEN_IP6_TOA == t_ip6_data_ptr->opsize) {
+			if (sk == ptr_ip6_entry->sk &&
+				TCPOPT_TOA == ptr_ip6_data->opcode &&
+				TCPOLEN_IP6_TOA == ptr_ip6_data->opsize) {
 				TOA_INC_STATS(ext_stats, GETNAME_TOA_OK_CNT);
 				TOA_DBG("inet6_getname_toa: set new sockaddr, ip " 
 					TOA_NIP6_FMT" -> "TOA_NIP6_FMT
 					", port %u -> %u\n",
 					TOA_NIP6(sin->sin6_addr),
-					TOA_NIP6(t_ip6_data_ptr->in6_addr),
+					TOA_NIP6(ptr_ip6_data->in6_addr),
 					ntohs(sin->sin6_port),
-					ntohs(t_ip6_data_ptr->port));
-				sin->sin6_port = t_ip6_data_ptr->port;
-				sin->sin6_addr = t_ip6_data_ptr->in6_addr;
+					ntohs(ptr_ip6_data->port));
+				sin->sin6_port = ptr_ip6_data->port;
+				sin->sin6_addr = ptr_ip6_data->in6_addr;
 			} else { /* sk_user_data doesn't belong to us */
 				TOA_INC_STATS(ext_stats,
 					      GETNAME_TOA_MISMATCH_CNT);
@@ -926,7 +918,6 @@ err:
 static void __exit
 toa_exit(void)
 {
-
 	unhook_toa_functions();
 	nf_unregister_sockopt(&toa_sockopts);
 	synchronize_net();
