@@ -38,9 +38,7 @@ static struct dp_vs_dest *dp_vs_wlc_schedule(struct dp_vs_service *svc,
      */
 
     list_for_each_entry(dest, &svc->dests, n_list) {
-        if (!(dest->flags & DPVS_DEST_F_OVERLOAD) &&
-            (dest->flags & DPVS_DEST_F_AVAILABLE) &&
-            rte_atomic16_read(&dest->weight) > 0) {
+        if (dp_vs_dest_is_valid(dest)) {
             least = dest;
             loh = dp_vs_wlc_dest_overhead(least);
             goto nextstage;

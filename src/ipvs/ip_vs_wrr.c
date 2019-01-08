@@ -163,8 +163,7 @@ static struct dp_vs_dest *dp_vs_wrr_schedule(struct dp_vs_service *svc,
         if (mark->cl != &svc->dests) {
             /* not at the head of the list */
             dest = list_entry(mark->cl, struct dp_vs_dest, n_list);
-            if (!(dest->flags & DPVS_DEST_F_OVERLOAD) &&
-                (dest->flags & DPVS_DEST_F_AVAILABLE) &&
+            if (dp_vs_dest_is_valid(dest) &&
                 rte_atomic16_read(&dest->weight) >= mark->cw) {
                 /* got it */
                 break;
@@ -203,5 +202,3 @@ int  dp_vs_wrr_term(void)
 {
     return unregister_dp_vs_scheduler(&dp_vs_wrr_scheduler);
 }
-
-
