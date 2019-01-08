@@ -47,11 +47,9 @@ static inline char* get_acl_rule_name(int rule)
     switch (rule) {
         case IP_VS_ACL_PERMIT:
             return "permit";
-            break;
 
         case IP_VS_ACL_DENY:
             return "deny";
-            break;
 
         default:
             return "unknown";
@@ -222,7 +220,9 @@ __acl_parse_add(const char *srange, const char *drange,
 
             acl = dp_vs_acl_find(new_acl, svc, hashkey, DP_VS_ACL_ADD);
             if (acl != NULL) {
+#ifdef CONFIG_DPVS_ACL_DEBUG
                 ++fail_cnt;
+#endif
                 rte_free(new_acl);
                 continue;
             }
@@ -422,7 +422,9 @@ __acl_parse_del(const char *srange, const char *drange,
             acl = dp_vs_acl_find(&new_acl, svc, hashkey, DP_VS_ACL_DEL);
 
             if (acl == NULL) {
+#ifdef CONFIG_DPVS_ACL_DEBUG
                 ++fail_cnt;
+#endif
                 continue;
             }
             list_del(&acl->list);
