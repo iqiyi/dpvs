@@ -307,7 +307,7 @@ static int route_add_del(bool add, struct in_addr* dest,
     else
         err = route_del_lcore(dest, netmask, flag, gw, port, src, mtu, metric);
 
-    if (err != EDPVS_OK) {
+    if (err != EDPVS_OK && err != EDPVS_EXIST && err != EDPVS_NOTEXIST) {
         RTE_LOG(INFO, ROUTE, "[%s] fail to set route\n", __func__);
         return err;
     }
@@ -335,9 +335,11 @@ static int route_add_del(bool add, struct in_addr* dest,
 
     err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
     if (err != EDPVS_OK) {
-        msg_destroy(&msg);
-        RTE_LOG(INFO, ROUTE, "[%s] fail to send multicast message\n", __func__);
-        return err;
+        /* ignore timeout for msg, or keepalived will cause a lot bug. 
+         * Timeout error is ok because route can still be set,
+         * no mem is another possible err, but problem will not just be here */
+        RTE_LOG(INFO, ROUTE, "[%s] fail to send multicast message, error code = %d\n",
+                                                                      __func__, err);
     }
     msg_destroy(&msg);
 

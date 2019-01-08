@@ -565,6 +565,7 @@ static int ifa_add_set(int af, const struct netif_port *dev,
     struct inet_ifaddr *ifa = NULL;
     struct timeval timeo = {0};
     int err;
+    char addr_str[64];
 
     if (!dev || !ifa_prefix_check(af, addr, plen))
         return EDPVS_INVAL;
@@ -572,6 +573,9 @@ static int ifa_add_set(int af, const struct netif_port *dev,
     idev = dev_get_idev(dev);
     if (!idev)
         return EDPVS_RESOURCE;
+
+    inet_ntop(af, &addr->in.s_addr, addr_str, sizeof(addr_str));
+    RTE_LOG(INFO, IFA, "try to add %s in %s \n", addr_str, __func__);
 
     rte_rwlock_write_lock(&in_addr_lock);
 
@@ -610,7 +614,7 @@ static int ifa_add_set(int af, const struct netif_port *dev,
 
         /* set routes for local and network */
         err = ifa_add_route(ifa);
-        if (err != EDPVS_OK)
+        if (err != EDPVS_OK && err != EDPVS_EXIST)
             goto del_mc;
 
         err = __ifa_insert(idev, ifa);
@@ -678,6 +682,7 @@ free_ifa:
 errout:
     rte_rwlock_write_unlock(&in_addr_lock);
     idev_put(idev);
+    RTE_LOG(WARNING, IFA, "add %s in %s failed\n", addr_str, __func__);
     return err;
 }
 
@@ -707,6 +712,7 @@ int inet_addr_del(int af, struct netif_port *dev,
     struct inet_ifaddr *ifa;
     struct inet_device *idev;
     int err;
+    char addr_str[64];
 
     if (!dev || !ifa_prefix_check(af, addr, plen))
         return EDPVS_INVAL;
@@ -729,6 +735,9 @@ int inet_addr_del(int af, struct netif_port *dev,
         rte_atomic32_dec(&in_addr_cnt);
     }
     rte_rwlock_write_unlock(&in_addr_lock);
+
+    inet_ntop(af, &addr->in.s_addr, addr_str, sizeof(addr_str));
+    RTE_LOG(INFO, IFA, "del %s in %s \n", addr_str, __func__);
 
     idev_put(idev);
     return err;
