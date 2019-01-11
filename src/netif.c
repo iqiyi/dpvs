@@ -2295,7 +2295,7 @@ static int netif_arp_ring_init(void)
 void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
                       lcoreid_t cid, uint16_t count, bool pkts_from_ring)
 {
-    int i, t = 0;
+    int i, t;
     struct ether_hdr *eth_hdr;
     struct rte_mbuf *mbuf_copied = NULL;
 

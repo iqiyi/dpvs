@@ -118,10 +118,10 @@ tuplehash_to_conn(const struct conn_tuple_hash *thash)
     return container_of(thash, struct dp_vs_conn, tuplehash[thash->direct]);
 }
 
-static inline uint32_t conn_hashkey(int af,
-                                const union inet_addr *saddr, uint16_t sport,
-                                const union inet_addr *daddr, uint16_t dport,
-                                uint32_t mask)
+inline uint32_t dp_vs_conn_hashkey(int af,
+    const union inet_addr *saddr, uint16_t sport,
+    const union inet_addr *daddr, uint16_t dport,
+    uint32_t mask)
 {
     switch (af) {
     case AF_INET:
@@ -147,46 +147,30 @@ static inline uint32_t conn_hashkey(int af,
     }
 }
 
-uint32_t dp_vs_conn_hashkey(int af,
-    const union inet_addr *saddr, uint16_t sport,
-    const union inet_addr *daddr, uint16_t dport,
-    uint32_t mask)
-{
-    return conn_hashkey(af, saddr, sport, daddr, dport, mask);
-}
-
-static inline int __conn_hash(struct dp_vs_conn *conn)
+static inline int __dp_vs_conn_hash(struct dp_vs_conn *conn)
 {
     uint32_t ihash, ohash;
 
     if (unlikely(conn->flags & DPVS_CONN_F_HASHED))
         return EDPVS_EXIST;
 
-    if (conn->flags & DPVS_CONN_F_TEMPLATE) {
-        ihash = conn_hashkey(conn->af,
-                    &tuplehash_in(conn).saddr, tuplehash_in(conn).sport,
-                    &tuplehash_in(conn).daddr, tuplehash_in(conn).dport,
-                    DPVS_CONN_TBL_MASK);
-        ohash = conn_hashkey(conn->af,
-                    &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
-                    &tuplehash_out(conn).daddr, tuplehash_out(conn).dport,
-                    DPVS_CONN_TBL_MASK);
+    ihash = dp_vs_conn_hashkey(tuplehash_in(conn).af,
+                         &tuplehash_in(conn).saddr, tuplehash_in(conn).sport,
+                         &tuplehash_in(conn).daddr, tuplehash_in(conn).dport,
+                         DPVS_CONN_TBL_MASK);
 
+    ohash = dp_vs_conn_hashkey(tuplehash_out(conn).af,
+                         &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
+                         &tuplehash_out(conn).daddr, tuplehash_out(conn).dport,
+                         DPVS_CONN_TBL_MASK);
+
+    if (conn->flags & DPVS_CONN_F_TEMPLATE) {
         /* lock is complusory for template */
         rte_spinlock_lock(&dp_vs_ct_lock);
         list_add(&tuplehash_in(conn).list, &dp_vs_ct_tbl[ihash]);
         list_add(&tuplehash_out(conn).list, &dp_vs_ct_tbl[ohash]);
         rte_spinlock_unlock(&dp_vs_ct_lock);
     } else {
-        ihash = conn_hashkey(conn->af,
-                    &tuplehash_in(conn).saddr, tuplehash_in(conn).sport,
-                    &tuplehash_in(conn).daddr, tuplehash_in(conn).dport,
-                    DPVS_CONN_TBL_MASK);
-        ohash = conn_hashkey(conn->af,
-                    &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
-                    &tuplehash_out(conn).daddr, tuplehash_out(conn).dport,
-                    DPVS_CONN_TBL_MASK);
-
         list_add(&tuplehash_in(conn).list, &this_conn_tbl[ihash]);
         list_add(&tuplehash_out(conn).list, &this_conn_tbl[ohash]);
     }
@@ -197,14 +181,14 @@ static inline int __conn_hash(struct dp_vs_conn *conn)
     return EDPVS_OK;
 }
 
-static inline int conn_hash(struct dp_vs_conn *conn)
+static inline int dp_vs_conn_hash(struct dp_vs_conn *conn)
 {
     int err;
 
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_lock(&this_conn_lock);
 #endif
-    err = __conn_hash(conn);
+    err = __dp_vs_conn_hash(conn);
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_unlock(&this_conn_lock);
 #endif
@@ -214,7 +198,7 @@ static inline int conn_hash(struct dp_vs_conn *conn)
     return err;
 }
 
-static inline int conn_unhash(struct dp_vs_conn *conn)
+static inline int dp_vs_conn_unhash(struct dp_vs_conn *conn)
 {
     int err;
 
@@ -490,7 +474,7 @@ static int conn_expire(void *priv)
 
     /* unhash it then no further user can get it,
      * even we cannot del it now. */
-    conn_unhash(conn);
+    dp_vs_conn_unhash(conn);
 
     /* refcnt == 1 means we are the only referer.
      * no one is using the conn and it's timed out. */
@@ -572,7 +556,7 @@ static int conn_expire(void *priv)
         return DTIMER_STOP;
     }
 
-    conn_hash(conn);
+    dp_vs_conn_hash(conn);
 
     /* some one is using it when expire,
      * try del it again later */
@@ -607,7 +591,7 @@ static void conn_flush(void)
             if (rte_atomic32_read(&conn->refcnt) != 2) {
                 rte_atomic32_dec(&conn->refcnt);
             } else {
-                conn_unhash(conn);
+                dp_vs_conn_unhash(conn);
 
                 if (conn->dest->fwdmode == DPVS_FWD_MODE_SNAT &&
                         conn->proto != IPPROTO_ICMP &&
@@ -710,7 +694,7 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     /* init inbound conn tuple hash */
     t = &tuplehash_in(new);
     t->direct   = DPVS_CONN_DIR_INBOUND;
-    t->af       = param->af;
+    t->af       = dest->af;
     t->proto    = param->proto;
     t->saddr    = *param->caddr;
     t->sport    = param->cport;
@@ -723,10 +707,11 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     t->direct   = DPVS_CONN_DIR_OUTBOUND;
     t->af       = param->af;
     t->proto    = param->proto;
-    if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
+    if (dest->fwdmode == DPVS_FWD_MODE_SNAT) {
         t->saddr = iph->saddr;
-    else
+    } else {
         t->saddr = dest->addr;
+    }
     t->sport    = rport;
     t->daddr    = *param->caddr;    /* non-FNAT */
     t->dport    = param->cport;     /* non-FNAT */
@@ -794,7 +779,7 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     dp_vs_redirect_init(new);
 
     /* add to hash table (dual dir for each bucket) */
-    if ((err = conn_hash(new)) != EDPVS_OK)
+    if ((err = dp_vs_conn_hash(new)) != EDPVS_OK)
         goto unbind_laddr;
 
     /* timer */
@@ -881,10 +866,10 @@ struct dp_vs_conn *dp_vs_conn_get(int af, uint16_t proto,
 #endif
 
     if (unlikely(reverse)) {
-        hash = conn_hashkey(af, daddr, dport, saddr, sport,
+        hash = dp_vs_conn_hashkey(af, daddr, dport, saddr, sport,
                             DPVS_CONN_TBL_MASK);
     } else {
-        hash = conn_hashkey(af, saddr, sport, daddr, dport,
+        hash = dp_vs_conn_hashkey(af, saddr, sport, daddr, dport,
                             DPVS_CONN_TBL_MASK);
     }
 
@@ -952,7 +937,8 @@ struct dp_vs_conn *dp_vs_ct_in_get(int af, uint16_t proto,
     char sbuf[64], dbuf[64];
 #endif
 
-    hash = conn_hashkey(af, saddr, sport, daddr, dport, DPVS_CONN_TBL_MASK);
+    hash = dp_vs_conn_hashkey(af, saddr, sport, daddr, dport,
+                              DPVS_CONN_TBL_MASK);
 
     rte_spinlock_lock(&dp_vs_ct_lock);
     list_for_each_entry(tuphash, &dp_vs_ct_tbl[hash], list) {
@@ -1010,12 +996,12 @@ int dp_vs_check_template(struct dp_vs_conn *ct)
 #endif
         /* invalidate the connection */
         if (ct->vport != htons(0xffff)) {
-            if (conn_unhash(ct)) {
+            if (dp_vs_conn_unhash(ct)) {
                 ct->dport = htonl(0xffff);
                 ct->vport = htonl(0xffff);
                 ct->lport = 0;
                 ct->cport = 0;
-                conn_hash(ct);
+                dp_vs_conn_hash(ct);
             }
         }
         /* simply decrease the refcnt of the template, do not restart its timer */

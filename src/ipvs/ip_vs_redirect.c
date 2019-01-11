@@ -36,15 +36,13 @@ dp_vs_redirect_show(struct dp_vs_redirect *r, const char *action)
 {
     char sbuf[64], dbuf[64];
 
-    if (r->proto != IPPROTO_ICMPV6) {
-        RTE_LOG(DEBUG, IPVS, "[%d] redirect %s: [%d] %s %s/%d -> %s/%d\n",
-                rte_lcore_id(), action, r->cid,
-                inet_proto_name(r->proto),
-                inet_ntop(r->af, &r->saddr, sbuf, sizeof(sbuf)) ? sbuf : "::",
-                ntohs(r->sport),
-                inet_ntop(r->af, &r->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::",
-                ntohs(r->dport));
-    }
+    RTE_LOG(DEBUG, IPVS, "[%d] redirect %s: [%d] %s %s/%d -> %s/%d\n",
+            rte_lcore_id(), action, r->cid,
+            inet_proto_name(r->proto),
+            inet_ntop(r->af, &r->saddr, sbuf, sizeof(sbuf)) ? sbuf : "::",
+            ntohs(r->sport),
+            inet_ntop(r->af, &r->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::",
+            ntohs(r->dport));
 }
 #endif
 
