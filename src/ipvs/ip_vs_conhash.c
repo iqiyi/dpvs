@@ -379,11 +379,6 @@ static int dp_vs_conhash_update_svc(struct dp_vs_service *svc,
     return ret;
 }
 
-static inline int is_overloaded(struct dp_vs_dest *dest)
-{
-    return dest->flags & DPVS_DEST_F_OVERLOAD;
-}
-
 /*
  *      Consistent Hashing scheduling
  */
