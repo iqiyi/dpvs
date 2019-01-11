@@ -271,27 +271,49 @@ void dp_vs_redirect_ring_proc(struct netif_queue_conf *qconf, lcoreid_t cid)
     }
 }
 
-static int dp_vs_redirect_table_create(void)
+/*
+ * allocate redirect cache on each NUMA socket and its size is
+ * same as conn_pool_size
+ */
+static int dp_vs_redirect_cache_alloc(void)
 {
     int i;
-    char poolname[32];
+    char pool_name[32];
 
-    /*
-     * allocate redirect cache on each NUMA socket and its size is
-     * same as conn_pool_size
-     */
     for (i = 0; i < get_numa_nodes(); i++) {
-        snprintf(poolname, sizeof(poolname), "dp_vs_redirect_%d", i);
+        snprintf(pool_name, sizeof(pool_name), "dp_vs_redirect_%d", i);
+
         dp_vs_cr_cache[i] =
-            rte_mempool_create(poolname,
+            rte_mempool_create(pool_name,
                                dp_vs_conn_pool_size(),
                                sizeof(struct dp_vs_redirect),
                                dp_vs_conn_pool_cache_size(),
                                0, NULL, NULL, NULL, NULL,
                                i, 0);
+
         if (!dp_vs_cr_cache[i]) {
             return EDPVS_NOMEM;
         }
+    }
+
+    return EDPVS_OK;
+}
+
+static void dp_vs_redirect_cache_free(void)
+{
+    int i;
+
+    for (i = 0; i < get_numa_nodes(); i++) {
+        rte_mempool_free(dp_vs_cr_cache[i]);
+    }
+}
+
+static int dp_vs_redirect_table_create(void)
+{
+    int i;
+
+    if (dp_vs_redirect_cache_alloc() != EDPVS_OK) {
+        goto cache_free;
     }
 
     /* allocate the global redirect hash table, per socket? */
@@ -299,7 +321,7 @@ static int dp_vs_redirect_table_create(void)
         rte_malloc_socket(NULL, sizeof(struct list_head ) * DPVS_CR_TBL_SIZE,
                           RTE_CACHE_LINE_SIZE, rte_socket_id());
     if (!dp_vs_cr_tbl) {
-        return EDPVS_NOMEM;
+        goto cache_free;
     }
 
     /* init the global redirect hash table */
@@ -309,15 +331,15 @@ static int dp_vs_redirect_table_create(void)
     }
 
     return EDPVS_OK;
+
+cache_free:
+    dp_vs_redirect_cache_free();
+    return EDPVS_NOMEM;
 }
 
 static void dp_vs_redirect_table_free(void)
 {
-    int i;
-
-    for (i = 0; i < get_numa_nodes(); i++) {
-        rte_mempool_free(dp_vs_cr_cache[i]);
-    }
+    dp_vs_redirect_cache_free();
 
     /* release the global redirect hash table */
     if (dp_vs_cr_tbl) {

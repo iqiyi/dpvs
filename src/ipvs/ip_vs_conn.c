@@ -147,7 +147,7 @@ inline uint32_t dp_vs_conn_hashkey(int af,
     }
 }
 
-static inline int __dp_vs_conn_hash(struct dp_vs_conn *conn)
+static inline int __dp_vs_conn_hash(struct dp_vs_conn *conn, uint32_t mask)
 {
     uint32_t ihash, ohash;
 
@@ -157,12 +157,12 @@ static inline int __dp_vs_conn_hash(struct dp_vs_conn *conn)
     ihash = dp_vs_conn_hashkey(tuplehash_in(conn).af,
                          &tuplehash_in(conn).saddr, tuplehash_in(conn).sport,
                          &tuplehash_in(conn).daddr, tuplehash_in(conn).dport,
-                         DPVS_CONN_TBL_MASK);
+                         mask);
 
     ohash = dp_vs_conn_hashkey(tuplehash_out(conn).af,
                          &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
                          &tuplehash_out(conn).daddr, tuplehash_out(conn).dport,
-                         DPVS_CONN_TBL_MASK);
+                         mask);
 
     if (conn->flags & DPVS_CONN_F_TEMPLATE) {
         /* lock is complusory for template */
@@ -188,7 +188,9 @@ static inline int dp_vs_conn_hash(struct dp_vs_conn *conn)
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_lock(&this_conn_lock);
 #endif
-    err = __dp_vs_conn_hash(conn);
+
+    err = __dp_vs_conn_hash(conn, DPVS_CONN_TBL_MASK);
+
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_unlock(&this_conn_lock);
 #endif
