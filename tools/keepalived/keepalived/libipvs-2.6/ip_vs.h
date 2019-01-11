@@ -84,7 +84,10 @@
 #define IP_VS_SO_SET_DELBLKLST  (IP_VS_BASE_CTL+19)
 #define IP_VS_SO_SET_ADDTUNNEL	 (IP_VS_BASE_CTL+20)
 #define IP_VS_SO_SET_DELTUNNEL	 (IP_VS_BASE_CTL+21)
-#define IP_VS_SO_SET_MAX	IP_VS_SO_SET_DELTUNNEL
+#define IP_VS_SO_SET_ADDACL	 (IP_VS_BASE_CTL+22)
+#define IP_VS_SO_SET_DELACL	 (IP_VS_BASE_CTL+23)
+#define IP_VS_SO_SET_GETACL	 (IP_VS_BASE_CTL+24)
+#define IP_VS_SO_SET_MAX	 IP_VS_SO_SETGETACL
 
 #define IP_VS_SO_GET_VERSION	IP_VS_BASE_CTL
 #define IP_VS_SO_GET_INFO	(IP_VS_BASE_CTL+1)
@@ -181,6 +184,7 @@ struct ip_vs_service_user {
 	char			drange[256];
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
+	int		        rule_all;          /* default action for whole match */
 
 	u_int16_t		af;
 	union nf_inet_addr	addr;
@@ -233,6 +237,13 @@ struct ip_vs_blklst_user {
 	__be32                  __addr_v4;      /* ipv4 address */
 	u_int16_t               af;
 	union nf_inet_addr      addr;
+};
+
+struct ip_vs_acl_user {
+    int                    rule;            /* deny | permit */
+    u_int32_t              max_conn;        /* maximum connections */
+    char                   srange[256];
+    char                   drange[256];
 };
 
 struct ip_vs_tunnel_user {
@@ -334,6 +345,8 @@ struct ip_vs_service_entry {
 	char			drange[256];
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
+	unsigned int		num_acls;  /* number of acls */
+	int			rule_all;  /* default action for whole match */
 
 	u_int16_t		af;
 	union nf_inet_addr	addr;
@@ -420,6 +433,28 @@ struct ip_vs_get_laddrs {
 
 	/* the real servers */
 	struct ip_vs_laddr_entry	entrytable[0];
+};
+
+struct ip_vs_acl_addr {
+    int                    af;
+    union inet_addr        addr;
+    __be16                 min_port;
+    __be16                 max_port;
+};
+
+struct ip_vs_acl_entry {
+    int                    rule;       /* deny | permit */
+    uint32_t               max_conn;   /* maximum connections */
+    uint32_t               p_conn;     /* permitted connections */
+    uint32_t               d_conn;     /* denied connections */
+
+    struct ip_vs_acl_addr  saddr;
+    struct ip_vs_acl_addr  daddr;
+};
+
+struct ip_vs_get_acls {
+    uint32_t               num_acls;
+    struct ip_vs_acl_entry entrytable[0];
 };
 
 /* The argument to IP_VS_SO_GET_DESTS */

@@ -422,6 +422,22 @@ establish_timeout_handler(vector_t *strvec)
 }
 
 static void
+rule_all_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    char *str = vector_slot(strvec, 1);
+    vs->rule_all = IP_VS_ACL_PERMIT_ALL;
+
+    if (!strcmp(str, "permit")) {
+        vs->rule_all = IP_VS_ACL_PERMIT_ALL;
+    } else if(!strcmp(str, "deny")) {
+        vs->rule_all = IP_VS_ACL_DENY_ALL;
+    } else {
+        log_message(LOG_INFO, "PARSER : unknown [%s] rule strategy.", str);
+    }
+}
+
+static void
 src_range_handler(vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -463,6 +479,52 @@ hash_target_handler(vector_t *strvec)
 		vs->hash_target = IP_VS_SVC_F_SIP_HASH;
 		log_message(LOG_INFO, "PARSER : unknown [%s] hash target, use source_ip", str);
 	}
+}
+
+static void
+acl_handler(vector_t *strvec)
+{
+    alloc_acl(vector_slot(strvec, 1));
+}
+
+static void
+rule_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *acl = LIST_TAIL_DATA(vs->acl);
+    char *str = vector_slot(strvec, 1);
+
+    if (!strcmp(str, "deny")) {
+        acl->rule = IP_VS_ACL_DENY;
+    } else if (!strcmp(str, "permit")) {
+        acl->rule = IP_VS_ACL_PERMIT;
+    } else {
+        log_message(LOG_INFO, "PARSER : unknown [%s] rule strategy.", str);
+    }
+}
+
+static void
+max_conn_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *acl = LIST_TAIL_DATA(vs->acl);
+    acl->max_conn = atoi(vector_slot(strvec, 1));
+}
+
+static void
+acl_srange_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *acl = LIST_TAIL_DATA(vs->acl);
+    snprintf(acl->srange, sizeof(acl->srange), "%s", (char *)vector_slot(strvec, 1));
+}
+
+static void
+acl_drange_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *acl = LIST_TAIL_DATA(vs->acl);
+    snprintf(acl->drange, sizeof(acl->drange), "%s", (char *)vector_slot(strvec, 1));
 }
 
 vector_t *
@@ -511,10 +573,22 @@ check_init_keywords(void)
 	install_keyword("ha_suspend", &hasuspend_handler);
 	install_keyword("ops", &ops_handler);
 	install_keyword("virtualhost", &virtualhost_handler);
+	install_keyword("rule_all", &rule_all_handler);
 	install_keyword("src-range", &src_range_handler);
 	install_keyword("dst-range", &dst_range_handler);
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
+
+	/* Access Control List mapping */
+	install_keyword("acl_entry", &acl_handler);
+	install_sublevel();
+	install_keyword("rule", &rule_handler);
+	install_keyword("max_conn", &max_conn_handler);
+	install_keyword("srange", &acl_srange_handler);
+	install_keyword("drange", &acl_drange_handler);
+	install_sublevel_end();
+
+    /* Hash target */
 	install_keyword("hash_target", &hash_target_handler);
 
 	/* Pool regression detection and handling. */

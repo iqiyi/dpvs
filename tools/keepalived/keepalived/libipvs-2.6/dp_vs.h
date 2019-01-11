@@ -8,6 +8,7 @@
 #include "conf/laddr.h"
 #include "conf/blklst.h"
 #include "conf/conn.h"
+#include "conf/acl.h"
 #include "ip_tunnel.h"
 #include "ipvs/service.h"
 #include "ipvs/dest.h"

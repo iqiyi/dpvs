@@ -368,6 +368,7 @@ static ipvs_daemon_t *daemonrule;
 static ipvs_laddr_t *laddr_rule;
 static ipvs_blklst_t *blklst_rule;
 static ipvs_tunnel_t *tunnel_rule;
+static ipvs_acl_t *acl_rule;
 
 /* Initialization helpers */
 int
@@ -388,6 +389,7 @@ ipvs_start(void)
 	laddr_rule = (ipvs_laddr_t *) MALLOC(sizeof(ipvs_laddr_t));
 	blklst_rule = (ipvs_blklst_t *) MALLOC(sizeof(ipvs_blklst_t));
 	tunnel_rule = (ipvs_tunnel_t *) MALLOC(sizeof(ipvs_tunnel_t));
+	acl_rule = (ipvs_acl_t *) MALLOC(sizeof(ipvs_acl_t));
 
 	return IPVS_SUCCESS;
 }
@@ -402,6 +404,7 @@ ipvs_stop(void)
 	FREE(laddr_rule);
 	FREE(blklst_rule);
 	FREE(tunnel_rule);
+	FREE(acl_rule);
 
 	ipvs_close();
 }
@@ -460,6 +463,12 @@ ipvs_talk(int cmd)
 		case IP_VS_SO_SET_DELTUNNEL:
 			result = ipvs_del_tunnel(tunnel_rule);
 			break;
+        case IP_VS_SO_SET_ADDACL:
+            return ipvs_add_acl(srule, acl_rule);
+            break;
+        case IP_VS_SO_SET_DELACL:
+            result = ipvs_del_acl(srule, acl_rule);
+            break;
 	}
 
 	if (result) {
@@ -609,6 +618,7 @@ ipvs_set_rule(int cmd, virtual_server_t * vs, real_server_t * rs)
 	srule->netmask = (vs->addr.ss_family == AF_INET6) ? 128 : ((u_int32_t) 0xffffffff);
 	srule->protocol = vs->service_type;
 	srule->conn_timeout = vs->conn_timeout;
+	srule->rule_all     = vs->rule_all;
 	snprintf(srule->srange, 256, "%s", vs->srange);
 	snprintf(srule->drange, 256, "%s", vs->drange);
 	snprintf(srule->iifname, IFNAMSIZ, "%s", vs->iifname);
@@ -977,6 +987,26 @@ int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry)
 
     tunnel_rule->laddr.ip = inet_sockaddrip4(&entry->local);
     tunnel_rule->raddr.ip = inet_sockaddrip4(&entry->remote);
+    ipvs_talk(cmd);
+
+    return IPVS_SUCCESS;
+}
+
+int
+ipvs_acl_cmd(int cmd, virtual_server_t *vs, access_control_t *acl)
+{
+    /* identify match */
+    srule->protocol = vs->service_type;
+    snprintf(srule->srange, sizeof(srule->srange), "%s", vs->srange);
+    snprintf(srule->drange, sizeof(srule->drange), "%s", vs->drange);
+    snprintf(srule->iifname, sizeof(srule->iifname), "%s", vs->iifname);
+    snprintf(srule->oifname, sizeof(srule->oifname), "%s", vs->oifname);
+
+    memset(acl_rule, 0, sizeof(ipvs_acl_t));
+    acl_rule->rule = acl->rule;
+    acl_rule->max_conn = acl->max_conn;
+    snprintf(acl_rule->srange, 256, "%s", acl->srange);
+    snprintf(acl_rule->drange, 256, "%s", acl->drange);
     ipvs_talk(cmd);
 
     return IPVS_SUCCESS;

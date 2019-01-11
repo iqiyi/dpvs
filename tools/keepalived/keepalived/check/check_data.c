@@ -305,6 +305,7 @@ free_vs(void *data)
 	FREE_PTR(vs->virtualhost);
 	FREE_PTR(vs->s_svr);
 	free_list(vs->rs);
+	free_list(vs->acl);
 	FREE_PTR(vs->quorum_up);
 	FREE_PTR(vs->quorum_down);
 	FREE_PTR(vs->local_addr_gname);
@@ -397,6 +398,9 @@ dump_vs(void *data)
 	}
 	if (!LIST_ISEMPTY(vs->rs))
 		dump_list(vs->rs);
+    if (!LIST_ISEMPTY(vs->acl)) {
+        dump_list(vs->acl);
+    }
 	if (vs->local_addr_gname)
 		log_message(LOG_INFO, " LOCAL_ADDR GROUP = %s", vs->local_addr_gname);
         if (vs->blklst_addr_gname)
@@ -515,6 +519,47 @@ alloc_rs(char *ip, char *port)
 	list_add(vs->rs, new);
 }
 
+/* Access Control facility functions */
+static void
+free_acl(void *data)
+{
+    if (!data)
+        return;
+
+    access_control_t *acl = data;
+    FREE_PTR(acl->srange);
+    FREE_PTR(acl->drange);
+    FREE(acl);
+}
+
+static void
+dump_acl(void *data)
+{
+    if (!data)
+        return;
+
+    access_control_t *acl = data;
+    log_message(LOG_INFO, "rule = %u, max_conn = %u, src-range=%s, dst-range=%s",
+                acl->rule, acl->max_conn, acl->srange, acl->drange);
+}
+
+void
+alloc_acl(char *ip)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    access_control_t *new;
+
+    new = (access_control_t *) MALLOC(sizeof(access_control_t));
+    /* init value */
+    memset(new, 0, sizeof(access_control_t));
+
+    if (LIST_ISEMPTY(vs->acl)) {
+        vs->acl = alloc_list(free_acl, dump_acl);
+    }
+    list_add(vs->acl, new);
+}
+
+/* Tunnel facility functions */
 static void
 free_tunnel_group(void *data)
 {

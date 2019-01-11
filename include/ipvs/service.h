@@ -33,6 +33,7 @@
 #include "netif.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/sched.h"
+#include <ipvs/acl.h>
 
 #define RTE_LOGTYPE_SERVICE RTE_LOGTYPE_USER3
 #define DP_VS_SVC_F_PERSISTENT      0x0001      /* peristent port */
@@ -88,6 +89,13 @@ struct dp_vs_service {
     rte_rwlock_t        laddr_lock;
     uint32_t            num_laddrs;
 
+    /* ACL */
+    int                 rule_all;    /* default action for whole match */
+    rte_rwlock_t        acl_lock;
+    uint32_t            num_acls;
+    struct list_head    *acl_list;
+    int                 acl_hashed;  /* acl hash table flag */
+
     /* ... flags, timer ... */
 } __rte_cache_aligned;
 #endif
@@ -100,6 +108,7 @@ struct dp_vs_service_conf {
     uint16_t            port;
     uint32_t            fwmark;     /* firwall mark of service */
     struct dp_vs_match  match;
+    int                 rule_all;    /* default action for whole match */
 
     /* virtual service options */
     char                *sched_name;
@@ -135,6 +144,8 @@ struct dp_vs_service_entry {
     char                drange[256];
     char                iifname[IFNAMSIZ];
     char                oifname[IFNAMSIZ];
+    int                 rule_all;
+    uint32_t            num_acls;
 };
 
 struct dp_vs_get_services {
@@ -161,6 +172,7 @@ struct dp_vs_service_user{
     char              drange[256];
     char              iifname[IFNAMSIZ];
     char              oifname[IFNAMSIZ];
+    int               rule_all;    /* default action for whole match */
 };
 
 struct dp_vs_getinfo {

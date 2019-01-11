@@ -574,7 +574,7 @@ static int sa4_fetch(struct netif_port *dev,
             return EDPVS_NOTEXIST;
 
         if (!ifa->this_sa_pool) {
-            RTE_LOG(WARNING, SAPOOL, "%s: fetch addr on IP without pool.", __func__);
+            RTE_LOG(WARNING, SAPOOL, "%s: fetch addr on IP without pool.\n", __func__);
             inet_addr_ifa_put(ifa);
             return EDPVS_INVAL;
         }
@@ -610,7 +610,7 @@ static int sa4_fetch(struct netif_port *dev,
     route4_put(rt);
 
     if (!ifa->this_sa_pool) {
-        RTE_LOG(WARNING, SAPOOL, "%s: fetch addr on IP without pool.",
+        RTE_LOG(WARNING, SAPOOL, "%s: fetch addr on IP without pool.\n",
                 __func__);
         inet_addr_ifa_put(ifa);
         return EDPVS_INVAL;
@@ -648,7 +648,7 @@ static int sa6_fetch(struct netif_port *dev,
             return EDPVS_NOTEXIST;
 
         if (!ifa->this_sa_pool) {
-            RTE_LOG(WARNING, SAPOOL, "%s: fetch addr on IP without pool.", __func__);
+            RTE_LOG(WARNING, SAPOOL, "%s: fetch addr on IP without pool.\n", __func__);
             inet_addr_ifa_put(ifa);
             return EDPVS_INVAL;
         }
@@ -689,7 +689,7 @@ static int sa6_fetch(struct netif_port *dev,
     route6_put(rt6);
 
     if (!ifa->this_sa_pool) {
-        RTE_LOG(WARNING, SAPOOL, "%s: fetch addr on IP without pool.",
+        RTE_LOG(WARNING, SAPOOL, "%s: fetch addr on IP without pool.\n",
                 __func__);
         inet_addr_ifa_put(ifa);
         return EDPVS_INVAL;
@@ -754,7 +754,7 @@ int sa_release(const struct netif_port *dev,
         return EDPVS_NOTEXIST;
 
     if (!ifa->this_sa_pool) {
-        RTE_LOG(WARNING, SAPOOL, "%s: release addr on IP without pool.",
+        RTE_LOG(WARNING, SAPOOL, "%s: release addr on IP without pool.\n",
                 __func__);
         inet_addr_ifa_put(ifa);
         return EDPVS_INVAL;

@@ -13,6 +13,7 @@ DPVS Tutorial
 * [Tunnel Mode(one-arm)](#tunnel)
 * [NAT Mode(one-arm)](#nat)
 * [SNAT Mode (two-arm)](#snat)
+    - [Configure ACL with Match](#acl)
 * [IPv6 Support](#ipv6_support)
 * [Virtual devices](#virt-dev)
   - [Bonding Device](#vdev-bond)
@@ -764,6 +765,99 @@ Then try Internet access from hosts through SNAT `DPVS` server.
 ```bash
 host$ ping www.iqiyi.com
 host$ curl www.iqiyi.com
+```
+
+<a id=acl></a>
+## Configure ACL with Match
+
+New keyword `rule-all` was introduced to MATCH, whose value is `permit` or `deny`. `permit` was set if this keyword was not specified.
+
+> `acl` supports `rule`,`max-conn`,`src-range`,`dst-range`(set `max-conn` to 0 to disable it). For example:`rule=permit,max-conn=5,src-range=192.168.9.5-192.168.9.10,dst-range=0.0.0.0-0.0.0.0:80-80`
+
+ACL can be configuread by `ipvsadm` or `keepalived`
+
+### Configure ACL by `ipvsadm`
+
+```bash
+MATCH0='proto=tcp,rule-all=deny,src-range=192.168.9.10-192.168.9.254,oif=dpdk0'
+./ipvsadm -A -s rr -H $MATCH0
+./ipvsadm -a -H $MATCH0 -r $WAN_IP:0 -w 100 -J
+
+ACL0='rule=permit,max-conn=5,src-range=192.168.9.5-192.168.9.10,dst-range=0.0.0.0-0.0.0.0:80-80'
+ACL1='rule=permit,max-conn=0,src-range=192.168.9.15-192.168.9.18,dst-range=192.168.10.11:80'
+
+./ipvsadm --add-acl --acl $ACL0 -H $MATCH0
+./ipvsadm --add-acl --acl $ACL1 -H $MATCH0
+```
+
+### Configure ACL by `keepalived`
+
+You can also use `keepalived` to configure ACL instead of `ipvsadm`, whose keyword was `acl_entry `. Every ACL entry must be embeded in a `match`.
+
+```bash
+virtual_server match SNAT {
+    protocol TCP
+    lb_algo rr
+    lb_kind SNAT
+    rule_all deny
+    src-range 192.168.9.10-192.168.9.254
+    oif dpdk0
+
+    real_server 192.168.10.1 0 {
+        weight 20
+    }
+
+    acl_entry acl1 {
+        rule permit
+        max_conn 5
+        srange 192.168.9.5-192.168.9.10
+        drange 0.0.0.0-0.0.0.0:80-80
+    }
+
+    acl_entry acl2 {
+        rule permit
+        max_conn 0
+        srange 192.168.9.15-192.168.9.18
+        drange 192.168.10.11:80
+    }
+}
+```
+
+### Show ACL
+
+Default `deny` action of Match with white list
+
+```bash
+$ ./ipvsadm --get-acl
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+MATCH tcp,deny,from=192.168.9.10-192.168.9.254:0-0,oif=dpdk0 rr
+  -> 192.168.10.1:0               SNAT    100    0          0
+ [ACL]     From                   To                 Rule MaxConn PermitConn DenyConn
+  192.168.9.5:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.6:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.7:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.8:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.9:0-0           0.0.0.0:80-80            permit  5       0         0
+  192.168.9.10:0-0          0.0.0.0:80-80            permit  5       5         4
+  192.168.9.15:0-0          192.168.10.11:80-80      permit  0       0         0
+  192.168.9.16:0-0          192.168.10.11:80-80      permit  0       0         0
+  192.168.9.17:0-0          192.168.10.11:80-80      permit  0       0         0
+  192.168.9.18:0-0          192.168.10.11:80-80      permit  0       0         0
+```
+
+### Clear ACL
+support three methods to clear the ACL
+
+```bash
+# delete all associated ACLs specified by ACL0 of MATCH0
+$ ./ipvsadm --del-acl --acl $ACL0 -H $MATCH0
+
+# clear all existing ACLs
+$ ./ipvsadm --clear-acl
+
+# clear the whole table, including all existing ACLs  
+$ ./ipvsadm -C
 ```
 
 <a id='ipv6_support'/>

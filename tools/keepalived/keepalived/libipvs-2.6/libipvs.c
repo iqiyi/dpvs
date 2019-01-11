@@ -72,6 +72,7 @@ typedef struct dpvs_servicedest_s {
 	X->netmask          = Y->netmask; 			\
 	X->bps              = Y->bps; 				\
 	X->limit_proportion = Y->limit_proportion; 		\
+	X->rule_all         = Y->rule_all; 			\
 	snprintf(X->srange, sizeof(X->srange), "%s", Y->srange); \
 	snprintf(X->drange, sizeof(X->drange), "%s", Y->drange); \
 	snprintf(X->iifname, sizeof(X->iifname), "%s", Y->iifname); \
@@ -85,6 +86,7 @@ typedef struct dpvs_servicedest_s {
 	SVC_CONVERT(X, Y) 					\
 	X->num_dests        = Y->num_dests;			\
 	X->num_laddrs       = Y->num_laddrs;			\
+	X->num_acls         = Y->num_acls;			\
 	memcpy(&X->stats, &Y->stats, sizeof(X->stats));		\
 	X->protocol = Y->proto;}
 
@@ -423,6 +425,105 @@ int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst)
 	return dpvs_setsockopt(SOCKOPT_SET_BLKLST_DEL, &conf, sizeof(conf));
 }
 
+static void ipvs_fill_acl_conf(ipvs_service_t *svc, ipvs_acl_t *acl,
+                               struct dp_vs_acl_conf *conf)
+{
+    memset(conf, 0, sizeof(*conf));
+    conf->af = svc->af;
+
+    /* identify match */
+    conf->proto = svc->protocol;
+    snprintf(conf->m_srange, sizeof(conf->m_srange), "%s", svc->srange);
+    snprintf(conf->m_drange, sizeof(conf->m_drange), "%s", svc->drange);
+    snprintf(conf->iifname, sizeof(conf->iifname), "%s", svc->iifname);
+    snprintf(conf->oifname, sizeof(conf->oifname), "%s", svc->oifname);
+
+    /* identify acl */
+    conf->rule     = acl->rule;
+    conf->max_conn = acl->max_conn;
+    snprintf(conf->srange, sizeof(conf->srange), "%s", acl->srange);
+    snprintf(conf->drange, sizeof(conf->drange), "%s", acl->drange);
+
+    return;
+}
+
+int ipvs_add_acl(ipvs_service_t *svc, ipvs_acl_t *acl)
+{
+    struct dp_vs_acl_conf conf;
+    ipvs_fill_acl_conf(svc, acl, &conf);
+
+    return dpvs_setsockopt(SOCKOPT_SET_ACL_ADD, &conf, sizeof(conf));
+}
+
+int ipvs_del_acl(ipvs_service_t *svc, ipvs_acl_t *acl)
+{
+    struct dp_vs_acl_conf conf;
+    ipvs_fill_acl_conf(svc, acl, &conf);
+
+    return dpvs_setsockopt(SOCKOPT_SET_ACL_DEL, &conf, sizeof(conf));
+}
+
+struct ip_vs_get_acls *ipvs_get_acls(ipvs_service_entry_t *svc)
+{
+    if (!svc)
+        return NULL;
+
+    struct dp_vs_acl_conf conf;
+    struct ip_vs_get_acls *result;
+    struct ip_vs_get_acls *get;
+    size_t res_size;
+
+    memset(&conf, 0, sizeof(conf));
+    conf.af    = svc->af;
+    conf.proto = svc->protocol;
+    snprintf(conf.m_srange, sizeof(conf.m_srange), "%s", svc->srange);
+    snprintf(conf.m_drange, sizeof(conf.m_drange), "%s", svc->drange);
+    snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
+    snprintf(conf.oifname, sizeof(conf.oifname), "%s", svc->oifname);
+
+    if (dpvs_getsockopt(SOCKOPT_GET_ACL_ALL, &conf, sizeof(conf),
+                        ((void **)&result), &res_size) != 0) {
+        return NULL;
+    }
+
+    if (!result || !res_size)
+        return NULL;
+
+    if (res_size != sizeof(*result) +
+                result->num_acls * sizeof(struct ip_vs_acl_entry)) {
+        fprintf(stderr, "%s\n","res_size not match.");
+        dpvs_sockopt_msg_free(result);
+        return NULL;
+    }
+
+    get = malloc(res_size);
+    if (!get) {
+        dpvs_sockopt_msg_free(result);
+        return NULL;
+    }
+
+    memmove(get, result, res_size);
+    dpvs_sockopt_msg_free(result);
+    return get;
+}
+
+int ipvs_flush_acl(ipvs_service_entry_t *svc)
+{
+    if (!svc)
+        return ESOCKOPT_INVAL;
+
+    struct dp_vs_acl_conf conf;
+    memset(&conf, 0, sizeof(conf));
+    conf.af    = svc->af;
+    conf.proto = svc->protocol;
+    snprintf(conf.m_srange, sizeof(conf.m_srange), "%s", svc->srange);
+    snprintf(conf.m_drange, sizeof(conf.m_drange), "%s", svc->drange);
+    snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
+    snprintf(conf.oifname, sizeof(conf.oifname), "%s", svc->oifname);
+
+    return dpvs_setsockopt(SOCKOPT_SET_ACL_FLUSH, &conf, sizeof(conf));
+}
+
 /* for tunnel entry */
 static void ipvs_fill_tunnel_conf(ipvs_tunnel_t* tunnel_entry,
                                  struct ip_tunnel_param *conf)
@@ -666,7 +767,6 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
 	return laddrs;
 }
 
-
 void ipvs_free_lddrs(struct ip_vs_get_laddrs* p)
 {
 	free(p);
@@ -786,6 +886,44 @@ void ipvs_sort_dests(struct ip_vs_get_dests *d, ipvs_dest_cmp_t f)
 	      sizeof(ipvs_dest_entry_t), (qsort_cmp_t)f);
 }
 
+int ipvs_cmp_acls(ipvs_acl_entry_t *acl1, ipvs_acl_entry_t *acl2)
+{
+    int r = 0, i;
+
+    /* first compare source ip, then dst ip, finally min port */
+    if (AF_INET == acl1->saddr.af) {
+        r = ntohl(acl1->saddr.addr.in.s_addr) - ntohl(acl2->saddr.addr.in.s_addr);
+    } else {
+        for (i = 0; !r && (i < 4); ++i) {
+            r = ntohl(acl1->saddr.addr.in6.s6_addr32[i]) -
+                ntohl(acl2->saddr.addr.in6.s6_addr32[i]);
+        }
+    }
+
+    if (r != 0)
+        return r;
+
+    if (AF_INET == acl1->daddr.af) {
+        r = ntohl(acl1->daddr.addr.in.s_addr) - ntohl(acl2->daddr.addr.in.s_addr);
+
+    } else {
+        for (i = 0; !r && (i < 4); ++i) {
+            r = ntohl(acl1->daddr.addr.in6.s6_addr32[i]) -
+                ntohl(acl2->daddr.addr.in6.s6_addr32[i]);
+        }
+    }
+
+    if (r != 0)
+        return r;
+
+    return ntohs(acl1->saddr.min_port) - ntohs(acl1->saddr.min_port);
+}
+
+void ipvs_sort_acls(struct ip_vs_get_acls *acls, ipvs_acl_cmp_t f)
+{
+    qsort(acls->entrytable, acls->num_acls,
+                sizeof(ipvs_acl_entry_t), (qsort_cmp_t)f);
+}
 
 ipvs_service_entry_t *
 ipvs_get_service(struct ip_vs_service_user *hint)

@@ -53,6 +53,8 @@
 #define LVS_CMD_DEL_BLKLST	IP_VS_SO_SET_DELBLKLST
 #define LVS_CMD_ADD_TUNNEL	IP_VS_SO_SET_ADDTUNNEL
 #define LVS_CMD_DEL_TUNNEL	IP_VS_SO_SET_DELTUNNEL
+#define LVS_CMD_ADD_ACL	IP_VS_SO_SET_ADDACL
+#define LVS_CMD_DEL_ACL	IP_VS_SO_SET_DELACL
 
 /* prototypes */
 extern bool perform_svr_state(int, virtual_server_t *, real_server_t *);

@@ -144,8 +144,12 @@
 #define CMD_ADDBLKLST		(CMD_NONE+18)
 #define CMD_DELBLKLST		(CMD_NONE+19)
 #define CMD_GETBLKLST		(CMD_NONE+20)
-#define CMD_MAX			CMD_GETBLKLST
-#define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
+#define CMD_ADDACL          (CMD_NONE+21)
+#define CMD_DELACL          (CMD_NONE+22)
+#define CMD_FLUSHACL        (CMD_NONE+23)
+#define CMD_GETACL          (CMD_NONE+24)
+#define CMD_MAX             CMD_GETACL
+#define NUMBER_OF_CMD       (CMD_MAX - CMD_NONE)
 
 static const char* cmdnames[] = {
 	"add-service",
@@ -264,6 +268,7 @@ struct ipvs_command_entry {
 	ipvs_daemon_t		daemon;
 	ipvs_laddr_t		laddr;
 	ipvs_blklst_t		blklst;
+	ipvs_acl_t		acl;
 	ipvs_sockpair_t		sockpair;
 };
 
@@ -304,6 +309,7 @@ static int parse_timeout(char *buf, int min, int max);
 static unsigned int parse_fwmark(char *buf);
 static int parse_sockpair(char *buf, ipvs_sockpair_t *sockpair);
 static int parse_match_snat(const char *buf, ipvs_service_t *svc);
+static int parse_acl_snat(const char *buf, ipvs_acl_t *acl);
 
 /* check the options based on the commands_v_options table */
 static void generic_opt_check(int command, int options);
@@ -317,6 +323,8 @@ static void version(FILE *stream);
 static void fail(int err, char *msg, ...);
 
 /* various listing functions */
+static inline int ipvs_acl_addr_dump(int af,
+            const struct ip_vs_acl_addr *, char *, size_t);
 static void list_conn(int is_template, unsigned int format);
 static void list_conn_sockpair(int is_template,
 		ipvs_sockpair_t *sockpair, unsigned int format);
@@ -326,6 +334,13 @@ static void list_timeout(void);
 static void list_daemon(void);
 static int list_laddrs(ipvs_service_t *svc, int with_title);
 static int list_all_laddrs(void);
+static void list_acls_print_match(ipvs_service_entry_t *svc,
+            unsigned int format);
+static int list_all_acls(void);
+static int flush_all_acls(void);
+static void print_service_and_acls(struct ip_vs_service_entry *,
+                                   struct ip_vs_get_acls *,
+                                   int with_title);
 static void list_blklsts_print_title(void);
 static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
 static int list_all_blklsts(void);
@@ -395,6 +410,10 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "add-laddr", 'P', POPT_ARG_NONE, NULL, 'P', NULL, NULL },
 		{ "del-laddr", 'Q', POPT_ARG_NONE, NULL, 'Q', NULL, NULL },
 		{ "get-laddr", 'G', POPT_ARG_NONE, NULL, 'G', NULL, NULL },
+		{ "add-acl", '2', POPT_ARG_NONE, NULL, '2', NULL, NULL },
+		{ "del-acl", '3', POPT_ARG_NONE, NULL, '3', NULL, NULL },
+		{ "clear-acl", '4', POPT_ARG_NONE, NULL, '4', NULL, NULL },
+		{ "get-acl", '5', POPT_ARG_NONE, NULL, '5', NULL, NULL },
 		{ "add-blklst", 'U', POPT_ARG_NONE, NULL, 'U', NULL, NULL },
 		{ "del-blklst", 'V', POPT_ARG_NONE, NULL, 'V', NULL, NULL },
 		{ "get-blklst", 'B', POPT_ARG_NONE, NULL, 'B', NULL, NULL },
@@ -453,6 +472,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
 		{ "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
+		{ "acl", '7', POPT_ARG_STRING, &optarg, '7', NULL, NULL },
 		{ "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
@@ -532,6 +552,18 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 	case 'G':
 		set_command(&ce->cmd, CMD_GETLADDR);
 		break;
+	case '2':
+		set_command(&ce->cmd, CMD_ADDACL);
+		break;
+	case '3':
+		set_command(&ce->cmd, CMD_DELACL);
+		break;
+	case '4':
+		set_command(&ce->cmd, CMD_FLUSHACL);
+		break;
+	case '5':
+		set_command(&ce->cmd, CMD_GETACL);
+		break;
 	case 'U':
 		set_command(&ce->cmd, CMD_ADDBLKLST);
 		break;
@@ -565,10 +597,16 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 				fail(2, "illegal virtual server "
 				     "address[:port] specified");
 			break;
+
 		case 'H':
 			set_option(options, OPT_SERVICE);
-		if (parse_match_snat(optarg, &ce->svc) != 0)
+			if (parse_match_snat(optarg, &ce->svc) != 0)
 				fail(2, "illegal match specified");
+			break;
+		case '7':
+			set_option(options, OPT_ACL);
+			if (parse_acl_snat(optarg, &ce->acl) != 0)
+				fail(2, "illegal acl specified");
 			break;
 		case 'f':
 			set_option(options, OPT_SERVICE);
@@ -1004,6 +1042,22 @@ static int process_options(int argc, char **argv, int reading_stdin)
 			result = list_all_laddrs();
 		break;
 
+	case CMD_ADDACL:
+        result = ipvs_add_acl(&ce.svc, &ce.acl);
+		break;
+
+	case CMD_DELACL:
+        result = ipvs_del_acl(&ce.svc, &ce.acl);
+		break;
+
+	case CMD_FLUSHACL:
+        result = flush_all_acls();
+		break;
+
+	case CMD_GETACL:
+        result = list_all_acls();
+		break;
+
 	case CMD_ADDBLKLST:
 		result = ipvs_add_blklst(&ce.svc , &ce.blklst);
 		break;
@@ -1235,10 +1289,12 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 
     return 1;
 }
+
 /*
  * comma separated parameters list, all fields is used to match packets.
  *
  *   proto      := tcp | udp | icmp |icmpv6
+ *   rule-all   := IP_VS_ACL_PERMIT_ALL | IP_VS_ACL_DENY_ALL
  *   src-range  := RANGE
  *   dst-range  := RANGE
  *   iif        := IFNAME
@@ -1247,17 +1303,19 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
  *
  * example:
  *
- *   proto=tcp,src-range=192.168.0.1-10:80-100,dst-range=10.0.0.1:1024,iif=eth0
+ * proto=tcp,rule-all=permit,
+ *  src-range=192.168.0.1-10:80-100,dst-range=10.0.0.1:1024,oif=dpdk0
  */
 static int parse_match_snat(const char *buf, ipvs_service_t *svc)
 {
     char params[256];
     char *arg, *start, *sp, key[32], val[128];
     int r;
+    svc->rule_all = IP_VS_ACL_PERMIT_ALL;  /* default permit all for match */
 
     snprintf(params, sizeof(params), "%s", buf);
 
-    svc->af = AF_INET; /* now IPv4 only */
+    svc->af = AF_INET;
     svc->protocol = IPPROTO_NONE;
 
     for (start = params; (arg = strtok_r(start, ",", &sp)); start = NULL) {
@@ -1279,6 +1337,13 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
                 svc->protocol = IPPROTO_ICMPV6;
             else
                 return -1;
+        } else if (strcmp(key, "rule-all") == 0) {
+            if (strcmp(val, "permit") == 0)
+                svc->rule_all = IP_VS_ACL_PERMIT_ALL;
+            else if (strcmp(val, "deny") == 0)
+                svc->rule_all = IP_VS_ACL_DENY_ALL;
+            else
+                return -1;
         } else if (strcmp(key, "src-range") == 0) {
             snprintf(svc->srange, sizeof(svc->srange), "%s", val);
         } else if (strcmp(key, "dst-range") == 0) {
@@ -1287,6 +1352,59 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
             snprintf(svc->iifname, sizeof(svc->iifname), "%s", val);
         } else if (strcmp(key, "oif") == 0) {
             snprintf(svc->oifname, sizeof(svc->oifname), "%s", val);
+        } else {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/*
+ * comma separated parameters list, all fields is used to match packets.
+ *
+ *   rule       := deny | permit
+ *   max-conn   := maximum connections, 0 for infinity
+ *   src-range  := RANGE
+ *   dst-range  := RANGE
+ *   iif        := IFNAME
+ *   oif        := IFNAME
+ *   RANGE      := IP1[-IP2][:PORT1[-PORT2]]
+ *
+ * example:
+ *
+ *   rule=deny,max-conn=0,src-range=192.168.0.1-192.168.0.10:80-100,
+ *        dst-range=10.0.0.1:1024
+ */
+static int parse_acl_snat(const char *buf, ipvs_acl_t *acl) {
+    char params[256];
+    char *arg, *start, *sp, key[32], val[128];
+    int r;
+    acl->max_conn = 0;   /* default infinity  */
+
+    snprintf(params, sizeof(params), "%s", buf);
+
+    for (start = params; (arg = strtok_r(start, ",", &sp)); start = NULL) {
+        r = sscanf(arg, "%31[^=]=%127s", key, val);
+        if (r != 2) {
+            if (sscanf(arg, "%31[^=]=", key) != 1)
+                return -1;
+            val[0] = '\0';
+        }
+
+        if (strcmp(key, "rule") == 0) {
+            if (strcmp(val, "deny") == 0)
+                acl->rule = IP_VS_ACL_DENY;
+            else if (strcmp(val, "permit") == 0)
+                acl->rule = IP_VS_ACL_PERMIT;
+            else
+                return -1;
+        } else if (strcmp(key, "max-conn") == 0) {
+            acl->max_conn = atoi(val);
+        } else if (strcmp(key, "src-range") == 0) {
+            snprintf(acl->srange, sizeof(acl->srange), "%s", val);
+        } else if (strcmp(key, "dst-range") == 0) {
+            snprintf(acl->drange, sizeof(acl->drange), "%s", val);
         } else {
             return -1;
         }
@@ -1410,6 +1528,10 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --add-blklst      -U        add blacklist address\n"
 		"  --del-blklst      -V        del blacklist address\n"
 		"  --get-blklst      -B        get blacklist address\n"
+		"  --add-acl         -2        add acl entry\n"
+		"  --del-acl         -3        del acl entry\n"
+		"  --clear-acl       -4        clear all existing acl\n"
+		"  --get-acl         -5        get all acl entry\n"
 		"  --save            -S        save rules to stdout\n"
 		"  --add-server      -a        add real server with options\n"
 		"  --edit-server     -e        edit real server with options\n"
@@ -1462,7 +1584,8 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --numeric      -n                   numeric output of addresses and ports\n"
 		"  --ifname       -F                   nic interface for laddrs\n"
 		"  --synproxy     -j                   TCP syn proxy\n"
-		"  --match        -H MATCH             select service by MATCH 'proto,srange,drange,iif,oif'\n"
+		"  --match        -H MATCH             select service by MATCH 'proto,rule-all,srange,drange,iif,oif'\n"
+		"  --acl          -7 ACL               select acl by ACL 'rule,max-conn,srange,drange'\n"
 		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n",
 		DEF_SCHED);
 
@@ -1763,7 +1886,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		}
 		free(vname);
 	} else { /* match */
-		char *proto;
+		char *proto, *rule_all;
 
 		if (se->protocol == IPPROTO_TCP)
 			proto = "tcp";
@@ -1773,6 +1896,12 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 			proto = "icmp";
 		else
 			proto = "icmpv6";
+
+        if (se->rule_all == IP_VS_ACL_PERMIT_ALL) {
+            rule_all = "permit";
+        } else if (se->rule_all == IP_VS_ACL_DENY_ALL) {
+            rule_all = "deny";
+        }
 			
 		if (format & FMT_RULE) {
 			snprintf(svc_name, sizeof(svc_name),
@@ -1784,7 +1913,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 			svc_name[0] = '\0';
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
-				"MATCH %s", proto);
+				"MATCH %s,%s", proto, rule_all);
             
 			if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
                             strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
@@ -2039,6 +2168,243 @@ static int list_all_laddrs(void)
 	free(get);
 	return 0;
 
+}
+
+static inline int
+ipvs_acl_addr_dump(int af, const struct ip_vs_acl_addr *acl_addr,
+                   char *buf, size_t size)
+{
+    char ip[64];
+    char min_port[16], max_port[16];
+
+    inet_ntop(acl_addr->af, &acl_addr->addr, ip, sizeof(ip));
+    snprintf(min_port, sizeof(min_port), "%u", ntohs(acl_addr->min_port));
+    snprintf(max_port, sizeof(max_port), "%u", ntohs(acl_addr->max_port));
+
+    if (af == AF_INET) {
+        return snprintf(buf, size, "%s:%s-%s", ip, min_port, max_port);
+    }
+    return snprintf(buf, size, "[%s]:%s-%s", ip, min_port, max_port);
+}
+
+static void list_acls_print_acl(ipvs_service_entry_t *svc_entry,
+                                ipvs_acl_entry_t     *acl,
+                                unsigned int format)
+{
+    char srange[256], drange[256];
+    char svc_name[256], *rule;
+    int left = sizeof(svc_name);
+    svc_name[0] = '\0';
+
+    if (acl->rule == IP_VS_ACL_DENY) {
+        rule = "deny";
+    } else if (acl->rule == IP_VS_ACL_PERMIT) {
+        rule = "permit";
+    }
+
+    ipvs_acl_addr_dump(acl->saddr.af, &acl->saddr, srange, sizeof(srange));
+    ipvs_acl_addr_dump(acl->daddr.af, &acl->daddr, drange, sizeof(drange));
+
+    left -= snprintf(svc_name + strlen(svc_name), left, "  ");
+
+    /* -40s for ipv6, -25s for ipv4 */
+    if (strcmp(srange, "[::-::]:0-0") != 0 &&
+                strcmp(srange, "0.0.0.0-0.0.0.0:0-0") != 0) {
+        if (AF_INET == acl->saddr.af) {
+            left -= snprintf(svc_name + strlen(svc_name), left,
+                        "%-25s", srange);
+        } else {
+            left -= snprintf(svc_name + strlen(svc_name), left,
+                        "%-40s", srange);
+        }
+    }
+
+    if (strcmp(drange, "[::-::]:0-0") != 0 &&
+                strcmp(drange, "0.0.0.0-0.0.0.0:0-0") != 0) {
+        if (AF_INET == acl->daddr.af) {
+            left -= snprintf(svc_name + strlen(svc_name), left,
+                        " %-25s", drange);
+        } else {
+            left -= snprintf(svc_name + strlen(svc_name), left,
+                        " %-40s", drange);
+        }
+    }
+
+    left -= snprintf(svc_name + strlen(svc_name), left, "%-7s %-7u %-7u   %-7u",
+                rule, acl->max_conn, acl->p_conn, acl->d_conn);
+
+    printf("%s\n", svc_name);
+}
+
+static void list_acls_print_match(ipvs_service_entry_t *svc,
+                                  unsigned int format)
+{
+    struct ip_vs_get_dests *d;
+    char svc_name[256];
+    char *proto, *rule_all;
+    int i;
+
+    /* temporary not support other print format */
+    if (format != FMT_NONE)
+        return;
+
+    if (!(d = ipvs_get_dests(svc))) {
+       fprintf(stderr, "%s\n", ipvs_strerror(errno));
+       exit(1);
+    }
+
+    switch (svc->protocol) {
+        case IPPROTO_TCP:
+            proto = "tcp";
+            break;
+        case IPPROTO_UDP:
+            proto = "udp";
+            break;
+        case IPPROTO_ICMP:
+            proto = "icmp";
+            break;
+        case IPPROTO_ICMPV6:
+            proto = "icmp6";
+            break;
+        default:
+            proto = "unknown";
+            break;
+    }
+
+    switch (svc->rule_all) {
+        case IP_VS_ACL_PERMIT_ALL:
+            rule_all = "permit";
+            break;
+
+        case IP_VS_ACL_DENY_ALL:
+            rule_all = "deny";
+            break;
+    }
+
+    int left = sizeof(svc_name);
+    svc_name[0] = '\0';
+
+    left -= snprintf(svc_name + strlen(svc_name), left,
+                "MATCH %s,%s", proto, rule_all);
+
+    if (strcmp(svc->srange, "[::-::]:0-0") != 0 &&
+                strcmp(svc->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+      left -= snprintf(svc_name + strlen(svc_name), left,
+                  ",from=%s", svc->srange);
+
+    if (strcmp(svc->drange, "[::-::]:0-0") != 0 &&
+                strcmp(svc->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+      left -= snprintf(svc_name + strlen(svc_name), left,
+                  ",to=%s", svc->drange);
+
+    if (strlen(svc->iifname))
+      left -= snprintf(svc_name + strlen(svc_name), left,
+                  ",iif=%s", svc->iifname);
+
+    if (strlen(svc->oifname))
+      left -= snprintf(svc_name + strlen(svc_name), left,
+                  ",oif=%s", svc->oifname);
+
+    printf("%s %s\n", svc_name, svc->sched_name);
+    copy_stats_from_dest(svc, d);
+    ipvs_sort_dests(d, ipvs_cmp_dests);
+
+    for (i = 0; i < d->num_dests; ++i) {
+        char *dname = NULL;
+        ipvs_dest_entry_t *e = &d->entrytable[i];
+
+        if (!(dname = addrport_to_anyname(e->af, &(e->addr), ntohs(e->port),
+                            svc->protocol, format))) {
+            fprintf(stderr, "addrport_to_anyname fails\n");
+            free(d);
+            exit(1);
+        }
+
+        printf("  -> %-28s %-7s %-6d %-10u %-10u\n",
+               dname, fwd_name(e->conn_flags),
+               e->weight, e->activeconns, e->inactconns);
+        free(dname);
+    }
+    free(d);
+
+    printf(" [ACL]     From                   To                 Rule"
+           " MaxConn PermitConn DenyConn\n");
+}
+
+static void print_service_and_acls(struct ip_vs_service_entry *svc,
+                                   struct ip_vs_get_acls *acls,
+                                   int with_title)
+{
+    if (!svc || !acls || svc->num_acls <= 0)
+        return;
+
+    if (with_title) {
+		printf("Prot LocalAddress:Port Scheduler Flags\n"
+               "  -> RemoteAddress:Port           "
+               "Forward Weight ActiveConn InActConn\n");
+    }
+
+    list_acls_print_match(svc, FMT_NONE);
+    ipvs_sort_acls(acls, ipvs_cmp_acls);
+
+    int i;
+    for (i = 0; i < acls->num_acls; ++i) {
+        list_acls_print_acl(svc, acls->entrytable + i, FMT_NONE);
+    }
+}
+
+static int list_all_acls(void)
+{
+    struct ip_vs_get_services *get;
+    struct ip_vs_get_acls *acls;
+    ipvs_service_entry_t *svc_entry;
+    int i;
+    int title_enable = 1;
+
+    if (!(get = ipvs_get_services())) {
+        fprintf(stderr, "%s\n", ipvs_strerror(errno));
+        return -1;
+    }
+
+    for (i = 0; i < get->num_services; ++i) {
+        svc_entry = &get->entrytable[i];
+        if (!(acls = ipvs_get_acls(svc_entry))) {
+            free(get);
+            fprintf(stderr, "%s\n", ipvs_strerror(errno));
+            return -1;
+        }
+
+        if (i != 0) {
+            title_enable = 0;
+        }
+        print_service_and_acls(svc_entry, acls, title_enable);
+        free(acls);
+    }
+
+    free(get);
+    return 0;
+}
+
+static int flush_all_acls(void)
+{
+    struct ip_vs_get_services *get;
+    ipvs_service_entry_t *svc_entry;
+    int i;
+
+    if (!(get = ipvs_get_services())) {
+        fprintf(stderr, "%s\n", ipvs_strerror(errno));
+        return -1;
+    }
+
+    for (i = 0; i < get->num_services; ++i) {
+        svc_entry = &get->entrytable[i];
+        if (svc_entry->num_acls) {
+            ipvs_flush_acl(svc_entry);
+        }
+    }
+
+    free(get);
+    return 0;
 }
 
 static void list_blklsts_print_title(void)

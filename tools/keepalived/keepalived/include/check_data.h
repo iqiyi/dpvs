@@ -95,6 +95,13 @@ typedef struct _real_server {
 #endif
 } real_server_t;
 
+typedef struct _access_control_t {
+    int                    rule;       /* deny | permit */
+    uint32_t               max_conn;   /* maximum connections */
+    char                   srange[256];
+    char                   drange[256];
+} access_control_t;
+
 /* local ip address group definition */
 typedef struct _local_addr_entry {
 	struct sockaddr_storage addr;
@@ -168,6 +175,7 @@ typedef struct _virtual_server {
 	uint32_t			granularity_persistence;
 	char				*virtualhost;
 	list				rs;
+	list				acl;
 	int				alive;
 	unsigned			alpha;		/* Alpha mode enabled. */
 	unsigned			omega;		/* Omega mode enabled. */
@@ -183,6 +191,7 @@ typedef struct _virtual_server {
 	char				*vip_bind_dev;		/* the interface name,vip bindto */
 	char				*blklst_addr_gname;	/* black list ip group name */
 
+	int			        rule_all;
 	char				srange[256];
 	char				drange[256];
 	char				iifname[IFNAMSIZ];
@@ -200,9 +209,9 @@ typedef struct _check_data {
 	ssl_data_t			*ssl;
 	list				vs_group;
 	list				vs;
-	list laddr_group;
-	list blklst_group;
-	list tunnel_group;
+	list				laddr_group;
+	list				blklst_group;
+	list				tunnel_group;
 } check_data_t;
 
 /* inline stuff */
@@ -294,6 +303,7 @@ static inline int inaddr_equal(sa_family_t family, void *addr1, void *addr2)
 			 (((X)->blklst_addr_gname && (Y)->blklst_addr_gname &&		\
 			   !strcmp((X)->blklst_addr_gname, (Y)->blklst_addr_gname)) ||	\
 			 (!(X)->blklst_addr_gname && !(Y)->blklst_addr_gname))		&&\
+			 (X)->rule_all == (Y)->rule_all  &&\
 			 !strcmp((X)->srange, (Y)->srange)				&&\
 			 !strcmp((X)->drange, (Y)->drange)				&&\
 			 !strcmp((X)->iifname, (Y)->iifname)				&&\
@@ -320,6 +330,7 @@ extern void alloc_vsg(char *);
 extern void alloc_vsg_entry(vector_t *);
 extern void alloc_vs(char *, char *);
 extern void alloc_rs(char *, char *);
+extern void alloc_acl(char *);
 extern void alloc_ssvr(char *, char *);
 extern void alloc_group(char *);
 extern void alloc_rsgroup(char *, char *);
