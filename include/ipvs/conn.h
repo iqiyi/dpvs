@@ -27,6 +27,7 @@
 #include "ipvs/conn.h"
 #include "ipvs/proto.h"
 #include "ipvs/service.h"
+#include "ipvs/redirect.h"
 
 enum {
     DPVS_CONN_DIR_INBOUND = 0,
@@ -35,11 +36,12 @@ enum {
 };
 
 enum {
-    DPVS_CONN_F_HASHED      = 0x0040,
-    DPVS_CONN_F_INACTIVE    = 0x0100,
-    DPVS_CONN_F_SYNPROXY    = 0x8000,
-    DPVS_CONN_F_TEMPLATE    = 0x1000,
-    DPVS_CONN_F_NOFASTXMIT  = 0x2000,
+    DPVS_CONN_F_HASHED          = 0x0040,
+    DPVS_CONN_F_REDIRECT_HASHED = 0x0080,
+    DPVS_CONN_F_INACTIVE        = 0x0100,
+    DPVS_CONN_F_SYNPROXY        = 0x8000,
+    DPVS_CONN_F_TEMPLATE        = 0x1000,
+    DPVS_CONN_F_NOFASTXMIT      = 0x2000,
 };
 
 struct dp_vs_conn_param {
@@ -147,6 +149,9 @@ struct dp_vs_conn {
     struct dp_vs_conn *control;         /* master who controlls me */
     rte_atomic32_t n_control;           /* number of connections controlled by me*/
     uint64_t ctime;                     /* create time */
+
+    /* connection redirect in fnat/snat/nat modes */
+    struct dp_vs_redirect  *redirect;
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
@@ -162,8 +167,8 @@ struct dp_vs_synproxy_ack_pakcet {
 int dp_vs_conn_init(void);
 int dp_vs_conn_term(void);
 
-struct dp_vs_conn * 
-dp_vs_conn_new(struct rte_mbuf *mbuf, 
+struct dp_vs_conn *
+dp_vs_conn_new(struct rte_mbuf *mbuf,
                const struct dp_vs_iphdr *iph,
                struct dp_vs_conn_param *param,
                struct dp_vs_dest *dest,
@@ -171,9 +176,9 @@ dp_vs_conn_new(struct rte_mbuf *mbuf,
 int dp_vs_conn_del(struct dp_vs_conn *conn);
 
 struct dp_vs_conn *
-dp_vs_conn_get(int af, uint16_t proto, 
-                const union inet_addr *saddr, 
-                const union inet_addr *daddr, 
+dp_vs_conn_get(int af, uint16_t proto,
+                const union inet_addr *saddr,
+                const union inet_addr *daddr,
                 uint16_t sport, uint16_t dport,
                 int *dir, bool reverse);
 
@@ -190,8 +195,8 @@ void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn);
 void ipvs_conn_keyword_value_init(void);
 void install_ipvs_conn_keywords(void);
 
-static inline void dp_vs_conn_fill_param(int af, uint8_t proto, 
-        const union inet_addr *caddr, const union inet_addr *vaddr, 
+static inline void dp_vs_conn_fill_param(int af, uint8_t proto,
+        const union inet_addr *caddr, const union inet_addr *vaddr,
         uint16_t cport, uint16_t vport, uint16_t ct_dport,
         struct dp_vs_conn_param *param)
 {
@@ -269,5 +274,32 @@ static inline void dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn 
     conn->control = ctl_conn;
     rte_atomic32_inc(&ctl_conn->n_control);
 }
+
+static inline bool
+dp_vs_conn_is_redirect_hashed(struct dp_vs_conn *conn)
+{
+    return  (conn->flags & DPVS_CONN_F_REDIRECT_HASHED) ? true : false;
+}
+
+static inline void
+dp_vs_conn_set_redirect_hashed(struct dp_vs_conn *conn)
+{
+    conn->flags |= DPVS_CONN_F_REDIRECT_HASHED;
+}
+
+static inline void
+dp_vs_conn_clear_redirect_hashed(struct dp_vs_conn *conn)
+{
+    conn->flags &= ~DPVS_CONN_F_REDIRECT_HASHED;
+}
+
+inline uint32_t dp_vs_conn_hashkey(int af,
+    const union inet_addr *saddr, uint16_t sport,
+    const union inet_addr *daddr, uint16_t dport,
+    uint32_t mask);
+int dp_vs_conn_pool_size(void);
+int dp_vs_conn_pool_cache_size(void);
+
+extern bool dp_vs_redirect_disable;
 
 #endif /* __DPVS_CONN_H__ */
