@@ -21,7 +21,7 @@
 
 #define DPVS_CR_TBL_BITS   22
 #define DPVS_CR_TBL_SIZE   (1 << DPVS_CR_TBL_BITS)
-#define DPVS_CR_TBL_MASK   (DPVS_CR_TBL_SIZE)
+#define DPVS_CR_TBL_MASK   (DPVS_CR_TBL_SIZE - 1)
 
 static struct list_head   *dp_vs_cr_tbl;
 static rte_spinlock_t      dp_vs_cr_lock[DPVS_CR_TBL_SIZE];

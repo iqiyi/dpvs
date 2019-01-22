@@ -1773,11 +1773,11 @@ void ipvs_conn_keyword_value_init(void)
         /* KW_TYPE_INIT keyword */
         conn_pool_size = DPVS_CONN_POOL_SIZE_DEF;
         conn_pool_cache = DPVS_CONN_CACHE_SIZE_DEF;
+        dp_vs_redirect_disable = true;
     }
     /* KW_TYPE_NORMAL keyword */
     conn_init_timeout = DPVS_CONN_INIT_TIMEOUT_DEF;
     conn_expire_quiescent_template = false;
-    dp_vs_redirect_disable = true;
 }
 
 void install_ipvs_conn_keywords(void)
@@ -1788,7 +1788,7 @@ void install_ipvs_conn_keywords(void)
     install_keyword("conn_init_timeout", conn_init_timeout_handler, KW_TYPE_NORMAL);
     install_keyword("expire_quiescent_template", conn_expire_quiscent_template_handler,
             KW_TYPE_NORMAL);
-    install_keyword("redirect", conn_redirect_handler, KW_TYPE_NORMAL);
+    install_keyword("redirect", conn_redirect_handler, KW_TYPE_INIT);
     install_xmit_keywords();
     install_sublevel_end();
 }
