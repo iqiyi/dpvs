@@ -2942,7 +2942,7 @@ void netif_mask_fdir_filter(int af, const struct netif_port *port,
 static int dpdk_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
                               const struct rte_eth_fdir_filter *filt)
 {
-    if (rte_eth_dev_filter_ctrl((uint8_t)dev->id, RTE_ETH_FILTER_FDIR,
+    if (rte_eth_dev_filter_ctrl(dev->id, RTE_ETH_FILTER_FDIR,
                                 op, (void *)filt) < 0)
         return EDPVS_DPDKAPIFAIL;
 
@@ -3996,6 +3996,11 @@ static int netif_loop(void *dummy)
     char buf[512];
     uint32_t loop_time;
     uint64_t loop_start, loop_end;
+#endif
+
+#ifdef DPVS_MAX_LCORE
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_IDLE;
 #endif
 
     assert(LCORE_ID_ANY != cid);
