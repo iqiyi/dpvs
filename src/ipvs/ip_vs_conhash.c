@@ -342,10 +342,15 @@ static int dp_vs_conhash_done_svc(struct dp_vs_service *svc)
 {
     struct conhash_sched_data *sched_data =
         (struct conhash_sched_data *)(svc->sched_data);
+    struct conhash_node *p_conhash_node, *p_conhash_node_next;
 
     conhash_fini(sched_data->conhash, node_fini);
 
-    assert(list_empty(&(sched_data->nodes)));
+    // del nodes left in list when rs weight is 0
+    list_for_each_entry_safe(p_conhash_node, p_conhash_node_next, 
+                             &(sched_data->nodes), list) {
+       node_fini(&(p_conhash_node->node));
+    }
 
     rte_free(svc->sched_data);
     svc->sched_data = NULL;
