@@ -326,10 +326,10 @@ static inline void conn_dump(const char *msg, struct dp_vs_conn *conn)
     char cbuf[64], vbuf[64], lbuf[64], dbuf[64];
     const char *caddr, *vaddr, *laddr, *daddr;
 
-    caddr = inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::";
-    vaddr = inet_ntop(conn->af, &conn->vaddr, vbuf, sizeof(vbuf)) ? vbuf : "::";
-    laddr = inet_ntop(conn->af, &conn->laddr, lbuf, sizeof(lbuf)) ? lbuf : "::";
-    daddr = inet_ntop(conn->af, &conn->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::";
+    caddr = inet_ntop(conn->tuplehash[DPVS_CONN_DIR_INBOUND].af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::";
+    vaddr = inet_ntop(conn->tuplehash[DPVS_CONN_DIR_INBOUND].af, &conn->vaddr, vbuf, sizeof(vbuf)) ? vbuf : "::";
+    laddr = inet_ntop(conn->tuplehash[DPVS_CONN_DIR_OUTBOUND].af, &conn->laddr, lbuf, sizeof(lbuf)) ? lbuf : "::";
+    daddr = inet_ntop(conn->tuplehash[DPVS_CONN_DIR_OUTBOUND].af, &conn->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::";
 
     RTE_LOG(DEBUG, IPVS, "%s [%d] %s %s/%u %s/%u %s/%u %s/%u refs %d\n",
             msg ? msg : "", rte_lcore_id(), inet_proto_name(conn->proto),

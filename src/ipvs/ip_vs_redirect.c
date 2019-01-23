@@ -105,7 +105,7 @@ void dp_vs_redirect_hash(struct dp_vs_conn *conn)
         return;
     }
 
-    hash = dp_vs_conn_hashkey(conn->af,
+    hash = dp_vs_conn_hashkey(r->af,
                     &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
                     &tuplehash_out(conn).daddr, tuplehash_out(conn).dport,
                     DPVS_CR_TBL_MASK);
