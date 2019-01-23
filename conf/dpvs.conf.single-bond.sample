@@ -12,8 +12,8 @@
 
 ! global config
 global_defs {
-    log_level    WARNING
-!    log_file    /var/log/dpvs.log
+    log_level   WARNING
+    ! log_file    /var/log/dpvs.log
 }
 
 ! netif config
@@ -162,6 +162,7 @@ worker_defs {
             ! isol_rxq_ring_sz 1048576
         }
     }
+
 }
 
 ! timer config
@@ -216,8 +217,9 @@ ipvs_defs {
         <init> conn_pool_size       2097152
         <init> conn_pool_cache      256
         conn_init_timeout           3
-    !    expire_quiescent_template
-    !    fast_xmit_close
+        ! expire_quiescent_template
+        ! fast_xmit_close
+        ! <init> redirect           off
     }
 
     udp {
