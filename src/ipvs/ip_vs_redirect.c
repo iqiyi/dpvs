@@ -21,7 +21,7 @@
 
 #define DPVS_CR_TBL_BITS   22
 #define DPVS_CR_TBL_SIZE   (1 << DPVS_CR_TBL_BITS)
-#define DPVS_CR_TBL_MASK   (DPVS_CR_TBL_SIZE)
+#define DPVS_CR_TBL_MASK   (DPVS_CR_TBL_SIZE - 1)
 
 static struct list_head   *dp_vs_cr_tbl;
 static rte_spinlock_t      dp_vs_cr_lock[DPVS_CR_TBL_SIZE];
@@ -105,7 +105,7 @@ void dp_vs_redirect_hash(struct dp_vs_conn *conn)
         return;
     }
 
-    hash = dp_vs_conn_hashkey(conn->af,
+    hash = dp_vs_conn_hashkey(r->af,
                     &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
                     &tuplehash_out(conn).daddr, tuplehash_out(conn).dport,
                     DPVS_CR_TBL_MASK);

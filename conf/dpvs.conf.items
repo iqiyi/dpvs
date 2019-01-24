@@ -189,7 +189,7 @@ ipvs_defs {
         conn_init_timeout           3           <3, 1-31535999>
         expire_quiescent_template               <disable>
         fast_xmit_close                         <disable>
-        redirect                    off         <off/on: disable/enable packet redirect>
+        <init> redirect             off         <off/on: disable/enable packet redirect>
     }
 
     udp {

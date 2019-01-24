@@ -192,6 +192,7 @@ ipvs_defs {
         conn_init_timeout           3
         ! expire_quiescent_template
         ! fast_xmit_close
+        ! <init> redirect           off
     }
 
     udp {

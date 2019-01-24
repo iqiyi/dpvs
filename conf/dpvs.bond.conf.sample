@@ -13,12 +13,12 @@
 ! global config
 global_defs {
     log_level   WARNING
-!    log_file    /var/log/dpvs.log
+    ! log_file    /var/log/dpvs.log
 }
 
 ! netif config
 netif_defs {
-    <init> pktpool_size     2097151
+    <init> pktpool_size     1048575
     <init> pktpool_cache    256
 
     <init> device dpdk0 {
@@ -31,8 +31,13 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-    !    promisc_mode
-    !    kni_name                dpdk0.kni
+        fdir {
+            mode                perfect
+            pballoc             64k
+            status              matched
+        }
+        ! promisc_mode
+        ! kni_name                dpdk0.kni
     }
 
     <init> device dpdk1 {
@@ -45,8 +50,13 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-    !    promisc_mode
-    !    kni_name                dpdk1.kni
+        fdir {
+            mode                perfect
+            pballoc             64k
+            status              matched
+        }
+        ! promisc_mode
+        ! kni_name                dpdk1.kni
     }
 
 
@@ -60,8 +70,13 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-    !    promisc_mode
-    !    kni_name                dpdk2.kni
+        fdir {
+            mode                perfect
+            pballoc             64k
+            status              matched
+        }
+        ! promisc_mode
+        ! kni_name                dpdk2.kni
     }
 
     <init> device dpdk3 {
@@ -74,8 +89,13 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-    !    promisc_mode
-    !    kni_name                dpdk3.kni
+        fdir {
+            mode                perfect
+            pballoc             64k
+            status              matched
+        }
+        ! promisc_mode
+        ! kni_name                dpdk3.kni
     } 
 
     <init> bonding bond0 {
@@ -237,6 +257,7 @@ worker_defs {
             isol_rxq_ring_sz 1048576
         }
     }
+
 }
 
 ! timer config
@@ -253,6 +274,7 @@ neigh_defs {
 
 ! dpvs ipv4 config
 ipv4_defs {
+    forwarding                 off
     <init> default_ttl         64
     fragment {
         <init> bucket_number   4096
@@ -262,12 +284,22 @@ ipv4_defs {
     }
 }
 
+! dpvs ipv6 config
+ipv6_defs {
+    disable                     off
+    forwarding                  off
+    route6 {
+        <init> method           "hlist"
+        recycle_time            10
+    }
+}
+
 ! control plane config
 ctrl_defs {
     lcore_msg {
         <init> ring_size                4096
         <init> multicast_queue_length   256
-        sync_msg_timeout_us             2000
+        sync_msg_timeout_us             20000
     }
     ipc_msg {
         <init> unix_domain /var/run/dpvs_ctrl
@@ -280,8 +312,9 @@ ipvs_defs {
         <init> conn_pool_size       2097152
         <init> conn_pool_cache      256
         conn_init_timeout           3
-    !    expire_quiescent_template
-    !    fast_xmit_close
+        ! expire_quiescent_template
+        ! fast_xmit_close
+        ! <init> redirect           off
     }
 
     udp {
@@ -313,19 +346,19 @@ ipvs_defs {
                 mss             1452
                 ttl             63
                 sack
-            !    wscale
-            !    timestamp
+                ! wscale
+                ! timestamp
             }
-        !    defer_rs_syn
+            ! defer_rs_syn
             rs_syn_max_retry    3
             ack_storm_thresh    10
             max_ack_saved       3
             conn_reuse_state {
                 close
                 time_wait
-            !    fin_wait
-            !    close_wait
-            !    last_ack
+                ! fin_wait
+                ! close_wait
+                ! last_ack
            }
         }
     }
