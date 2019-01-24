@@ -925,6 +925,35 @@ DPVS support IPv6-IPv4 for fullnat, which means VIP/client IP can be IPv6 and lo
 ```
 OSPF can just be configured like IPv6-IPv6. If you prefer keepalived, you can configure it like IPv6-IPv6 except real_server/local_address_group.
 
+**IPv6 and Flow Director**
+
+We found there exists some NICs do not (fully) support Flow Director for IPv6.
+For example, 82599 10GE Controller do not support IPv6 *perfect mode*, and IPv4/IPv6 *signature mode* supports only one locall IP.
+
+If you would like to use Flow Director signature mode, add the following lines into the device configs of `dpvs.conf`:
+
+```
+fdir {
+    mode                signature
+    pballoc             64k
+    status              matched
+}
+```
+
+Another method to avoid Flow Director problem is to use the redirect forwarding, which forwards the recieved packets to the right lcore where the session resides by using lockless DPDK rings.
+If you want to try this method, turn on the `redirect` switch in the `dpvs.conf`.
+
+```
+ipvs_defs {
+    conn {
+        ......
+        redirect    on
+    }
+    ......
+}
+```
+It should note that the redirect forwarding may harm performance to a certain degree. Keep it in `off` state unless you have no other sulotions.
+
 
 <a id='virt-dev'/>
 
