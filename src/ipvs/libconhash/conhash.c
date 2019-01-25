@@ -63,7 +63,7 @@ void conhash_set_node(struct node_s *node, const char *iden, u_int replica)
 
 int conhash_add_node(struct conhash_s *conhash, struct node_s *node)
 {
-    if((conhash==NULL) || (node==NULL)) 
+    if((conhash==NULL) || (node==NULL))
     {
         return -1;
     }
@@ -75,13 +75,13 @@ int conhash_add_node(struct conhash_s *conhash, struct node_s *node)
     node->flag |= NODE_FLAG_IN;
     /* add replicas of server */
     __conhash_add_replicas(conhash, node);
- 
+
     return 0;
 }
 
 int conhash_del_node(struct conhash_s *conhash, struct node_s *node)
 {
-   if((conhash==NULL) || (node==NULL)) 
+   if((conhash==NULL) || (node==NULL))
     {
         return -1;
     }
@@ -101,13 +101,13 @@ const struct node_s* conhash_lookup(const struct conhash_s *conhash, const char 
 {
     long hash;
     const util_rbtree_node_t *rbnode;
-    if((conhash==NULL) || (conhash->ivnodes==0) || (object==NULL)) 
+    if((conhash==NULL) || (conhash->ivnodes==0) || (object==NULL))
     {
         return NULL;
     }
     /* calc hash value */
     hash = conhash->cb_hashfunc(object);
-    
+
     rbnode = util_rbtree_lookup((util_rbtree_t *)&(conhash->vnode_tree), hash);
     if(rbnode != NULL)
     {

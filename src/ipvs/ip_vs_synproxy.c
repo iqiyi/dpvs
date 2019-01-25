@@ -75,7 +75,7 @@ rte_atomic64_t sp_ack_refused;
 static struct dpvs_timer g_second_timer;
 #endif
 
-/* 
+/*
  * syncookies using digest function from openssl libray,
  * a little difference from kernel, which uses md5_transform
  * */
@@ -86,7 +86,7 @@ static rte_atomic32_t g_minute_count;
 static int minute_timer_expire( void *priv)
 {
     struct timeval tv;
-    
+
     rte_atomic32_inc(&g_minute_count);
 
     tv.tv_sec = 60; /* one minute timer */
@@ -362,7 +362,7 @@ syn_proxy_cookie_v4_init_sequence(struct rte_mbuf *mbuf,
     data |= opts->sack_ok << DP_VS_SYNPROXY_SACKOK_BIT;
     data |= opts->tstamp_ok << DP_VS_SYNPROXY_TSOK_BIT;
     data |= ((opts->snd_wscale & 0xf) << DP_VS_SYNPROXY_SND_WSCALE_BITS);
-    
+
     return secure_tcp_syn_cookie(iph->saddr, iph->daddr,
             th->source, th->dest, ntohl(th->seq),
             rte_atomic32_read(&g_minute_count), data);
@@ -472,7 +472,7 @@ syn_proxy_v6_cookie_check(struct rte_mbuf *mbuf, uint32_t cookie,
     return 0;
 }
 
-/*  
+/*
  *  Synproxy implementation
  */
 
@@ -559,7 +559,7 @@ static void syn_proxy_parse_set_opts(struct rte_mbuf *mbuf, struct tcphdr *th,
                         opt->sack_ok = 1;
                     } else {
                         memset(tmp_opcode, TCPOPT_NOP, TCPOLEN_SACK_PERMITTED);
-                    } 
+                    }
                 }
                 break;
             }
@@ -669,7 +669,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
  * 1) mbuf is a syn packet,
  * 2) and the service is synproxy-enable,
  * 3) and ip_vs_todrop return fasle (not supported now)
- * 
+ *
  * @return 0 means the caller should return at once and use
  * verdict as return value, return 1 for nothing.
  */
@@ -689,7 +689,7 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         goto syn_rcv_out;
 
     if (th->syn && !th->ack && !th->rst && !th->fin &&
-            (svc = dp_vs_service_lookup(af, iph->proto, 
+            (svc = dp_vs_service_lookup(af, iph->proto,
                                         &iph->daddr, th->dest, 0, NULL, NULL)) &&
             (svc->flags & DP_VS_SVC_F_SYNPROXY)) {
         /* if service's weight is zero (non-active realserver),
@@ -753,9 +753,9 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
     if (unlikely(EDPVS_OK != (ret = netif_xmit(mbuf, dev)))) {
         RTE_LOG(ERR, IPVS, "%s: netif_xmit failed -- %s\n",
                 __func__, dpvs_strerror(ret));
-	/* should not set verdict to INET_DROP since netif_xmit
-	 * always consume the mbuf while INET_DROP means mbuf'll
-	 * be free in INET_HOOK.*/
+    /* should not set verdict to INET_DROP since netif_xmit
+     * always consume the mbuf while INET_DROP means mbuf'll
+     * be free in INET_HOOK.*/
     }
 
     *verdict = INET_STOLEN;
@@ -821,7 +821,7 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
     int tcp_hdr_size;
     struct rte_mbuf *syn_mbuf, *syn_mbuf_cloned;
     struct rte_mempool *pool;
-    struct tcphdr *syn_th; 
+    struct tcphdr *syn_th;
 
     if (!cp->packet_xmit) {
         RTE_LOG(WARNING, IPVS, "%s: packet_xmit is null\n", __func__);
@@ -1004,7 +1004,7 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
             *verdict = INET_DROP;
             return 0;
         }
-        
+
         /* Release the service, we do not need it any more */
         dp_vs_service_put(svc);
 
@@ -1272,9 +1272,9 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
             *verdict = INET_DROP;
             return 0;
         }
-	
+
         /* Window size has been set to zero in the syn-ack packet to Client.
-         * If get more than one ack packet here, 
+         * If get more than one ack packet here,
          * it means client has sent a window probe after one RTO.
          * The probe will be forward to RS and RS will respond a window update.
          * So DPVS has no need to send a window update.

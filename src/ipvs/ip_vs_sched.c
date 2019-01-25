@@ -101,8 +101,8 @@ struct dp_vs_scheduler *dp_vs_scheduler_get(const char *sched_name)
             /* HIT */
             rte_rwlock_read_unlock(&__dp_vs_sched_lock);
             return sched;
-        }   
-    }   
+        }
+    }
 
     rte_rwlock_read_unlock(&__dp_vs_sched_lock);
     return NULL;
@@ -192,7 +192,7 @@ int dp_vs_sched_term(void)
     dp_vs_rr_term();
     dp_vs_wrr_term();
     dp_vs_wlc_term();
-    dp_vs_conhash_term();    
+    dp_vs_conhash_term();
 
     return EDPVS_OK;
 }

@@ -17,7 +17,7 @@ struct util_rbtree_node_s
     util_rbtree_node_t *right;
     util_rbtree_node_t *left;
     int color;
-	void *data;
+    void *data;
 };
 
 struct util_rbtree_s
@@ -35,22 +35,22 @@ struct util_rbtree_s
 
 /* clear a node's link */
 #define rbt_clear_node(node) do{ \
-	node->left = NULL;  \
-	node->right = NULL; \
-	node->parent = NULL; \
-	}while(0)
+    node->left = NULL;  \
+    node->right = NULL; \
+    node->parent = NULL; \
+    }while(0)
 
 /* is the tree empty */
 #define util_rbtree_isempty(rbtree) ((rbtree)->root == &(rbtree)->null)
 
-/* 
- * find the min node of tree 
+/*
+ * find the min node of tree
  * return NULL is tree is empty
  */
 #define util_rbtree_min(rbtree) util_rbsubtree_min((rbtree)->root, &(rbtree)->null)
 
-/* 
- * find the max node of tree 
+/*
+ * find the max node of tree
  * return NULL is tree is empty
  */
 #define util_rbtree_max(rbtree) util_rbsubtree_max((rbtree)->root, &(rbtree)->null)
@@ -59,7 +59,7 @@ void util_rbtree_init(util_rbtree_t *rbtree);
 void util_rbtree_insert(util_rbtree_t *rbtree, util_rbtree_node_t *node);
 void util_rbtree_delete(util_rbtree_t *rbtree, util_rbtree_node_t *node);
 
-/* 
+/*
  * search node with key = @key in the tree
  * if no such node exist, return NULL
  */
@@ -73,16 +73,16 @@ util_rbtree_node_t* util_rbtree_search(util_rbtree_t *rbtree, long key);
  */
 util_rbtree_node_t* util_rbtree_lookup(util_rbtree_t *rbtree, long key);
 
-/* 
- * find the min node of subtree 
+/*
+ * find the min node of subtree
  * @rbnode: root of the subtree
- * @sentinel : the sentinel node 
+ * @sentinel : the sentinel node
  * return NULL if subtree is empty
  */
 util_rbtree_node_t* util_rbsubtree_min(util_rbtree_node_t *node, util_rbtree_node_t *sentinel);
 
-/* 
- * find the max node of subtree 
+/*
+ * find the max node of subtree
  * @rbnode: root of the subtree
  * @sentinel : the sentinel node
  * return NULL if subtree is empty

@@ -27,77 +27,77 @@
 #include "rte_mbuf.h"
 
 /* for each mbuf including heading mbuf and segments */
-#define mbuf_foreach(m, pos)	\
-	for (pos = m; pos != NULL; pos = pos->next)
+#define mbuf_foreach(m, pos)    \
+    for (pos = m; pos != NULL; pos = pos->next)
 
 /* for each segments of mbuf */
-#define mbuf_foreach_seg(m, s)	\
-	for (s = m->next; s != NULL; s = s->next)
+#define mbuf_foreach_seg(m, s)    \
+    for (s = m->next; s != NULL; s = s->next)
 
-#define mbuf_foreach_seg_safe(m, n, s)	\
-	for (s = m->next, n = s ? s->next : NULL; \
-		s != NULL; \
-		s = n, n = s ? s->next : NULL)
+#define mbuf_foreach_seg_safe(m, n, s)    \
+    for (s = m->next, n = s ? s->next : NULL; \
+        s != NULL; \
+        s = n, n = s ? s->next : NULL)
 
 /**
  * mbuf_copy_bits - copy bits from mbuf to buffer.
  * see skb_copy_bits().
  */
 static inline int mbuf_copy_bits(const struct rte_mbuf *mbuf,
-				 int offset, void *to, int len)
+                 int offset, void *to, int len)
 {
-	const struct rte_mbuf *seg;
-	int start, copy, end;
+    const struct rte_mbuf *seg;
+    int start, copy, end;
 
-	if (offset + len > (int)mbuf->pkt_len)
-		return -1;
+    if (offset + len > (int)mbuf->pkt_len)
+        return -1;
 
-	start = 0;
-	mbuf_foreach(mbuf, seg) {
-		end = start + seg->data_len;
+    start = 0;
+    mbuf_foreach(mbuf, seg) {
+        end = start + seg->data_len;
 
-		if ((copy = end - offset) > 0) {
-			if (copy > len)
-				copy = len;
+        if ((copy = end - offset) > 0) {
+            if (copy > len)
+                copy = len;
 
-			memcpy(to, rte_pktmbuf_mtod_offset(
-						seg, void *, offset - start),
-			       copy);
+            memcpy(to, rte_pktmbuf_mtod_offset(
+                        seg, void *, offset - start),
+                   copy);
 
-			if ((len -= copy) == 0)
-				return 0;
-			offset += copy;
-			to += copy;
-		}
+            if ((len -= copy) == 0)
+                return 0;
+            offset += copy;
+            to += copy;
+        }
 
-		start = end;
-	}
+        start = end;
+    }
 
-	if (!len)
-		return 0;
+    if (!len)
+        return 0;
 
-	return -1;
+    return -1;
 }
 
 static inline void *mbuf_tail_point(const struct rte_mbuf *mbuf)
 {
-	return rte_pktmbuf_mtod_offset(mbuf, void *, mbuf->data_len);
+    return rte_pktmbuf_mtod_offset(mbuf, void *, mbuf->data_len);
 }
 
 static inline void *mbuf_header_pointer(const struct rte_mbuf *mbuf,
-					int offset, int len, void *buffer)
+                    int offset, int len, void *buffer)
 {
-	if (unlikely(mbuf->data_len < offset + len)) {
-		if (unlikely(mbuf->pkt_len < offset + len))
-			return NULL;
+    if (unlikely(mbuf->data_len < offset + len)) {
+        if (unlikely(mbuf->pkt_len < offset + len))
+            return NULL;
 
-		if (mbuf_copy_bits(mbuf, offset, buffer, len) != 0)
-			return NULL;
+        if (mbuf_copy_bits(mbuf, offset, buffer, len) != 0)
+            return NULL;
 
-		return buffer;
-	}
+        return buffer;
+    }
 
-	return rte_pktmbuf_mtod_offset(mbuf, void *, offset);
+    return rte_pktmbuf_mtod_offset(mbuf, void *, offset);
 }
 
 /**

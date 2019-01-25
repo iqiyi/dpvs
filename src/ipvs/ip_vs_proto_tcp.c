@@ -73,22 +73,22 @@ static const char *tcp_state_names[] = {
 #endif
 
 static struct tcp_state tcp_states[] = {
-/*	INPUT */
-/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA	*/
+/*    INPUT */
+/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA    */
 /*syn*/ {{sSR, sES, sES, sSR, sSR, sSR, sSR, sSR, sSR, sSR, sSR}},
 /*fin*/ {{sCL, sCW, sSS, sTW, sTW, sTW, sCL, sCW, sLA, sLI, sTW}},
 /*ack*/ {{sCL, sES, sSS, sES, sFW, sTW, sCL, sCW, sCL, sLI, sES}},
 /*rst*/ {{sCL, sCL, sCL, sSR, sCL, sCL, sCL, sCL, sLA, sLI, sSR}},
 
-/*	OUTPUT */
-/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA	*/
+/*    OUTPUT */
+/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA    */
 /*syn*/ {{sSS, sES, sSS, sSR, sSS, sSS, sSS, sSS, sSS, sLI, sSR}},
 /*fin*/ {{sTW, sFW, sSS, sTW, sFW, sTW, sCL, sTW, sLA, sLI, sTW}},
 /*ack*/ {{sES, sES, sSS, sES, sFW, sTW, sCL, sCW, sLA, sES, sES}},
 /*rst*/ {{sCL, sCL, sSS, sCL, sCL, sTW, sCL, sCL, sCL, sCL, sCL}},
 
-/*	INPUT-ONLY */
-/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA	*/
+/*    INPUT-ONLY */
+/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA    */
 /*syn*/ {{sSR, sES, sES, sSR, sSR, sSR, sSR, sSR, sSR, sSR, sSR}},
 /*fin*/ {{sCL, sFW, sSS, sTW, sFW, sTW, sCL, sCW, sLA, sLI, sTW}},
 /*ack*/ {{sCL, sES, sSS, sES, sFW, sTW, sCL, sCW, sCL, sLI, sES}},
@@ -282,10 +282,10 @@ static void tcp_in_remove_ts(struct tcphdr *tcph)
             continue;
         default:
             opsize = *ptr++;
-            if (opsize < 2)	/* silly options */
+            if (opsize < 2)    /* silly options */
                 return;
             if (opsize > len)
-                return;	/* partial options */
+                return;    /* partial options */
             if ((opcode == TCP_OPT_TIMESTAMP)
                     && (opsize == TCP_OLEN_TIMESTAMP)) {
                 for (i = 0; i < TCP_OLEN_TIMESTAMP; i++)
@@ -448,10 +448,10 @@ static void tcp_out_adjust_mss(int af, struct tcphdr *tcph)
             continue;
         default:
             opsize = *ptr++;
-            if (opsize < 2)	/* "silly options" */
+            if (opsize < 2)    /* "silly options" */
                 return;
             if (opsize > length)
-                return;	/* partial options */
+                return;    /* partial options */
             if ((opcode == TCP_OPT_MSS) && (opsize == TCP_OLEN_MSS)) {
                 uint16_t in_mss = ntohs(*(__be16 *) ptr);
 

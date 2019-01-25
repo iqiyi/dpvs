@@ -102,12 +102,12 @@ static atomic_t uoa_map_count = ATOMIC_INIT(0);
 static int ipv6_hdrlen(const struct sk_buff *skb);
 
 /* uoa mapping table lock array */
-#define UOA_MAP_LOCKARR_BITS	5
-#define UOA_MAP_LOCKARR_SIZE	(1<<UOA_MAP_LOCKARR_BITS)
-#define UOA_MAP_LOCKARR_MASK	(UOA_MAP_LOCKARR_SIZE-1)
+#define UOA_MAP_LOCKARR_BITS    5
+#define UOA_MAP_LOCKARR_SIZE    (1<<UOA_MAP_LOCKARR_BITS)
+#define UOA_MAP_LOCKARR_MASK    (UOA_MAP_LOCKARR_SIZE-1)
 
 struct uoa_map_lock {
-    spinlock_t		lock;
+    spinlock_t        lock;
 } __attribute__((__aligned__(SMP_CACHE_BYTES)));
 
 static struct uoa_map_lock
@@ -573,15 +573,15 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 
 static struct nf_sockopt_ops uoa_sockopts = {
     .pf          = PF_INET,
-    .owner		= THIS_MODULE,
+    .owner        = THIS_MODULE,
     /* set */
-    .set_optmin	= UOA_BASE_CTL,
-    .set_optmax	= UOA_SO_SET_MAX + 1,
-    .set		= uoa_so_set,
+    .set_optmin    = UOA_BASE_CTL,
+    .set_optmax    = UOA_SO_SET_MAX + 1,
+    .set        = uoa_so_set,
     /* get */
-    .get_optmin	= UOA_BASE_CTL,
-    .get_optmax	= UOA_SO_GET_MAX + 1,
-    .get		= uoa_so_get,
+    .get_optmin    = UOA_BASE_CTL,
+    .get_optmax    = UOA_SO_GET_MAX + 1,
+    .get        = uoa_so_get,
 };
 
 static int uoa_map_init(void)
@@ -881,19 +881,19 @@ static unsigned int uoa_ip_local_in(unsigned int hooknum,
  */
 static struct nf_hook_ops uoa_nf_hook_ops[] __read_mostly = {
     {
-        .hook		= uoa_ip_local_in,
-        .pf 		= NFPROTO_IPV4,
-        .hooknum	= NF_INET_LOCAL_IN,
-        .priority	= NF_IP_PRI_NAT_SRC + 1,
+        .hook        = uoa_ip_local_in,
+        .pf         = NFPROTO_IPV4,
+        .hooknum    = NF_INET_LOCAL_IN,
+        .priority    = NF_IP_PRI_NAT_SRC + 1,
     },
 };
 
 static struct nf_hook_ops uoa_nf_hook_ops6[] __read_mostly = {
     {
-        .hook		= uoa_ip_local_in,
-        .pf 		= NFPROTO_IPV6,
-        .hooknum	= NF_INET_LOCAL_IN,
-        .priority	= NF_IP_PRI_NAT_SRC + 1,
+        .hook        = uoa_ip_local_in,
+        .pf         = NFPROTO_IPV6,
+        .hooknum    = NF_INET_LOCAL_IN,
+        .priority    = NF_IP_PRI_NAT_SRC + 1,
     },
 };
 

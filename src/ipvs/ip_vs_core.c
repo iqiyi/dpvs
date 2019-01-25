@@ -533,8 +533,8 @@ static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
 
     /* no translation needed for DR/TUN. */
     if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
-	conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
-	conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
+    conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
+    conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
         if (!conn->packet_xmit) {
             RTE_LOG(WARNING, IPVS, "%s: missing packet_xmit\n", __func__);
             rte_pktmbuf_free(mbuf);
