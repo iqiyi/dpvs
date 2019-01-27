@@ -3,6 +3,8 @@
 /*
  *	TOA: Address is a new TCP Option
  *	Address include ip+port, Now support IPV4 and IPV6
+ * 	davidleeux@gmail.com 
+ *      add high version kernel support
  */
 
 unsigned long sk_data_ready_addr = 0;
@@ -30,11 +32,19 @@ unsigned long sk_data_ready_addr = 0;
 
 static struct proto_ops *inet6_stream_ops_p = NULL;
 static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+typedef struct sock *(*syn_recv_sock_func_pt)(
+			const struct sock *sk, struct sk_buff *skb,
+			struct request_sock *req,
+			struct dst_entry *dst,
+			struct request_sock *req_unhash,
+			bool *own_req);
+#else
 typedef struct sock *(*syn_recv_sock_func_pt)(
 		struct sock *sk, struct sk_buff *skb,
 		struct request_sock *req,
 		struct dst_entry *dst);
+#endif
 static syn_recv_sock_func_pt tcp_v6_syn_recv_sock_org_pt = NULL;
 #endif
 
@@ -304,17 +314,31 @@ get_kernel_ipv6_symbol(void)
  * @param dst [out] route cache entry
  * @return NULL if fail new socket if succeed.
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+static struct sock *
+ tcp_v4_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+			struct request_sock *req,
+			struct dst_entry *dst,
+			struct request_sock *req_unhash,
+			bool *own_req)
+#else
+
 static struct sock *
 tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 			struct request_sock *req, struct dst_entry *dst)
+#endif
 {
 	struct sock *newsock = NULL;
 
 	TOA_DBG("tcp_v4_syn_recv_sock_toa called\n");
 
 	/* call orginal one */
-	newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+	newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst, req_unhash, own_req);
+#else
+	newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst);
+#endif
 	/* set our value if need */
 	if (NULL != newsock && NULL == newsock->sk_user_data) {
 		newsock->sk_user_data = get_toa_data(AF_INET, skb);
@@ -341,16 +365,31 @@ tcp_v6_sk_destruct_toa(struct sock *sk) {
 	inet_sock_destruct(sk);
 }
 
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+static struct sock *
+ tcp_v6_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+			struct request_sock *req,
+			struct dst_entry *dst,
+			struct request_sock *req_unhash,
+			bool *own_req)
+#else	
+
 static struct sock *
 tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 			 struct request_sock *req, struct dst_entry *dst)
+#endif
 {
 	struct sock *newsock = NULL;
 
 	TOA_DBG("tcp_v6_syn_recv_sock_toa called\n");
 
 	/* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+	newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash, own_req);
+#else
 	newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst);
+#endif
 
 	/* set our value if need */
 	if (NULL != newsock && NULL == newsock->sk_user_data) {
@@ -380,12 +419,22 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 static inline int
 hook_toa_functions(void)
 {
+        unsigned int level;
+	pte_t *pte;
 	/* hook inet_getname for ipv4 */
 	struct proto_ops *inet_stream_ops_p =
 			(struct proto_ops *)&inet_stream_ops;
 	/* hook tcp_v4_syn_recv_sock for ipv4 */
 	struct inet_connection_sock_af_ops *ipv4_specific_p =
 			(struct inet_connection_sock_af_ops *)&ipv4_specific;
+
+
+	pte = lookup_address((unsigned long )inet_stream_ops_p, &level);
+	if (pte == NULL)
+		return 1;
+	if (pte->pte & ~_PAGE_RW) {
+		pte->pte |= _PAGE_RW;
+	}
 
 	inet_stream_ops_p->getname = inet_getname_toa;
 	TOA_INFO("CPU [%u] hooked inet_getname <%p> --> <%p>\n",
@@ -407,6 +456,12 @@ hook_toa_functions(void)
 		ipv6_specific_p->syn_recv_sock);
 #endif
 
+
+	pte = lookup_address((unsigned long )inet_stream_ops_p, &level);
+	if (pte == NULL)
+		return 1;
+	pte->pte |= pte->pte &~_PAGE_RW;
+
 	return 0;
 }
 
@@ -414,6 +469,8 @@ hook_toa_functions(void)
 static int
 unhook_toa_functions(void)
 {
+	unsigned int level;
+	pte_t *pte;
 	/* unhook inet_getname for ipv4 */
 	struct proto_ops *inet_stream_ops_p =
 			(struct proto_ops *)&inet_stream_ops;
@@ -421,6 +478,12 @@ unhook_toa_functions(void)
 	struct inet_connection_sock_af_ops *ipv4_specific_p =
 			(struct inet_connection_sock_af_ops *)&ipv4_specific;
 
+	pte = lookup_address((unsigned long )inet_stream_ops_p, &level);
+	if (pte == NULL)
+		return 1;
+	if (pte->pte & ~_PAGE_RW) {
+		pte->pte |= _PAGE_RW;
+	}
 	inet_stream_ops_p->getname = inet_getname;
 	TOA_INFO("CPU [%u] unhooked inet_getname\n",
 		smp_processor_id());
@@ -441,6 +504,11 @@ unhook_toa_functions(void)
 			smp_processor_id());
 	}
 #endif
+
+	pte = lookup_address((unsigned long )inet_stream_ops_p, &level);
+	if (pte == NULL)
+		return 1;
+	pte->pte |= pte->pte &~_PAGE_RW;
 
 	return 0;
 }
