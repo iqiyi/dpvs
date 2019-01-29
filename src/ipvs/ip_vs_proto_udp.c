@@ -592,6 +592,9 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     if (uoa->state == UOA_S_DONE)
         return EDPVS_OK;
 
+    if (tuplehash_in(conn).af != tuplehash_out(conn).af)
+        return EDPVS_NOTSUPP;
+
     /* stop sending if ACK received or max-trail reached */
     if (uoa->sent >= g_uoa_max_trail || uoa->acked) {
         uoa->state = UOA_S_DONE;
