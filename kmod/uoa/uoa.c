@@ -52,6 +52,10 @@
 #include <linux/vmalloc.h>
 #include <asm/pgtable_types.h>
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0)
+#include <net/ipv6.h> /* ipv6_skip_exthdr */
+#endif
+
 #define UOA_NEED_EXTRA
 #include "uoa_extra.h"
 #include "uoa.h"
@@ -971,10 +975,14 @@ static __exit void uoa_exit(void)
 static int ipv6_hdrlen(const struct sk_buff *skb)
 {
     struct ipv6hdr *ip6h = ipv6_hdr(skb);
-    __be16 frag_off;
     uint8_t ip6nxt = ip6h->nexthdr;
-    int ip6_hdrlen = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), &ip6nxt,
-                                      &frag_off);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0)
+    int ip6_hdrlen = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), &ip6nxt);
+#else
+    __be16 frag_off;
+    int ip6_hdrlen = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr),
+            &ip6nxt, &frag_off);
+#endif
 
     return (ip6_hdrlen >= 0) ? ip6_hdrlen : sizeof(struct ipv6hdr);
 }
