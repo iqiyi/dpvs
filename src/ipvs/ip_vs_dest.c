@@ -525,6 +525,8 @@ int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
         entry.inactconns = rte_atomic32_read(&dest->inactconns);
         entry.persistconns = rte_atomic32_read(&dest->persistconns);
         ret = dp_vs_copy_stats(&(entry.stats), dest->stats);
+        if (ret != EDPVS_OK)
+            break;
 
         memcpy(&uptr->entrytable[count], &entry, sizeof(entry));
         count++;

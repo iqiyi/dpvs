@@ -1140,9 +1140,10 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     ret = dp_vs_match_parse(get->srange, get->drange,
                                             get->iifname, get->oifname,
                                             &match);
-                    if (ret != EDPVS_OK)
+                    if (ret != EDPVS_OK) {
+                        rte_free(output);
                         return ret;
-
+                    }
                     if (!is_empty_match(&match)) {
                         svc = __dp_vs_svc_match_find(match.af, get->proto,
                                                      &match);
@@ -1167,7 +1168,12 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
             return EDPVS_INVAL;
     }
 
-    return ret;
+    if (ret != EDPVS_OK) {
+        if (*out)
+            rte_free(*out);
+    }
+
+    return ret; 
 }
 
 struct dpvs_sockopts sockopts_svc = {
