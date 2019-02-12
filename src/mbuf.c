@@ -109,7 +109,7 @@ void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m)
     mi->packet_type = m->packet_type;
 
     __rte_mbuf_sanity_check(mi, 1);
-    __rte_mbuf_sanity_check(m,0);
+    __rte_mbuf_sanity_check(m, 0);
 }
 
 struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp)
@@ -131,8 +131,7 @@ struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp)
         mbuf_copy_metadata(mi, md);
         *prev = mi;
         prev = &mi->next;
-        rte_memcpy(rte_pktmbuf_mtod(mi, void *), rte_pktmbuf_mtod(md, void *)
-, md->data_len);
+        rte_memcpy(rte_pktmbuf_mtod(mi, void *), rte_pktmbuf_mtod(md, void *), md->data_len);
     } while ((md = md->next) != NULL && (mi = rte_pktmbuf_alloc(mp)) != NULL);
 
     *prev =  NULL;

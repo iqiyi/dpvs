@@ -449,7 +449,7 @@ static int conn_expire(void *priv)
                 RTE_LOG(WARNING, IPVS, "%s: no route for syn_proxy rs's syn "
                         "retransmit\n", __func__);
             } else {
-                cloned_syn_mbuf = rte_pktmbuf_clone(conn->syn_mbuf, pool);
+                cloned_syn_mbuf = mbuf_copy(conn->syn_mbuf, pool);
                 if (unlikely(!cloned_syn_mbuf)) {
                     RTE_LOG(WARNING, IPVS, "%s: no memory for syn_proxy rs's syn "
                             "retransmit\n", __func__);

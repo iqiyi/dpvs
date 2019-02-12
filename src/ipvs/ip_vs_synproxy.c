@@ -921,7 +921,7 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
 
     /* Save syn_mbuf if syn retransmission is on */
     if (dp_vs_synproxy_ctrl_syn_retry > 0) {
-        syn_mbuf_cloned = rte_pktmbuf_clone(syn_mbuf, pool);
+        syn_mbuf_cloned = mbuf_copy(syn_mbuf, pool);
         if (unlikely(!syn_mbuf_cloned)) {
             rte_pktmbuf_free(syn_mbuf);
             //RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOMEM));
