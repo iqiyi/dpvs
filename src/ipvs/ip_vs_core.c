@@ -715,11 +715,11 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
         return dp_vs_redirect_pkt(mbuf, peer_cid);
     }
 
-    if (!conn)
-        return INET_ACCEPT;
-
     /* recover mbuf.data_off to outer IP header. */
     rte_pktmbuf_prepend(mbuf, off);
+
+    if (!conn)
+        return INET_ACCEPT;
 
     /* so the ICMP is related to existing conn */
     *related = 1;
@@ -858,11 +858,11 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
         return dp_vs_redirect_pkt(mbuf, peer_cid);
     }
 
-    if (!conn)
-        return INET_ACCEPT;
-
     /* recover mbuf.data_off to outer IP header. */
     rte_pktmbuf_prepend(mbuf, off);
+
+    if (!conn)
+        return INET_ACCEPT;
 
     /* so the ICMP is related to existing conn */
     *related = 1;
