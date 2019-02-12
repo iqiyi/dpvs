@@ -495,11 +495,12 @@ static int dp_vs_in_icmp(struct rte_mbuf *mbuf, int *related)
     dp_vs_fill_iphdr(AF_INET, mbuf, &dciph);
 
     conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true, &drop);
-    if (!conn)
-        return INET_ACCEPT;
 
     /* recover mbuf.data_off to outer IP header. */
     rte_pktmbuf_prepend(mbuf, off);
+
+    if (!conn)
+        return INET_ACCEPT;
 
     /* so the ICMP is related to existing conn */
     *related = 1;
