@@ -803,15 +803,24 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
         /* re-calc checksum */
         ip_send_check(iph);
     } else {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,0,0)
-        /* do as upper ipv4, handle for old kernel version */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+        /* IPv6 uoa is verified on kernel 4.14.17+ and later.
+         * There is kernel crash for kernel version which is <= 4.9.
+         * The crash is caused by memmove() below which corrupts the pointer
+         * of skb shared info specified by skb->end. The root cause of corrupting
+         * is that skb->end is always 320 no mater how long the packet is.
+         * It should be a kernel bug and 4.14 should fix it. */
         int payload_len = ntohs(((struct ipv6hdr *)iph)->payload_len);
         ((struct ipv6hdr *)iph)->payload_len = htons(payload_len - opplen);
         ((struct ipv6hdr *)iph)->nexthdr = opph->protocol;
         memmove(iph + iphdrlen, uh, ntohs(uh->len));
         skb_set_transport_header(skb, iphdrlen);
+
+        /* disable ipv6 udp checksum verification
+         * It is meaningless to recalculate checksum. */
+        skb->ip_summed = CHECKSUM_UNNECESSARY;
 #else
-        ((struct ipv6hdr *)iph)->nexthdr = opph->protocol;
+        pr_warn("ipv6 uoa is not verified in kernel version below 4.14.0.\n");
 #endif
     }
 
