@@ -1171,15 +1171,15 @@ parse_service(char *buf, ipvs_service_t *svc)
  * Get sockpair from the arguments.
  * sockpair := PROTO:SIP:SPORT:TIP:TPORT
  * PROTO := [tcp|udp]
- * SIP,TIP := dotted-decimal ip address
+ * SIP,TIP := dotted-decimal ip address or square-blacketed ip6 address
  * SPORT,TPORT := range(0, 65535)
  */
 static int
 parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 {
     char *pos = buf, *end;
-    int af = AF_INET;
-    struct in_addr sip, tip;
+    int af = (strchr(pos, '[') == NULL ? AF_INET : AF_INET6);
+    union inet_addr sip, tip;
     unsigned short proto, sport, tport;
     long portn;
 
@@ -1196,13 +1196,26 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 	else
 		return 0;
 
-	pos = end;
-    end = strchr(pos, ':');
-    if (!end)
-        return 0;
-    *end++ = '\0';
-    if (inet_pton(af, pos, &sip) != 1)
-        return 0;
+    if (af == AF_INET) {
+        pos = end;
+        end = strchr(pos, ':');
+        if (!end)
+            return 0;
+        *end++ = '\0';
+        if (inet_pton(af, pos, &sip) != 1)
+            return 0;
+    } else {
+        if (*end != '[')
+            return 0;
+        pos = end + 1;
+        end = strchr(pos, ']');
+        if (!end || *(end+1) != ':')
+            return 0;
+        *end++ = '\0';
+        *end++ = '\0';
+        if (inet_pton(af, pos, &sip.in6) != 1)
+            return 0;
+    }
 
     pos = end;
     end = strchr(pos, ':');
@@ -1213,13 +1226,26 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
         return 0;
     sport = portn;
 
-    pos = end;
-    end = strchr(pos, ':');
-    if (!end)
-        return 0;
-    *end++ = '\0';
-    if (inet_pton(af, pos, &tip) != 1)
-        return 0;
+    if (af == AF_INET) {
+        pos = end;
+        end = strchr(pos, ':');
+        if (!end)
+            return 0;
+        *end++ = '\0';
+        if (inet_pton(af, pos, &tip.in) != 1)
+            return 0;
+    } else {
+        if (*end !='[')
+            return 0;
+        pos = end + 1;
+        end = strchr(pos, ']');
+        if (!end || *(end+1) != ':')
+            return 0;
+        *end++ = '\0';
+        *end++ = '\0';
+        if (inet_pton(af, pos, &tip.in6) != 1)
+            return 0;
+    }
 
     pos = end;
     if ((portn = string_to_number(pos, 0, 65535)) == -1)
@@ -1228,9 +1254,9 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 
     sockpair->af = af;
 	sockpair->proto = proto;
-    memcpy(&sockpair->sip, &sip, sizeof(sockpair->sip));
+    sockpair->sip = sip;
     sockpair->sport = ntohs(sport);
-    memcpy(&sockpair->tip, &tip, sizeof(sockpair->tip));
+    sockpair->tip = tip;
     sockpair->tport = ntohs(tport);
 
     return 1;
@@ -1525,16 +1551,16 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 
 	snprintf(time_str, sizeof(time_str), "%ds", conn_entry->timeout);
 
-	if (!(cname = addrport_to_anyname(conn_entry->af, &conn_entry->caddr,
+	if (!(cname = addrport_to_anyname(conn_entry->in_af, &conn_entry->caddr,
                     ntohs(conn_entry->cport), conn_entry->proto, format)))
 		goto exit;
-	if (!(vname = addrport_to_anyname(conn_entry->af, &conn_entry->vaddr,
+	if (!(vname = addrport_to_anyname(conn_entry->in_af, &conn_entry->vaddr,
                     ntohs(conn_entry->vport), conn_entry->proto, format)))
 		goto exit;
-	if (!(lname = addrport_to_anyname(conn_entry->af, &conn_entry->laddr,
+	if (!(lname = addrport_to_anyname(conn_entry->out_af, &conn_entry->laddr,
                     ntohs(conn_entry->lport), conn_entry->proto, format)))
 		goto exit;
-	if (!(dname = addrport_to_anyname(conn_entry->af, &conn_entry->daddr,
+	if (!(dname = addrport_to_anyname(conn_entry->out_af, &conn_entry->daddr,
                     ntohs(conn_entry->dport), conn_entry->proto, format)))
 		goto exit;
 

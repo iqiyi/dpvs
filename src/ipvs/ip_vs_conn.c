@@ -1166,7 +1166,8 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
 static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
         ipvs_conn_entry_t *entry)
 {
-    entry->af = conn->af;
+    entry->in_af = tuplehash_in(conn).af;
+    entry->out_af = tuplehash_out(conn).af;
     entry->proto = conn->proto;
     entry->lcoreid = rte_lcore_id();
     snprintf(entry->state, sizeof(entry->state), "%s",
