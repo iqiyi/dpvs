@@ -101,6 +101,7 @@ struct uoa_param_map {
     __be16           sport;
     __be16           dport;
     /* output */
+    __be16           real_af;
     union inet_addr  real_saddr;
     __be16           real_sport;
 } __attribute__((__packed__));

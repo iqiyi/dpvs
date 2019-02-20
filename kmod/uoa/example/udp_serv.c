@@ -83,7 +83,7 @@ void handle_reply(int efd, int fd)
         memmove(&map.saddr, &sin->sin_addr.s_addr, sizeof(struct in_addr));
         mlen = sizeof(map);
         if (getsockopt(fd, IPPROTO_IP, UOA_SO_GET_LOOKUP, &map, &mlen) == 0) {
-            inet_ntop(AF_INET, &map.real_saddr.in, from, sizeof(from));
+            inet_ntop(map.real_af, &map.real_saddr.in, from, sizeof(from));
             printf("  real client %s:%d\n", from, ntohs(map.real_sport));
         }
 
@@ -103,7 +103,7 @@ void handle_reply(int efd, int fd)
         mlen = sizeof(map);
 
         if (getsockopt(fd, IPPROTO_IP, UOA_SO_GET_LOOKUP, &map, &mlen) == 0) {
-            inet_ntop(AF_INET6, &map.real_saddr.in6, from, sizeof(from));
+            inet_ntop(map.real_af, &map.real_saddr.in6, from, sizeof(from));
             printf("  real client %s:%d\n", from, ntohs(map.real_sport));
         }
 

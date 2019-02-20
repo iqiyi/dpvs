@@ -277,19 +277,40 @@ static void uoa_stats_exit(void)
 
 static inline void uoa_map_dump(const struct uoa_map *um, const char *pref)
 {
+    int real_af;
+
     if (likely(!uoa_debug))
       return;
 
+    if (um->optuoa.op_len == IPOLEN_UOA_IPV6)
+        real_af = AF_INET6;
+    else
+        real_af = AF_INET;
+
     if (AF_INET == um->af) {
-        pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d, refcnt %d\n", pref ? : "",
-                 &um->saddr.in, ntohs(um->sport), &um->daddr.in, ntohs(um->dport),
-                 &um->optuoa.op_addr.in, ntohs(um->optuoa.op_port),
-                 atomic_read(&um->refcnt));
+        if (real_af == AF_INET) {
+            pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d, refcnt %d\n", pref ? : "",
+                    &um->saddr.in, ntohs(um->sport), &um->daddr.in, ntohs(um->dport),
+                    &um->optuoa.op_addr.in, ntohs(um->optuoa.op_port),
+                    atomic_read(&um->refcnt));
+        } else {
+            pr_info("%s %pI4:%d->%pI4:%d real [%pI6]:%d, refcnt %d\n", pref ? : "",
+                    &um->saddr.in, ntohs(um->sport), &um->daddr.in, ntohs(um->dport),
+                    &um->optuoa.op_addr.in6, ntohs(um->optuoa.op_port),
+                    atomic_read(&um->refcnt));
+        }
     } else {
-        pr_info("%s %pI6:%d->%pI6:%d real %pI6:%d, refcnt %d\n", pref ? : "",
-                 &um->saddr.in6, ntohs(um->sport), &um->daddr.in6, ntohs(um->dport),
-                 &um->optuoa.op_addr.in6, ntohs(um->optuoa.op_port),
-                 atomic_read(&um->refcnt));
+        if (real_af == AF_INET) {
+            pr_info("%s [%pI6]:%d->[%pI6]:%d real %pI4:%d, refcnt %d\n", pref ? : "",
+                    &um->saddr.in6, ntohs(um->sport), &um->daddr.in6, ntohs(um->dport),
+                    &um->optuoa.op_addr.in, ntohs(um->optuoa.op_port),
+                    atomic_read(&um->refcnt));
+        } else {
+            pr_info("%s [%pI6]:%d->[%pI6]:%d real [%pI6]:%d, refcnt %d\n", pref ? : "",
+                    &um->saddr.in6, ntohs(um->sport), &um->daddr.in6, ntohs(um->dport),
+                    &um->optuoa.op_addr.in6, ntohs(um->optuoa.op_port),
+                    atomic_read(&um->refcnt));
+        }
     }
 }
 
@@ -339,7 +360,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 
             kmem_cache_free(uoa_map_cache, um);
 
-            uoa_map_dump(cur, "udp:");
+            uoa_map_dump(cur, "update:");
             goto hashed;
         }
     }
@@ -531,7 +552,7 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
                         &map.saddr.in, ntohs(map.sport),
                         &map.daddr.in, ntohs(map.dport));
             } else {
-                pr_warn("%s: not found: %pI6:%d->%pI6:%d\n", __func__,
+                pr_warn("%s: not found: [%pI6]:%d->[%pI6]:%d\n", __func__,
                         &map.saddr.in6, ntohs(map.sport),
                         &map.daddr.in6, ntohs(map.dport));
             }
@@ -544,6 +565,7 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 
     if (likely(um->optuoa.op_code == IPOPT_UOA)) {
         if (um->optuoa.op_len == IPOLEN_UOA_IPV4) {
+            map.real_af = AF_INET;
             memmove(&map.real_saddr.in, &um->optuoa.op_addr.in,
                         sizeof(map.real_saddr.in));
             map.real_sport = um->optuoa.op_port;
@@ -551,6 +573,7 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
             err = 0;
         } else {
             if (um->optuoa.op_len == IPOLEN_UOA_IPV6) {
+                map.real_af = AF_INET6;
                 memmove(&map.real_saddr.in6, &um->optuoa.op_addr.in6,
                             sizeof(map.real_saddr.in6));
                 map.real_sport = um->optuoa.op_port;
@@ -686,13 +709,12 @@ static struct uoa_map *uoa_parse_ipopt(__be16 af, unsigned char *optptr,
 
             atomic_set(&um->refcnt, 0);
             um->af = af;
-            if (optlen == IPOLEN_UOA_IPV4) {
+            if (AF_INET == af) {
                 memmove(&um->saddr.in, &((struct iphdr *)iph)->saddr,
                             sizeof(struct in_addr));
                 memmove(&um->daddr.in, &((struct iphdr *)iph)->daddr,
                             sizeof(struct in_addr));
-            }
-            else {
+            } else {
                 /* ipv6 */
                 memmove(&um->saddr.in6, &((struct ipv6hdr *)iph)->saddr,
                             sizeof(struct in6_addr));

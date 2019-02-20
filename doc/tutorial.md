@@ -1046,7 +1046,7 @@ To achieve this,
 1. The kernel module `uoa.ko` is needed to be installed on `RS`, and
 2. the program on `RS` just need a `getsockopt(2)` call to get the real client IP/port.
 
-The example C code for RS to fetch Real Client IP can be found [here](../uoa/example/udp_serv.c).
+The example C code for RS to fetch Real Client IP can be found [here](../kmod/uoa/example/udp_serv.c).
 
 ```bash
 rs$ insmod `uoa`
