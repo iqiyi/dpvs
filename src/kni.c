@@ -50,6 +50,8 @@ static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
                           struct rte_kni_conf *conf)
 {
     struct rte_eth_dev_info info = {0};
+    const struct rte_bus *bus = NULL;
+    const struct rte_pci_device *pci_dev;
 
     memset(conf, 0, sizeof(*conf));
     conf->group_id = dev->id;
@@ -57,8 +59,14 @@ static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
 
     if (dev->type == PORT_TYPE_GENERAL) { /* dpdk phy device */
         rte_eth_dev_info_get(dev->id, &info);
-        conf->addr = info.pci_dev->addr;
-        conf->id = info.pci_dev->id;
+        if (info.device) {
+            bus = rte_bus_find_by_device(info.device);
+        }
+        if (bus && !strcmp(bus->name, "pci")) {
+            pci_dev = RTE_DEV_TO_PCI(info.device);
+            conf->addr = pci_dev->addr;
+            conf->id = pci_dev->id;
+        }
     }
 
     if (ifname && strlen(ifname))

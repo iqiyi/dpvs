@@ -254,7 +254,7 @@ int main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "Fail to init stats: %s\n", dpvs_strerror(err));
     
     /* config and start all available dpdk ports */
-    nports = rte_eth_dev_count();
+    nports = rte_eth_dev_count_avail();
     for (pid = 0; pid < nports; pid++) {
         dev = netif_port_get(pid);
         if (!dev) {
