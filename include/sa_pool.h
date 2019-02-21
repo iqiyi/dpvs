@@ -42,6 +42,11 @@
 #ifndef __DPVS_SA_POOL__
 #define __DPVS_SA_POOL__
 
+enum {
+    LADDR_LCORE_MAPPING_POOL_MODE,
+    LPORT_LCORE_MAPPING_POOL_MODE,
+};
+
 struct sa_pool_stats {
     uint32_t used_cnt;
     uint32_t free_cnt;

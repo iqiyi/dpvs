@@ -28,6 +28,7 @@
 #include "common.h"
 #include "netif.h"
 #include "netif_addr.h"
+#include "sa_pool.h"
 #include "vlan.h"
 #include "ctrl.h"
 #include "list.h"
@@ -78,6 +79,8 @@ static portid_t port_id_end = 0;
 static uint16_t g_nports;
 
 static uint64_t cycles_per_sec;
+
+extern uint8_t sa_pool_mode;
 
 #define NETIF_BOND_MODE_DEF     BONDING_MODE_ROUND_ROBIN
 
@@ -149,6 +152,7 @@ static uint8_t g_slave_lcore_num;
 static uint8_t g_isol_rx_lcore_num;
 static uint64_t g_slave_lcore_mask;
 static uint64_t g_isol_rx_lcore_mask;
+uint32_t lcore_ids[RTE_MAX_LCORE];
 
 bool is_lcore_id_valid(lcoreid_t cid)
 {
@@ -1287,6 +1291,7 @@ void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask)
     while (lcore_conf[i].nports > 0) {
         slave_lcore_nb++;
         slave_lcore_mask |= (1L << lcore_conf[i].id);
+        lcore_ids[i] = lcore_conf[i].id;
         i++;
     }
 
@@ -3473,7 +3478,8 @@ int netif_port_start(struct netif_port *port)
     }
 
     // device configure
-    if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
+    if (sa_pool_mode == LPORT_LCORE_MAPPING_POOL_MODE &&
+        (ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
     ret = rte_eth_dev_configure(port->id, port->nrxq, port->ntxq, &port->dev_conf);
     if (ret < 0 ) {
@@ -3765,9 +3771,7 @@ static struct rte_eth_conf default_port_conf = {
                 .dst_ip         = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF },
             },
             .src_port_mask      = 0x0000,
-
-            /* to be changed according to slave lcore number in use */
-            .dst_port_mask      = 0x00F8,
+            .dst_port_mask      = 0x0000,
 
             .mac_addr_byte_mask = 0x00,
             .tunnel_type_mask   = 0,

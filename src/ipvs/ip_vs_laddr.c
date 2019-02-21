@@ -105,9 +105,12 @@ struct dp_vs_laddr {
     rte_atomic32_t          conn_counts;
 
     struct netif_port       *iface;
+
+    lcoreid_t               lcore;
 };
 
 static uint32_t dp_vs_laddr_max_trails = 16;
+extern uint8_t sa_pool_mode;
 
 static inline int __laddr_step(struct dp_vs_service *svc)
 {
@@ -116,7 +119,15 @@ static inline int __laddr_step(struct dp_vs_service *svc)
     * scheduler. If so, the local IP may stay invariant for a specified realserver,
     * which is a hurt for realserver concurrency performance. To avoid the problem,
     * we just choose 5% sessions to use the one after the next laddr randomly.
+    *
+    * In LADDR_LCORE_MAPPING_POOL_MODE, the iteration step is different
+    * between laddr_list and realserver rr/wrr scheduler internally since every
+    * laddr is bound to a dedicated lcore. So we don't need to get a random
+    * laddr_list step any more.
     * */
+    if (sa_pool_mode == LADDR_LCORE_MAPPING_POOL_MODE)
+        return 1;
+
     if (strncmp(svc->scheduler->name, "rr", 2) == 0 ||
             strncmp(svc->scheduler->name, "wrr", 3) == 0)
         return (random() % 100) < 5 ? 2 : 1;
@@ -185,10 +196,25 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
     for (i = 0; i < dp_vs_laddr_max_trails && i < svc->num_laddrs; i++) {
         /* select a local IP from service */
         laddr = __get_laddr(svc);
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+        char buf[64];
+        if (inet_ntop(conn->af, &laddr->addr, buf, sizeof(buf)) == NULL)
+            snprintf(buf, sizeof(buf), "::");
+#endif
         if (!laddr) {
             RTE_LOG(ERR, IPVS, "%s: no laddr available.\n", __func__);
             rte_rwlock_write_unlock(&svc->laddr_lock);
             return EDPVS_RESOURCE;
+        }
+        if (sa_pool_mode == LADDR_LCORE_MAPPING_POOL_MODE) {
+            if (laddr->lcore != rte_lcore_id()) {
+                laddr = NULL;
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+                RTE_LOG(DEBUG, IPVS, "%s: %s is not assigned on lcore[%d], "
+                        "try next laddr.\n",__func__, buf, rte_lcore_id());
+#endif
+                continue;
+            }
         }
 
         memset(&dsin, 0, sizeof(struct sockaddr_storage));
@@ -215,10 +241,6 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
         }
 
         if (sa_fetch(laddr->af, laddr->iface, &dsin, &ssin) != EDPVS_OK) {
-            char buf[64];
-            if (inet_ntop(laddr->af, &laddr->addr, buf, sizeof(buf)) == NULL)
-                snprintf(buf, sizeof(buf), "::");
-
 #ifdef CONFIG_DPVS_IPVS_DEBUG
             RTE_LOG(ERR, IPVS, "%s: [%d] no lport available on %s, "
                     "try next laddr.\n", __func__, rte_lcore_id(), buf);
@@ -233,11 +255,13 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
     }
     rte_rwlock_write_unlock(&svc->laddr_lock);
 
-    if (!laddr || sport == 0) {
-#ifdef CONFIG_DPVS_IPVS_DEBUG
-        RTE_LOG(ERR, IPVS, "%s: [%d] no lport available !!\n", 
+    if (!laddr) {
+        RTE_LOG(ERR, IPVS, "%s: [%d] no laddr available !!\n",
                 __func__, rte_lcore_id());
-#endif
+        return EDPVS_RESOURCE;
+    } else if (sport == 0) {
+        RTE_LOG(ERR, IPVS, "%s: [%d] no lport available !!\n",
+                __func__, rte_lcore_id());
         if (laddr)
             put_laddr(laddr);
         return EDPVS_RESOURCE;
@@ -304,6 +328,8 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
                     const char *ifname)
 {
     struct dp_vs_laddr *new, *curr;
+    struct inet_ifaddr *ifa;
+    lcoreid_t cid;
 
     if (!svc || !addr)
         return EDPVS_INVAL;
@@ -323,6 +349,25 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
     if (unlikely(!new->iface)) {
         rte_free(new);
         return EDPVS_NOTEXIST;
+    }
+
+    if (sa_pool_mode == LADDR_LCORE_MAPPING_POOL_MODE) {
+        ifa = inet_addr_ifa_get(af, new->iface, &new->addr);
+
+        char buf[64];
+        if (inet_ntop(af, &new->addr, buf, sizeof(buf)) == NULL)
+            snprintf(buf, sizeof(buf), "::");
+
+        for (cid=0; cid<RTE_MAX_LCORE; cid++) {
+            if (ifa->sa_pools[cid]) {
+                new->lcore = cid;
+                RTE_LOG(DEBUG, IPVS, "%s: %s is bound on lcore [%d].\n", __func__, buf, new->lcore);
+                break;
+            }
+        }
+
+        if (!new->lcore)
+            RTE_LOG(ERR, IPVS, "%s: %s is not bound on any lcore.\n", __func__, buf);
     }
 
     rte_rwlock_write_lock(&svc->laddr_lock);
