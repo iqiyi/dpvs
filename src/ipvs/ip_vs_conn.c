@@ -562,10 +562,13 @@ static int conn_expire(void *priv)
 
     /* some one is using it when expire,
      * try del it again later */
-    if (conn->flags & DPVS_CONN_F_TEMPLATE)
+    if (conn->flags & DPVS_CONN_F_TEMPLATE) {
         dpvs_timer_update(&conn->timer, &conn->timeout, true);
-    else
+        dpvs_time_now(&conn->rtime, true);
+    } else {
         dpvs_timer_update(&conn->timer, &conn->timeout, false);
+        dpvs_time_now(&conn->rtime, false);
+    }
 
     rte_atomic32_dec(&conn->refcnt);
     return DTIMER_OK;
@@ -759,9 +762,7 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     rte_atomic32_set(&new->refcnt, 1);
     new->flags  = flags;
     new->state  = 0;
-#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
-    new->ctime = rte_rdtsc();
-#endif
+    new->ctime = rte_rdtsc_precise();
 
     /* bind destination and corresponding trasmitter */
     err = conn_bind_dest(new, dest);
@@ -827,10 +828,14 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
 
     /* schedule conn timer */
     dpvs_time_rand_delay(&new->timeout, 1000000);
-    if (new->flags & DPVS_CONN_F_TEMPLATE)
+    if (new->flags & DPVS_CONN_F_TEMPLATE) {
         dpvs_timer_sched(&new->timer, &new->timeout, conn_expire, new, true);
-    else
+        dpvs_time_now(&new->rtime, true);
+    } else {
         dpvs_timer_sched(&new->timer, &new->timeout, conn_expire, new, false);
+        dpvs_time_now(&new->rtime, false);
+    }
+
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
     conn_dump("new conn: ", new);
@@ -846,6 +851,22 @@ errout:
 errout_redirect:
     dp_vs_redirect_free(new);
     return NULL;
+}
+
+uint32_t
+dp_vs_conn_get_left_lifetime(const struct dp_vs_conn *conn)
+{
+   struct timeval now;
+   uint32_t idle_time;
+
+   if (conn->flags & DPVS_CONN_F_TEMPLATE) {
+       dpvs_time_now(&now, true);
+   } else {
+       dpvs_time_now(&now, false);
+   }
+
+   idle_time = (now.tv_sec - conn->rtime.tv_sec) * 1000000 + now.tv_usec - conn->rtime.tv_usec;
+   return (conn->timeout.tv_sec * 1000000 + conn->timeout.tv_usec - idle_time);
 }
 
 /**
@@ -1021,10 +1042,13 @@ void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn)
 /* put back the conn and reset it's timer */
 void dp_vs_conn_put(struct dp_vs_conn *conn)
 {
-    if (conn->flags & DPVS_CONN_F_TEMPLATE)
+    if (conn->flags & DPVS_CONN_F_TEMPLATE) {
         dpvs_timer_update(&conn->timer, &conn->timeout, true);
-    else
+        dpvs_time_now(&conn->rtime, true);
+    } else {
         dpvs_timer_update(&conn->timer, &conn->timeout, false);
+        dpvs_time_now(&conn->rtime, false);
+    }
 
     rte_atomic32_dec(&conn->refcnt);
 }
@@ -1072,7 +1096,7 @@ static int conn_term_lcore(void *arg)
 }
 
 /*
- * ctrl plane support for commands:
+ * ctrl plane support for commands with --detail-conn:
  *     ipvsadm -ln -c
  *     ipvsadm -ln -c --sockpair af:proto:sip:sport:tip:tport
  *     ipvsadm -ln -c --persistent-conn
@@ -1164,7 +1188,7 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
 }
 
 static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
-        ipvs_conn_entry_t *entry)
+        ipvs_conn_entry_t *entry, bool is_detail)
 {
     entry->af = conn->af;
     entry->proto = conn->proto;
@@ -1180,6 +1204,11 @@ static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
     entry->lport = conn->lport;
     entry->dport = conn->dport;
     entry->timeout = conn->timeout.tv_sec;
+    if (is_detail) {
+        entry->left_lifetime = dp_vs_conn_get_left_lifetime(conn) / 1000000;
+        memset(entry->ctime, 0, sizeof(entry->ctime));
+        cycles_to_systime(conn->ctime, entry->ctime, sizeof(entry->ctime));
+    }
 }
 
 static int sockopt_conn_get_specified(const struct ip_vs_conn_req *conn_req,
@@ -1196,7 +1225,8 @@ static int sockopt_conn_get_specified(const struct ip_vs_conn_req *conn_req,
                 &conn_req->sockpair.sip, &conn_req->sockpair.tip,
                 conn_req->sockpair.sport, conn_req->sockpair.tport);
         if (unlikely(conn != NULL)) { /* hit persist conn */
-            sockopt_fill_conn_entry(conn, &conn_arr->array[0]);
+            sockopt_fill_conn_entry(conn, &conn_arr->array[0],
+                                    conn_req->flag & GET_IPVS_CONN_FLAG_DETAIL);
             conn_arr->nconns = 1;
             conn_arr->resl = GET_IPVS_CONN_RESL_OK;
             conn_arr->curcid = 0;
@@ -1236,7 +1266,7 @@ static int sockopt_conn_get_specified(const struct ip_vs_conn_req *conn_req,
 /* call me on the same lcore as the conn table,
  * lock me if the conn table is global
  * */
-static int __lcore_conn_table_dump(const struct list_head *cplist)
+static int __lcore_conn_table_dump(const struct list_head *cplist, bool is_detail)
 {
     int i;
     struct conn_tuple_hash *tuphash;
@@ -1255,7 +1285,7 @@ static int __lcore_conn_table_dump(const struct list_head *cplist)
                     return EDPVS_NOMEM;
                 cparr->head = cparr->tail = 0;
             }
-            sockopt_fill_conn_entry(conn, &cparr->array[cparr->tail++]);
+            sockopt_fill_conn_entry(conn, &cparr->array[cparr->tail++], is_detail);
             if (cparr->tail >= MAX_CTRL_CONN_GET_ENTRIES) {
                 RTE_LOG(DEBUG, IPVS, "%s: adding %d elems to conn_to_dump list -- "
                         "%p:%d-%d\n", __func__, cparr->tail - cparr->head, cparr,
@@ -1323,7 +1353,8 @@ again:
     if ((conn_req->flag & GET_IPVS_CONN_FLAG_TEMPLATE)
             && (cid == rte_get_master_lcore())) { /* persist conns */
         rte_spinlock_lock(&dp_vs_ct_lock);
-        res = __lcore_conn_table_dump(dp_vs_ct_tbl);
+        res = __lcore_conn_table_dump(dp_vs_ct_tbl,
+                                      conn_req->flag & GET_IPVS_CONN_FLAG_DETAIL);
         rte_spinlock_unlock(&dp_vs_ct_lock);
         if (res != EDPVS_OK) {
             conn_arr->nconns = got;
@@ -1353,7 +1384,8 @@ again:
     }
 
     /* get conns table from cid and saved into dump list */
-    msg = msg_make(MSG_TYPE_CONN_GET_ALL, 0, DPVS_MSG_UNICAST, rte_lcore_id(), 0, NULL);
+    msg = msg_make(MSG_TYPE_CONN_GET_ALL, 0, DPVS_MSG_UNICAST, rte_lcore_id(),
+                   sizeof(struct ip_vs_conn_req), conn_req);
     /* FIXME: When conns in session table are not many enough, blockable msg would get
      * timeout probably due to the traverse of the whole huge session table.  So non-
      * blockable msg is used. A more elegant solution is to use an upper time limit for
@@ -1483,7 +1515,8 @@ static int conn_get_msgcb_slave(struct dpvs_msg *msg)
         reply_data->nconns = 1;
         reply_data->resl = GET_IPVS_CONN_RESL_OK;
         reply_data->curcid = 0;
-        sockopt_fill_conn_entry(conn, &reply_data->array[0]);
+        sockopt_fill_conn_entry(conn, &reply_data->array[0],
+                                conn_req->flag & GET_IPVS_CONN_FLAG_DETAIL);
         dp_vs_conn_put(conn);
     }
 
@@ -1495,7 +1528,13 @@ static int conn_get_msgcb_slave(struct dpvs_msg *msg)
 
 static int conn_get_all_msgcb_slave(struct dpvs_msg *msg)
 {
-    return  __lcore_conn_table_dump(this_conn_tbl);
+    const struct ip_vs_conn_req *conn_req;
+
+    assert(msg->len == sizeof(struct ip_vs_conn_req));
+    conn_req = (struct ip_vs_conn_req *)&msg->data[0];
+
+    return  __lcore_conn_table_dump(this_conn_tbl,
+                                    conn_req->flag & GET_IPVS_CONN_FLAG_DETAIL);
 }
 
 static int register_conn_get_msg(void)

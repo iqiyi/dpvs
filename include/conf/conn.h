@@ -32,6 +32,7 @@ enum conn_get_flags {
     GET_IPVS_CONN_FLAG_MORE         = 2,
     GET_IPVS_CONN_FLAG_SPECIFIED    = 4,
     GET_IPVS_CONN_FLAG_TEMPLATE     = 8,
+    GET_IPVS_CONN_FLAG_DETAIL       = 16,
 };
 
 enum conn_get_result {
@@ -70,8 +71,10 @@ struct ip_vs_conn_entry {
     uint16_t            lport;
     uint16_t            dport;
     uint32_t            timeout;
+    uint32_t            left_lifetime;   //seconds
     uint8_t             lcoreid;
     char                state[16];
+    char                ctime[24];
 };
 typedef struct ip_vs_conn_entry ipvs_conn_entry_t;
 

@@ -200,6 +200,7 @@ static const char* optnames[] = {
 	"ifname" , 
 	"sockpair" ,
 	"hash-target",
+	"detail-conn",
 };
 
 /*
@@ -245,6 +246,7 @@ static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 #define FMT_PERSISTENTCONN	0x0020
 #define FMT_NOSORT		0x0040
 #define FMT_EXACT		0x0080
+#define FMT_DETAILCONN  0x0100
 
 #define SERVICE_NONE		0x0000
 #define SERVICE_ADDR		0x0001
@@ -285,6 +287,7 @@ enum {
 	TAG_NO_SORT,
 	TAG_PERSISTENCE_ENGINE,
 	TAG_SOCKPAIR,
+	TAG_DETAILCONN,
 };
 
 /* various parsing helpers & parsing functions */
@@ -317,8 +320,8 @@ static void version(FILE *stream);
 static void fail(int err, char *msg, ...);
 
 /* various listing functions */
-static void list_conn(int is_template, unsigned int format);
-static void list_conn_sockpair(int is_template,
+static void list_conn(unsigned int options, unsigned int format);
+static void list_conn_sockpair(unsigned int options,
 		ipvs_sockpair_t *sockpair, unsigned int format);
 static void list_service(ipvs_service_t *svc, unsigned int format);
 static void list_all(unsigned int format);
@@ -454,6 +457,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
 		{ "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
+		{ "detail-conn", '\0', POPT_ARG_NONE, NULL, TAG_DETAILCONN, NULL, NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
 
@@ -698,6 +702,10 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			set_option(options, OPT_PERSISTENTCONN);
 			*format |= FMT_PERSISTENTCONN;
 			break;
+		case TAG_DETAILCONN:
+			set_option(options, OPT_DETAILCONN);
+			*format |= FMT_DETAILCONN;
+			break;
 		case TAG_SOCKPAIR:
 			set_option(options, OPT_SOCKPAIR);
 			parse = parse_sockpair(optarg, &ce->sockpair);
@@ -918,15 +926,17 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		if ((options & (OPT_CONNECTION|OPT_TIMEOUT|OPT_DAEMON) &&
 		     options & (OPT_STATS|OPT_RATE|OPT_THRESHOLDS)) ||
 		    (options & (OPT_TIMEOUT|OPT_DAEMON) &&
-		     options & OPT_PERSISTENTCONN))
+		     options & OPT_PERSISTENTCONN) ||
+		     (options & (OPT_TIMEOUT|OPT_DAEMON) &&
+		      options & OPT_DETAILCONN))
 			fail(2, "options conflicts in the list command");
 
 		if (options & OPT_CONNECTION)
             if (options & OPT_SOCKPAIR)
-                list_conn_sockpair(options & OPT_PERSISTENTCONN,
+                list_conn_sockpair(options,
 						&ce.sockpair, format);
             else
-                list_conn(options & OPT_PERSISTENTCONN, format);
+                list_conn(options, format);
 		else if (options & OPT_SERVICE)
 			list_service(&ce.svc, format);
 		else if (options & OPT_TIMEOUT)
@@ -1448,6 +1458,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --mcast-interface interface         multicast interface for connection sync\n"
 		"  --syncid sid                        syncid for connection sync (default=255)\n"
 		"  --connection   -c                   output of current IPVS connections\n"
+		"  --detail-conn                       output detail including left lifetime of current IPVS connctions\n"
 		"  --timeout                           output of timeout (tcp tcpfin udp)\n"
 		"  --daemon                            output of daemon information\n"
 		"  --stats                             output of statistics information\n"
@@ -1510,7 +1521,7 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 		unsigned int format)
 {
 	char *cname, *vname, *lname, *dname;
-	char proto_str[8], time_str[8];
+	char proto_str[8], time_str[8], left_lifetime_str[16];
 
 	if (conn_entry->proto == IPPROTO_TCP)
 		snprintf(proto_str, sizeof(proto_str), "%s", "tcp");
@@ -1524,6 +1535,8 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 		snprintf(proto_str, sizeof(proto_str), "%s", "--");
 
 	snprintf(time_str, sizeof(time_str), "%ds", conn_entry->timeout);
+	snprintf(left_lifetime_str, sizeof(left_lifetime_str), "%ds",
+	         conn_entry->left_lifetime);
 
 	if (!(cname = addrport_to_anyname(conn_entry->af, &conn_entry->caddr,
                     ntohs(conn_entry->cport), conn_entry->proto, format)))
@@ -1538,9 +1551,15 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
                     ntohs(conn_entry->dport), conn_entry->proto, format)))
 		goto exit;
 
-	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
-			conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
-			cname, vname, lname, dname);
+	if (format & FMT_DETAILCONN) {
+		printf("[%d]%-3s %-6s %-6s %-20s %-11s %-18s %-18s %-18s %s\n",
+				conn_entry->lcoreid, proto_str, time_str, left_lifetime_str,
+				conn_entry->ctime, conn_entry->state, cname, vname, lname, dname);
+	} else {
+		printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
+				conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
+				cname, vname, lname, dname);
+	}
 exit:
 	if (cname)
 		free(cname);
@@ -1552,17 +1571,33 @@ exit:
 		free(dname);
 }
 
-static void list_conn(int is_template, unsigned int format)
+static void make_conn_req(unsigned int options, struct ip_vs_conn_req *req,
+        ipvs_sockpair_t *sockpair)
+{
+    memset(req, 0, sizeof(struct ip_vs_conn_req));
+
+    if (options & OPT_PERSISTENTCONN) {
+        req->flag |= GET_IPVS_CONN_FLAG_TEMPLATE; 
+    }
+    if (options & OPT_DETAILCONN) {
+        req->flag |= GET_IPVS_CONN_FLAG_DETAIL;
+    }
+
+    if (sockpair) {
+        req->flag |= GET_IPVS_CONN_FLAG_SPECIFIED;
+        memcpy(&req->sockpair, sockpair, sizeof(ipvs_sockpair_t));
+    } else {
+        req->flag |= GET_IPVS_CONN_FLAG_ALL;
+    }
+}
+
+static void list_conn(unsigned int options, unsigned int format)
 {
     struct ip_vs_conn_array *conn_array;
     struct ip_vs_conn_req req;
     int i, more = 0;
 
-    memset(&req, 0, sizeof(struct ip_vs_conn_req));
-    if (is_template)
-        req.flag |= GET_IPVS_CONN_FLAG_TEMPLATE;
-    req.flag |= GET_IPVS_CONN_FLAG_ALL;
-
+    make_conn_req(options, &req, NULL);
     while((conn_array = ip_vs_get_conns(&req)) != NULL) {
 		for (i = 0; i < conn_array->nconns; i++)
 			print_conn_entry(&conn_array->array[i], format);
@@ -1578,18 +1613,13 @@ static void list_conn(int is_template, unsigned int format)
         fprintf(stderr, "Fail to fetch all connection entries!\n");
 }
 
-static void list_conn_sockpair(int is_template,
+static void list_conn_sockpair(unsigned int options,
 		ipvs_sockpair_t *sockpair, unsigned int format)
 {
     struct ip_vs_conn_array *conn_array;
     struct ip_vs_conn_req req;
 
-    memset(&req, 0, sizeof(struct ip_vs_conn_req));
-    req.flag = GET_IPVS_CONN_FLAG_SPECIFIED;
-    if (is_template)
-        req.flag |= GET_IPVS_CONN_FLAG_TEMPLATE;
-    memcpy(&req.sockpair, sockpair, sizeof(ipvs_sockpair_t));
-
+    make_conn_req(options, &req, sockpair);
     conn_array = ip_vs_get_conns(&req);
     if (conn_array == NULL) {
         fprintf(stderr, "connection specified not found\n");

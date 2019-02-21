@@ -6,6 +6,7 @@
 
 #define SYS_TIME_STR_LEN (64)
 
+void cycles_to_systime(uint64_t cycles, char* time_str, int str_len);
 char* sys_localtime_str(void);
 char* cycles_to_stime(uint64_t cycles);
 time_t sys_current_time(void);
