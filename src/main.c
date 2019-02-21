@@ -239,7 +239,7 @@ int main(int argc, char *argv[])
                  dpvs_strerror(err));
 
     /* config and start all available dpdk ports */
-    nports = rte_eth_dev_count();
+    nports = rte_eth_dev_count_avail();
     for (pid = 0; pid < nports; pid++) {
         dev = netif_port_get(pid);
         if (!dev) {
