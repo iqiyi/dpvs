@@ -345,6 +345,7 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 						ptr_toa_ip6->opsize = TCPOLEN_IP6_TOA;
 						ipv6_addr_set(&ptr_toa_ip6->in6_addr, 0, 0,
 							htonl(0x0000FFFF), tdata.ip);
+						ptr_toa_ip6->port = tdata.port;
 						TOA_DBG("coded ip6 toa data: %p\n",
 							ptr_toa_ip6);
 						TOA_INC_STATS(ext_stats, IP6_ADDR_ALLOC_CNT);
