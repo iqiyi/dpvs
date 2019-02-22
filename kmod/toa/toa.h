@@ -23,9 +23,6 @@
 
 #define TOA_VERSION "2.0.0.0"
 
-//#define TOA_DEBUG_ENABLE
-//#define TOA_IPV6_ENABLE
-
 #ifdef TOA_DEBUG_ENABLE
 #define TOA_DBG(msg...)				\
 	do {					\
@@ -56,13 +53,16 @@ struct toa_ip4_data {
 	__u32 ip;
 };
 
+#if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
 struct  toa_ip6_data {
 	__u8 opcode;
 	__u8 opsize;
 	__u16 port;
 	struct in6_addr in6_addr;
 };
+#endif
 
+#ifdef TOA_NAT64_ENABLE
 struct toa_nat64_peer {
 	struct in6_addr saddr;
 	__u16 port;
@@ -77,6 +77,7 @@ enum {
         TOA_SO_GET_LOOKUP       = TOA_BASE_CTL,
         TOA_SO_GET_MAX          = TOA_SO_GET_LOOKUP,
 };
+#endif
 
 /*should be larger than enum sock_flags(net/sock.h)*/ 
 enum toa_sock_flags {
@@ -95,7 +96,7 @@ enum {
 	GETNAME_TOA_MISMATCH_CNT,
 	GETNAME_TOA_BYPASS_CNT,
 	GETNAME_TOA_EMPTY_CNT,
-#ifdef TOA_IPV6_ENABLE
+#if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
 	IP6_ADDR_ALLOC_CNT,
 	IP6_ADDR_FREE_CNT,
 #endif

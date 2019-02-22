@@ -7,7 +7,8 @@ KDIR	:= $(KERNDIR)
 endif
 PWD	:= $(shell pwd)
 
-ccflags-y := -DTOA_IPV6_ENABLE
+ccflags-y += -DTOA_IPV6_ENABLE
+ccflags-y += -DTOA_NAT64_ENABLE
 
 ifeq ($(DEBUG), 1)
 ccflags-y += -g -O0

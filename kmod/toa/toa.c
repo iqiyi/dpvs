@@ -16,7 +16,7 @@ unsigned long sk_data_ready_addr = 0;
  ((unsigned char *)&addr)[2], \
  ((unsigned char *)&addr)[3]
 
-#ifdef TOA_IPV6_ENABLE
+#if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
 #define TOA_NIP6_FMT "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x"
 
 #define TOA_NIP6(addr) \
@@ -56,7 +56,9 @@ struct toa_ip6_sk_lock {
 };
 
 static struct toa_ip6_sk_lock toa_ip6_sk_lock;
+#endif
 
+#ifdef TOA_IPV6_ENABLE
 static struct proto_ops *inet6_stream_ops_p = NULL;
 static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
 
@@ -65,8 +67,6 @@ typedef struct sock *(*syn_recv_sock_func_pt)(
 		struct request_sock *req,
 		struct dst_entry *dst);
 static syn_recv_sock_func_pt tcp_v6_syn_recv_sock_org_pt = NULL;
-
-static void tcp_v6_sk_destruct_toa(struct sock *sk);
 #endif
 
 /*
@@ -79,7 +79,7 @@ struct toa_stats_entry toa_stats[] = {
 	TOA_STAT_ITEM("getname_toa_mismatch", GETNAME_TOA_MISMATCH_CNT),
 	TOA_STAT_ITEM("getname_toa_bypass", GETNAME_TOA_BYPASS_CNT),
 	TOA_STAT_ITEM("getname_toa_empty", GETNAME_TOA_EMPTY_CNT),
-#ifdef TOA_IPV6_ENABLE
+#if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
 	TOA_STAT_ITEM("ip6_address_alloc", IP6_ADDR_ALLOC_CNT),
 	TOA_STAT_ITEM("ip6_address_free", IP6_ADDR_FREE_CNT),
 #endif
@@ -88,7 +88,7 @@ struct toa_stats_entry toa_stats[] = {
 
 DEFINE_TOA_STAT(struct toa_stat_mib, ext_stats);
 
-#ifdef TOA_IPV6_ENABLE
+#if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,4,103)
 /* more secured version of ipv6_addr_hash() */
 static inline u32
@@ -195,6 +195,25 @@ init_toa_ip6(void)
 	}
 
 	return 0;
+}
+
+static void 
+tcp_v6_sk_destruct_toa(struct sock *sk) {
+
+        lock_cpu_toa_ip6_sk();
+
+        if (sk->sk_user_data) {
+                struct toa_ip6_entry* ptr_ip6_entry = sk->sk_user_data;
+                toa_ip6_unhash(ptr_ip6_entry);
+                sk->sk_destruct = inet_sock_destruct;
+                sk->sk_user_data = NULL;
+                kfree(ptr_ip6_entry);
+                TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
+        }
+
+        inet_sock_destruct(sk);
+
+        unlock_cpu_toa_ip6_sk();
 }
 
 static int
@@ -334,7 +353,7 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
 #endif
 				}
 
-#ifdef TOA_IPV6_ENABLE
+#if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
 				if (TCPOPT_TOA == opcode &&
 				    TCPOLEN_IP6_TOA == opsize) {
 					struct toa_ip6_data *ptr_toa_ip6;
@@ -438,6 +457,7 @@ inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
  * In fact, we can just use original api inet_getname_toa by uaddr_len judge.
  * We didn't do this because RS developers may be confused about this api.
  */
+#ifdef TOA_NAT64_ENABLE
 static int
 inet64_getname_toa(struct sock *sk, int cmd, void __user *user, int *len)
 {
@@ -529,6 +549,7 @@ out:
 	unlock_cpu_toa_ip6_sk();
 	return ret;
 }
+#endif
 
 #ifdef TOA_IPV6_ENABLE
 static int
@@ -638,6 +659,7 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 		sock_reset_flag(newsock, SOCK_NAT64);
 		if (NULL != newsock->sk_user_data) {
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_TOA_CNT);
+#ifdef TOA_NAT64_ENABLE
 			if (nat64) {
 				struct toa_ip6_entry *ptr_ip6_entry = newsock->sk_user_data;
 				ptr_ip6_entry->sk = newsock;
@@ -647,6 +669,7 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 
 				sock_set_flag(newsock, SOCK_NAT64);
 			}
+#endif
 		}
 		else
 			TOA_INC_STATS(ext_stats, SYN_RECV_SOCK_NO_TOA_CNT);
@@ -659,25 +682,6 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 }
 
 #ifdef TOA_IPV6_ENABLE
-static void 
-tcp_v6_sk_destruct_toa(struct sock *sk) {
-
-	lock_cpu_toa_ip6_sk();
-
-	if (sk->sk_user_data) {
-		struct toa_ip6_entry* ptr_ip6_entry = sk->sk_user_data;
-		toa_ip6_unhash(ptr_ip6_entry);
-		sk->sk_destruct = inet_sock_destruct;
-		sk->sk_user_data = NULL;
-		kfree(ptr_ip6_entry);
-		TOA_INC_STATS(ext_stats, IP6_ADDR_FREE_CNT);
-	}
-
-	inet_sock_destruct(sk);
-
-	unlock_cpu_toa_ip6_sk();
-}
-
 static struct sock *
 tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 			 struct request_sock *req, struct dst_entry *dst)
@@ -831,6 +835,7 @@ static const struct file_operations toa_stats_fops = {
 	.release = single_release,
 };
 
+#ifdef TOA_NAT64_ENABLE
 static struct nf_sockopt_ops toa_sockopts = {
 	.pf	= PF_INET,
 	.owner	= THIS_MODULE,
@@ -840,6 +845,7 @@ static struct nf_sockopt_ops toa_sockopts = {
 	.get_optmax = TOA_SO_GET_MAX+1,
 	.get        = inet64_getname_toa,
 };
+#endif
 
 /*
  * TOA module init and destory
@@ -882,21 +888,26 @@ toa_init(void)
 		goto err;
 	}
 
-#ifdef TOA_IPV6_ENABLE
+#if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
 	if (0 != init_toa_ip6()) {
 		TOA_INFO("init toa ip6 fail.\n");
 		goto err;
 	}
+#endif
 
+#ifdef TOA_IPV6_ENABLE
 	if (0 != get_kernel_ipv6_symbol()) {
 		TOA_INFO("get ipv6 struct from kernel fail.\n");
 		goto err;
 	}
 #endif
+
+#ifdef TOA_NAT64_ENABLE
 	if (0 != nf_register_sockopt(&toa_sockopts)) {
 		TOA_INFO("fail to register sockopt\n");
 		goto err;
 	}
+#endif
 
 	/* hook funcs for parse and get toa */
 	hook_toa_functions();
@@ -919,10 +930,12 @@ static void __exit
 toa_exit(void)
 {
 	unhook_toa_functions();
+#ifdef TOA_NAT64_ENABLE
 	nf_unregister_sockopt(&toa_sockopts);
+#endif
 	synchronize_net();
 
-#ifdef TOA_IPV6_ENABLE
+#if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
 	if (0 != exit_toa_ip6()) {
 		TOA_INFO("exit toa ip6 fail.\n");
 	}
