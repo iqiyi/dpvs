@@ -449,7 +449,7 @@ static int conn_expire(void *priv)
                 RTE_LOG(WARNING, IPVS, "%s: no route for syn_proxy rs's syn "
                         "retransmit\n", __func__);
             } else {
-                cloned_syn_mbuf = rte_pktmbuf_clone(conn->syn_mbuf, pool);
+                cloned_syn_mbuf = mbuf_copy(conn->syn_mbuf, pool);
                 if (unlikely(!cloned_syn_mbuf)) {
                     RTE_LOG(WARNING, IPVS, "%s: no memory for syn_proxy rs's syn "
                             "retransmit\n", __func__);
@@ -1166,7 +1166,8 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
 static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
         ipvs_conn_entry_t *entry)
 {
-    entry->af = conn->af;
+    entry->in_af = tuplehash_in(conn).af;
+    entry->out_af = tuplehash_out(conn).af;
     entry->proto = conn->proto;
     entry->lcoreid = rte_lcore_id();
     snprintf(entry->state, sizeof(entry->state), "%s",

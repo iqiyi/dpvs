@@ -347,7 +347,7 @@ static int dp_vs_conhash_done_svc(struct dp_vs_service *svc)
     conhash_fini(sched_data->conhash, node_fini);
 
     // del nodes left in list when rs weight is 0
-    list_for_each_entry_safe(p_conhash_node, p_conhash_node_next, 
+    list_for_each_entry_safe(p_conhash_node, p_conhash_node_next,
                              &(sched_data->nodes), list) {
        node_fini(&(p_conhash_node->node));
     }

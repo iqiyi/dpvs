@@ -31,7 +31,7 @@
 #define TC_PRIO_MAX             15
 
 static const uint8_t prio2band[TC_PRIO_MAX + 1] = {
-	1, 2, 2, 2, 1, 2, 0, 0 , 1, 1, 1, 1, 1, 1, 1, 1
+    1, 2, 2, 2, 1, 2, 0, 0 , 1, 1, 1, 1, 1, 1, 1, 1
 };
 
 #define PFIFO_FAST_BANDS        3
@@ -47,7 +47,7 @@ struct pfifo_fast_priv {
 };
 
 static inline struct tc_mbuf_head *band2list(struct pfifo_fast_priv *priv,
-					                         int band)
+                                             int band)
 {
     assert(band >= 0 && band < PFIFO_FAST_BANDS);
 
@@ -55,7 +55,7 @@ static inline struct tc_mbuf_head *band2list(struct pfifo_fast_priv *priv,
 }
 
 static inline struct tc_mbuf_head *band2list_cpu(struct pfifo_fast_priv *priv,
-					                             int band, lcoreid_t cid)
+                                                 int band, lcoreid_t cid)
 {
     assert(band >= 0 && band < PFIFO_FAST_BANDS);
 
@@ -84,7 +84,7 @@ static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     band = prio2band[prio];
     priv = qsch_priv(sch);
     qh = band2list(priv, band);
-    
+
     err = __qsch_enqueue_tail(sch, mbuf, qh);
     if (err == EDPVS_OK) {
         priv->this_bitmap |= (1 << band);

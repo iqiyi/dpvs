@@ -4,7 +4,7 @@
 #include "conhash_inter.h"
 #include "conhash.h"
 
-/* 
+/*
  * the default hash function, using md5 algorithm
  * @instr: input string
  */
@@ -25,7 +25,7 @@ unsigned long __conhash_hash_def(const char *instr)
             | ((long)(digest[i*4 + 1]&0xFF) <<  8)
             | ((long)(digest[i*4 + 0]&0xFF));
     }
-    
+
     a = hash;
     a = (a+0x7ed55d16) + (a<<12);
     a = (a^0xc761c23c) ^ (a>>19);
@@ -37,7 +37,7 @@ unsigned long __conhash_hash_def(const char *instr)
     /* ensure values are better spread all around the tree by multiplying
      * by a large prime close to 3/4 of the tree.
      */
-    a =  a * 3221225473U;    
+    a =  a * 3221225473U;
 
     return a;
 }

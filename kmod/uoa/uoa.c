@@ -52,6 +52,10 @@
 #include <linux/vmalloc.h>
 #include <asm/pgtable_types.h>
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0)
+#include <net/ipv6.h> /* ipv6_skip_exthdr */
+#endif
+
 #define UOA_NEED_EXTRA
 #include "uoa_extra.h"
 #include "uoa.h"
@@ -102,12 +106,12 @@ static atomic_t uoa_map_count = ATOMIC_INIT(0);
 static int ipv6_hdrlen(const struct sk_buff *skb);
 
 /* uoa mapping table lock array */
-#define UOA_MAP_LOCKARR_BITS	5
-#define UOA_MAP_LOCKARR_SIZE	(1<<UOA_MAP_LOCKARR_BITS)
-#define UOA_MAP_LOCKARR_MASK	(UOA_MAP_LOCKARR_SIZE-1)
+#define UOA_MAP_LOCKARR_BITS    5
+#define UOA_MAP_LOCKARR_SIZE    (1<<UOA_MAP_LOCKARR_BITS)
+#define UOA_MAP_LOCKARR_MASK    (UOA_MAP_LOCKARR_SIZE-1)
 
 struct uoa_map_lock {
-    spinlock_t		lock;
+    spinlock_t        lock;
 } __attribute__((__aligned__(SMP_CACHE_BYTES)));
 
 static struct uoa_map_lock
@@ -273,19 +277,40 @@ static void uoa_stats_exit(void)
 
 static inline void uoa_map_dump(const struct uoa_map *um, const char *pref)
 {
+    int real_af;
+
     if (likely(!uoa_debug))
       return;
 
+    if (um->optuoa.op_len == IPOLEN_UOA_IPV6)
+        real_af = AF_INET6;
+    else
+        real_af = AF_INET;
+
     if (AF_INET == um->af) {
-        pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d, refcnt %d\n", pref ? : "",
-                 &um->saddr.in, ntohs(um->sport), &um->daddr.in, ntohs(um->dport),
-                 &um->optuoa.op_addr.in, ntohs(um->optuoa.op_port),
-                 atomic_read(&um->refcnt));
+        if (real_af == AF_INET) {
+            pr_info("%s %pI4:%d->%pI4:%d real %pI4:%d, refcnt %d\n", pref ? : "",
+                    &um->saddr.in, ntohs(um->sport), &um->daddr.in, ntohs(um->dport),
+                    &um->optuoa.op_addr.in, ntohs(um->optuoa.op_port),
+                    atomic_read(&um->refcnt));
+        } else {
+            pr_info("%s %pI4:%d->%pI4:%d real [%pI6]:%d, refcnt %d\n", pref ? : "",
+                    &um->saddr.in, ntohs(um->sport), &um->daddr.in, ntohs(um->dport),
+                    &um->optuoa.op_addr.in6, ntohs(um->optuoa.op_port),
+                    atomic_read(&um->refcnt));
+        }
     } else {
-        pr_info("%s %pI6:%d->%pI6:%d real %pI6:%d, refcnt %d\n", pref ? : "",
-                 &um->saddr.in6, ntohs(um->sport), &um->daddr.in6, ntohs(um->dport),
-                 &um->optuoa.op_addr.in6, ntohs(um->optuoa.op_port),
-                 atomic_read(&um->refcnt));
+        if (real_af == AF_INET) {
+            pr_info("%s [%pI6]:%d->[%pI6]:%d real %pI4:%d, refcnt %d\n", pref ? : "",
+                    &um->saddr.in6, ntohs(um->sport), &um->daddr.in6, ntohs(um->dport),
+                    &um->optuoa.op_addr.in, ntohs(um->optuoa.op_port),
+                    atomic_read(&um->refcnt));
+        } else {
+            pr_info("%s [%pI6]:%d->[%pI6]:%d real [%pI6]:%d, refcnt %d\n", pref ? : "",
+                    &um->saddr.in6, ntohs(um->sport), &um->daddr.in6, ntohs(um->dport),
+                    &um->optuoa.op_addr.in6, ntohs(um->optuoa.op_port),
+                    atomic_read(&um->refcnt));
+        }
     }
 }
 
@@ -335,7 +360,7 @@ static inline void uoa_map_hash(struct uoa_map *um)
 
             kmem_cache_free(uoa_map_cache, um);
 
-            uoa_map_dump(cur, "udp:");
+            uoa_map_dump(cur, "update:");
             goto hashed;
         }
     }
@@ -527,7 +552,7 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
                         &map.saddr.in, ntohs(map.sport),
                         &map.daddr.in, ntohs(map.dport));
             } else {
-                pr_warn("%s: not found: %pI6:%d->%pI6:%d\n", __func__,
+                pr_warn("%s: not found: [%pI6]:%d->[%pI6]:%d\n", __func__,
                         &map.saddr.in6, ntohs(map.sport),
                         &map.daddr.in6, ntohs(map.dport));
             }
@@ -540,6 +565,7 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 
     if (likely(um->optuoa.op_code == IPOPT_UOA)) {
         if (um->optuoa.op_len == IPOLEN_UOA_IPV4) {
+            map.real_af = AF_INET;
             memmove(&map.real_saddr.in, &um->optuoa.op_addr.in,
                         sizeof(map.real_saddr.in));
             map.real_sport = um->optuoa.op_port;
@@ -547,6 +573,7 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
             err = 0;
         } else {
             if (um->optuoa.op_len == IPOLEN_UOA_IPV6) {
+                map.real_af = AF_INET6;
                 memmove(&map.real_saddr.in6, &um->optuoa.op_addr.in6,
                             sizeof(map.real_saddr.in6));
                 map.real_sport = um->optuoa.op_port;
@@ -573,15 +600,15 @@ static int uoa_so_get(struct sock *sk, int cmd, void __user *user, int *len)
 
 static struct nf_sockopt_ops uoa_sockopts = {
     .pf          = PF_INET,
-    .owner		= THIS_MODULE,
+    .owner        = THIS_MODULE,
     /* set */
-    .set_optmin	= UOA_BASE_CTL,
-    .set_optmax	= UOA_SO_SET_MAX + 1,
-    .set		= uoa_so_set,
+    .set_optmin    = UOA_BASE_CTL,
+    .set_optmax    = UOA_SO_SET_MAX + 1,
+    .set        = uoa_so_set,
     /* get */
-    .get_optmin	= UOA_BASE_CTL,
-    .get_optmax	= UOA_SO_GET_MAX + 1,
-    .get		= uoa_so_get,
+    .get_optmin    = UOA_BASE_CTL,
+    .get_optmax    = UOA_SO_GET_MAX + 1,
+    .get        = uoa_so_get,
 };
 
 static int uoa_map_init(void)
@@ -682,13 +709,12 @@ static struct uoa_map *uoa_parse_ipopt(__be16 af, unsigned char *optptr,
 
             atomic_set(&um->refcnt, 0);
             um->af = af;
-            if (optlen == IPOLEN_UOA_IPV4) {
+            if (AF_INET == af) {
                 memmove(&um->saddr.in, &((struct iphdr *)iph)->saddr,
                             sizeof(struct in_addr));
                 memmove(&um->daddr.in, &((struct iphdr *)iph)->daddr,
                             sizeof(struct in_addr));
-            }
-            else {
+            } else {
                 /* ipv6 */
                 memmove(&um->saddr.in6, &((struct ipv6hdr *)iph)->saddr,
                             sizeof(struct in6_addr));
@@ -881,19 +907,19 @@ static unsigned int uoa_ip_local_in(unsigned int hooknum,
  */
 static struct nf_hook_ops uoa_nf_hook_ops[] __read_mostly = {
     {
-        .hook		= uoa_ip_local_in,
-        .pf 		= NFPROTO_IPV4,
-        .hooknum	= NF_INET_LOCAL_IN,
-        .priority	= NF_IP_PRI_NAT_SRC + 1,
+        .hook        = uoa_ip_local_in,
+        .pf         = NFPROTO_IPV4,
+        .hooknum    = NF_INET_LOCAL_IN,
+        .priority    = NF_IP_PRI_NAT_SRC + 1,
     },
 };
 
 static struct nf_hook_ops uoa_nf_hook_ops6[] __read_mostly = {
     {
-        .hook		= uoa_ip_local_in,
-        .pf 		= NFPROTO_IPV6,
-        .hooknum	= NF_INET_LOCAL_IN,
-        .priority	= NF_IP_PRI_NAT_SRC + 1,
+        .hook        = uoa_ip_local_in,
+        .pf         = NFPROTO_IPV6,
+        .hooknum    = NF_INET_LOCAL_IN,
+        .priority    = NF_IP_PRI_NAT_SRC + 1,
     },
 };
 
@@ -971,10 +997,14 @@ static __exit void uoa_exit(void)
 static int ipv6_hdrlen(const struct sk_buff *skb)
 {
     struct ipv6hdr *ip6h = ipv6_hdr(skb);
-    __be16 frag_off;
     uint8_t ip6nxt = ip6h->nexthdr;
-    int ip6_hdrlen = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), &ip6nxt,
-                                      &frag_off);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0)
+    int ip6_hdrlen = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), &ip6nxt);
+#else
+    __be16 frag_off;
+    int ip6_hdrlen = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr),
+            &ip6nxt, &frag_off);
+#endif
 
     return (ip6_hdrlen >= 0) ? ip6_hdrlen : sizeof(struct ipv6hdr);
 }

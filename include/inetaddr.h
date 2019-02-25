@@ -80,15 +80,15 @@ struct inet_ifaddr {
 #define this_sa_pool sa_pools[rte_lcore_id()]
 };
 
-int inet_addr_add(int af, const struct netif_port *dev, 
+int inet_addr_add(int af, const struct netif_port *dev,
                   const union inet_addr *addr, uint8_t plen,
-                  const union inet_addr *bcast, 
+                  const union inet_addr *bcast,
                   uint32_t valid_lft, uint32_t prefered_lft,
                   uint8_t scope, uint32_t flags);
 
-int inet_addr_mod(int af, const struct netif_port *dev, 
+int inet_addr_mod(int af, const struct netif_port *dev,
                   const union inet_addr *addr, uint8_t plen,
-                  const union inet_addr *bcast, 
+                  const union inet_addr *bcast,
                   uint32_t valid_lft, uint32_t prefered_lft,
                   uint8_t scope);
 
@@ -99,8 +99,8 @@ int inet_addr_flush(int af, struct netif_port *dev);
 
 struct netif_port *inet_addr_get_iface(int af, union inet_addr *addr);
 
-void inet_addr_select(int af, const struct netif_port *dev, 
-                      const union inet_addr *dst, int scope, 
+void inet_addr_select(int af, const struct netif_port *dev,
+                      const union inet_addr *dst, int scope,
                       union inet_addr *addr);
 
 struct inet_ifaddr *inet_addr_ifa_get(int af, const struct netif_port *dev,

@@ -107,20 +107,20 @@ static void neigh_dump(struct dp_vs_neigh_conf *neigh)
             neigh->eth_addr.ether_addr_octet[3],
             neigh->eth_addr.ether_addr_octet[4],
             neigh->eth_addr.ether_addr_octet[5],
-            nud_state_names[neigh->state], neigh->ifname, neigh->cid, 
+            nud_state_names[neigh->state], neigh->ifname, neigh->cid,
             (neigh->flag & NEIGHBOUR_STATIC) ? "static" : "");
     else
         printf("ip: %-48s mac:incomplate                       state: %-12s   dev: %s  core: %d  %s\n",
             inet_ntop(neigh->af, &neigh->ip_addr, ipaddr, sizeof(ipaddr)) ? ipaddr : "::",
-            nud_state_names[neigh->state], neigh->ifname, neigh->cid, 
+            nud_state_names[neigh->state], neigh->ifname, neigh->cid,
             (neigh->flag & NEIGHBOUR_STATIC) ? "static" : "");
-    return; 
+    return;
 }
 
 static inline bool is_mac_valid(const struct ether_addr *ea)
 {
-    return (ea->ether_addr_octet[0] || ea->ether_addr_octet[1] || 
-            ea->ether_addr_octet[2] || ea->ether_addr_octet[3] || 
+    return (ea->ether_addr_octet[0] || ea->ether_addr_octet[1] ||
+            ea->ether_addr_octet[2] || ea->ether_addr_octet[3] ||
             ea->ether_addr_octet[4] || ea->ether_addr_octet[5]);
 }
 
@@ -132,7 +132,7 @@ static int neigh_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
     struct dp_vs_neigh_conf_array *array;
     size_t size, i;
     int err;
-    
+
     if (neigh_parse_args(conf, &neigh) != 0)
         return EDPVS_INVAL;
 
@@ -142,7 +142,7 @@ static int neigh_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
                               (void **)&array, &size);
         if (err != 0)
             return err;
-        if (size < sizeof(*array) || 
+        if (size < sizeof(*array) ||
             size != sizeof(*array) + \
             array->neigh_nums * sizeof(struct dp_vs_neigh_conf)) {
             fprintf(stderr, "corrupted response.\n");
@@ -152,7 +152,7 @@ static int neigh_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         for (i = 0; i < array->neigh_nums; i++)
             neigh_dump(&array->addrs[i]);
         dpvs_sockopt_msg_free(array);
-        return EDPVS_OK; 
+        return EDPVS_OK;
 
     case DPIP_CMD_ADD:
         if (!is_mac_valid(&neigh.eth_addr)) {
@@ -166,7 +166,7 @@ static int neigh_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         return dpvs_setsockopt(SOCKOPT_SET_NEIGH_DEL, &neigh, sizeof(neigh));
 
     default:
-        return EDPVS_NOTSUPP;    
+        return EDPVS_NOTSUPP;
     }
 }
 

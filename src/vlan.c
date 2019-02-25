@@ -423,10 +423,10 @@ int vlan_rcv(struct rte_mbuf *mbuf, struct netif_port *real_dev)
 
     mbuf->port = dev->id;
     if (unlikely(mbuf->packet_type == ETH_PKT_OTHERHOST)) {
-		/* as comments in linux:vlan_do_receive().
+        /* as comments in linux:vlan_do_receive().
          * "Our lower layer thinks this is not local, let's make sure.
-		 * This allows the VLAN to have a different MAC than the
-		 * underlying device, and still route correctly." */
+         * This allows the VLAN to have a different MAC than the
+         * underlying device, and still route correctly." */
         if (eth_addr_equal(&ehdr->d_addr, &dev->addr))
             mbuf->packet_type = ETH_PKT_HOST;
     }

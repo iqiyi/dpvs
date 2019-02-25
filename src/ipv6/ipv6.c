@@ -190,7 +190,7 @@ resubmit_final:
         /* check mcast, if failed, kni may like it. */
         if (ipv6_addr_is_multicast(&hdr->ip6_dst) &&
             !inet_chk_mcast_addr(AF_INET6, netif_port_get(mbuf->port),
-                                 (union inet_addr *)&hdr->ip6_dst, 
+                                 (union inet_addr *)&hdr->ip6_dst,
                                  (union inet_addr *)&hdr->ip6_src)) {
             rte_rwlock_read_unlock(&inet6_prot_lock);
             goto kni;
@@ -246,7 +246,7 @@ static int ip6_mc_local_in(struct rte_mbuf *mbuf)
 
     IP6_UPD_PO_STATS(inmcast, mbuf->pkt_len);
 
-    if (inet_chk_mcast_addr(AF_INET6, netif_port_get(mbuf->port), 
+    if (inet_chk_mcast_addr(AF_INET6, netif_port_get(mbuf->port),
                             (union inet_addr *)&iph->ip6_dst, NULL))
         return ip6_local_in(mbuf);
     else
@@ -690,7 +690,7 @@ int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6)
 
     if (unlikely(ipv6_addr_is_multicast(&fl6->fl6_daddr))) {
         /* only support linklocal now */
-        if (IPV6_ADDR_MC_SCOPE(&fl6->fl6_daddr) 
+        if (IPV6_ADDR_MC_SCOPE(&fl6->fl6_daddr)
             != IPV6_ADDR_SCOPE_LINKLOCAL) {
             IP6_INC_STATS(outnoroutes);
             rte_pktmbuf_free(mbuf);

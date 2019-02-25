@@ -31,10 +31,10 @@ int ipv4_term(void);
 void ipv4_keyword_value_init(void);
 void install_ipv4_keywords(void);
 
-/* 
+/*
  * Output
  */
-/* 'flow4.daddr' & 'flow4.proto' is mandatory 
+/* 'flow4.daddr' & 'flow4.proto' is mandatory
  * while others are not. '0/NULL' for wildcard. */
 int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4);
 
@@ -45,14 +45,14 @@ int ipv4_output(struct rte_mbuf *mbuf);
  * Transport Protocols
  */
 struct inet_protocol {
-    /* mbuf->userdata can be used to get IPv4 header, 
+    /* mbuf->userdata can be used to get IPv4 header,
      * save it if protocols need ->userdata for other purpose. */
     int (*handler)(struct rte_mbuf *mbuf);
 };
 
-int ipv4_register_protocol(struct inet_protocol *prot, 
+int ipv4_register_protocol(struct inet_protocol *prot,
         unsigned char protocol);
-int ipv4_unregister_protocol(struct inet_protocol *prot, 
+int ipv4_unregister_protocol(struct inet_protocol *prot,
         unsigned char protocol);
 
 enum {

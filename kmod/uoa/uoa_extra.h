@@ -52,7 +52,10 @@ static inline bool inet_is_addr_any(int af, const union inet_addr *addr)
         case AF_INET:
             return addr->in.s_addr == htonl(INADDR_ANY);
         case AF_INET6:
-            return IN6_ARE_ADDR_EQUAL(&addr->in6, &in6addr_any);
+        {
+            struct in6_addr ip6adummy = IN6ADDR_ANY_INIT;
+            return IN6_ARE_ADDR_EQUAL(&addr->in6, &ip6adummy);
+        }
         default:
             return false;
     }

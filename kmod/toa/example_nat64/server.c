@@ -48,10 +48,10 @@ int main(int argc,char **argv)
             printf("recv error\n");
             continue;
         }
-    
+
         if (getsockopt(connfd, IPPROTO_IP, TOA_SO_GET_LOOKUP, &uaddr, &len) == 0) {
-   	        inet_ntop(AF_INET6, &uaddr.saddr, from, sizeof(from));
-	        printf("  real client [%s]:%d\n", from, ntohs(uaddr.sport));
+               inet_ntop(AF_INET6, &uaddr.saddr, from, sizeof(from));
+            printf("  real client [%s]:%d\n", from, ntohs(uaddr.sport));
         } else {
             printf("client is %s\n", inet_ntoa(caddr.sin_addr));
         }

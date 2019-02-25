@@ -208,7 +208,7 @@ int main(int argc, char *argv[])
 
     if ((err = netif_init(NULL)) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init netif: %s\n", dpvs_strerror(err));
-    /* Default lcore conf and port conf are used and may be changed here 
+    /* Default lcore conf and port conf are used and may be changed here
      * with "netif_port_conf_update" and "netif_lcore_conf_set" */
 
     if ((err = ctrl_init()) != EDPVS_OK)
@@ -288,7 +288,7 @@ int main(int argc, char *argv[])
 
         /* process mac ring on master */
         neigh_process_ring(NULL);
- 
+
         /* increase loop counts */
         netif_update_master_loop_cnt();
     }
