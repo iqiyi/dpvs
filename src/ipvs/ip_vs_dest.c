@@ -88,7 +88,7 @@ static int dp_vs_rs_unhash(struct dp_vs_dest *dest)
 
 struct dp_vs_dest *dp_vs_lookup_dest(int af,
                                      struct dp_vs_service *svc,
-                                     const union inet_addr *daddr, 
+                                     const union inet_addr *daddr,
                                      uint16_t dport)
 {
     struct dp_vs_dest *dest;
@@ -113,7 +113,7 @@ struct dp_vs_dest *dp_vs_lookup_dest(int af,
  *  scheduling.
  */
 struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
-                                        const union inet_addr *daddr, 
+                                        const union inet_addr *daddr,
                                         uint16_t dport)
 {
     struct dp_vs_dest *dest, *nxt;
@@ -161,7 +161,7 @@ void dp_vs_trash_cleanup(void)
 }
 
 static void __dp_vs_update_dest(struct dp_vs_service *svc,
-                                struct dp_vs_dest *dest, 
+                                struct dp_vs_dest *dest,
                                 struct dp_vs_dest_conf *udest)
 {
     int conn_flags;
@@ -196,7 +196,7 @@ static void __dp_vs_update_dest(struct dp_vs_service *svc,
 }
 
 
-int dp_vs_new_dest(struct dp_vs_service *svc, 
+int dp_vs_new_dest(struct dp_vs_service *svc,
                    struct dp_vs_dest_conf *udest,
                    struct dp_vs_dest **dest_p)
 {

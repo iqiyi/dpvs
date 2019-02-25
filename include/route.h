@@ -81,7 +81,7 @@ static inline uint32_t __attribute__((pure))
         depth_to_mask(uint8_t depth)
 {
     if (depth>0) {
-        return (int)0x80000000 >> (depth - 1); 
+        return (int)0x80000000 >> (depth - 1);
     }
     else
         return (int)0x0;

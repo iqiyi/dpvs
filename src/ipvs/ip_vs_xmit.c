@@ -115,9 +115,9 @@ static int __dp_vs_fast_xmit_fnat6(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /* 
+        /*
          * re-fetch IP header
-         * the offset may changed during pre-handler 
+         * the offset may changed during pre-handler
          */
         ip6h = ip6_hdr(mbuf);
     }
@@ -237,9 +237,9 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             return err;
 
-        /* 
+        /*
          * re-fetch IP header
-         * the offset may changed during pre-handler 
+         * the offset may changed during pre-handler
          */
         ip6h = ip6_hdr(mbuf);
     }
@@ -533,7 +533,7 @@ static int __dp_vs_xmit_fnat6(struct dp_vs_proto *proto,
      * didn't cache the pointer to rt6
      * or route can't be deleted when there is conn ref
      * this is for neighbour confirm.
-     */ 
+     */
     dp_vs_conn_cache_rt6(conn, rt6, true);
 
     // check mtu
@@ -604,7 +604,7 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
-    /*   
+    /*
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
@@ -623,7 +623,7 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    /*   
+    /*
      * didn't cache the pointer to rt
      * or route can't be deleted when there is conn ref
      * this is for neighbour confirm
@@ -632,7 +632,7 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
 
     /*
      * mbuf is from IPv6, icmp should send by icmp6
-     * ext_hdr and 
+     * ext_hdr and
      */
     mtu = rt->mtu;
     pkt_len = mbuf_nat6to4_len(mbuf);
@@ -674,19 +674,19 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
         err = proto->fnat_in_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
-    }    
+    }
 
     if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
-        ip4h->hdr_checksum = 0; 
+        ip4h->hdr_checksum = 0;
     } else {
         ip4_send_csum(ip4h);
-    }      
+    }
 
     return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt) 
+    if (rt)
         route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
@@ -914,13 +914,13 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
                                    struct dp_vs_conn *conn,
                                    struct rte_mbuf *mbuf)
 {
-    struct flow6 fl6; 
+    struct flow6 fl6;
     struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
     uint32_t pkt_len;
     struct route6 *rt6;
     int err, mtu;
 
-    /*   
+    /*
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
@@ -928,7 +928,7 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
         RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n",
                 __func__, mbuf->userdata);
         route4_put((struct route_entry *)mbuf->userdata);
-    }    
+    }
 
     memset(&fl6, 0, sizeof(struct flow6));
     fl6.fl6_daddr = conn->caddr.in6;
@@ -939,16 +939,16 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    /*   
+    /*
      * didn't cache the pointer to rt
      * or route can't be deleted when there is conn ref
      * this is for neighbour confirm
      */
     dp_vs_conn_cache_rt6(conn, rt6, false);
 
-    /*   
+    /*
      * mbuf is from IPv6, icmp should send by icmp6
-     * ext_hdr and 
+     * ext_hdr and
      */
     mtu = rt6->rt6_mtu;
     pkt_len = mbuf_nat4to6_len(mbuf);
@@ -958,7 +958,7 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
         err = EDPVS_FRAG;
         goto errout;
-    }    
+    }
 
     mbuf->userdata = rt6;
     /* after route lookup and before translation */
@@ -967,16 +967,16 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
             icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
             err = EDPVS_DROP;
             goto errout;
-        }    
+        }
         ip4h->time_to_live--;
-    }    
+    }
 
     /* pre-handler before translation */
     if (proto->fnat_out_pre_handler) {
         err = proto->fnat_out_pre_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
-    }    
+    }
 
     /* L3 translation before l4 re-csum */
     err = mbuf_4to6(mbuf, &conn->vaddr.in6, &conn->caddr.in6);
@@ -988,16 +988,16 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
         err = proto->fnat_out_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
-    }    
+    }
 
     return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
                      NULL, rt6->rt6_dev, ip6_output);
 
 errout:
-    if (rt6) 
+    if (rt6)
         route6_put(rt6);
     rte_pktmbuf_free(mbuf);
-    return err;     
+    return err;
 }
 
 int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
@@ -1033,7 +1033,7 @@ static void __dp_vs_xmit_icmp4(struct rte_mbuf *mbuf,
     int fullnat = (conn->dest->fwdmode == DPVS_FWD_MODE_FNAT);
     uint16_t csum;
 
-    /* 
+    /*
      * outer/inner L3 translation.
      */
     if (fullnat) {
@@ -1058,7 +1058,7 @@ static void __dp_vs_xmit_icmp4(struct rte_mbuf *mbuf,
         ip4_send_csum(ciph);
     }
 
-    /* 
+    /*
      * inner L4 translation.
      *
      * note it's no way to recalc inner csum to lack of data,
@@ -1194,7 +1194,7 @@ static void __dp_vs_xmit_icmp6(struct rte_mbuf *mbuf,
         }
     }
 
-    /* 
+    /*
      * ICMP recalc csum.
      */
     icmp6h->icmp6_cksum = 0;
@@ -1427,7 +1427,7 @@ static int __dp_vs_xmit_snat6(struct dp_vs_proto *proto,
     struct route6 *rt6;
     int err, mtu;
 
-    /* 
+    /*
      * drop old route. just for safe, because
      * inbound SNAT traffic is hooked at PRE_ROUTING,
      * should not have route.
@@ -1438,9 +1438,9 @@ static int __dp_vs_xmit_snat6(struct dp_vs_proto *proto,
         route6_put((struct route6 *)mbuf->userdata);
     }
 
-    /* 
+    /*
      * hosts inside SNAT may belongs to diff net,
-     * let's route it. 
+     * let's route it.
      */
     memset(&fl6, 0, sizeof(struct flow6));
     fl6.fl6_daddr = conn->daddr.in6;
@@ -1839,7 +1839,7 @@ static int __dp_vs_xmit_nat6(struct dp_vs_proto *proto,
     struct route6 *rt6;
     int err, mtu;
 
-    /* 
+    /*
      * drop old route. just for safe, because
      * NAT is PREROUTING, should not have route.
      */
@@ -2011,7 +2011,7 @@ static int __dp_vs_out_xmit_nat6(struct dp_vs_proto *proto,
     struct route6 *rt6;
     int err, mtu;
 
-    /* 
+    /*
      * drop old route. just for safe, because
      * NAT is PREROUTING, should not have route.
      */

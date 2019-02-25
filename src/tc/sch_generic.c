@@ -128,7 +128,7 @@ static inline tc_handle_t sch_alloc_handle(struct netif_port *dev)
             autohandle = TC_H_MAKE(0x80000000U, 0);
         if (!qsch_lookup_noref(&dev->tc, autohandle))
             return autohandle;
-    } while	(--i > 0);
+    } while    (--i > 0);
 
     return 0;
 }

@@ -18,8 +18,9 @@
 
 #include "ipvs/nat64.h"
 #include "ipvs/ipvs.h"
+#include "uoa.h"
 
-int mbuf_6to4(struct rte_mbuf *mbuf, 
+int mbuf_6to4(struct rte_mbuf *mbuf,
               const struct in_addr *saddr,
               const struct in_addr *daddr)
 {
@@ -33,7 +34,8 @@ int mbuf_6to4(struct rte_mbuf *mbuf,
      */
     if (ip6h->ip6_nxt != IPPROTO_TCP &&
         ip6h->ip6_nxt != IPPROTO_UDP &&
-        ip6h->ip6_nxt != IPPROTO_ICMPV6) {
+        ip6h->ip6_nxt != IPPROTO_ICMPV6 &&
+        ip6h->ip6_nxt != IPPROTO_OPT) {
         return EDPVS_NOTSUPP;
     }
     if (rte_pktmbuf_adj(mbuf, mbuf->l3_len) == NULL)
@@ -55,7 +57,7 @@ int mbuf_6to4(struct rte_mbuf *mbuf,
     ip4h->src_addr        = saddr->s_addr;
     ip4h->dst_addr        = daddr->s_addr;
     ip4h->packet_id       = 0; // NO FRAG, so 0 is OK?
-    
+
     mbuf->l3_len = sizeof(struct ipv4_hdr);
 
     return EDPVS_OK;

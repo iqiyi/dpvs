@@ -99,12 +99,12 @@ struct Qsch {
 };
 
 struct qsch_rate {
-	uint64_t                rate_bytes_ps; /* B/s */
+    uint64_t                rate_bytes_ps; /* B/s */
 };
 
 static inline void *qsch_priv(struct Qsch *sch)
 {
-	return (char *)sch + TC_ALIGN(sizeof(struct Qsch));
+    return (char *)sch + TC_ALIGN(sizeof(struct Qsch));
 }
 
 static inline struct netif_port *qsch_dev(struct Qsch *sch)

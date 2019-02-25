@@ -42,7 +42,7 @@ static int proto_register(struct dp_vs_proto *proto)
 
     if (proto->init)
         proto->init(proto);
-    
+
     return EDPVS_OK;
 }
 
@@ -57,7 +57,7 @@ static int proto_unregister(struct dp_vs_proto *proto)
 
     if (proto->exit)
         proto->exit(proto);
-    
+
     return EDPVS_OK;
 }
 

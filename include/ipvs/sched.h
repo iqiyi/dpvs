@@ -30,7 +30,7 @@ struct dp_vs_scheduler {
 //    rte_atomic32_t      refcnt;
 
     struct dp_vs_dest *
-        (*schedule)(struct dp_vs_service *svc, 
+        (*schedule)(struct dp_vs_service *svc,
                     const struct rte_mbuf *mbuf);
 
     int (*init_service)(struct dp_vs_service *svc);

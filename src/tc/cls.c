@@ -37,7 +37,7 @@ static inline tc_handle_t cls_alloc_handle(struct Qsch *sch)
             autohandle = TC_H_MAKE(0x80000000U, 0);
         if (!tc_cls_lookup(sch, autohandle))
             return autohandle;
-    } while	(--i > 0);
+    } while    (--i > 0);
 
     return 0;
 }
@@ -142,7 +142,7 @@ void tc_cls_destroy(struct tc_cls *cls)
 
     if (ops->destroy)
         ops->destroy(cls);
-        
+
     tc_cls_ops_put(ops);
     cls_free(cls);
 }

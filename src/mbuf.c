@@ -38,56 +38,56 @@
  */
 int mbuf_may_pull(struct rte_mbuf *mbuf, unsigned int len)
 {
-	int delta, eat;
-	struct rte_mbuf *seg, *next;
+    int delta, eat;
+    struct rte_mbuf *seg, *next;
 
-	if (likely(len <= mbuf->data_len))
-		return 0;
+    if (likely(len <= mbuf->data_len))
+        return 0;
 
-	if (unlikely(len > mbuf->pkt_len))
-		return -1;
+    if (unlikely(len > mbuf->pkt_len))
+        return -1;
 
-	delta = len - mbuf->data_len;
+    delta = len - mbuf->data_len;
 
-	/* different from skb, there's no way to expand mbuf's tail room,
-	 * because mbuf size is determined when init mbuf pool */
-	if (rte_pktmbuf_tailroom(mbuf) < delta) {
-		RTE_LOG(ERR, EMBUF, "%s: no tail room.", __func__);
-		return -1;
-	}
+    /* different from skb, there's no way to expand mbuf's tail room,
+     * because mbuf size is determined when init mbuf pool */
+    if (rte_pktmbuf_tailroom(mbuf) < delta) {
+        RTE_LOG(ERR, EMBUF, "%s: no tail room.", __func__);
+        return -1;
+    }
 
-	/* pull bits needed from segments to tail room of heading mbuf */
-	if (mbuf_copy_bits(mbuf, mbuf->data_len, 
-			   mbuf_tail_point(mbuf), delta) != 0)
-		return -1;
+    /* pull bits needed from segments to tail room of heading mbuf */
+    if (mbuf_copy_bits(mbuf, mbuf->data_len,
+               mbuf_tail_point(mbuf), delta) != 0)
+        return -1;
 
-	/* free fully eaten segments and leave left segs attached,
-	 * points need be reload if partial bits was eaten for a seg. */
-	eat = delta;
-	mbuf_foreach_seg_safe(mbuf, next, seg) {
-		if (eat <= 0)
-			break;
+    /* free fully eaten segments and leave left segs attached,
+     * points need be reload if partial bits was eaten for a seg. */
+    eat = delta;
+    mbuf_foreach_seg_safe(mbuf, next, seg) {
+        if (eat <= 0)
+            break;
 
-		if (seg->data_len <= eat) {
-			assert(mbuf->next == seg);
-			eat -= seg->data_len;
-			rte_pktmbuf_free_seg(seg);
-			mbuf->next = next;
-			mbuf->nb_segs--;
-		} else {
-			rte_pktmbuf_adj(seg, eat);
-			eat = 0;
-			break;
-		}
-	}
+        if (seg->data_len <= eat) {
+            assert(mbuf->next == seg);
+            eat -= seg->data_len;
+            rte_pktmbuf_free_seg(seg);
+            mbuf->next = next;
+            mbuf->nb_segs--;
+        } else {
+            rte_pktmbuf_adj(seg, eat);
+            eat = 0;
+            break;
+        }
+    }
 
-	assert(!eat &&
-	       mbuf->data_off + mbuf->data_len + delta <= mbuf->buf_len);
+    assert(!eat &&
+           mbuf->data_off + mbuf->data_len + delta <= mbuf->buf_len);
 
-	/* mbuf points must be updated */
-	mbuf->data_len += delta;
+    /* mbuf points must be updated */
+    mbuf->data_len += delta;
 
-	return 0;
+    return 0;
 }
 
 void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m)
@@ -109,7 +109,7 @@ void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m)
     mi->packet_type = m->packet_type;
 
     __rte_mbuf_sanity_check(mi, 1);
-    __rte_mbuf_sanity_check(m,0);
+    __rte_mbuf_sanity_check(m, 0);
 }
 
 struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp)
@@ -131,8 +131,7 @@ struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp)
         mbuf_copy_metadata(mi, md);
         *prev = mi;
         prev = &mi->next;
-        rte_memcpy(rte_pktmbuf_mtod(mi, void *), rte_pktmbuf_mtod(md, void *)
-, md->data_len);
+        rte_memcpy(rte_pktmbuf_mtod(mi, void *), rte_pktmbuf_mtod(md, void *), md->data_len);
     } while ((md = md->next) != NULL && (mi = rte_pktmbuf_alloc(mp)) != NULL);
 
     *prev =  NULL;

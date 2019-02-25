@@ -93,8 +93,8 @@ static struct dp_vs_stats* alloc_percpu_stats(void)
         if (!(lcore_mask & (1L<<i)))
             continue;
         __dp_vs_stats_clear(&svc_stats[i]);
-    } 
-    
+    }
+
     return svc_stats;
 }
 
@@ -118,14 +118,14 @@ void dp_vs_zero_stats(struct dp_vs_stats* stats)
 {
     uint8_t nlcore, i;
     uint64_t lcore_mask;
-    
+
     netif_get_slave_lcores(&nlcore,&lcore_mask);
 
     for (i = 0; i < DPVS_MAX_LCORE; i++) {
         if (!(lcore_mask & (1L<<i)))
             continue;
         __dp_vs_stats_clear(&stats[i]);
-    } 
+    }
     return;
 }
 
@@ -159,8 +159,8 @@ int dp_vs_copy_stats(struct dp_vs_stats* dst, struct dp_vs_stats* src)
         return EDPVS_INVAL;
 
     msg = msg_make(MSG_TYPE_STATS_GET, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
-			sizeof(struct dp_vs_stats *), &src);
-    if (!msg) {   
+            sizeof(struct dp_vs_stats *), &src);
+    if (!msg) {
         return EDPVS_NOMEM;
     }
     err = multicast_msg_send(msg, 0, &reply);
@@ -205,14 +205,14 @@ int dp_vs_stats_in(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     assert(conn && mbuf);
     struct dp_vs_dest *dest = conn->dest;
-    lcoreid_t cid;   
+    lcoreid_t cid;
     cid = rte_lcore_id();
 
     if (dest && (dest->flags & DPVS_DEST_F_AVAILABLE)) {
         /*limit rate*/
         if ((dest->limit_proportion < 100) &&
             (dest->limit_proportion > 0)) {
-            return (rand()%100) > dest->limit_proportion 
+            return (rand()%100) > dest->limit_proportion
                         ? EDPVS_OVERLOAD : EDPVS_OK;
         }
 
@@ -239,10 +239,10 @@ int dp_vs_stats_out(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 
     if (dest && (dest->flags & DPVS_DEST_F_AVAILABLE)) {
         /*limit rate*/
-        if ((dest->limit_proportion < 100) && 
+        if ((dest->limit_proportion < 100) &&
             (dest->limit_proportion > 0)) {
-            return (rand()%100) > dest->limit_proportion 
-			? EDPVS_OVERLOAD : EDPVS_OK; 
+            return (rand()%100) > dest->limit_proportion
+            ? EDPVS_OVERLOAD : EDPVS_OK;
         }
 
         dest->stats[cid].outpkts++;
@@ -264,7 +264,7 @@ void dp_vs_stats_conn(struct dp_vs_conn *conn)
     assert(conn && conn->dest);
     lcoreid_t cid;
 
-    cid = rte_lcore_id();   
+    cid = rte_lcore_id();
     conn->dest->stats[cid].conns++;
     this_dpvs_stats.conns++;
 }

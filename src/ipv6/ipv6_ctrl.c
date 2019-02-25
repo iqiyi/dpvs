@@ -43,7 +43,7 @@ static int ip6_msg_get_stats(struct dpvs_msg *msg)
         rte_free(stats);
         return err;
     }
-    
+
     msg->reply.len = sizeof(*stats);
     msg->reply.data = stats;
 

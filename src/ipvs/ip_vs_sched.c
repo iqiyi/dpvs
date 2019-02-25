@@ -102,8 +102,8 @@ struct dp_vs_scheduler *dp_vs_scheduler_get(const char *sched_name)
             /* HIT */
             rte_rwlock_read_unlock(&__dp_vs_sched_lock);
             return sched;
-        }   
-    }   
+        }
+    }
 
     rte_rwlock_read_unlock(&__dp_vs_sched_lock);
     return NULL;

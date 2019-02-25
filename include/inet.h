@@ -98,7 +98,7 @@ static inline const char *inet_proto_name(uint8_t proto)
 
 static inline uint32_t inet_addr_fold(int af, const union inet_addr *addr)
 {
-    uint32_t addr_fold = 0; 
+    uint32_t addr_fold = 0;
 
     if (af == AF_INET) {
         addr_fold = addr->in.s_addr;
@@ -109,7 +109,7 @@ static inline uint32_t inet_addr_fold(int af, const union inet_addr *addr)
         return 0;
     }
 
-    return addr_fold; 
+    return addr_fold;
 }
 
 /* ip1[-ip2][:port1[-port2]] */
@@ -308,7 +308,7 @@ int INET_HOOK(int af, unsigned int hook, struct rte_mbuf *mbuf,
 int inet_init(void);
 int inet_term(void);
 
-bool inet_addr_equal(int af, const union inet_addr *a1, 
+bool inet_addr_equal(int af, const union inet_addr *a1,
                      const union inet_addr *a2);
 
 const char *inet_proto_name(uint8_t proto);
@@ -317,7 +317,7 @@ bool inet_is_addr_any(int af, const union inet_addr *addr);
 
 int inet_plen_to_mask(int af, uint8_t plen, union inet_addr *mask);
 
-int inet_addr_net(int af, const union inet_addr *addr, 
+int inet_addr_net(int af, const union inet_addr *addr,
                   const union inet_addr *mask,
                   union inet_addr *net);
 
