@@ -500,7 +500,7 @@ static int conn_expire(void *priv)
             memset(&saddr, 0, sizeof(saddr));
             memset(&daddr, 0, sizeof(daddr));
             if (AF_INET == conn->af) {
-                struct sockaddr_in *daddr4 = (struct sockaddr_in *)&saddr;
+                struct sockaddr_in *daddr4 = (struct sockaddr_in *)&daddr;
                 struct sockaddr_in *saddr4 = (struct sockaddr_in *)&saddr;
 
                 daddr4->sin_family = AF_INET;
