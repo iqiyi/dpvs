@@ -232,7 +232,7 @@ static int kni_rtnl_check(void *arg)
 
     /* try to handle more events once, because we're not really
      * event-driven, the polling speed may not fast enough.
-     * there may not so may events in real world ? but when 
+     * there may not so may events in real world ? but when
      * performan strength test, it's really found kni_rtnl_timer
      * is too slow, so that more and more events queued. */
 
@@ -312,7 +312,7 @@ errout:
     return err;
 }
 
-/* 
+/*
  * @dev     - real device kni attach to.
  * @kniname - optional, kni device name or auto generate.
  */

@@ -321,10 +321,11 @@ static void ipvs_fill_laddr_conf(ipvs_service_t *svc, ipvs_laddr_t *laddr,
                                  struct dp_vs_laddr_conf *conf)
 {
 	memset(conf, 0, sizeof(*conf));
-	conf->af        = laddr->af;
+	conf->af_s      = svc->af;
 	conf->proto     = svc->protocol;
 	conf->vport     = svc->port;
 	conf->fwmark    = svc->fwmark;
+	conf->af_l      = laddr->af;
 	if (strlen(laddr->ifname))
 		snprintf(conf->ifname, sizeof(conf->ifname), "%s", laddr->ifname);
 
@@ -615,7 +616,7 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
 	size_t res_size, i;
 
 	memset(&conf, 0, sizeof(struct dp_vs_laddr_conf));
-	conf.af = svc->af;
+	conf.af_s = svc->af;
 	conf.proto = svc->protocol;
 	if (svc->af == AF_INET)
 		conf.vaddr.in = svc->addr.in;
@@ -644,8 +645,8 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
 	laddrs->port = result->vport;
 	laddrs->fwmark = result->fwmark;
 	laddrs->num_laddrs = result->nladdrs;
-	laddrs->af = result->af;
-	if (result->af == AF_INET)
+	laddrs->af = result->af_s;
+	if (result->af_s == AF_INET)
 		laddrs->addr.in = result->vaddr.in;
 	else
 		laddrs->addr.in6 = result->vaddr.in6;
@@ -654,8 +655,8 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
 		laddrs->entrytable[i].__addr_v4 = result->laddrs[i].addr.in.s_addr;
 		laddrs->entrytable[i].port_conflict = result->laddrs[i].nport_conflict;
 		laddrs->entrytable[i].conn_counts = result->laddrs[i].nconns;
-		laddrs->entrytable[i].af = result->af;
-		if (result->af == AF_INET)
+		laddrs->entrytable[i].af = result->laddrs[i].af;
+		if (result->laddrs[i].af == AF_INET)
 			laddrs->entrytable[i].addr.in = result->laddrs[i].addr.in;
 		else
 			laddrs->entrytable[i].addr.in6 = result->laddrs[i].addr.in6;

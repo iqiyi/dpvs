@@ -73,7 +73,7 @@ struct tc_cls {
 
 static inline void *tc_cls_priv(struct tc_cls *cls)
 {
-	return (char *)cls + TC_ALIGN(sizeof(struct tc_cls));
+    return (char *)cls + TC_ALIGN(sizeof(struct tc_cls));
 }
 
 struct tc_cls *tc_cls_create(struct Qsch *sch, const char *kind,

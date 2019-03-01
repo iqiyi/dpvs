@@ -51,7 +51,7 @@
 #define NEIGH_TAB_MASK (NEIGH_TAB_SIZE - 1)
 
 struct neighbour_entry {
-    int                 af;  
+    int                 af;
     struct list_head    neigh_list;
     union inet_addr     ip_addr;
     struct ether_addr   eth_addr;
@@ -60,7 +60,7 @@ struct neighbour_entry {
     struct list_head    queue_list;
     uint32_t            que_num;
     uint32_t            state;
-    uint32_t            ts;  
+    uint32_t            ts;
     uint8_t             flag;
 } __rte_cache_aligned;
 
@@ -69,12 +69,12 @@ enum param_kind {
     NEIGH_PARAM
 };
 
-/* 
+/*
  * no matter which kind of ip_addr, just use 32 bit to hash
  * since neighbour table is not a large table
  */
 static inline unsigned int neigh_hashkey(int af,
-                                         const union inet_addr *ip_addr, 
+                                         const union inet_addr *ip_addr,
                                          struct netif_port *port) {
     return rte_be_to_cpu_32(inet_addr_fold(af, ip_addr)) \
                              & NEIGH_TAB_MASK;
@@ -83,12 +83,12 @@ static inline unsigned int neigh_hashkey(int af,
 void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx);
 
 struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key,
-                                           const struct netif_port *port, 
+                                           const struct netif_port *port,
                                            unsigned int hashkey);
 
 void neigh_send_mbuf_cach(struct neighbour_entry *neighbour);
 
-int neigh_edit(struct neighbour_entry *neighbour, 
+int neigh_edit(struct neighbour_entry *neighbour,
                struct ether_addr *eth_addr);
 
 int neigh_init(void);
@@ -100,13 +100,13 @@ void neigh_keyword_value_init(void);
 void install_neighbor_keywords(void);
 
 int neigh_output(int af,
-                 union  inet_addr *nexhop, 
-                 struct rte_mbuf *mbuf, 
+                 union  inet_addr *nexhop,
+                 struct rte_mbuf *mbuf,
                  struct netif_port *port);
 
-struct neighbour_entry *neigh_add_table(int af, const union inet_addr *ipaddr, 
+struct neighbour_entry *neigh_add_table(int af, const union inet_addr *ipaddr,
                                         const struct ether_addr *eth_addr,
-                                        struct netif_port *port, 
+                                        struct netif_port *port,
                                         unsigned int hashkey, int flag);
 
 int neigh_gratuitous_arp(struct in_addr *src, struct netif_port *port);
@@ -119,7 +119,7 @@ void neigh_confirm(int af, union inet_addr *nexthop, struct netif_port *port);
 
 int neigh_sync_core(const void *param, bool add_del, enum param_kind kind);
 
-static inline void ipv6_mac_mult(const struct in6_addr *mult_target, 
+static inline void ipv6_mac_mult(const struct in6_addr *mult_target,
                                  struct ether_addr *mult_eth)
 {
     uint8_t *w = (uint8_t *)mult_eth;
@@ -146,7 +146,7 @@ ethAddrSwap(void *t, void *f) {
 
     uint16Swap(d++, s++);
     uint16Swap(d++, s++);
-    uint16Swap(d, s); 
+    uint16Swap(d, s);
 }
 
 /* inetAddrSwap( void * t, void * f ) - Swap two IPv4 addresses */
@@ -165,7 +165,7 @@ inetAddrCopy(void *t, void *f) {
     uint32_t *d = (uint32_t *)t;
     uint32_t *s = (uint32_t *)f;
 
-    *d = *s; 
+    *d = *s;
 }
 
 #endif /* __DPVS_NEIGH_H__ */

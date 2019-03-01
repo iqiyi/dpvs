@@ -112,8 +112,8 @@ static int dp_vs_svc_unhash(struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
-struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol, 
-                                          const union inet_addr *vaddr, 
+struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol,
+                                          const union inet_addr *vaddr,
                                           uint16_t vport)
 {
     unsigned hash;
@@ -156,7 +156,7 @@ static inline bool __svc_in_range(int af,
                                   const union inet_addr *addr, __be16 port,
                                   const struct inet_addr_range *range)
 {
-    if (unlikely((af == AF_INET) && 
+    if (unlikely((af == AF_INET) &&
         (ntohl(range->min_addr.in.s_addr) > ntohl(range->max_addr.in.s_addr))))
         return false;
 
@@ -381,7 +381,7 @@ __dp_vs_svc_match_find(int af, uint8_t proto, const struct dp_vs_match *match)
 }
 
 struct dp_vs_service *dp_vs_service_lookup(int af, uint16_t protocol,
-                                        const union inet_addr *vaddr, 
+                                        const union inet_addr *vaddr,
                                         uint16_t vport, uint32_t fwmark,
                                         const struct rte_mbuf *mbuf,
                                         const struct dp_vs_match *match)
@@ -456,7 +456,7 @@ void __dp_vs_unbind_svc(struct dp_vs_dest *dest)
     }
 }
 
-int dp_vs_add_service(struct dp_vs_service_conf *u, 
+int dp_vs_add_service(struct dp_vs_service_conf *u,
                       struct dp_vs_service **svc_p)
 {
     int ret = 0;
@@ -464,7 +464,7 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     struct dp_vs_scheduler *sched = NULL;
     struct dp_vs_service *svc = NULL;
 
-    if (!u->fwmark && inet_is_addr_any(u->af, &u->addr) 
+    if (!u->fwmark && inet_is_addr_any(u->af, &u->addr)
         && !u->port && is_empty_match(&u->match)) {
         RTE_LOG(ERR, SERVICE, "%s: adding empty servive\n", __func__);
         return EDPVS_INVAL;
@@ -523,7 +523,7 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     ret = dp_vs_new_stats(&(svc->stats));
     if(ret)
         goto out_err;
-        
+
     dp_vs_num_services++;
 
     rte_rwlock_write_lock(&__dp_vs_svc_lock);
@@ -714,7 +714,7 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     return err;
 }
 
-int dp_vs_get_service_entries(const struct dp_vs_get_services *get, 
+int dp_vs_get_service_entries(const struct dp_vs_get_services *get,
                               struct dp_vs_get_services *uptr)
 {
     int idx, count = 0;
@@ -897,7 +897,7 @@ static void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
     udest->addr       = udest_compat->addr;
     udest->port       = udest_compat->port;
     udest->fwdmode    = udest_compat->conn_flags;//make sure fwdmode and conn_flags are the same
-    udest->conn_flags = udest_compat->conn_flags; 
+    udest->conn_flags = udest_compat->conn_flags;
     udest->weight     = udest_compat->weight;
     udest->max_conn   = udest_compat->max_conn;
     udest->min_conn   = udest_compat->min_conn;
@@ -937,13 +937,13 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     memcpy(arg, user, len);
     usvc_compat = (struct dp_vs_service_user *)arg;
     udest_compat = (struct dp_vs_dest_user *)(usvc_compat + 1);
-    
+
     ret = dp_vs_copy_usvc_compat(&usvc, usvc_compat);
     if (ret != EDPVS_OK)
         return ret;
-    
+
     if (opt == DPVS_SO_SET_ZERO) {
-        if(!inet_is_addr_any(usvc.af, &usvc.addr) && 
+        if(!inet_is_addr_any(usvc.af, &usvc.addr) &&
            !usvc.fwmark && !usvc.port &&
            is_empty_match(&usvc.match)
           ) {
@@ -958,7 +958,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     }
 
     if (!inet_is_addr_any(usvc.af, &usvc.addr) || usvc.port)
-        svc = __dp_vs_service_get(usvc.af, usvc.protocol, 
+        svc = __dp_vs_service_get(usvc.af, usvc.protocol,
                                   &usvc.addr, usvc.port);
     else if (usvc.fwmark)
         svc = __dp_vs_svc_fwm_get(usvc.af, usvc.fwmark);
@@ -969,7 +969,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
         return EDPVS_INVAL;
     }
 
-    if(opt != DPVS_SO_SET_ADD && 
+    if(opt != DPVS_SO_SET_ADD &&
             (svc == NULL || svc->proto != usvc.protocol)){
         if (svc)
             dp_vs_service_put(svc);
@@ -980,7 +980,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
         case DPVS_SO_SET_ADD:
             if(svc != NULL)
                 ret = EDPVS_EXIST;
-            else 
+            else
                 ret = dp_vs_add_service(&usvc, &svc);
             break;
         case DPVS_SO_SET_EDIT:
@@ -1048,7 +1048,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 size = sizeof(*get) + \
                        sizeof(struct dp_vs_service_entry) * (get->num_services);
                 if(len != sizeof(*get)){
-                    *outlen = 0; 
+                    *outlen = 0;
                     return EDPVS_INVAL;
                 }
                 output = rte_zmalloc("get_services", size, 0);
@@ -1076,8 +1076,8 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 else {
                     struct dp_vs_match match;
 
-                    ret = dp_vs_match_parse(entry->srange, entry->drange, 
-                                            entry->iifname, entry->oifname, 
+                    ret = dp_vs_match_parse(entry->srange, entry->drange,
+                                            entry->iifname, entry->oifname,
                                             &match);
                     if (ret != EDPVS_OK)
                         return ret;
@@ -1090,8 +1090,12 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
 
                 output = rte_zmalloc("get_service",
                                      sizeof(struct dp_vs_service_entry), 0);
-                if (unlikely(NULL == output))
+                if (unlikely(NULL == output)) {
+                    if (svc) {
+                        dp_vs_service_put(svc);
+                    }
                     return EDPVS_NOMEM;
+                }
                 memcpy(output, entry, sizeof(struct dp_vs_service_entry));
                 if(svc) {
                     ret = dp_vs_copy_service(output, svc);
@@ -1100,6 +1104,9 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     *outlen = sizeof(struct dp_vs_service_entry);
                 }else{
                     *outlen = 0;
+                    if (output) {
+                        rte_free(output);
+                    }
                     ret = EDPVS_NOTEXIST;
                 }
             }
@@ -1130,20 +1137,25 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                 else {
                     struct dp_vs_match match;
 
-                    ret = dp_vs_match_parse(get->srange, get->drange, 
-                                            get->iifname, get->oifname, 
+                    ret = dp_vs_match_parse(get->srange, get->drange,
+                                            get->iifname, get->oifname,
                                             &match);
-                    if (ret != EDPVS_OK)
+                    if (ret != EDPVS_OK) {
+                        rte_free(output);
                         return ret;
-
+                    }
                     if (!is_empty_match(&match)) {
                         svc = __dp_vs_svc_match_find(match.af, get->proto,
                                                      &match);
                     }
                 }
 
-                if (!svc)
+                if (!svc) {
+                    if (output) {
+                        rte_free(output);
+                    }
                     ret = EDPVS_NOTEXIST;
+                }
                 else {
                     ret = dp_vs_get_dest_entries(svc, get, output);
                     dp_vs_service_put(svc);
@@ -1154,6 +1166,11 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
             break;
         default:
             return EDPVS_INVAL;
+    }
+
+    if (ret != EDPVS_OK) {
+        if (*out)
+            rte_free(*out);
     }
 
     return ret; 
@@ -1175,7 +1192,7 @@ int dp_vs_service_init(void)
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         INIT_LIST_HEAD(&dp_vs_svc_table[idx]);
         INIT_LIST_HEAD(&dp_vs_svc_fwm_table[idx]);
-    }   
+    }
     INIT_LIST_HEAD(&dp_vs_svc_match_list);
     rte_rwlock_init(&__dp_vs_svc_lock);
     dp_vs_dest_init();

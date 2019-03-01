@@ -86,35 +86,20 @@ static int dp_vs_rs_unhash(struct dp_vs_dest *dest)
 }
 
 
-struct dp_vs_dest *dp_vs_lookup_dest(struct dp_vs_service *svc,
-                                     const union inet_addr *daddr, 
+struct dp_vs_dest *dp_vs_lookup_dest(int af,
+                                     struct dp_vs_service *svc,
+                                     const union inet_addr *daddr,
                                      uint16_t dport)
 {
     struct dp_vs_dest *dest;
 
     list_for_each_entry(dest, &svc->dests, n_list){
-        if ((dest->af == svc->af)
-            && inet_addr_equal(svc->af, &dest->addr, daddr)
+        if ((dest->af == af)
+            && inet_addr_equal(af, &dest->addr, daddr)
             && (dest->port == dport))
             return dest;
     }
     return NULL;
-}
-
-struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
-                                   uint16_t dport, const union inet_addr *vaddr,
-                                   uint16_t vport, uint16_t protocol)
-{
-    struct dp_vs_dest *dest;
-    struct dp_vs_service *svc;
-    svc = dp_vs_service_lookup(af, protocol, vaddr, vport, 0, NULL, NULL);
-    if(!svc)
-        return NULL;
-    dest = dp_vs_lookup_dest(svc, daddr, dport);
-    if(dest)
-        rte_atomic32_inc(&dest->refcnt);
-    dp_vs_service_put(svc);
-    return dest;
 }
 
 /*
@@ -128,7 +113,7 @@ struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
  *  scheduling.
  */
 struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
-                                        const union inet_addr *daddr, 
+                                        const union inet_addr *daddr,
                                         uint16_t dport)
 {
     struct dp_vs_dest *dest, *nxt;
@@ -176,7 +161,7 @@ void dp_vs_trash_cleanup(void)
 }
 
 static void __dp_vs_update_dest(struct dp_vs_service *svc,
-                                struct dp_vs_dest *dest, 
+                                struct dp_vs_dest *dest,
                                 struct dp_vs_dest_conf *udest)
 {
     int conn_flags;
@@ -211,14 +196,12 @@ static void __dp_vs_update_dest(struct dp_vs_service *svc,
 }
 
 
-int dp_vs_new_dest(struct dp_vs_service *svc, 
+int dp_vs_new_dest(struct dp_vs_service *svc,
                    struct dp_vs_dest_conf *udest,
                    struct dp_vs_dest **dest_p)
 {
     int size;
     struct dp_vs_dest *dest;
-#ifdef CONFIG_IP_VS_IPV6
-#endif
     size = RTE_CACHE_LINE_ROUNDUP(sizeof(struct dp_vs_dest));
     dest = rte_zmalloc("dpvs_new_dest", size, 0);
     if(dest == NULL){
@@ -227,7 +210,7 @@ int dp_vs_new_dest(struct dp_vs_service *svc,
     }
     assert(dest->svc == NULL);
 
-    dest->af = svc->af;
+    dest->af = udest->af;
     dest->proto = svc->proto;
     dest->vaddr = svc->addr;
     dest->vport = svc->port;
@@ -279,7 +262,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      * Check if the dest already exists in the list
      */
-    dest = dp_vs_lookup_dest(svc, &daddr, dport);
+    dest = dp_vs_lookup_dest(udest->af, svc, &daddr, dport);
 
     if (dest != NULL) {
         RTE_LOG(DEBUG, SERVICE, "%s: dest already exists.\n", __func__);
@@ -317,7 +300,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 
         /* call the update_service function of its scheduler */
         if (svc->scheduler->update_service)
-            svc->scheduler->update_service(svc);
+            svc->scheduler->update_service(svc, dest, DPVS_SO_SET_ADDDEST);
 
         rte_rwlock_write_unlock(&__dp_vs_svc_lock);
         return EDPVS_OK;
@@ -349,7 +332,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 
     /* call the update_service function of its scheduler */
     if (svc->scheduler->update_service)
-        svc->scheduler->update_service(svc);
+        svc->scheduler->update_service(svc, dest, DPVS_SO_SET_ADDDEST);
 
     rte_rwlock_write_unlock(&__dp_vs_svc_lock);
 
@@ -380,7 +363,7 @@ dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      *  Lookup the destination list
      */
-    dest = dp_vs_lookup_dest(svc, &daddr, dport);
+    dest = dp_vs_lookup_dest(udest->af, svc, &daddr, dport);
 
     if (dest == NULL) {
         RTE_LOG(DEBUG, SERVICE,"%s(): dest doesn't exist\n", __func__);
@@ -410,7 +393,7 @@ dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 
     /* call the update_service, because server weight may be changed */
     if (svc->scheduler->update_service)
-        svc->scheduler->update_service(svc);
+        svc->scheduler->update_service(svc, dest, DPVS_SO_SET_EDITDEST);
 
     rte_rwlock_write_unlock(&__dp_vs_svc_lock);
 
@@ -480,7 +463,7 @@ void __dp_vs_unlink_dest(struct dp_vs_service *svc,
      *  Call the update_service function of its scheduler
      */
     if (svcupd && svc->scheduler->update_service)
-        svc->scheduler->update_service(svc);
+        svc->scheduler->update_service(svc, dest, DPVS_SO_SET_DELDEST);
 }
 
 int
@@ -489,7 +472,7 @@ dp_vs_del_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     struct dp_vs_dest *dest;
     uint16_t dport = udest->port;
 
-    dest = dp_vs_lookup_dest(svc, &udest->addr, dport);
+    dest = dp_vs_lookup_dest(udest->af, svc, &udest->addr, dport);
 
     if (dest == NULL) {
         RTE_LOG(DEBUG, SERVICE,"%s(): destination not found!\n", __func__);
@@ -542,6 +525,8 @@ int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
         entry.inactconns = rte_atomic32_read(&dest->inactconns);
         entry.persistconns = rte_atomic32_read(&dest->persistconns);
         ret = dp_vs_copy_stats(&(entry.stats), dest->stats);
+        if (ret != EDPVS_OK)
+            break;
 
         memcpy(&uptr->entrytable[count], &entry, sizeof(entry));
         count++;

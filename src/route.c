@@ -71,13 +71,6 @@ static int route_local_hash(struct route_entry *route)
     return EDPVS_OK;
 }
 
-static int route_local_unhash(struct route_entry *route)
-{
-    list_del(&route->list);
-    rte_atomic32_dec(&route->refcnt);
-    return EDPVS_OK;
-}
-
 static struct route_entry *route_new_entry(struct in_addr* dest,
                                            uint8_t netmask, uint32_t flag,
                                            struct in_addr* gw, struct netif_port *port,
@@ -145,18 +138,6 @@ static int route_net_add(struct in_addr *dest, uint8_t netmask, uint32_t flag,
     rte_atomic32_inc(&this_num_routes);
     rte_atomic32_inc(&route->refcnt);
     return EDPVS_OK;
-}
-
-static int route_net_del(struct route_entry *route)
-{
-    if (route){
-        DPVS_WAIT_WHILE(rte_atomic32_read(&route->refcnt) > 2);
-        list_del(&route->list);
-        rte_free(route);
-        rte_atomic32_dec(&this_num_routes);
-        return EDPVS_OK;
-    }
-    return EDPVS_NOTEXIST;
 }
 
 static struct route_entry *route_local_lookup(uint32_t dest, const struct netif_port *port)
@@ -251,18 +232,6 @@ static int route_local_add(struct in_addr* dest, uint8_t netmask, uint32_t flag,
     return EDPVS_OK;
 }
 
-static int route_local_del(struct route_entry *route)
-{
-    if(route){
-        DPVS_WAIT_WHILE(rte_atomic32_read(&route->refcnt) > 2);
-        route_local_unhash(route);
-        rte_free(route);
-        rte_atomic32_dec(&this_num_routes);
-        return EDPVS_OK;
-    }
-    return EDPVS_NOTEXIST;
-}
-
 static int route_add_lcore(struct in_addr* dest,uint8_t netmask, uint32_t flag,
               struct in_addr* gw, struct netif_port *port,
               struct in_addr* src, unsigned long mtu,short metric)
@@ -277,22 +246,42 @@ static int route_add_lcore(struct in_addr* dest,uint8_t netmask, uint32_t flag,
     return EDPVS_INVAL;
 }
 
+/* del route node in list, then mbuf next will never find it;
+ * route4_put will delete route when refcnt is 0.
+ * refcnt:
+ * 1, new route is set to 0;
+ * 2, add list will be 1;
+ * 3, find route and ref it will +1;
+ * 4, put route will -1;
+ */
 static int route_del_lcore(struct in_addr* dest,uint8_t netmask, uint32_t flag,
               struct in_addr* gw, struct netif_port *port,
               struct in_addr* src, unsigned long mtu,short metric)
 {
     struct route_entry *route = NULL;
-    int error;
+
     if(flag & RTF_LOCALIN || (flag & RTF_KNI)){
         route = route_local_lookup(dest->s_addr, port);
-        error = route_local_del(route);
-        return error;
+        if (!route)
+            return EDPVS_NOTEXIST;
+        list_del(&route->list);
+        rte_atomic32_dec(&route->refcnt);
+        rte_atomic32_dec(&this_num_routes);
+        route4_put(route);
+        return EDPVS_OK;
     }
+
     if(flag & RTF_FORWARD || (flag & RTF_DEFAULT)){
         route = route_net_lookup(port, dest, netmask);
-        error = route_net_del(route);
-        return error;
+        if (!route)
+            return EDPVS_NOTEXIST;
+        list_del(&route->list);
+        rte_atomic32_dec(&route->refcnt);
+        rte_atomic32_dec(&this_num_routes);
+        route4_put(route);
+        return EDPVS_OK;
     }
+
     return EDPVS_INVAL;
 }
 
@@ -318,7 +307,7 @@ static int route_add_del(bool add, struct in_addr* dest,
     else
         err = route_del_lcore(dest, netmask, flag, gw, port, src, mtu, metric);
 
-    if (err != EDPVS_OK) {
+    if (err != EDPVS_OK && err != EDPVS_EXIST && err != EDPVS_NOTEXIST) {
         RTE_LOG(INFO, ROUTE, "[%s] fail to set route\n", __func__);
         return err;
     }
@@ -346,9 +335,11 @@ static int route_add_del(bool add, struct in_addr* dest,
 
     err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
     if (err != EDPVS_OK) {
-        msg_destroy(&msg);
-        RTE_LOG(INFO, ROUTE, "[%s] fail to send multicast message\n", __func__);
-        return err;
+        /* ignore timeout for msg, or keepalived will cause a lot bug.
+         * Timeout error is ok because route can still be set,
+         * no mem is another possible err, but problem will not just be here */
+        RTE_LOG(INFO, ROUTE, "[%s] fail to send multicast message, error code = %d\n",
+                                                                      __func__, err);
     }
     msg_destroy(&msg);
 
@@ -423,7 +414,7 @@ struct route_entry *route4_output(const struct flow4 *fl4)
     if(route){
         return route;
     }
-    
+
     route = route_out_net_lookup(&fl4->fl4_daddr);
     if(route){
         return route;
@@ -432,23 +423,33 @@ struct route_entry *route4_output(const struct flow4 *fl4)
     return NULL;
 }
 
-int route_flush(void)
+static int route_lcore_flush(void)
 {
     int i = 0;
     struct route_entry *route_node;
 
     for (i = 0; i < LOCAL_ROUTE_TAB_SIZE; i++){
         list_for_each_entry(route_node, &this_local_route_table[i], list){
-            route_local_del(route_node);
+            list_del(&route_node->list);
+            rte_atomic32_dec(&this_num_routes);
+            route4_put(route_node);
         }
     }
 
     list_for_each_entry(route_node, &this_net_route_table, list){
-        route_net_del(route_node);
+        list_del(&route_node->list);
+        rte_atomic32_dec(&this_num_routes);
+        route4_put(route_node);
     }
 
     return EDPVS_OK;
 }
+
+int route_flush(void)
+{
+    return EDPVS_OK;
+}
+
 
 /**
  * control plane
@@ -673,7 +674,7 @@ static int route_lcore_term(void *arg)
     if (!rte_lcore_is_enabled(rte_lcore_id()))
         return EDPVS_DISABLED;
 
-    return route_flush();
+    return route_lcore_flush();
 }
 
 int route_init(void)

@@ -36,6 +36,7 @@
  * like tcphdr.syn, so use standard definition. */
 #include <netinet/tcp.h>
 #include <openssl/sha.h>
+#include "ipvs/redirect.h"
 
 static int g_defence_tcp_drop = 0;
 
@@ -72,22 +73,22 @@ static const char *tcp_state_names[] = {
 #endif
 
 static struct tcp_state tcp_states[] = {
-/*	INPUT */
-/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA	*/
+/*    INPUT */
+/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA    */
 /*syn*/ {{sSR, sES, sES, sSR, sSR, sSR, sSR, sSR, sSR, sSR, sSR}},
 /*fin*/ {{sCL, sCW, sSS, sTW, sTW, sTW, sCL, sCW, sLA, sLI, sTW}},
 /*ack*/ {{sCL, sES, sSS, sES, sFW, sTW, sCL, sCW, sCL, sLI, sES}},
 /*rst*/ {{sCL, sCL, sCL, sSR, sCL, sCL, sCL, sCL, sLA, sLI, sSR}},
 
-/*	OUTPUT */
-/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA	*/
+/*    OUTPUT */
+/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA    */
 /*syn*/ {{sSS, sES, sSS, sSR, sSS, sSS, sSS, sSS, sSS, sLI, sSR}},
 /*fin*/ {{sTW, sFW, sSS, sTW, sFW, sTW, sCL, sTW, sLA, sLI, sTW}},
 /*ack*/ {{sES, sES, sSS, sES, sFW, sTW, sCL, sCW, sLA, sES, sES}},
 /*rst*/ {{sCL, sCL, sSS, sCL, sCL, sTW, sCL, sCL, sCL, sCL, sCL}},
 
-/*	INPUT-ONLY */
-/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA	*/
+/*    INPUT-ONLY */
+/*        sNO, sES, sSS, sSR, sFW, sTW, sCL, sCW, sLA, sLI, sSA    */
 /*syn*/ {{sSR, sES, sES, sSR, sSR, sSR, sSR, sSR, sSR, sSR, sSR}},
 /*fin*/ {{sCL, sFW, sSS, sTW, sFW, sTW, sCL, sCW, sLA, sLI, sTW}},
 /*ack*/ {{sCL, sES, sSS, sES, sFW, sTW, sCL, sCW, sCL, sLI, sES}},
@@ -140,7 +141,7 @@ inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
 inline void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th)
 {
     th->check = 0;
-    th->check = rte_ipv4_udptcp_cksum(iph, th);
+    th->check = ip4_udptcp_cksum(iph, th);
 }
 
 /*
@@ -153,6 +154,52 @@ inline void tcp6_send_csum(struct ipv6_hdr *iph, struct tcphdr *th) {
     th->check = 0;
     th->check = ip6_udptcp_cksum((struct ip6_hdr *)iph, th,
             (void *)th - (void *)iph, IPPROTO_TCP);
+}
+
+static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
+        const struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
+{
+    /* leverage HW TX TCP csum offload if possible */
+
+    struct netif_port *dev = NULL;
+
+    if (AF_INET6 == af) {
+        struct route6 *rt6 = mbuf->userdata;
+        struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+        if (rt6 && rt6->rt6_dev)
+            dev = rt6->rt6_dev;
+        else if (conn->out_dev)
+            dev = conn->out_dev;
+        if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+            mbuf->l3_len = iphdrlen;
+            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
+            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
+        } else {
+            if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
+                return EDPVS_INVPKT;
+            tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
+        }
+    } else { /* AF_INET */
+        struct route_entry *rt = mbuf->userdata;
+        struct ipv4_hdr *iph = ip4_hdr(mbuf);
+        if (rt && rt->port)
+            dev = rt->port;
+        else if (conn->out_dev)
+            dev = conn->out_dev;
+        if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+            mbuf->l4_len = ntohs(iph->total_length) - iphdrlen;
+            mbuf->l3_len = iphdrlen;
+            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+            th->check = ip4_phdr_cksum(iph, mbuf->ol_flags);
+        } else {
+            if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
+                return EDPVS_INVPKT;
+            tcp4_send_csum(iph, th);
+        }
+    }
+
+    return EDPVS_OK;
 }
 
 static inline uint32_t seq_scale(uint32_t seq)
@@ -186,7 +233,7 @@ static inline uint32_t tcp_secure_sequence_number(uint32_t saddr, uint32_t daddr
     return seq_scale(*(uint32_t *)&hash0);
 }
 
-static inline void tcp_in_init_seq(struct dp_vs_conn *conn, 
+static inline void tcp_in_init_seq(struct dp_vs_conn *conn,
                                    struct rte_mbuf *mbuf, struct tcphdr *th)
 {
     struct dp_vs_seq *fseq = &conn->fnat_seq;
@@ -198,7 +245,7 @@ static inline void tcp_in_init_seq(struct dp_vs_conn *conn,
     if (fseq->isn)
         return;
 
-    fseq->isn = tcp_secure_sequence_number(conn->laddr.in.s_addr, 
+    fseq->isn = tcp_secure_sequence_number(conn->laddr.in.s_addr,
             conn->daddr.in.s_addr, conn->lport, conn->dport);
 
     fseq->delta = fseq->isn - seq;
@@ -235,10 +282,10 @@ static void tcp_in_remove_ts(struct tcphdr *tcph)
             continue;
         default:
             opsize = *ptr++;
-            if (opsize < 2)	/* silly options */
+            if (opsize < 2)    /* silly options */
                 return;
             if (opsize > len)
-                return;	/* partial options */
+                return;    /* partial options */
             if ((opcode == TCP_OPT_TIMESTAMP)
                     && (opsize == TCP_OLEN_TIMESTAMP)) {
                 for (i = 0; i < TCP_OLEN_TIMESTAMP; i++)
@@ -259,9 +306,9 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     uint32_t mtu;
     struct tcpopt_addr *toa;
     uint32_t tcp_opt_len;
-
     uint8_t *p, *q, *tail;
     struct route_entry *rt;
+    struct route6 *rt6;
 
     if (unlikely(conn->af != AF_INET && conn->af != AF_INET6))
         return EDPVS_NOTSUPP;
@@ -271,8 +318,10 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
      * check if we can add the new option
      */
     /* skb length and tcp option length checking */
-    if ((rt = mbuf->userdata) != NULL) {
+    if (tuplehash_out(conn).af == AF_INET && (rt = mbuf->userdata) != NULL) {
         mtu = rt->mtu;
+    } else if (tuplehash_out(conn).af == AF_INET6 && (rt6 = mbuf->userdata) != NULL) {
+        mtu = rt6->rt6_mtu;
     } else if (conn->in_dev) { /* no route for fast-xmit */
         mtu = conn->in_dev->mtu;
     } else {
@@ -337,34 +386,37 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     /* reset tcp header length */
     tcph->doff += tcp_opt_len >> 2;
 
-    /* reset ip header total length */
-    if (conn->af == AF_INET)
+    /*
+     * reset ip header total length, notice nat64
+     * toa is always for rs which is tuplehash_out conn
+     */
+    if (tuplehash_out(conn).af == AF_INET)
         ip4_hdr(mbuf)->total_length =
             htons(ntohs(ip4_hdr(mbuf)->total_length) + tcp_opt_len);
     else
         ip6_hdr(mbuf)->ip6_plen =
             htons(ntohs(ip6_hdr(mbuf)->ip6_plen) + tcp_opt_len);
 
-    /* tcp csum will be recalc later, 
+    /* tcp csum will be recalc later,
      * so as IP hdr csum since iph.tot_len has been chagned. */
     return EDPVS_OK;
 }
 
-static void tcp_out_save_seq(struct rte_mbuf *mbuf, 
+static void tcp_out_save_seq(struct rte_mbuf *mbuf,
                              struct dp_vs_conn *conn, struct tcphdr *th)
 {
     if (th->rst)
         return;
 
     /* out of order ? */
-    if (seq_before(ntohl(th->ack_seq), ntohl(conn->rs_end_ack)) 
+    if (seq_before(ntohl(th->ack_seq), ntohl(conn->rs_end_ack))
             && conn->rs_end_ack != 0)
         return;
 
     if (th->syn && th->ack)
         conn->rs_end_seq = htonl(ntohl(th->seq) + 1);
     else
-        conn->rs_end_seq = htonl(ntohl(th->seq) + mbuf->pkt_len 
+        conn->rs_end_seq = htonl(ntohl(th->seq) + mbuf->pkt_len
                 - ip4_hdrlen(mbuf) - (th->doff << 2));
 
     conn->rs_end_ack = th->ack_seq;
@@ -396,10 +448,10 @@ static void tcp_out_adjust_mss(int af, struct tcphdr *tcph)
             continue;
         default:
             opsize = *ptr++;
-            if (opsize < 2)	/* "silly options" */
+            if (opsize < 2)    /* "silly options" */
                 return;
             if (opsize > length)
-                return;	/* partial options */
+                return;    /* partial options */
             if ((opcode == TCP_OPT_MSS) && (opsize == TCP_OLEN_MSS)) {
                 uint16_t in_mss = ntohs(*(__be16 *) ptr);
 
@@ -493,14 +545,15 @@ static void tcp_out_init_seq(struct dp_vs_conn *conn, struct tcphdr *th)
 }
 
 /* set @verdict if failed to schedule */
-static int tcp_conn_sched(struct dp_vs_proto *proto, 
+static int tcp_conn_sched(struct dp_vs_proto *proto,
                           const struct dp_vs_iphdr *iph,
-                          struct rte_mbuf *mbuf, 
+                          struct rte_mbuf *mbuf,
                           struct dp_vs_conn **conn,
                           int *verdict)
 {
     struct tcphdr *th, _tcph;
     struct dp_vs_service *svc;
+
     assert(proto && iph && mbuf && conn && verdict);
 
     th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
@@ -527,7 +580,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
         daddr = inet_ntop(iph->af, &iph->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::";
         saddr = inet_ntop(iph->af, &iph->saddr, sbuf, sizeof(sbuf)) ? sbuf : "::";
         RTE_LOG(DEBUG, IPVS,
-                "%s: [%d] try sched non-SYN packet: [%c%c%c%c] %s:%d->%s:%d\n", 
+                "%s: [%d] try sched non-SYN packet: [%c%c%c%c] %s/%d->%s/%d\n",
                 __func__, rte_lcore_id(),
                 th->syn ? 'S' : '.', th->fin ? 'F' : '.',
                 th->ack ? 'A' : '.', th->rst ? 'R' : '.',
@@ -546,7 +599,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_INVAL;
     }
 
-    svc = dp_vs_service_lookup(iph->af, iph->proto, 
+    svc = dp_vs_service_lookup(iph->af, iph->proto,
                                &iph->daddr, th->dest, 0, mbuf, NULL);
     if (!svc) {
         /* Drop tcp packet which is send to vip and !vport */
@@ -574,7 +627,8 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 
 static struct dp_vs_conn *
 tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
-                struct rte_mbuf *mbuf, int *direct, bool reverse, bool *drop)
+                struct rte_mbuf *mbuf, int *direct, bool reverse, bool *drop,
+                lcoreid_t *peer_cid)
 {
     struct tcphdr *th, _tcph;
     struct dp_vs_conn *conn;
@@ -583,29 +637,40 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
     if (unlikely(!th))
         return NULL;
-    
+
     if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
         *drop = true;
         return NULL;
     }
 
-    conn = dp_vs_conn_get(iph->af, iph->proto, 
+    conn = dp_vs_conn_get(iph->af, iph->proto,
             &iph->saddr, &iph->daddr, th->source, th->dest, direct, reverse);
 
     /*
      * L2 confirm neighbour
-     * pkt in from client confirm neighbour to client 
-     * pkt out from rs confirm neighbour to rs 
+     * pkt in from client confirm neighbour to client
+     * pkt out from rs confirm neighbour to rs
      */
     if (conn != NULL) {
         if (th->ack) {
-            if ((*direct == DPVS_CONN_DIR_INBOUND) && conn->out_dev 
-                 && (!inet_is_addr_any(conn->af, &conn->out_nexthop))) {
-                neigh_confirm(conn->af, &conn->out_nexthop, conn->out_dev);
-            } else if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev 
-                        && (!inet_is_addr_any(conn->af, &conn->in_nexthop))) {
-                neigh_confirm(conn->af, &conn->in_nexthop, conn->in_dev);
+            if ((*direct == DPVS_CONN_DIR_INBOUND) && conn->out_dev
+                 && (!inet_is_addr_any(tuplehash_in(conn).af, &conn->out_nexthop))) {
+                neigh_confirm(tuplehash_in(conn).af, &conn->out_nexthop,
+                              conn->out_dev);
+            } else if ((*direct == DPVS_CONN_DIR_OUTBOUND) && conn->in_dev
+                        && (!inet_is_addr_any(tuplehash_out(conn).af, &conn->in_nexthop))) {
+                neigh_confirm(tuplehash_out(conn).af, &conn->in_nexthop,
+                              conn->in_dev);
             }
+        }
+    } else {
+        struct dp_vs_redirect *r;
+
+        r = dp_vs_redirect_get(iph->af, iph->proto,
+                               &iph->saddr, &iph->daddr,
+                               th->source, th->dest);
+        if (r) {
+            *peer_cid = r->cid;
         }
     }
 
@@ -616,9 +681,8 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    struct route_entry *rt = mbuf->userdata;
-    struct netif_port *dev = NULL;
-    int af = conn->af;
+    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
+    int af = tuplehash_out(conn).af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
     if (mbuf_may_pull(mbuf, iphdrlen + sizeof(*th)) != 0)
@@ -631,7 +695,7 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
     if (mbuf_may_pull(mbuf, iphdrlen + (th->doff << 2)) != 0)
         return EDPVS_INVPKT;
 
-    /* 
+    /*
      * for SYN packet
      * 1. remove tcp timestamp option
      *    laddress for different client have diff timestamp.
@@ -657,49 +721,21 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
     th->source  = conn->lport;
     th->dest    = conn->dport;
 
-    if (rt && rt->port)
-        dev = rt->port;
-    else if (conn->in_dev)
-        dev = conn->in_dev;
 
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-        if (AF_INET6 == af) {
-            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-            mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
-        } else {
-            mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
-            mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
-        }
-    } else {
-        if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
-            return EDPVS_INVPKT;
-        if (AF_INET6 == af) {
-            tcp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), th);
-        } else {
-            tcp4_send_csum(ip4_hdr(mbuf), th);
-        }
-    }
-
-    return EDPVS_OK;
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
 }
 
 static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    struct route_entry *rt = mbuf->userdata;
-    struct netif_port *dev = NULL;
-    int af = conn->af;
+    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4*/
+    int af = tuplehash_in(conn).af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
     if (mbuf_may_pull(mbuf, iphdrlen + sizeof(*th)) != 0)
         return EDPVS_INVPKT;
-    
+
     th = tcp_hdr(mbuf);
     if (unlikely(!th))
         return EDPVS_INVPKT;
@@ -724,43 +760,13 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
     if (th->syn && th->ack)
         tcp_out_init_seq(conn, th);
 
-    if (rt && rt->port)
-        dev = rt->port;
-    else if (conn->out_dev)
-        dev = conn->out_dev;
-
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-        if (AF_INET6 == af) {
-            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-            mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
-        } else {
-            mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
-            mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
-        }
-    } else {
-        if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
-            return EDPVS_INVPKT;
-        if (AF_INET6 == af) {
-            tcp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), th);
-        } else {
-            tcp4_send_csum(ip4_hdr(mbuf), th);
-        }
-    }
-
-    return EDPVS_OK;
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
 }
 
 static int tcp_snat_in_handler(struct dp_vs_proto *proto,
                                struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    struct netif_port *dev = NULL;
-    struct route_entry *rt = mbuf->userdata;
     int af = conn->af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
@@ -778,42 +784,13 @@ static int tcp_snat_in_handler(struct dp_vs_proto *proto,
     th->dest = conn->dport;
 
     /* L4 re-checksum */
-    if (rt && rt->port)
-        dev = rt->port;
-
-    /* leverage HW TX TCP csum offload if possible */
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-        if (AF_INET6 == af) {
-            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-            mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
-        } else {
-            mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
-            mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
-        }
-    } else {
-        if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
-            return EDPVS_INVPKT;
-        if (AF_INET6 == af) {
-            tcp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), th);
-        } else {
-            tcp4_send_csum(ip4_hdr(mbuf), th);
-        }
-    }
-
-    return EDPVS_OK;
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
 }
 
 static int tcp_snat_out_handler(struct dp_vs_proto *proto,
                                 struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    struct netif_port *dev = NULL;
-    struct route_entry *rt = mbuf->userdata;
     int af = conn->af;
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
@@ -831,34 +808,7 @@ static int tcp_snat_out_handler(struct dp_vs_proto *proto,
     th->source = conn->vport;
 
     /* L4 re-checksum */
-    if (rt && rt->port)
-        dev = rt->port;
-
-    /* leverage HW TX TCP csum offload if possible */
-    if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-        if (AF_INET6 == af) {
-            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-            mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
-            th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
-        } else {
-            mbuf->l4_len = ntohs(ip4_hdr(mbuf)->total_length) - iphdrlen;
-            mbuf->l3_len = iphdrlen;
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = rte_ipv4_phdr_cksum(ip4_hdr(mbuf), mbuf->ol_flags);
-        }
-    } else {
-        if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
-            return EDPVS_INVPKT;
-        if (AF_INET6 == af) {
-            tcp6_send_csum((struct ipv6_hdr *)ip6_hdr(mbuf), th);
-        } else {
-            tcp4_send_csum(ip4_hdr(mbuf), th);
-        }
-    }
-
-    return EDPVS_OK;
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
 }
 
 static inline int tcp_state_idx(struct tcphdr *th)
@@ -898,6 +848,11 @@ static int tcp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
     const char *daddr, *caddr;
 #endif
 
+    if (dir == DPVS_CONN_DIR_INBOUND && dest->fwdmode == DPVS_FWD_MODE_FNAT)
+        af = tuplehash_in(conn).af;
+    else if (dir == DPVS_CONN_DIR_OUTBOUND && dest->fwdmode == DPVS_FWD_MODE_FNAT)
+        af = tuplehash_out(conn).af;
+
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
     th = mbuf_header_pointer(mbuf, iphdrlen, sizeof(_tcph), &_tcph);
     if (unlikely(!th))
@@ -925,16 +880,16 @@ tcp_state_out:
     /* state changed */
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-    daddr = inet_ntop(conn->af, &conn->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::";
-    caddr = inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::";
+    daddr = inet_ntop(tuplehash_out(conn).af, &conn->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::";
+    caddr = inet_ntop(tuplehash_in(conn).af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::";
 
     RTE_LOG(DEBUG, IPVS, "state trans: %s %s [%c%c%c%c] %s:%u->%s:%u "
             " state %s->%s conn.refcnt %d\n",
             proto->name, dir == DPVS_CONN_DIR_OUTBOUND ? "out" : "in",
             th->syn ? 'S' : '.', th->fin ? 'F' : '.',
             th->ack ? 'A' : '.', th->rst ? 'R' : '.',
-            caddr, ntohs(conn->cport), 
-            daddr, ntohs(conn->dport), 
+            caddr, ntohs(conn->cport),
+            daddr, ntohs(conn->dport),
             tcp_state_name(conn->state),
             tcp_state_name(new_state),
             rte_atomic32_read(&conn->refcnt));
@@ -954,7 +909,7 @@ tcp_state_out:
     }
 
     if (dest) {
-        if (!(conn->flags & DPVS_CONN_F_INACTIVE) 
+        if (!(conn->flags & DPVS_CONN_F_INACTIVE)
                 && (new_state != DPVS_TCP_S_ESTABLISHED)) {
             rte_atomic32_dec(&dest->actconns);
             rte_atomic32_inc(&dest->inactconns);
@@ -973,13 +928,19 @@ tcp_state_out:
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir)
 {
     struct netif_port *dev;
+    int af;
 
-    /* we need oif for correct rte_mempoll, 
+    /* we need oif for correct rte_mempoll,
      * most likely oif is conn->in/out_dev (fast-xmit),
      * if not, determine output device by route. */
     dev = ((dir == DPVS_CONN_DIR_INBOUND) ? conn->in_dev : conn->out_dev);
+
     if (unlikely(!dev)) {
-        if (AF_INET == conn->af) {
+    /* dir is mbuf to revieve, route/af is mbuf to send
+     * their in/out may be reversed */
+        af = ((dir == DPVS_CONN_DIR_INBOUND) ? \
+              tuplehash_out(conn).af : tuplehash_in(conn).af);
+        if (AF_INET == af) {
             struct route_entry *rt = NULL;
             struct flow4 fl4;
             memset(&fl4, 0, sizeof(struct flow4));
@@ -1025,13 +986,14 @@ struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir)
     return dev->mbuf_pool;
 }
 
-static int tcp_send_rst(struct dp_vs_proto *proto, 
+static int tcp_send_rst(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn, int dir)
 {
     struct rte_mempool *pool;
     struct rte_mbuf *mbuf = NULL;
     struct tcphdr *th;
-    struct ipv4_hdr *iph;
+    struct ipv4_hdr *ip4h;
+    struct ip6_hdr *ip6h;
 
     if (conn->state != DPVS_TCP_S_ESTABLISHED) {
         /* RTE_LOG(WARNING, IPVS, "%s: only RST in ESTABLISHED.\n", __func__); */
@@ -1047,9 +1009,9 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
         return EDPVS_NOMEM;
     mbuf->userdata = NULL; /* make sure "no route info" */
 
-    /* 
+    /*
      * reserve head room ?
-     * mbuf has alreay configured header room 
+     * mbuf has alreay configured header room
      * RTE_PKTMBUF_HEADROOM for lower layer headers.
      */
     assert(rte_pktmbuf_headroom(mbuf) >= 128); /* how to reserve. >_< */
@@ -1079,45 +1041,107 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
     th->rst = 1;
 
     /* IP header (before translation) */
-    iph = (struct ipv4_hdr *)rte_pktmbuf_prepend(mbuf, sizeof(struct ipv4_hdr));
-    if (!iph) {
-        rte_pktmbuf_free(mbuf);
-        return EDPVS_NOROOM;
-    }
-
-    iph->version_ihl = 0x45;
-    iph->total_length = htons(mbuf->pkt_len);
-    iph->packet_id = 0;
-    iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
-    iph->time_to_live = 64;
-    iph->next_proto_id = IPPROTO_TCP;
     if (dir == DPVS_CONN_DIR_INBOUND) {
-        iph->src_addr = conn->caddr.in.s_addr;
-        iph->dst_addr = conn->vaddr.in.s_addr;
-    } else {
-        iph->src_addr = conn->daddr.in.s_addr;
-        iph->dst_addr = conn->laddr.in.s_addr;
-    }
+        if (tuplehash_in(conn).af == AF_INET) {
+            ip4h = (struct ipv4_hdr *)rte_pktmbuf_prepend(mbuf,
+                                       sizeof(struct ipv4_hdr));
+            if (!ip4h) {
+                rte_pktmbuf_free(mbuf);
+                return EDPVS_NOROOM;
+            }
+            ip4h->version_ihl     = 0x45;
+            ip4h->total_length    = htons(mbuf->pkt_len);
+            ip4h->packet_id       = 0;
+            ip4h->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+            ip4h->time_to_live    = 64;
+            ip4h->next_proto_id   = IPPROTO_TCP;
+            ip4h->src_addr        = conn->caddr.in.s_addr;
+            ip4h->dst_addr        = conn->vaddr.in.s_addr;
 
-    iph->hdr_checksum = 0;
-    tcp4_send_csum(iph, th);
-    ip4_send_csum(iph);
+            mbuf->l3_len = sizeof(*ip4h);
 
-    if (dir == DPVS_CONN_DIR_INBOUND)
+            ip4h->hdr_checksum = 0;
+            tcp4_send_csum(ip4h, th);
+            ip4_send_csum(ip4h);
+
+        } else {
+            int plen = mbuf->pkt_len;
+            ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(mbuf,
+                                       sizeof(struct ip6_hdr));
+            if (!ip6h) {
+                rte_pktmbuf_free(mbuf);
+                return EDPVS_NOROOM;
+            }
+            ip6h->ip6_vfc   = 0x60;
+            ip6h->ip6_plen  = htons(plen);
+            ip6h->ip6_hlim  = 64;
+            ip6h->ip6_nxt   = IPPROTO_TCP;
+            ip6h->ip6_src   = conn->caddr.in6;
+            ip6h->ip6_dst   = conn->vaddr.in6;
+
+            mbuf->l3_len = sizeof(*ip6h);
+
+            tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
+        }
+
         conn->packet_xmit(proto, conn, mbuf);
-    else
+
+    } else {
+        if (tuplehash_out(conn).af == AF_INET) {
+            ip4h = (struct ipv4_hdr *)rte_pktmbuf_prepend(mbuf,
+                                       sizeof(struct ipv4_hdr));
+            if (!ip4h) {
+                rte_pktmbuf_free(mbuf);
+                return EDPVS_NOROOM;
+            }
+            ip4h->version_ihl     = 0x45;
+            ip4h->total_length    = htons(mbuf->pkt_len);
+            ip4h->packet_id       = 0;
+            ip4h->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+            ip4h->time_to_live    = 64;
+            ip4h->next_proto_id   = IPPROTO_TCP;
+            ip4h->src_addr        = conn->daddr.in.s_addr;
+            ip4h->dst_addr        = conn->laddr.in.s_addr;
+
+            mbuf->l3_len = sizeof(*ip4h);
+
+            ip4h->hdr_checksum = 0;
+            tcp4_send_csum(ip4h, th);
+            ip4_send_csum(ip4h);
+
+        } else {
+            int plen = mbuf->pkt_len;
+            ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(mbuf,
+                                       sizeof(struct ip6_hdr));
+            if (!ip6h) {
+                rte_pktmbuf_free(mbuf);
+                return EDPVS_NOROOM;
+            }
+            ip6h->ip6_vfc   = 0x60;
+            ip6h->ip6_plen  = htons(plen);
+            ip6h->ip6_hlim  = 64;
+            ip6h->ip6_nxt   = IPPROTO_TCP;
+            ip6h->ip6_src   = conn->daddr.in6;
+            ip6h->ip6_dst   = conn->laddr.in6;
+
+            mbuf->l3_len = sizeof(*ip6h);
+
+            tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
+        }
+
         conn->packet_out_xmit(proto, conn, mbuf);
+    }
 
     return EDPVS_OK;
 }
 
-static int tcp_conn_expire(struct dp_vs_proto *proto, 
+static int tcp_conn_expire(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn)
 {
     int err;
     assert(proto && conn && conn->dest);
 
-    if (conn->dest->fwdmode == DPVS_FWD_MODE_NAT 
+    if (conn->dest->fwdmode == DPVS_FWD_MODE_NAT
             || conn->dest->fwdmode == DPVS_FWD_MODE_FNAT) {
         /* send RST to RS and client */
         err = tcp_send_rst(proto, conn, DPVS_CONN_DIR_INBOUND);

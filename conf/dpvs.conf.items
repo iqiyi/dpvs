@@ -11,7 +11,7 @@
 
 ! global config
 global_defs {
-    #daemon                         <disalbe> 
+    #daemon                         <disalbe>
     log_level   INFO                <none>
     log_file    /var/log/dpvs.log   <none>
 }
@@ -189,6 +189,7 @@ ipvs_defs {
         conn_init_timeout           3           <3, 1-31535999>
         expire_quiescent_template               <disable>
         fast_xmit_close                         <disable>
+        <init> redirect             off         <off/on: disable/enable packet redirect>
     }
 
     udp {
@@ -243,4 +244,3 @@ ipvs_defs {
 sa_pool {
     <init> pool_hash_size   16  <16, 1-128>
 }
-

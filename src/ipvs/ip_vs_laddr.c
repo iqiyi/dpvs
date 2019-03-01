@@ -35,13 +35,13 @@
 #include "conf/laddr.h"
 
 /*
- * Local Address (LIP) and port (lport) allocation for FNAT mode, 
+ * Local Address (LIP) and port (lport) allocation for FNAT mode,
  *
  * 1. Four tuple of IP connection <sip:sport, dip:dport> must be unique.
- *    we cannot control RS's <rip:rport> while we really need support 
- *    millions of connections. so one laddr is not enough (only lport 
+ *    we cannot control RS's <rip:rport> while we really need support
+ *    millions of connections. so one laddr is not enough (only lport
  *    is variable means 2^16 is the max connection number).
- *    
+ *
  *    So we need more laddr and an algorithm to select it, so as lport.
  *
  * 2. laddr maintained by service.
@@ -53,11 +53,11 @@
  *    consider conn table is per-lcore, we must
  *    make sure outbound flow handled by same lcore.
  *    so we use FDIR to set oubound flow to same lcore as inbound.
- *    note FDIR has limited filter number (8K), 
+ *    note FDIR has limited filter number (8K),
  *    both <lip:lport> 2^32*2^16 and <lport> 2^16 are too big.
  *
  *    actually we just need N fdir filter, while N >= #lcore
- *    so we use LSB B bits of lport for fdir mask, let 
+ *    so we use LSB B bits of lport for fdir mask, let
  *    2^B >= (N == #lcore)
  *
  *    further more, for the case inbound/outbound port are same,
@@ -70,7 +70,7 @@
  *
  *    MSB was used, it makes lport range continuous and more clear
  *    for each lcores, for example
- *             
+ *
  *      lcore   lport-range
  *      0       0~4095
  *      1       4096~8191
@@ -78,7 +78,7 @@
  *    But consider global min/max limitations, like we should
  *    skip port 0~1024 or 50000~65535. it causes lport resource
  *    of some lcore exhausted prematurely. That's not acceptable.
- * 
+ *
  *    Using LSB bits solves this issue, although the lports for
  *    each lcore is distributed.
  *
@@ -89,9 +89,9 @@
  *    b) select laddr according to lcore
  *    c) set laddr to FDIR.
  *
- *    to use lport-mask we can save laddr, but it's not easy set 
+ *    to use lport-mask we can save laddr, but it's not easy set
  *    fdir for TCP/UDP related ICMP (or too complex).
- *    and using laddr-lcore 1:1 mapping, it consumes more laddr, 
+ *    and using laddr-lcore 1:1 mapping, it consumes more laddr,
  *    but note one laddr supports at about 6W conn (same rip:rport).
  *    It man not make sence to let #lcore bigger then #laddr.
  */
@@ -177,7 +177,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
     /*
      * some time allocate lport fails for one laddr,
      * but there's also some resource on another laddr.
-     * use write lock since 
+     * use write lock since
      * 1. __get_laddr will change svc->laddr_curr;
      * 2. we uses svc->num_laddrs;
      */
@@ -235,7 +235,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 
     if (!laddr || sport == 0) {
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-        RTE_LOG(ERR, IPVS, "%s: [%d] no lport available !!\n", 
+        RTE_LOG(ERR, IPVS, "%s: [%d] no lport available !!\n",
                 __func__, rte_lcore_id());
 #endif
         if (laddr)
@@ -308,7 +308,7 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
     if (!svc || !addr)
         return EDPVS_INVAL;
 
-    new = rte_malloc_socket(NULL, sizeof(*new), 
+    new = rte_malloc_socket(NULL, sizeof(*new),
                             RTE_CACHE_LINE_SIZE, rte_socket_id());
     if (!new)
         return EDPVS_NOMEM;
@@ -356,9 +356,9 @@ int dp_vs_laddr_del(struct dp_vs_service *svc, int af, const union inet_addr *ad
 
         /* found */
         if (rte_atomic32_read(&laddr->refcnt) == 0) {
- 	    /* update svc->curr_laddr */
-	    if (svc->laddr_curr == &laddr->list)
-		svc->laddr_curr = laddr->list.next;
+         /* update svc->curr_laddr */
+        if (svc->laddr_curr == &laddr->list)
+        svc->laddr_curr = laddr->list.next;
             list_del(&laddr->list);
             rte_free(laddr);
             svc->num_laddrs--;
@@ -379,7 +379,7 @@ int dp_vs_laddr_del(struct dp_vs_service *svc, int af, const union inet_addr *ad
 }
 
 /* if success, it depend on caller to free @addrs by rte_free() */
-static int dp_vs_laddr_getall(struct dp_vs_service *svc, 
+static int dp_vs_laddr_getall(struct dp_vs_service *svc,
                               struct dp_vs_laddr_entry **addrs, size_t *naddr)
 {
     struct dp_vs_laddr *laddr;
@@ -445,7 +445,7 @@ int dp_vs_laddr_flush(struct dp_vs_service *svc)
     return err;
 }
 
-/* 
+/*
  * for control plane
  */
 static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
@@ -458,12 +458,12 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
-    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange, 
-                          laddr_conf->iifname, laddr_conf->oifname, 
+    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
+                          laddr_conf->iifname, laddr_conf->oifname,
                           &match) != EDPVS_OK)
         return EDPVS_INVAL;
 
-    svc = dp_vs_service_lookup(laddr_conf->af, laddr_conf->proto, 
+    svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
                                laddr_conf->fwmark, NULL, &match);
     if (!svc)
@@ -471,11 +471,11 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     switch (opt) {
     case SOCKOPT_SET_LADDR_ADD:
-        err = dp_vs_laddr_add(svc, laddr_conf->af, &laddr_conf->laddr,
+        err = dp_vs_laddr_add(svc, laddr_conf->af_l, &laddr_conf->laddr,
                 laddr_conf->ifname);
         break;
     case SOCKOPT_SET_LADDR_DEL:
-        err = dp_vs_laddr_del(svc, laddr_conf->af, &laddr_conf->laddr);
+        err = dp_vs_laddr_del(svc, laddr_conf->af_l, &laddr_conf->laddr);
         break;
     case SOCKOPT_SET_LADDR_FLUSH:
         err = dp_vs_laddr_flush(svc);
@@ -503,13 +503,13 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
-    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange, 
-                          laddr_conf->iifname, laddr_conf->oifname, 
+    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
+                          laddr_conf->iifname, laddr_conf->oifname,
                           &match) != EDPVS_OK)
         return EDPVS_INVAL;
 
 
-    svc = dp_vs_service_lookup(laddr_conf->af, laddr_conf->proto, 
+    svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
                                laddr_conf->fwmark, NULL, &match);
     if (!svc)

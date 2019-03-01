@@ -20,13 +20,13 @@
 
 #include "neigh.h"
 
-int ndisc_rcv(struct rte_mbuf *mbuf, 
+int ndisc_rcv(struct rte_mbuf *mbuf,
               struct netif_port *dev);
 
-void ndisc_send_dad(struct netif_port *dev, 
+void ndisc_send_dad(struct netif_port *dev,
                     const struct in6_addr* solicit);
 
-void ndisc_solicit(struct neighbour_entry *neigh, 
+void ndisc_solicit(struct neighbour_entry *neigh,
                    const struct in6_addr *saddr);
 
 #endif /* __DPVS_NDISC_H__ */

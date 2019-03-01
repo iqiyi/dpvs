@@ -70,7 +70,7 @@ struct ip_tunnel_param {
     __be16          o_flags;
     __be32          i_key;
     __be32          o_key;
-	struct iphdr	iph;
+    struct iphdr    iph;
 } __attribute__((__packed__));
 
 #if defined(__DPVS__)

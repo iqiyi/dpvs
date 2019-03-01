@@ -162,8 +162,8 @@ static const char* cmdnames[] = {
 	"restore",
 	"save",
 	"zero",
-	"add-laddr" , 
-	"del-laddr" , 
+	"add-laddr" ,
+	"del-laddr" ,
 	"get-laddr" ,
 	"add-blklst",
 	"del-blklst",
@@ -193,11 +193,11 @@ static const char* optnames[] = {
 	"syncid",
 	"exact",
 	"ops",
-	"pe" , 
+	"pe" ,
 	"local-address" ,
-	"blklst-address", 
-	"synproxy" , 
-	"ifname" , 
+	"blklst-address",
+	"synproxy" ,
+	"ifname" ,
 	"sockpair" ,
 	"hash-target",
 };
@@ -585,7 +585,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			strncpy(ce->svc.sched_name,
 				optarg, IP_VS_SCHEDNAME_MAXLEN);
 			if (!memcmp(ce->svc.sched_name, "conhash", strlen("conhash")))
-				ce->svc.flags = ce->svc.flags | IP_VS_SVC_F_SIP_HASH; 
+				ce->svc.flags = ce->svc.flags | IP_VS_SVC_F_SIP_HASH;
 			break;
 		case 'p':
 			set_option(options, OPT_PERSISTENT);
@@ -1171,15 +1171,15 @@ parse_service(char *buf, ipvs_service_t *svc)
  * Get sockpair from the arguments.
  * sockpair := PROTO:SIP:SPORT:TIP:TPORT
  * PROTO := [tcp|udp]
- * SIP,TIP := dotted-decimal ip address
+ * SIP,TIP := dotted-decimal ip address or square-blacketed ip6 address
  * SPORT,TPORT := range(0, 65535)
  */
 static int
 parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 {
     char *pos = buf, *end;
-    int af = AF_INET;
-    struct in_addr sip, tip;
+    int af = (strchr(pos, '[') == NULL ? AF_INET : AF_INET6);
+    union inet_addr sip, tip;
     unsigned short proto, sport, tport;
     long portn;
 
@@ -1196,13 +1196,26 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 	else
 		return 0;
 
-	pos = end;
-    end = strchr(pos, ':');
-    if (!end)
-        return 0;
-    *end++ = '\0';
-    if (inet_pton(af, pos, &sip) != 1)
-        return 0;
+    if (af == AF_INET) {
+        pos = end;
+        end = strchr(pos, ':');
+        if (!end)
+            return 0;
+        *end++ = '\0';
+        if (inet_pton(af, pos, &sip) != 1)
+            return 0;
+    } else {
+        if (*end != '[')
+            return 0;
+        pos = end + 1;
+        end = strchr(pos, ']');
+        if (!end || *(end+1) != ':')
+            return 0;
+        *end++ = '\0';
+        *end++ = '\0';
+        if (inet_pton(af, pos, &sip.in6) != 1)
+            return 0;
+    }
 
     pos = end;
     end = strchr(pos, ':');
@@ -1213,13 +1226,26 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
         return 0;
     sport = portn;
 
-    pos = end;
-    end = strchr(pos, ':');
-    if (!end)
-        return 0;
-    *end++ = '\0';
-    if (inet_pton(af, pos, &tip) != 1)
-        return 0;
+    if (af == AF_INET) {
+        pos = end;
+        end = strchr(pos, ':');
+        if (!end)
+            return 0;
+        *end++ = '\0';
+        if (inet_pton(af, pos, &tip.in) != 1)
+            return 0;
+    } else {
+        if (*end !='[')
+            return 0;
+        pos = end + 1;
+        end = strchr(pos, ']');
+        if (!end || *(end+1) != ':')
+            return 0;
+        *end++ = '\0';
+        *end++ = '\0';
+        if (inet_pton(af, pos, &tip.in6) != 1)
+            return 0;
+    }
 
     pos = end;
     if ((portn = string_to_number(pos, 0, 65535)) == -1)
@@ -1228,9 +1254,9 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 
     sockpair->af = af;
 	sockpair->proto = proto;
-    memcpy(&sockpair->sip, &sip, sizeof(sockpair->sip));
+    sockpair->sip = sip;
     sockpair->sport = ntohs(sport);
-    memcpy(&sockpair->tip, &tip, sizeof(sockpair->tip));
+    sockpair->tip = tip;
     sockpair->tport = ntohs(tport);
 
     return 1;
@@ -1525,16 +1551,16 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
 
 	snprintf(time_str, sizeof(time_str), "%ds", conn_entry->timeout);
 
-	if (!(cname = addrport_to_anyname(conn_entry->af, &conn_entry->caddr,
+	if (!(cname = addrport_to_anyname(conn_entry->in_af, &conn_entry->caddr,
                     ntohs(conn_entry->cport), conn_entry->proto, format)))
 		goto exit;
-	if (!(vname = addrport_to_anyname(conn_entry->af, &conn_entry->vaddr,
+	if (!(vname = addrport_to_anyname(conn_entry->in_af, &conn_entry->vaddr,
                     ntohs(conn_entry->vport), conn_entry->proto, format)))
 		goto exit;
-	if (!(lname = addrport_to_anyname(conn_entry->af, &conn_entry->laddr,
+	if (!(lname = addrport_to_anyname(conn_entry->out_af, &conn_entry->laddr,
                     ntohs(conn_entry->lport), conn_entry->proto, format)))
 		goto exit;
-	if (!(dname = addrport_to_anyname(conn_entry->af, &conn_entry->daddr,
+	if (!(dname = addrport_to_anyname(conn_entry->out_af, &conn_entry->daddr,
                     ntohs(conn_entry->dport), conn_entry->proto, format)))
 		goto exit;
 
@@ -1667,7 +1693,7 @@ static void print_largenum(unsigned long long i, unsigned int format)
 		printf("%*llu", len <= 8 ? 9 : len + 1, i);
 		return;
 	}
-	
+
 	if (i < 100000000)			/* less than 100 million */
 		printf("%9llu", i);
 	else if (i < 1000000000)		/* less than 1 billion */
@@ -1754,7 +1780,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 				proto = "UDP";
 			else if (se->protocol == IPPROTO_ICMP)
 				proto = "ICMP";
-			else 
+			else
 				proto = "ICMPv6";
 
 			sprintf(svc_name, "%s  %s", proto, vname);
@@ -1773,7 +1799,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 			proto = "icmp";
 		else
 			proto = "icmpv6";
-			
+
 		if (format & FMT_RULE) {
 			snprintf(svc_name, sizeof(svc_name),
 			"-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
@@ -1785,7 +1811,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
 				"MATCH %s", proto);
-            
+
 			if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
                             strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
 				left -= snprintf(svc_name + strlen(svc_name), left,
@@ -1883,7 +1909,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		char *dname;
 		ipvs_dest_entry_t *e = &d->entrytable[i];
 
-		if (!(dname = addrport_to_anyname(se->af, &(e->addr), ntohs(e->port),
+		if (!(dname = addrport_to_anyname(e->af, &(e->addr), ntohs(e->port),
 						  se->protocol, format))) {
 			fprintf(stderr, "addrport_to_anyname fails\n");
 			exit(1);
@@ -1929,7 +1955,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 
 static void list_laddrs_print_title(void)
 {
-	printf("%-20s %-8s %-20s %-10s %-10s\n" , 
+	printf("%-20s %-8s %-20s %-10s %-10s\n" ,
 		"VIP:VPORT" ,
 		"TOTAL" ,
 		"SNAT_IP",
@@ -1943,7 +1969,7 @@ static void list_laddrs_print_service(struct ip_vs_get_laddrs *d)
 
 	if (!(vname = addrport_to_anyname(d->af, &d->addr, ntohs(d->port),
 		d->protocol, FMT_NUMERIC)))
-		fail(2, "addrport_to_anyname: %s", strerror(errno));	
+		fail(2, "addrport_to_anyname: %s", strerror(errno));
 
 	printf("%-20s %-8u \n" , vname , d->num_laddrs);
 	free(vname);
@@ -1957,10 +1983,10 @@ static void list_laddrs_print_service(struct ip_vs_get_laddrs *d)
 
 static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 {
-	char	pbuf[40];
+	char	pbuf[INET6_ADDRSTRLEN];
 
 	inet_ntop(entry->af, (char *)&entry->addr, pbuf, sizeof(pbuf));
-	
+
 	printf("%-20s %-8s %-20s %-10lu %-10u\n",
 		"",
 		"",
@@ -1972,13 +1998,13 @@ static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 static void print_service_and_laddrs(struct ip_vs_get_laddrs* d, int with_title)
 {
 	int i = 0;
-	
+
 	if(with_title)
 		list_laddrs_print_title();
 
 	list_laddrs_print_service(d);
 	for(i = 0 ; i < d->num_laddrs ; i ++){
-		list_laddrs_print_laddr(d->entrytable + i); 
+		list_laddrs_print_laddr(d->entrytable + i);
 	}
 
 	return;
@@ -1999,7 +2025,7 @@ static int list_laddrs(ipvs_service_t *svc , int with_title)
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		free(entry);
 		return -1;
-	}	
+	}
 
 	print_service_and_laddrs(d, with_title);
 
@@ -2028,14 +2054,14 @@ static int list_all_laddrs(void)
 			fprintf(stderr, "%s\n", ipvs_strerror(errno));
 			return -1;
 		}
-		
+
 		if(i != 0)
 			title_enable = 0;
 		print_service_and_laddrs(d, title_enable);
 
 		free(d);
 	}
-	
+
 	free(get);
 	return 0;
 
@@ -2075,8 +2101,8 @@ static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol)
 	}
 
 	for (i = 0; i < get->naddr; i++) {
-		if ( addr_v4== get->blklsts[i].vaddr.in.s_addr && 
-		     port == get->blklsts[i].vport&& 
+		if ( addr_v4== get->blklsts[i].vaddr.in.s_addr &&
+		     port == get->blklsts[i].vport&&
 		     protocol == get->blklsts[i].proto) {
 			print_service_and_blklsts(&get->blklsts[i]);
 		}
@@ -2097,9 +2123,9 @@ static int list_all_blklsts(void)
 
 	list_blklsts_print_title();
 	for (i = 0; i < get->num_services; i++)
-		list_blklst(get->entrytable[i].__addr_v4, get->entrytable[i].port, 
+		list_blklst(get->entrytable[i].__addr_v4, get->entrytable[i].port,
 				get->entrytable[i].protocol);
-	
+
 	free(get);
 	return 0;
 }
@@ -2273,7 +2299,7 @@ static char *
 addrport_to_anyname(int af, const void *addr, unsigned short port,
 		    unsigned short proto, unsigned int format)
 {
-  char *buf, pbuf[INET6_ADDRSTRLEN];
+ 	char *buf, pbuf[INET6_ADDRSTRLEN];
 
 	if (!(buf=malloc(60)))
 		return NULL;

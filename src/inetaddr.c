@@ -70,7 +70,7 @@ static uint32_t inline in_addr_hash(struct in_addr *in)
     return hash % INET_ADDR_HSIZE;
 }
 
-static inline bool ifa_prefix_check(int af, const union inet_addr *addr, 
+static inline bool ifa_prefix_check(int af, const union inet_addr *addr,
                                     uint8_t plen)
 {
     if ((af != AF_INET && af != AF_INET6)
@@ -83,7 +83,7 @@ static inline bool ifa_prefix_check(int af, const union inet_addr *addr,
 }
 
 /* zero for infinity lifetime */
-static void ifa_set_lifetime(struct inet_ifaddr *ifa, 
+static void ifa_set_lifetime(struct inet_ifaddr *ifa,
                              uint32_t valid_lft, uint32_t prefered_lft)
 {
     /* XXX: do not support prefered_lft */
@@ -99,8 +99,8 @@ static void ifa_set_lifetime(struct inet_ifaddr *ifa,
     return;
 }
 
-static struct inet_ifaddr *__ifa_lookup(struct inet_device *idev, 
-                                        const union inet_addr *addr, 
+static struct inet_ifaddr *__ifa_lookup(struct inet_device *idev,
+                                        const union inet_addr *addr,
                                         uint8_t plen, int af)
 {
     struct inet_ifaddr *ifa;
@@ -139,7 +139,7 @@ static inline void ___ifa_remove(struct inet_ifaddr *ifa)
 }
 
 /* make lookup and remove atmomic, also cancel the timer */
-static int __ifa_remove(struct inet_device *idev, const union inet_addr *addr, 
+static int __ifa_remove(struct inet_device *idev, const union inet_addr *addr,
                         uint8_t plen, struct inet_ifaddr **ifa, int af)
 {
     struct inet_ifaddr *ent;
@@ -162,7 +162,7 @@ static int __ifa_add_route4(struct inet_ifaddr *ifa)
     int err;
     union inet_addr net;
 
-    err = route_add(&ifa->addr.in, 32, RTF_LOCALIN, 
+    err = route_add(&ifa->addr.in, 32, RTF_LOCALIN,
                     NULL, ifa->idev->dev, NULL, 0, 0);
     /* may already added by same IP with diff plen */
     if (err != EDPVS_OK && err != EDPVS_EXIST)
@@ -175,7 +175,7 @@ static int __ifa_add_route4(struct inet_ifaddr *ifa)
     if (err != EDPVS_OK)
         goto errout;
 
-    err = route_add(&net.in, ifa->plen, RTF_FORWARD, 
+    err = route_add(&net.in, ifa->plen, RTF_FORWARD,
                     NULL, ifa->idev->dev, &ifa->addr.in, 0, 0);
     /* may already added by another IP */
     if (err != EDPVS_OK && err != EDPVS_EXIST)
@@ -184,7 +184,7 @@ static int __ifa_add_route4(struct inet_ifaddr *ifa)
     return EDPVS_OK;
 
 errout:
-    route_del(&ifa->addr.in, ifa->plen, RTF_LOCALIN, 
+    route_del(&ifa->addr.in, ifa->plen, RTF_LOCALIN,
               NULL, ifa->idev->dev, NULL, 0, 0);
     return err;
 }
@@ -195,7 +195,7 @@ static int __ifa_add_route6(struct inet_ifaddr *ifa)
     struct in6_addr net;
 
     err = route6_add(&ifa->addr.in6, 128, RTF_LOCALIN,
-                     &in6addr_any, ifa->idev->dev, 
+                     &in6addr_any, ifa->idev->dev,
                      &in6addr_any, ifa->idev->dev->mtu);
 
     if (err != EDPVS_OK && err != EDPVS_EXIST)
@@ -237,7 +237,7 @@ static int __ifa_del_route4(struct inet_ifaddr *ifa)
     int err;
     union inet_addr net;
 
-    err = route_del(&ifa->addr.in, 32, RTF_LOCALIN, 
+    err = route_del(&ifa->addr.in, 32, RTF_LOCALIN,
                     NULL, ifa->idev->dev, NULL, 0, 0);
     if (err != EDPVS_OK && err != EDPVS_NOTEXIST)
         RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
@@ -249,7 +249,7 @@ static int __ifa_del_route4(struct inet_ifaddr *ifa)
     if (err != EDPVS_OK)
         RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
 
-    err = route_del(&net.in, ifa->plen, RTF_FORWARD, 
+    err = route_del(&net.in, ifa->plen, RTF_FORWARD,
                     NULL, ifa->idev->dev, &ifa->addr.in, 0, 0);
     if (err != EDPVS_OK && err != EDPVS_NOTEXIST)
         RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
@@ -263,7 +263,7 @@ static int __ifa_del_route6(struct inet_ifaddr *ifa)
     struct in6_addr net;
 
     err = route6_del(&ifa->addr.in6, 128, RTF_LOCALIN,
-                     &in6addr_any, ifa->idev->dev, 
+                     &in6addr_any, ifa->idev->dev,
                      &in6addr_any, ifa->idev->dev->mtu);
     if (err != EDPVS_OK && err != EDPVS_NOTEXIST)
         RTE_LOG(WARNING, IFA, "%s: fail to delete route", __func__);
@@ -292,7 +292,7 @@ static int ifa_del_route(struct inet_ifaddr *ifa)
         return EDPVS_NOTSUPP;
 }
 
-static struct inet_ifmcaddr *__imc_lookup( int af, const struct inet_device *idev, 
+static struct inet_ifmcaddr *__imc_lookup( int af, const struct inet_device *idev,
                                            const union inet_addr *maddr)
 {
     struct inet_ifmcaddr *imc;
@@ -306,7 +306,7 @@ static struct inet_ifmcaddr *__imc_lookup( int af, const struct inet_device *ide
     return NULL;
 }
 
-static int idev_mc_add(int af, struct inet_device *idev, 
+static int idev_mc_add(int af, struct inet_device *idev,
                        const union inet_addr *maddr)
 {
     struct inet_ifmcaddr  *imc;
@@ -330,7 +330,7 @@ static int idev_mc_add(int af, struct inet_device *idev,
     return EDPVS_OK;
 }
 
-static int idev_mc_del(int af, struct inet_device *idev, 
+static int idev_mc_del(int af, struct inet_device *idev,
                       const union inet_addr *maddr)
 {
     struct inet_ifmcaddr *imc;
@@ -403,7 +403,7 @@ static int inet_ifaddr_dad_completed(void *arg)
 }
 
 /* change timer callback, refer to 'addrconf_mod_timer' */
-static void inet_ifaddr_mod_timer(struct inet_ifaddr *ifa, 
+static void inet_ifaddr_mod_timer(struct inet_ifaddr *ifa,
                                   enum ifaddr_timer_t what,
                                   struct timeval *when)
 {
@@ -411,13 +411,13 @@ static void inet_ifaddr_mod_timer(struct inet_ifaddr *ifa,
 
     switch (what) {
     case INET_DAD:
-        dpvs_timer_sched(&ifa->timer, when, inet_ifaddr_dad_completed, 
+        dpvs_timer_sched(&ifa->timer, when, inet_ifaddr_dad_completed,
                                                            ifa, true);
         break;
     /* TODO: other timer support */
     default:
         break;
-    }   
+    }
 }
 
 static void inet_ifaddr_dad_stop(struct inet_ifaddr *ifa, int dad_failed)
@@ -463,8 +463,8 @@ static void inet_ifaddr_dad_start(struct inet_ifaddr *ifa)
     ndisc_send_dad(ifa->idev->dev, &ifa->addr.in6);
 }
 
-/* 
- * no need to rollback, dpvs can not start successfully; 
+/*
+ * no need to rollback, dpvs can not start successfully;
  * should not be init in 'inetaddr_init';
  * because multicast address should be added after port_start
  */
@@ -555,9 +555,9 @@ static int ifa_expire(void *arg)
     return DTIMER_STOP;
 }
 
-static int ifa_add_set(int af, const struct netif_port *dev, 
+static int ifa_add_set(int af, const struct netif_port *dev,
                        const union inet_addr *addr, uint8_t plen,
-                       const union inet_addr *bcast, 
+                       const union inet_addr *bcast,
                        uint32_t valid_lft, uint32_t prefered_lft,
                        uint8_t scope, uint32_t flags, bool create)
 {
@@ -565,6 +565,7 @@ static int ifa_add_set(int af, const struct netif_port *dev,
     struct inet_ifaddr *ifa = NULL;
     struct timeval timeo = {0};
     int err;
+    char addr_str[64];
 
     if (!dev || !ifa_prefix_check(af, addr, plen))
         return EDPVS_INVAL;
@@ -572,6 +573,9 @@ static int ifa_add_set(int af, const struct netif_port *dev,
     idev = dev_get_idev(dev);
     if (!idev)
         return EDPVS_RESOURCE;
+
+    inet_ntop(af, &addr->in.s_addr, addr_str, sizeof(addr_str));
+    RTE_LOG(INFO, IFA, "try to add %s in %s \n", addr_str, __func__);
 
     rte_rwlock_write_lock(&in_addr_lock);
 
@@ -583,7 +587,7 @@ static int ifa_add_set(int af, const struct netif_port *dev,
         err = EDPVS_NOTEXIST;
         goto errout;
     }
-    
+
     if (!ifa) {
         ifa = rte_calloc(NULL, 1, sizeof(*ifa), RTE_CACHE_LINE_SIZE);
         if (!ifa) {
@@ -610,7 +614,7 @@ static int ifa_add_set(int af, const struct netif_port *dev,
 
         /* set routes for local and network */
         err = ifa_add_route(ifa);
-        if (err != EDPVS_OK)
+        if (err != EDPVS_OK && err != EDPVS_EXIST)
             goto del_mc;
 
         err = __ifa_insert(idev, ifa);
@@ -678,26 +682,27 @@ free_ifa:
 errout:
     rte_rwlock_write_unlock(&in_addr_lock);
     idev_put(idev);
+    RTE_LOG(WARNING, IFA, "add %s in %s failed\n", addr_str, __func__);
     return err;
 }
 
-int inet_addr_add(int af, const struct netif_port *dev, 
+int inet_addr_add(int af, const struct netif_port *dev,
                   const union inet_addr *addr, uint8_t plen,
-                  const union inet_addr *bcast, 
+                  const union inet_addr *bcast,
                   uint32_t valid_lft, uint32_t prefered_lft,
                   uint8_t scope, uint32_t flags)
 {
-    return ifa_add_set(af, dev, addr, plen, bcast, valid_lft, prefered_lft, 
+    return ifa_add_set(af, dev, addr, plen, bcast, valid_lft, prefered_lft,
                        scope, flags, true);
 }
 
-int inet_addr_mod(int af, const struct netif_port *dev, 
+int inet_addr_mod(int af, const struct netif_port *dev,
                   const union inet_addr *addr, uint8_t plen,
-                  const union inet_addr *bcast, 
+                  const union inet_addr *bcast,
                   uint32_t valid_lft, uint32_t prefered_lft,
                   uint8_t scope)
 {
-    return ifa_add_set(af, dev, addr, plen, bcast, valid_lft, prefered_lft, 
+    return ifa_add_set(af, dev, addr, plen, bcast, valid_lft, prefered_lft,
                        scope, 0, false);
 }
 
@@ -707,6 +712,7 @@ int inet_addr_del(int af, struct netif_port *dev,
     struct inet_ifaddr *ifa;
     struct inet_device *idev;
     int err;
+    char addr_str[64];
 
     if (!dev || !ifa_prefix_check(af, addr, plen))
         return EDPVS_INVAL;
@@ -729,6 +735,9 @@ int inet_addr_del(int af, struct netif_port *dev,
         rte_atomic32_dec(&in_addr_cnt);
     }
     rte_rwlock_write_unlock(&in_addr_lock);
+
+    inet_ntop(af, &addr->in.s_addr, addr_str, sizeof(addr_str));
+    RTE_LOG(INFO, IFA, "del %s in %s \n", addr_str, __func__);
 
     idev_put(idev);
     return err;
@@ -756,8 +765,8 @@ int inet_addr_flush(int af, struct netif_port *dev)
         INIT_LIST_HEAD(&ifa->h_list);
 
         if (rte_atomic32_read(&ifa->refcnt) > 2) {
-            RTE_LOG(ERR, IFA, "%s: address %s/%d is in use\n", __func__, 
-                    inet_ntop(af, &ifa->addr, buf, sizeof(buf)) ? buf : "::", 
+            RTE_LOG(ERR, IFA, "%s: address %s/%d is in use\n", __func__,
+                    inet_ntop(af, &ifa->addr, buf, sizeof(buf)) ? buf : "::",
                     ifa->plen);
             continue;
         }
@@ -810,8 +819,8 @@ struct netif_port *inet_addr_get_iface(int af, union inet_addr *addr)
     return dev;
 }
 
-void inet_addr_select(int af, const struct netif_port *dev, 
-                      const union inet_addr *dst, int scope, 
+void inet_addr_select(int af, const struct netif_port *dev,
+                      const union inet_addr *dst, int scope,
                       union inet_addr *addr)
 {
     struct inet_device *idev = dev_get_idev(dev);
@@ -833,7 +842,7 @@ void inet_addr_select(int af, const struct netif_port *dev,
     /* for each primary address */
     if (af == AF_INET) {
         list_for_each_entry(ifa, &idev->ifa_list, d_list) {
-            if ((ifa->flags & IFA_F_SECONDARY) || 
+            if ((ifa->flags & IFA_F_SECONDARY) ||
                 (ifa->flags & IFA_F_TENTATIVE))
                 continue;
             if (ifa->scope > scope)
@@ -901,7 +910,7 @@ bool inet_chk_mcast_addr(int af, struct netif_port *dev,
 
     if (af != AF_INET6)
         return true;
-    
+
     idev = dev_get_idev(dev);
 
     if (idev) {
@@ -916,7 +925,7 @@ bool inet_chk_mcast_addr(int af, struct netif_port *dev,
                 ret = true;
             }
         }
-        
+
         rte_rwlock_read_unlock(&in_addr_lock);
         idev_put(idev);
     }
@@ -942,23 +951,23 @@ static int ifa_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     dev = netif_port_get_by_name(param->ifname);
     if (!dev) {
-        RTE_LOG(WARNING, IFA, "%s: no such device: %s\n", 
+        RTE_LOG(WARNING, IFA, "%s: no such device: %s\n",
                 __func__, param->ifname);
         return EDPVS_NOTEXIST;
     }
 
     switch (opt) {
     case SOCKOPT_SET_IFADDR_ADD:
-        return inet_addr_add(param->af, dev, &param->addr, param->plen, 
-                             &param->bcast, param->valid_lft, 
+        return inet_addr_add(param->af, dev, &param->addr, param->plen,
+                             &param->bcast, param->valid_lft,
                              param->prefered_lft, param->scope, param->flags);
 
     case SOCKOPT_SET_IFADDR_DEL:
         return inet_addr_del(param->af, dev, &param->addr, param->plen);
 
     case SOCKOPT_SET_IFADDR_SET:
-        return inet_addr_mod(param->af, dev, &param->addr, param->plen, 
-                             &param->bcast, param->valid_lft, 
+        return inet_addr_mod(param->af, dev, &param->addr, param->plen,
+                             &param->bcast, param->valid_lft,
                              param->prefered_lft, param->scope);
 
     case SOCKOPT_SET_IFADDR_FLUSH:
@@ -1001,7 +1010,7 @@ static void ifa_fill_param(int af, struct inet_addr_param *param,
     }
 }
 
-static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size, 
+static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                            void **out, size_t *outsize)
 {
     const struct inet_addr_param *param = conf;
@@ -1017,7 +1026,7 @@ static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     if (opt != SOCKOPT_GET_IFADDR_SHOW)
         return EDPVS_NOTSUPP;
 
-    if (param->af != AF_INET && 
+    if (param->af != AF_INET &&
         param->af != AF_UNSPEC &&
         param->af != AF_INET6)
         return EDPVS_NOTSUPP;
@@ -1025,7 +1034,7 @@ static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     if (strlen(param->ifname)) {
         dev = netif_port_get_by_name(param->ifname);
         if (!dev) {
-            RTE_LOG(WARNING, IFA, "%s: no such device: %s\n", 
+            RTE_LOG(WARNING, IFA, "%s: no such device: %s\n",
                     __func__, param->ifname);
             return EDPVS_NOTEXIST;
         }

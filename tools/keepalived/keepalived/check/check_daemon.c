@@ -97,7 +97,6 @@ start_check(void)
 	init_checkers_queue();
 #ifdef _WITH_VRRP_
 	init_interface_queue();
-	kernel_netlink_init();
 #endif
 #ifdef _WITH_SNMP_
 	if (!reload && snmp)

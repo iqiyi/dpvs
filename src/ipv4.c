@@ -532,7 +532,8 @@ int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
 
     /* output route decision: out-dev, source address, ... */
     rt = route4_output(fl4);
-    if (!rt) {
+    /* not support loopback */
+    if (!rt || !(rt->flag & RTF_FORWARD)) {
         rte_pktmbuf_free(mbuf);
         IP4_INC_STATS(outnoroutes);
         return EDPVS_NOROUTE;

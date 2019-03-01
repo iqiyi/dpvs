@@ -182,7 +182,7 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
     struct timeval delay;
     assert(timer && timer->handler);
 
-    /* remove from hash table first, since timer may 
+    /* remove from hash table first, since timer may
      * set by handler, could not remove it after it. */
     handler = timer->handler;
     priv    = timer->priv;
@@ -216,16 +216,16 @@ static inline void deviation_measure(void)
         timersub(&tv_now, &tv_prev[rte_lcore_id()], &tv_elapse);
         tv_prev[rte_lcore_id()] = tv_now;
 
-        printf("[%d] %s: round %u elapse %6lu.%06lu\n", 
+        printf("[%d] %s: round %u elapse %6lu.%06lu\n",
                 rte_lcore_id(), __func__, count[rte_lcore_id()] - 1,
                 tv_elapse.tv_sec, tv_elapse.tv_usec);
     }
 }
 #endif
 
-/* 
+/*
  * it takes exactly one tick between invokations,
- * except system (including time handles) takes more then 
+ * except system (including time handles) takes more then
  * one tick to get rte_timer_manage() called.
  * we needn't calculate ticks elapsed by ourself.
  */
@@ -379,7 +379,7 @@ int dpvs_timer_init(void)
     RTE_LCORE_FOREACH_SLAVE(cid) {
         err = rte_eal_wait_lcore(cid);
         if (err < 0) {
-            RTE_LOG(ERR, DTIMER, "%s: lcore %d: %s.\n", 
+            RTE_LOG(ERR, DTIMER, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));
             return err;
         }
@@ -399,7 +399,7 @@ int dpvs_timer_term(void)
     RTE_LCORE_FOREACH_SLAVE(cid) {
         err = rte_eal_wait_lcore(cid);
         if (err < 0) {
-            RTE_LOG(WARNING, DTIMER, "%s: lcore %d: %s.\n", 
+            RTE_LOG(WARNING, DTIMER, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));
         }
     }
@@ -419,13 +419,13 @@ static inline struct timer_scheduler *this_lcore_sched(bool global)
     return global ? &g_timer_sched : &RTE_PER_LCORE(timer_sched);
 }
 
-int dpvs_timer_sched(struct dpvs_timer *timer, struct timeval *delay, 
+int dpvs_timer_sched(struct dpvs_timer *timer, struct timeval *delay,
                      dpvs_timer_cb_t handler, void *arg, bool global)
 {
     struct timer_scheduler *sched = this_lcore_sched(global);
     int err;
 
-    if (!sched || !timer || !delay || !handler 
+    if (!sched || !timer || !delay || !handler
             || delay->tv_sec >= TIMER_MAX_SECS)
         return EDPVS_INVAL;
 
@@ -436,7 +436,7 @@ int dpvs_timer_sched(struct dpvs_timer *timer, struct timeval *delay,
     return err;
 }
 
-int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire, 
+int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
                          dpvs_timer_cb_t handler, void *arg, bool global)
 {
     struct timer_scheduler *sched = this_lcore_sched(global);
@@ -450,7 +450,7 @@ int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
     __time_now(sched, &now);
     if (!timercmp(expire, &now, >)) {
         /* consider the diff between user call dpvs_time_now() and NOW,
-         * it's possible timer already expired although rarely. 
+         * it's possible timer already expired although rarely.
          * to schedule an 1-tick timer ? no, let's trigger it now.
          * note we cannot call timer_expire() direcly. */
         handler(arg);
@@ -470,7 +470,7 @@ int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
     return err;
 }
 
-int dpvs_timer_sched_period(struct dpvs_timer *timer, struct timeval *intv, 
+int dpvs_timer_sched_period(struct dpvs_timer *timer, struct timeval *intv,
                             dpvs_timer_cb_t handler, void *arg, bool global)
 {
     struct timer_scheduler *sched = this_lcore_sched(global);
@@ -530,7 +530,7 @@ int dpvs_timer_update(struct dpvs_timer *timer, struct timeval *delay, bool glob
     rte_spinlock_lock(&sched->lock);
     if (timer_pending(timer))
         list_del(&timer->list);
-    err = __dpvs_timer_sched(sched, timer, delay, 
+    err = __dpvs_timer_sched(sched, timer, delay,
             timer->handler, timer->priv, timer->is_period);
     rte_spinlock_unlock(&sched->lock);
     return err;

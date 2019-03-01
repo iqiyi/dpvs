@@ -16,20 +16,35 @@
  *
  */
 
+#include <assert.h>
 #include <netinet/ip6.h>
 #include "ipv4.h"
 #include "ipv6.h"
 #include "libconhash/conhash.h"
 #include "ipvs/conhash.h"
 
+struct conhash_node {
+    struct list_head    list;
+    uint16_t            weight;
+    int                 af;         /* address family */
+    union inet_addr     addr;       /* IP address of the server */
+    uint16_t            port;       /* port number of the server */
+    struct node_s       node;       /* node in libconhash */
+};
+
+struct conhash_sched_data {
+    struct list_head    nodes;      /* node list */
+    struct conhash_s   *conhash;    /* consistent hash meta data */
+};
+
 #define REPLICA 160
 #define QUIC_PACKET_8BYTE_CONNECTION_ID  (1 << 3)
 
-/* 
+/*
  * QUIC CID hash target for quic*
  * QUIC CID(qid) should be configured in UDP service
  */
-static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf, 
+static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
                                 uint64_t *quic_cid)
 {
     uint8_t pub_flags;
@@ -44,14 +59,14 @@ static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
     }
     else
         udphoff = ip4_hdrlen(mbuf);
-    
+
     quic_len = udphoff + sizeof(struct udp_hdr) +
                sizeof(pub_flags) + sizeof(*quic_cid);
 
     if (mbuf_may_pull((struct rte_mbuf *)mbuf, quic_len) != 0)
         return EDPVS_NOTEXIST;
 
-    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *, 
+    quic_data = rte_pktmbuf_mtod_offset(mbuf, char *,
                                         udphoff + sizeof(struct udp_hdr));
     pub_flags = *((uint8_t *)quic_data);
 
@@ -67,7 +82,7 @@ static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
 }
 
 /*source ip hash target*/
-static int get_sip_hash_target(int af, const struct rte_mbuf *mbuf, 
+static int get_sip_hash_target(int af, const struct rte_mbuf *mbuf,
                                uint32_t *addr_fold)
 {
     if (af == AF_INET) {
@@ -122,41 +137,10 @@ dp_vs_conhash_get(struct dp_vs_service *svc, struct conhash_s *conhash,
     return node == NULL? NULL: node->data;
 }
 
-/*
- *      Assign dest to connhash.
- */
-static int
-dp_vs_conhash_assign(struct dp_vs_service *svc)
-{
-    struct dp_vs_dest *dest;
-    struct node_s *p_node;
-    uint32_t addr_fold;
-    int weight = 0;
-    char str[40];
-
-    list_for_each_entry(dest, &svc->dests, n_list) {
-       weight = rte_atomic16_read(&dest->weight);
-       if (weight > 0) {
-           p_node = rte_zmalloc("p_node", sizeof(struct node_s), RTE_CACHE_LINE_SIZE);
-           if (p_node == NULL) {
-                return EDPVS_NOMEM;
-            }
-
-           rte_atomic32_inc(&dest->refcnt);
-           p_node->data = dest;
-
-           addr_fold = inet_addr_fold(dest->af, &dest->addr);
-           snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
-
-           conhash_set_node(p_node, str, weight*REPLICA);
-           conhash_add_node(svc->sched_data, p_node);
-        }
-    }
-    return EDPVS_OK;
-}
-
 static void node_fini(struct node_s *node)
 {
+    struct conhash_node *p_conhash_node = NULL;
+
     if (!node)
         return;
 
@@ -164,45 +148,240 @@ static void node_fini(struct node_s *node)
         rte_atomic32_dec(&(((struct dp_vs_dest *)(node->data))->refcnt));
         node->data = NULL;
     }
-    
-    rte_free(node);
+
+    p_conhash_node = container_of(node, struct conhash_node, node);
+    list_del(&(p_conhash_node->list));
+    rte_free(p_conhash_node);
+}
+
+static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
+        struct dp_vs_dest *dest)
+{
+    int ret;
+    char str[40];
+    uint32_t addr_fold;
+    int16_t weight = 0;
+    struct node_s *p_node;
+    struct conhash_node *p_conhash_node;
+    struct conhash_sched_data *p_sched_data;
+
+    p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
+
+    weight = rte_atomic16_read(&dest->weight);
+    if (weight < 0) {
+        RTE_LOG(ERR, SERVICE, "%s: add dest with weight(%d) less than 0\n",
+                __func__, weight);
+        return EDPVS_INVAL;
+    }
+
+    p_conhash_node = rte_zmalloc(NULL, sizeof(struct conhash_node),
+            RTE_CACHE_LINE_SIZE);
+    if (!p_conhash_node) {
+        RTE_LOG(ERR, SERVICE, "%s: alloc conhash node failed\n", __func__);
+        return EDPVS_NOMEM;
+    }
+
+    INIT_LIST_HEAD(&(p_conhash_node->list));
+    p_conhash_node->af = dest->af;
+    p_conhash_node->addr = dest->addr;
+    p_conhash_node->port = dest->port;
+    p_conhash_node->weight = weight;
+
+    // add node to conhash
+    p_node = &(p_conhash_node->node);
+    addr_fold = inet_addr_fold(dest->af, &dest->addr);
+    snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
+
+    conhash_set_node(p_node, str, weight * REPLICA);
+    ret = conhash_add_node(p_sched_data->conhash, p_node);
+    if (ret < 0) {
+        RTE_LOG(ERR, SERVICE, "%s: conhash_add_node failed\n", __func__);
+        rte_free(p_conhash_node);
+        return EDPVS_INVAL;
+    }
+
+    // set node data
+    rte_atomic32_inc(&dest->refcnt);
+    p_node->data = dest;
+
+    // add conhash node to list
+    list_add(&(p_conhash_node->list), &(p_sched_data->nodes));
+
+    return EDPVS_OK;
+}
+
+static int dp_vs_conhash_del_dest(struct dp_vs_service *svc,
+        struct dp_vs_dest *dest)
+{
+    int ret;
+    struct node_s *p_node;
+    struct conhash_node *p_conhash_node;
+    struct conhash_sched_data *p_sched_data;
+
+    p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
+
+    list_for_each_entry(p_conhash_node, &(p_sched_data->nodes), list) {
+        if (p_conhash_node->af == dest->af &&
+                inet_addr_equal(dest->af, &p_conhash_node->addr, &dest->addr) &&
+                p_conhash_node->port == dest->port) {
+            p_node = &(p_conhash_node->node);
+            ret = conhash_del_node(p_sched_data->conhash, p_node);
+            if (ret < 0) {
+                RTE_LOG(ERR, SERVICE, "%s: conhash_del_node failed\n", __func__);
+                return EDPVS_INVAL;
+            }
+            node_fini(p_node);
+            return EDPVS_OK;
+        }
+    }
+
+    return EDPVS_NOTEXIST;
+}
+
+static int dp_vs_conhash_edit_dest(struct dp_vs_service *svc,
+        struct dp_vs_dest *dest)
+{
+    int ret;
+    char str[40];
+    uint32_t addr_fold;
+    int16_t weight;
+    struct node_s *p_node;
+    struct conhash_node *p_conhash_node;
+    struct conhash_sched_data *p_sched_data;
+
+    weight = rte_atomic16_read(&dest->weight);
+    p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
+
+    // find node by addr and port
+    list_for_each_entry(p_conhash_node, &(p_sched_data->nodes), list) {
+        if (p_conhash_node->af == dest->af &&
+                inet_addr_equal(dest->af, &p_conhash_node->addr, &dest->addr) &&
+                p_conhash_node->port == dest->port) {
+            if (p_conhash_node->weight == weight)
+                return EDPVS_OK;
+
+            // del from conhash
+            p_node = &(p_conhash_node->node);
+            ret = conhash_del_node(p_sched_data->conhash, p_node);
+            if (ret < 0) {
+                RTE_LOG(ERR, SERVICE, "%s: conhash_del_node failed\n", __func__);
+                return EDPVS_INVAL;
+            }
+
+            // adjust weight
+            p_conhash_node->weight = weight;
+            addr_fold = inet_addr_fold(dest->af, &dest->addr);
+            snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
+            conhash_set_node(p_node, str, weight * REPLICA);
+
+            // add to conhash again
+            ret = conhash_add_node(p_sched_data->conhash, p_node);
+            if (ret < 0) {
+                RTE_LOG(ERR, SERVICE, "%s: conhash_set_node failed\n", __func__);
+                return EDPVS_INVAL;
+            }
+
+            return EDPVS_OK;
+        }
+    }
+
+    return EDPVS_NOTEXIST;
+}
+
+/*
+ *      Assign dest to connhash.
+ */
+static int
+dp_vs_conhash_assign(struct dp_vs_service *svc)
+{
+    int err;
+    struct dp_vs_dest *dest;
+
+    list_for_each_entry(dest, &svc->dests, n_list) {
+        err = dp_vs_conhash_add_dest(svc, dest);
+        if (err != EDPVS_OK) {
+            RTE_LOG(ERR, SERVICE, "%s: add dest to conhash failed\n", __func__);
+            return err;
+        }
+    }
+
+    return EDPVS_OK;
 }
 
 static int dp_vs_conhash_init_svc(struct dp_vs_service *svc)
 {
-    svc->sched_data = conhash_init(NULL);
+    struct conhash_sched_data *sched_data = NULL;
 
-    if (!svc->sched_data) {
-        RTE_LOG(ERR, SERVICE, "%s: conhash init faild!\n", __func__);
+    svc->sched_data = NULL;
+
+    // alloc schedule data
+    sched_data = rte_zmalloc(NULL, sizeof(struct conhash_sched_data),
+            RTE_CACHE_LINE_SIZE);
+    if (!sched_data) {
+        RTE_LOG(ERR, SERVICE, "%s: alloc schedule data faild\n", __func__);
         return EDPVS_NOMEM;
     }
 
-    dp_vs_conhash_assign(svc);
+    // init conhash
+    sched_data->conhash = conhash_init(NULL);
+    if (!sched_data->conhash) {
+        RTE_LOG(ERR, SERVICE, "%s: conhash init faild!\n", __func__);
+        rte_free(sched_data);
+        return EDPVS_NOMEM;
+    }
 
-    return EDPVS_OK;
+    // init node list
+    INIT_LIST_HEAD(&(sched_data->nodes));
+
+    // assign node
+    svc->sched_data = sched_data;
+    return dp_vs_conhash_assign(svc);
 }
 
 static int dp_vs_conhash_done_svc(struct dp_vs_service *svc)
 {
-    conhash_fini(svc->sched_data, node_fini);
+    struct conhash_sched_data *sched_data =
+        (struct conhash_sched_data *)(svc->sched_data);
+    struct conhash_node *p_conhash_node, *p_conhash_node_next;
+
+    conhash_fini(sched_data->conhash, node_fini);
+
+    // del nodes left in list when rs weight is 0
+    list_for_each_entry_safe(p_conhash_node, p_conhash_node_next,
+                             &(sched_data->nodes), list) {
+       node_fini(&(p_conhash_node->node));
+    }
+
+    rte_free(svc->sched_data);
+    svc->sched_data = NULL;
 
     return EDPVS_OK;
 }
 
-static int dp_vs_conhash_update_svc(struct dp_vs_service *svc)
+static int dp_vs_conhash_update_svc(struct dp_vs_service *svc,
+        struct dp_vs_dest *dest, sockoptid_t opt)
 {
-    conhash_fini(svc->sched_data, node_fini);
+    int ret;
 
-    svc->sched_data = conhash_init(NULL);
+    switch (opt) {
+        case DPVS_SO_SET_ADDDEST:
+            ret = dp_vs_conhash_add_dest(svc, dest);
+            break;
+        case DPVS_SO_SET_DELDEST:
+            ret = dp_vs_conhash_del_dest(svc, dest);
+            break;
+        case DPVS_SO_SET_EDITDEST:
+            ret = dp_vs_conhash_edit_dest(svc, dest);
+            break;
+        default:
+            ret = EDPVS_INVAL;
+            break;
+    }
 
-    dp_vs_conhash_assign(svc);
+    if (ret != EDPVS_OK)
+        RTE_LOG(ERR, SERVICE, "%s: update service faild!\n", __func__);
 
-    return 0;
-}
-
-static inline int is_overloaded(struct dp_vs_dest *dest)
-{
-    return dest->flags & DPVS_DEST_F_OVERLOAD;
+    return ret;
 }
 
 /*
@@ -212,18 +391,12 @@ static struct dp_vs_dest *
 dp_vs_conhash_schedule(struct dp_vs_service *svc, const struct rte_mbuf *mbuf)
 {
     struct dp_vs_dest *dest;
+    struct conhash_sched_data *sched_data =
+        (struct conhash_sched_data *)(svc->sched_data);
 
-    dest = dp_vs_conhash_get(svc, (struct conhash_s *)svc->sched_data, mbuf);
+    dest = dp_vs_conhash_get(svc, sched_data->conhash, mbuf);
 
-    if (!dest
-        || !(dest->flags & DPVS_DEST_F_AVAILABLE)
-        || rte_atomic16_read(&dest->weight) <= 0
-        || is_overloaded(dest)) {
-
-        return NULL;
-    }
-    else
-        return dest;
+    return dp_vs_dest_is_valid(dest) ? dest : NULL;
 }
 
 /*

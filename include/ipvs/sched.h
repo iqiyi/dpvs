@@ -20,6 +20,7 @@
 #include "list.h"
 #include "dpdk.h"
 #include "common.h"
+#include "ctrl.h"
 #include "ipvs/service.h"
 
 
@@ -29,12 +30,13 @@ struct dp_vs_scheduler {
 //    rte_atomic32_t      refcnt;
 
     struct dp_vs_dest *
-        (*schedule)(struct dp_vs_service *svc, 
+        (*schedule)(struct dp_vs_service *svc,
                     const struct rte_mbuf *mbuf);
 
     int (*init_service)(struct dp_vs_service *svc);
     int (*exit_service)(struct dp_vs_service *svc);
-    int (*update_service)(struct dp_vs_service *svc);
+    int (*update_service)(struct dp_vs_service *svc, struct dp_vs_dest *dest,
+            sockoptid_t opt);
 } __rte_cache_aligned;
 
 int dp_vs_sched_init(void);

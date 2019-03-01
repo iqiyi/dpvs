@@ -36,6 +36,7 @@
 #include "ipvs/blklst.h"
 #include "ipvs/proto_udp.h"
 #include "route6.h"
+#include "ipvs/redirect.h"
 
 static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
                                    struct dp_vs_iphdr *iph)
@@ -96,7 +97,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
         return NULL;
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-    RTE_LOG(DEBUG, IPVS, "%s: persist-schedule: src %s:%u dest %s:%u snet %s\n",
+    RTE_LOG(DEBUG, IPVS, "%s: persist-schedule: src %s/%u dest %s/%u snet %s\n",
             __func__,
             inet_ntop(svc->af, &iph->saddr, sbuf, sizeof(sbuf)),
             ntohs(ports[0]),
@@ -269,7 +270,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
 }
 
 /* select an RS by service's scheduler and create a connection */
-struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc, 
+struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                                   const struct dp_vs_iphdr *iph,
                                   struct rte_mbuf *mbuf,
                                   bool is_synproxy_on)
@@ -284,7 +285,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     ports = mbuf_header_pointer(mbuf, iph->len, sizeof(_ports), _ports);
     if (!ports)
         return NULL;
-        
+
     /* persistent service */
     if (svc->flags & DP_VS_SVC_F_PERSISTENT)
         return dp_vs_sched_persist(svc, iph,  mbuf, is_synproxy_on);
@@ -297,7 +298,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
 #endif
         return NULL;
     }
-        
+
     if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
         return dp_vs_snat_schedule(dest, iph, ports, mbuf);
 
@@ -344,8 +345,8 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
 }
 
 /* return verdict INET_XXX */
-static int xmit_outbound(struct rte_mbuf *mbuf, 
-                         struct dp_vs_proto *prot, 
+static int xmit_outbound(struct rte_mbuf *mbuf,
+                         struct dp_vs_proto *prot,
                          struct dp_vs_conn *conn)
 {
     int err;
@@ -383,7 +384,7 @@ static int xmit_inbound(struct rte_mbuf *mbuf,
         dp_vs_conn_put(conn);
         return INET_DROP;
     }
-      
+
     /* is dest avaible to forward the packet ? */
     if (!conn->dest) {
         /* silently drop packet without reset connection timer.
@@ -418,7 +419,7 @@ static int __xmit_outbound_icmp4(struct rte_mbuf *mbuf,
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
 
     /* no translation needed for DR/TUN. */
-    if (conn->dest->fwdmode != DPVS_FWD_MODE_FNAT && 
+    if (conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
         conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
         conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
         if (!conn->packet_out_xmit) {
@@ -440,10 +441,10 @@ static int __xmit_outbound_icmp4(struct rte_mbuf *mbuf,
         return EDPVS_NOROUTE;
     }
 
-    if ((mbuf->pkt_len > rt->mtu) 
+    if ((mbuf->pkt_len > rt->mtu)
             && (ip4_hdr(mbuf)->fragment_offset & IPV4_HDR_DF_FLAG)) {
         route4_put(rt);
-        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, 
+        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG,
                   htonl(rt->mtu));
         rte_pktmbuf_free(mbuf);
         return EDPVS_FRAG;
@@ -531,9 +532,9 @@ static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
 
     /* no translation needed for DR/TUN. */
-    if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT  && 
-	conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
-	conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
+    if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
+    conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
+    conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
         if (!conn->packet_xmit) {
             RTE_LOG(WARNING, IPVS, "%s: missing packet_xmit\n", __func__);
             rte_pktmbuf_free(mbuf);
@@ -553,10 +554,10 @@ static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
         return EDPVS_NOROUTE;
     }
 
-    if ((mbuf->pkt_len > rt->mtu) 
+    if ((mbuf->pkt_len > rt->mtu)
             && (ip4_hdr(mbuf)->fragment_offset & IPV4_HDR_DF_FLAG)) {
         route4_put(rt);
-        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, 
+        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG,
                   htonl(rt->mtu));
         rte_pktmbuf_free(mbuf);
         return EDPVS_FRAG;
@@ -646,9 +647,11 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
     struct dp_vs_proto *prot;
     struct dp_vs_conn *conn;
     int off, dir, err;
+    lcoreid_t cid, peer_cid;
     bool drop = false;
 
     *related = 0; /* not related until found matching conn */
+    cid = peer_cid = rte_lcore_id();
 
     if (unlikely(ip4_is_frag(iph))) {
         if (ip4_defrag(mbuf, IP_DEFRAG_VS_FWD) != EDPVS_OK)
@@ -689,9 +692,9 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
     }
 
-    /* 
+    /*
      * lookup conn with inner IP pkt.
-     * it need to move mbuf.data_off to inner IP pkt, 
+     * it need to move mbuf.data_off to inner IP pkt,
      * and restore it later. although it looks strange.
      */
     rte_pktmbuf_adj(mbuf, off);
@@ -699,12 +702,24 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
     dp_vs_fill_iphdr(AF_INET, mbuf, &dciph);
 
-    conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true, &drop);
-    if (!conn)
-        return INET_ACCEPT;
+    conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true, &drop, &peer_cid);
+
+    /*
+     * The connection is not locally found, however the redirect is found so
+     * forward the packet to the remote redirect owner core.
+     */
+    if (cid != peer_cid) {
+        /* recover mbuf.data_off to outer Ether header */
+        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr) + off);
+
+        return dp_vs_redirect_pkt(mbuf, peer_cid);
+    }
 
     /* recover mbuf.data_off to outer IP header. */
     rte_pktmbuf_prepend(mbuf, off);
+
+    if (!conn)
+        return INET_ACCEPT;
 
     /* so the ICMP is related to existing conn */
     *related = 1;
@@ -728,7 +743,7 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
         dp_vs_conn_put(conn);
         return INET_DROP;
     }
-    /* note 
+    /* note
      * 1. the direction of inner IP pkt is reversed with ICMP pkt.
      * 2. but we use (@reverse == true) for prot->conn_lookup()
      * as a result, @dir is same with icmp packet. */
@@ -737,12 +752,25 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
     else
         err = xmit_outbound_icmp(mbuf, prot, conn);
     if (err != EDPVS_OK)
-        RTE_LOG(WARNING, IPVS, "%s: xmit icmp error: %s\n", 
+        RTE_LOG(WARNING, IPVS, "%s: xmit icmp error: %s\n",
                 __func__, dpvs_strerror(err));
 
     dp_vs_conn_put_no_reset(conn);
     return INET_STOLEN;
 }
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+static void __dp_vs_icmp6_show(struct ip6_hdr *ip6h, struct icmp6_hdr *ic6h)
+{
+    char src_addr_buff[64], dst_addr_buff[64];
+
+    inet_ntop(AF_INET6, &ip6h->ip6_src, src_addr_buff, sizeof(src_addr_buff));
+    inet_ntop(AF_INET6, &ip6h->ip6_dst, dst_addr_buff, sizeof(dst_addr_buff));
+
+    RTE_LOG(DEBUG, IPVS, "%s: ICMP6 (%d, %d) %s->%s\n",
+            __func__, ic6h->icmp6_type, ntohs(icmp6h_id(ic6h)), src_addr_buff, dst_addr_buff);
+}
+#endif
 
 /* return verdict INET_XXX */
 static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
@@ -754,13 +782,12 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
     struct dp_vs_proto *prot;
     struct dp_vs_conn *conn;
     int off, ic6h_off, dir, err;
+    lcoreid_t cid, peer_cid;
     bool drop = false;
     uint8_t nexthdr = ip6h->ip6_nxt;
-#ifdef CONFIG_DPVS_IPVS_DEBUG
-    char src_addr_buff[64], dst_addr_buff[64];
-#endif
 
     *related = 0; /* not related until found matching conn */
+    cid = peer_cid = rte_lcore_id();
 
     // don't suppurt frag now
     if (unlikely(ip6_is_frag(ip6h))) {
@@ -782,10 +809,7 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-    inet_ntop(AF_INET6, &ip6h->ip6_src, src_addr_buff, sizeof(src_addr_buff));
-    inet_ntop(AF_INET6, &ip6h->ip6_dst, dst_addr_buff, sizeof(dst_addr_buff));
-    RTE_LOG(DEBUG, IPVS, "ICMP6 (%d,%d) %s->%s\n",
-            ic6h->icmp6_type, ntohs(icmp6h_id(ic6h)), src_addr_buff, dst_addr_buff);
+    __dp_vs_icmp6_show(ip6h, ic6h);
 #endif
 
     /* support these related error types only,
@@ -821,12 +845,24 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
     if (!prot)
         return INET_ACCEPT;
 
-    conn = prot->conn_lookup(prot, &dcip6h, mbuf, &dir, true, &drop);
-    if (!conn)
-        return INET_ACCEPT;
+    conn = prot->conn_lookup(prot, &dcip6h, mbuf, &dir, true, &drop, &peer_cid);
+
+    /*
+     * The connection is not locally found, however the redirect is found so
+     * forward the packet to the remote redirect owner core.
+     */
+    if (cid != peer_cid) {
+        /* recover mbuf.data_off to outer Ether header */
+        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr) + off);
+
+        return dp_vs_redirect_pkt(mbuf, peer_cid);
+    }
 
     /* recover mbuf.data_off to outer IP header. */
     rte_pktmbuf_prepend(mbuf, off);
+
+    if (!conn)
+        return INET_ACCEPT;
 
     /* so the ICMP is related to existing conn */
     *related = 1;
@@ -862,7 +898,7 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
     else
         err = xmit_outbound_icmp(mbuf, prot, conn);
     if (err != EDPVS_OK)
-        RTE_LOG(WARNING, IPVS, "%s: xmit icmp error: %s\n", 
+        RTE_LOG(WARNING, IPVS, "%s: xmit icmp error: %s\n",
                 __func__, dpvs_strerror(err));
 
     dp_vs_conn_put_no_reset(conn);
@@ -893,8 +929,11 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
     struct dp_vs_conn *conn;
     int dir, verdict, err, related;
     bool drop = false;
+    lcoreid_t cid, peer_cid;
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
     assert(mbuf && state);
+
+    cid = peer_cid = rte_lcore_id();
 
     if (unlikely(etype != ETH_PKT_HOST))
         return INET_ACCEPT;
@@ -908,7 +947,7 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
         verdict = dp_vs_in_icmp(af, mbuf, &related);
         if (related || verdict != INET_ACCEPT)
             return verdict;
-        /* let unrelated and valid ICMP goes down, 
+        /* let unrelated and valid ICMP goes down,
          * may implement ICMP fwd in the futher. */
     }
 
@@ -934,11 +973,22 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
     }
 
     /* packet belongs to existing connection ? */
-    conn = prot->conn_lookup(prot, &iph, mbuf, &dir, false, &drop);
+    conn = prot->conn_lookup(prot, &iph, mbuf, &dir, false, &drop, &peer_cid);
 
     if (unlikely(drop)) {
         RTE_LOG(DEBUG, IPVS, "%s: deny ip try to visit.\n", __func__);
         return INET_DROP;
+    }
+
+    /*
+     * The connection is not locally found, however the redirect is found so
+     * forward the packet to the remote redirect owner core.
+     */
+    if (cid != peer_cid) {
+        /* recover mbuf.data_off to outer Ether header */
+        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr));
+
+        return dp_vs_redirect_pkt(mbuf, peer_cid);
     }
 
     if (unlikely(!conn)) {
@@ -1111,6 +1161,12 @@ int dp_vs_init(void)
         goto err_conn;
     }
 
+    err = dp_vs_redirects_init();
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPVS, "fail to init redirect: %s\n", dpvs_strerror(err));
+        goto err_redirect;
+    }
+
     err = dp_vs_synproxy_init();
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to init synproxy: %s\n", dpvs_strerror(err));
@@ -1128,16 +1184,19 @@ int dp_vs_init(void)
         RTE_LOG(ERR, IPVS, "fail to init serv: %s\n", dpvs_strerror(err));
         goto err_serv;
     }
+
     err = dp_vs_blklst_init();
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to init blklst: %s\n", dpvs_strerror(err));
         goto err_blklst;
     }
+
     err = dp_vs_stats_init();
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to init stats: %s\n", dpvs_strerror(err));
         goto err_stats;
     }
+
     err = inet_register_hooks(dp_vs_ops, NELEMS(dp_vs_ops));
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to register hooks: %s\n", dpvs_strerror(err));
@@ -1158,6 +1217,8 @@ err_serv:
 err_sched:
     dp_vs_synproxy_term();
 err_synproxy:
+    dp_vs_redirects_term();
+err_redirect:
     dp_vs_conn_term();
 err_conn:
     dp_vs_laddr_term();
@@ -1181,7 +1242,7 @@ int dp_vs_term(void)
 
     err = dp_vs_blklst_term();
     if (err != EDPVS_OK)
-        RTE_LOG(ERR, IPVS, "fail to terminate blklst: %s\n", dpvs_strerror(err)); 
+        RTE_LOG(ERR, IPVS, "fail to terminate blklst: %s\n", dpvs_strerror(err));
 
     err = dp_vs_service_term();
     if (err != EDPVS_OK)
@@ -1194,6 +1255,10 @@ int dp_vs_term(void)
     err = dp_vs_synproxy_term();
     if (err != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "fail to terminate synproxy: %s\n", dpvs_strerror(err));
+
+    err = dp_vs_redirects_term();
+    if (err != EDPVS_OK)
+        RTE_LOG(ERR, IPVS, "fail to terminate redirect: %s\n", dpvs_strerror(err));
 
     err = dp_vs_conn_term();
     if (err != EDPVS_OK)

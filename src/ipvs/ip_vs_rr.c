@@ -24,7 +24,8 @@ static int dp_vs_rr_init_svc(struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
-static int dp_vs_rr_update_svc(struct dp_vs_service *svc)
+static int dp_vs_rr_update_svc(struct dp_vs_service *svc,
+        struct dp_vs_dest *dest __rte_unused, sockoptid_t opt __rte_unused)
 {
     svc->sched_data = &svc->dests;
     return EDPVS_OK;
@@ -53,9 +54,7 @@ static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
         }
 
         dest = list_entry(q, struct dp_vs_dest, n_list);
-        if (!(dest->flags & DPVS_DEST_F_OVERLOAD) &&
-            (dest->flags & DPVS_DEST_F_AVAILABLE) &&
-            rte_atomic16_read(&dest->weight) > 0)
+        if (dp_vs_dest_is_valid(dest))
             /* HIT */
             goto out;
         q = q->next;

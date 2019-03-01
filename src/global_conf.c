@@ -78,7 +78,7 @@ static int set_log_file(const char *log_file)
                 __func__, log_file);
         return EDPVS_DPDKAPIFAIL;
     }
-    
+
     log_current_time();
     return EDPVS_OK;
 }

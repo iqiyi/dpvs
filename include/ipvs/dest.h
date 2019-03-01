@@ -78,7 +78,7 @@ struct dp_vs_dest {
     struct dp_vs_service *svc;      /* service it belongs to */
     union inet_addr     vaddr;      /* virtual IP address */
     unsigned            conn_timeout; /* conn timeout copied from svc*/
-    unsigned            limit_proportion; /* limit copied from svc*/ 
+    unsigned            limit_proportion; /* limit copied from svc*/
 } __rte_cache_aligned;
 #endif
 
@@ -149,15 +149,38 @@ struct dp_vs_dest_user{
 };
 
 #ifdef __DPVS__
+static inline bool
+dp_vs_dest_is_avail(struct dp_vs_dest *dest)
+{
+    return (dest->flags & DPVS_DEST_F_AVAILABLE) ? true : false;
+}
+
+static inline bool
+dp_vs_dest_is_overload(struct dp_vs_dest *dest)
+{
+    return (dest->flags & DPVS_DEST_F_OVERLOAD) ? true : false;
+}
+
+static inline int16_t
+dp_vs_dest_get_weight(struct dp_vs_dest *dest)
+{
+    return rte_atomic16_read(&dest->weight);
+}
+
+static inline bool
+dp_vs_dest_is_valid(struct dp_vs_dest *dest)
+{
+    return (dest
+            && dp_vs_dest_is_avail(dest)
+            && !dp_vs_dest_is_overload(dest)
+            && dp_vs_dest_get_weight(dest) > 0) ? true : false;
+}
+
 int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
                                               struct dp_vs_dest **dest_p);
 
-struct dp_vs_dest *dp_vs_lookup_dest(struct dp_vs_service *svc,
+struct dp_vs_dest *dp_vs_lookup_dest(int af, struct dp_vs_service *svc,
                                      const union inet_addr *daddr, uint16_t dport);
-
-struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
-                                   uint16_t dport, const union inet_addr *vaddr,
-                                   uint16_t vport, uint16_t protocol);
 
 struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
                                         const union inet_addr *daddr, uint16_t dport);

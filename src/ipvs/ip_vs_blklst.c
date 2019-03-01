@@ -88,7 +88,7 @@ static int dp_vs_blklst_add_lcore(uint8_t proto, const union inet_addr *vaddr,
     new = rte_zmalloc("new_blklst_entry", sizeof(struct blklst_entry), 0);
     if (new == NULL)
         return EDPVS_NOMEM;
-    
+
     memcpy(&new->vaddr, vaddr,sizeof(union inet_addr));
     new->vport   = vport;
     new->proto  = proto;
@@ -103,13 +103,13 @@ static int dp_vs_blklst_del_lcore(uint8_t proto, const union inet_addr *vaddr,
                                   uint16_t vport, const union inet_addr *blklst)
 {
     struct blklst_entry *blklst_node;
-   
+
     blklst_node = dp_vs_blklst_lookup(proto, vaddr, vport, blklst);
     if (blklst_node != NULL) {
         list_del(&blklst_node->list);
         rte_free(blklst_node);
         rte_atomic32_dec(&this_num_blklsts);
-        return EDPVS_OK; 
+        return EDPVS_OK;
     }
     return EDPVS_NOTEXIST;
 }
@@ -121,7 +121,7 @@ static int dp_vs_blklst_add(uint8_t proto, const union inet_addr *vaddr,
     int err;
     struct dpvs_msg *msg;
     struct dp_vs_blklst_conf cf;
-    
+
     if (cid != rte_get_master_lcore()) {
         RTE_LOG(INFO, SERVICE, "[%s] must set from master lcore\n", __func__);
         return EDPVS_NOTSUPP;
@@ -131,7 +131,7 @@ static int dp_vs_blklst_add(uint8_t proto, const union inet_addr *vaddr,
     memcpy(&(cf.vaddr), vaddr,sizeof(union inet_addr));
     memcpy(&(cf.blklst), blklst, sizeof(union inet_addr));
     cf.vport = vport;
-    cf.proto = proto; 
+    cf.proto = proto;
 
     /*set blklst ip on master lcore*/
     err = dp_vs_blklst_add_lcore(proto, vaddr, vport, blklst);
@@ -145,7 +145,7 @@ static int dp_vs_blklst_add(uint8_t proto, const union inet_addr *vaddr,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
     if (!msg)
         return EDPVS_NOMEM;
-    err = multicast_msg_send(msg, 0, NULL); 
+    err = multicast_msg_send(msg, 0, NULL);
     if (err != EDPVS_OK) {
         msg_destroy(&msg);
         RTE_LOG(INFO, SERVICE, "[%s] fail to send multicast message\n", __func__);
@@ -209,7 +209,7 @@ void  dp_vs_blklst_flush(struct dp_vs_service *svc)
                                  entry->vport, &entry->blklst);
         }
     }
-    return; 
+    return;
 }
 
 static void dp_vs_blklst_flush_all(void)
@@ -219,14 +219,14 @@ static void dp_vs_blklst_flush_all(void)
 
     for (hash = 0; hash < DPVS_BLKLST_TAB_SIZE; hash++) {
         list_for_each_entry_safe(entry, next, &this_blklst_tab[hash], list) {
-            dp_vs_blklst_del(entry->proto, &entry->vaddr, 
+            dp_vs_blklst_del(entry->proto, &entry->vaddr,
                              entry->vport, &entry->blklst);
         }
     }
     return;
 }
 
-/* 
+/*
  * for control plane
  */
 static int blklst_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
@@ -239,7 +239,7 @@ static int blklst_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     switch (opt) {
     case SOCKOPT_SET_BLKLST_ADD:
-        err = dp_vs_blklst_add(blklst_conf->proto, &blklst_conf->vaddr, 
+        err = dp_vs_blklst_add(blklst_conf->proto, &blklst_conf->vaddr,
                                blklst_conf->vport, &blklst_conf->blklst);
         break;
     case SOCKOPT_SET_BLKLST_DEL:
@@ -265,7 +265,7 @@ static void blklst_fill_conf(int af, struct dp_vs_blklst_conf *cf,
     cf->vport = entry->vport;
 }
 
-static int blklst_sockopt_get(sockoptid_t opt, const void *conf, size_t size, 
+static int blklst_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                              void **out, size_t *outsize)
 {
     struct dp_vs_blklst_conf_array *array;
@@ -274,7 +274,7 @@ static int blklst_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     int off = 0;
 
     naddr = rte_atomic32_read(&this_num_blklsts);
-    *outsize = sizeof(struct dp_vs_blklst_conf_array) + 
+    *outsize = sizeof(struct dp_vs_blklst_conf_array) +
                naddr * sizeof(struct dp_vs_blklst_conf);
     *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
     if (!(*out))
@@ -288,7 +288,7 @@ static int blklst_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                 break;
             blklst_fill_conf(AF_INET, &array->blklsts[off++], entry);
         }
-    } 
+    }
 
     return EDPVS_OK;
 }
@@ -299,7 +299,7 @@ static int blklst_msg_process(bool add, struct dpvs_msg *msg)
     struct dp_vs_blklst_conf *cf;
     int err;
     assert(msg);
-    
+
     if (msg->len != sizeof(struct dp_vs_blklst_conf)){
         RTE_LOG(ERR, SERVICE, "%s: bad message.\n", __func__);
         return EDPVS_INVAL;
@@ -341,7 +341,7 @@ static int blklst_lcore_init(void *args)
 {
     int i;
     if (!rte_lcore_is_enabled(rte_lcore_id()))
-	return EDPVS_DISABLED;
+    return EDPVS_DISABLED;
     this_blklst_tab = rte_malloc_socket(NULL,
                         sizeof(struct list_head) * DPVS_BLKLST_TAB_SIZE,
                         RTE_CACHE_LINE_SIZE, rte_socket_id());
@@ -349,7 +349,7 @@ static int blklst_lcore_init(void *args)
         return EDPVS_NOMEM;
 
     for (i = 0; i < DPVS_BLKLST_TAB_SIZE; i++)
-        INIT_LIST_HEAD(&this_blklst_tab[i]); 
+        INIT_LIST_HEAD(&this_blklst_tab[i]);
 
     return EDPVS_OK;
 }
@@ -361,7 +361,7 @@ static int blklst_lcore_term(void *args)
 
     dp_vs_blklst_flush_all();
 
-    if (this_blklst_tab) { 
+    if (this_blklst_tab) {
        rte_free(this_blklst_tab);
        this_blklst_tab = NULL;
     }
@@ -384,7 +384,7 @@ int dp_vs_blklst_init(void)
             return err;
         }
     }
-    
+
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_BLKLST_ADD;
     msg_type.mode   = DPVS_MSG_MULTICAST;
@@ -410,7 +410,7 @@ int dp_vs_blklst_init(void)
     if ((err = sockopt_register(&blklst_sockopts)) != EDPVS_OK)
         return err;
     dp_vs_blklst_rnd = (uint32_t)random();
-   
+
     return EDPVS_OK;
 }
 

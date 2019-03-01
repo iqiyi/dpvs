@@ -75,7 +75,7 @@ rte_atomic64_t sp_ack_refused;
 static struct dpvs_timer g_second_timer;
 #endif
 
-/* 
+/*
  * syncookies using digest function from openssl libray,
  * a little difference from kernel, which uses md5_transform
  * */
@@ -86,7 +86,7 @@ static rte_atomic32_t g_minute_count;
 static int minute_timer_expire( void *priv)
 {
     struct timeval tv;
-    
+
     rte_atomic32_inc(&g_minute_count);
 
     tv.tv_sec = 60; /* one minute timer */
@@ -362,7 +362,7 @@ syn_proxy_cookie_v4_init_sequence(struct rte_mbuf *mbuf,
     data |= opts->sack_ok << DP_VS_SYNPROXY_SACKOK_BIT;
     data |= opts->tstamp_ok << DP_VS_SYNPROXY_TSOK_BIT;
     data |= ((opts->snd_wscale & 0xf) << DP_VS_SYNPROXY_SND_WSCALE_BITS);
-    
+
     return secure_tcp_syn_cookie(iph->saddr, iph->daddr,
             th->source, th->dest, ntohl(th->seq),
             rte_atomic32_read(&g_minute_count), data);
@@ -472,7 +472,7 @@ syn_proxy_v6_cookie_check(struct rte_mbuf *mbuf, uint32_t cookie,
     return 0;
 }
 
-/*  
+/*
  *  Synproxy implementation
  */
 
@@ -559,7 +559,7 @@ static void syn_proxy_parse_set_opts(struct rte_mbuf *mbuf, struct tcphdr *th,
                         opt->sack_ok = 1;
                     } else {
                         memset(tmp_opcode, TCPOPT_NOP, TCPOLEN_SACK_PERMITTED);
-                    } 
+                    }
                 }
                 break;
             }
@@ -609,7 +609,8 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
     tmpport = th->dest;
     th->dest = th->source;
     th->source = tmpport;
-
+    /* set window size to zero */
+    th->window = 0;
     /* set seq(cookie) and ack_seq */
     th->ack_seq = htonl(ntohl(th->seq) + 1);
     th->seq = htonl(isn);
@@ -647,7 +648,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
             mbuf->l3_len = iphlen;
             mbuf->l4_len = ntohs(iph->tot_len) - iphlen;
-            th->check = rte_ipv4_phdr_cksum((struct ipv4_hdr*)iph, mbuf->ol_flags);
+            th->check = ip4_phdr_cksum((struct ipv4_hdr*)iph, mbuf->ol_flags);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return;
@@ -668,7 +669,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
  * 1) mbuf is a syn packet,
  * 2) and the service is synproxy-enable,
  * 3) and ip_vs_todrop return fasle (not supported now)
- * 
+ *
  * @return 0 means the caller should return at once and use
  * verdict as return value, return 1 for nothing.
  */
@@ -688,7 +689,7 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         goto syn_rcv_out;
 
     if (th->syn && !th->ack && !th->rst && !th->fin &&
-            (svc = dp_vs_service_lookup(af, iph->proto, 
+            (svc = dp_vs_service_lookup(af, iph->proto,
                                         &iph->daddr, th->dest, 0, NULL, NULL)) &&
             (svc->flags & DP_VS_SVC_F_SYNPROXY)) {
         /* if service's weight is zero (non-active realserver),
@@ -752,9 +753,9 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
     if (unlikely(EDPVS_OK != (ret = netif_xmit(mbuf, dev)))) {
         RTE_LOG(ERR, IPVS, "%s: netif_xmit failed -- %s\n",
                 __func__, dpvs_strerror(ret));
-	/* should not set verdict to INET_DROP since netif_xmit
-	 * always consume the mbuf while INET_DROP means mbuf'll
-	 * be free in INET_HOOK.*/
+    /* should not set verdict to INET_DROP since netif_xmit
+     * always consume the mbuf while INET_DROP means mbuf'll
+     * be free in INET_HOOK.*/
     }
 
     *verdict = INET_STOLEN;
@@ -820,7 +821,7 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
     int tcp_hdr_size;
     struct rte_mbuf *syn_mbuf, *syn_mbuf_cloned;
     struct rte_mempool *pool;
-    struct tcphdr *syn_th; 
+    struct tcphdr *syn_th;
 
     if (!cp->packet_xmit) {
         RTE_LOG(WARNING, IPVS, "%s: packet_xmit is null\n", __func__);
@@ -889,6 +890,8 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         syn_ip6h->ip6_plen = htons(tcp_hdr_size);
         syn_ip6h->ip6_nxt = NEXTHDR_TCP;
         syn_ip6h->ip6_hlim = IPV6_DEFAULT_HOPLIMIT;
+
+        syn_mbuf->l3_len = sizeof(*syn_ip6h);
     } else {
         struct iphdr *ack_iph;
         struct iphdr *syn_iph;
@@ -910,13 +913,15 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         syn_iph->saddr = ack_iph->saddr;
         syn_iph->daddr = ack_iph->daddr;
 
+        syn_mbuf->l3_len = sizeof(*syn_iph);
+
         /* checksum is done by fnat_in_handler */
         syn_iph->check = 0;
     }
 
     /* Save syn_mbuf if syn retransmission is on */
     if (dp_vs_synproxy_ctrl_syn_retry > 0) {
-        syn_mbuf_cloned = rte_pktmbuf_clone(syn_mbuf, pool);
+        syn_mbuf_cloned = mbuf_copy(syn_mbuf, pool);
         if (unlikely(!syn_mbuf_cloned)) {
             rte_pktmbuf_free(syn_mbuf);
             //RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOMEM));
@@ -999,7 +1004,7 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
             *verdict = INET_DROP;
             return 0;
         }
-        
+
         /* Release the service, we do not need it any more */
         dp_vs_service_put(svc);
 
@@ -1109,6 +1114,87 @@ void dp_vs_synproxy_dnat_handler(struct tcphdr *tcph, struct dp_vs_seq *sp_seq)
     }
 }
 
+static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp_vs_conn *conn,
+                                        struct dp_vs_proto *pp, struct tcphdr *th)
+{
+    struct rte_mbuf *ack_mbuf;
+    struct rte_mempool *pool;
+    struct tcphdr *ack_th;
+
+    if (!conn->packet_out_xmit) {
+        return EDPVS_INVAL;
+    }
+
+    pool = get_mbuf_pool(conn, DPVS_CONN_DIR_OUTBOUND);
+    if (unlikely(!pool)) {
+        RTE_LOG(WARNING, IPVS, "%s: %s\n", __func__, dpvs_strerror(EDPVS_NOROUTE));
+        return EDPVS_NOROUTE;
+    }
+
+    ack_mbuf = rte_pktmbuf_alloc(pool);
+    if (unlikely(!ack_mbuf)) {
+        RTE_LOG(WARNING, IPVS, "%s: %s\n", __func__, dpvs_strerror(EDPVS_NOMEM));
+        return EDPVS_NOMEM;
+    }
+
+    ack_th = (struct tcphdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct tcphdr));
+    if (!ack_th) {
+        rte_pktmbuf_free(ack_mbuf);
+        RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
+        return EDPVS_NOROOM;
+    }
+
+    /* Set up tcp header */
+    memcpy(ack_th, th, sizeof(struct tcphdr));
+    /* clear SYN flag */
+    ack_th->syn = 0;
+    /* add one to seq and seq will be adjust later */
+    ack_th->seq = htonl(ntohl(ack_th->seq)+1);
+    ack_th->doff = sizeof(struct tcphdr) >> 2;
+
+    if (AF_INET6 == af) {
+        struct ip6_hdr *ack_ip6h;
+        struct ip6_hdr *reuse_ip6h = (struct ip6_hdr *)ip6_hdr(mbuf);
+        /* Reserve space for ipv6 header */
+        ack_ip6h = (struct ip6_hdr *)rte_pktmbuf_prepend(ack_mbuf,
+                                         sizeof(struct ip6_hdr));
+        if (!ack_ip6h) {
+            rte_pktmbuf_free(ack_mbuf);
+            RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
+            return EDPVS_NOROOM;
+        }
+
+        memcpy(ack_ip6h, reuse_ip6h, sizeof(struct ip6_hdr));
+        ack_ip6h->ip6_vfc = 0x60;  /* IPv6 */
+        ack_ip6h->ip6_plen = htons(sizeof(struct tcphdr));
+        ack_ip6h->ip6_nxt = NEXTHDR_TCP;
+        ack_mbuf->l3_len = sizeof(*ack_ip6h);
+    } else {
+        struct ipv4_hdr *ack_iph;
+        struct ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
+        int pkt_ack_len = sizeof(struct tcphdr) + sizeof(struct iphdr);
+        /* Reserve space for ipv4 header */
+        ack_iph = (struct ipv4_hdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct ipv4_hdr));
+        if (!ack_iph) {
+            rte_pktmbuf_free(ack_mbuf);
+            RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
+            return EDPVS_NOROOM;
+        }
+
+        memcpy(ack_iph, reuse_iph, sizeof(struct ipv4_hdr));
+        /* version and ip header length */
+        ack_iph->version_ihl = 0x45;
+        ack_iph->type_of_service = 0;
+        ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+        ack_iph->total_length = htons(pkt_ack_len);
+        ack_mbuf->l3_len = sizeof(*ack_iph);
+    }
+
+    conn->packet_out_xmit(pp, conn, ack_mbuf);
+
+    return EDPVS_OK;
+}
+
 /* Syn-proxy step 3 logic: receive rs's Syn/Ack.
  * Update syn_proxy_seq.delta and send stored ack mbufs to rs. */
 int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
@@ -1186,6 +1272,15 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
             *verdict = INET_DROP;
             return 0;
         }
+
+        /* Window size has been set to zero in the syn-ack packet to Client.
+         * If get more than one ack packet here,
+         * it means client has sent a window probe after one RTO.
+         * The probe will be forward to RS and RS will respond a window update.
+         * So DPVS has no need to send a window update.
+         */
+        if (cp->ack_num == 1)
+            syn_proxy_send_window_update(tuplehash_out(cp).af, mbuf, cp, pp, th);
 
         list_for_each_entry_safe(tmbuf, tmbuf2, &cp->ack_mbuf, list) {
             list_del_init(&tmbuf->list);

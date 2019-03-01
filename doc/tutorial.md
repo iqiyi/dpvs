@@ -30,7 +30,7 @@ DPVS Tutorial
 
 About the concepts of *Full-NAT* (`FNAT`), `DR`, `Tunnel`, `toa`, `OSPF`/`ECMP` and `keepalived`, pls refer [LVS](www.linuxvirtualserver.org) and [Alibaba/LVS](https://github.com/alibaba/LVS/tree/master/docs).
 
-Note `DPVS` support `FNAT`, `DR`, `Tunnel`, `SNAT` forwarding modes, and each mode can be configured as `one-arm` or `two-arm` topology, with or without `OSFP/ECMP`/`keepalived`. There're too many combinations, I cannot list all the examples here. Let's just give some popular working models used in our daily work.
+Note `DPVS` supports `FNAT`, `DR`, `Tunnel`, `NAT`, `SNAT` forwarding modes, and each mode can be configured as `one-arm` or `two-arm` topology, with or without `OSFP/ECMP`/`keepalived`. There're too many combinations, I cannot list all the examples here. Let's just give some popular working models used in our daily work.
 
 <a id='one-two-arm'/>
 
@@ -177,13 +177,17 @@ You could refer to following links to get `TOA` source code and porting to your 
 * [Huawai TOA](https://github.com/Huawei/TCP_option_address)
 * [IPVS CA](https://github.com/yubo/ip_vs_ca)
 
+TOA source code is included into DPVS project(in directory `kmod/toa`) since v1.7 to support IPv6 and NAT64. It is derived from the Alibaba TOA. For IPv6 applications which need client's real IP address, we suggest to use this TOA version.
+
+Be aware that **application may need some changes** if you are using NAT64. An extra `getsockopt` should be called to obtain the client's real IPv6 address from the IPv4 socket on RS. As an example, we give a [NAT64 patch for nginx-1.14](../kmod/toa/example_nat64/nginx/nginx-1.14.0-nat64-toa.patch). By the way, if you do not need client's real IP address, application needs no changes.
+
 <a id='fnat-ospf'/>
 
 ## Full-NAT with OSPF/ECMP (two-arm)
 
-To work with *OSPF*, the patch in `patch/dpdk-stable-17.05.2/` must be applied to *dpdk-stable-17.05.2* and the correct `rte_kni.ko` should be installed.
+To work with *OSPF*, the patch in `patch/dpdk-xxx/` must be applied to the corresponding DPDK source codes and the correct `rte_kni.ko` should be installed.
 
-`DPVS` OSPF-cluster model looks like this, it leverage `OSPF/ECMP` for HA and high-scalability. This model is widely used in practice.
+`DPVS` OSPF-cluster model looks like this, it leverages `OSPF/ECMP` for HA and high-scalability. This model is widely used in practice.
 
 ![fnat-ospf-two-arm](pics/fnat-ospf-two-arm.png)
 
@@ -646,6 +650,7 @@ Hi, I am 10.140.18.33.
 client$ curl 192.168.0.89:80
 Hi, I am 10.140.18.34.
 ```
+> Since v1.7.2, a solution is made for multi-lcore NAT mode forwarding. The principle is to redirect the outbound packets to the correct lcore where its session entry reside through a global redirection table and some lockless rings. Of course, it harms performance to some degree. If you want to use it, turn on the config swtich "ipvs_defs/conn/redirect" in /etc/dpvs.conf.
 
 <a id='snat'/>
 
@@ -770,7 +775,7 @@ host$ curl www.iqiyi.com
 
 # IPv6 Support
 
-DPVS support IPv6 since 1.7-0. You can configure IPv6 fullnat just like IPv4:
+DPVS support IPv6-IPv6 since v1.7 which means VIP/client IP/local IP/rs IP can be IPv6. You can configure IPv6 fullnat just like IPv4:
 
 ```bash
 #!/bin/sh -
@@ -900,6 +905,61 @@ virtual_server group 2001-1-80 {
 }
 ```
 
+DPVS support IPv6-IPv4 for fullnat, which means VIP/client IP can be IPv6 and local IP/rs IP can be IPv4, you can configure it like this:
+
+```bash
+#!/bin/sh -
+# add VIP to WAN interface
+./dpip addr add 2001::1/128 dev dpdk1
+
+# route for WAN/LAN access
+# add routes for other network or default route if needed.
+./dpip route -6 add 2001::/64 dev dpdk1
+./dpip route add 10.0.0.0/8 dev dpdk0
+
+# add service <VIP:vport> to forwarding, scheduling mode is RR.
+# use ipvsadm --help for more info.
+./ipvsadm -A -t [2001::1]:80 -s rr
+
+# add two RS for service, forwarding mode is FNAT (-b)
+./ipvsadm -a -t [2001::1]:80 -r 10.0.0.1 -b
+./ipvsadm -a -t [2001::1]:80 -r 10.0.0.2 -b
+
+# add at least one Local-IP (LIP) for FNAT on LAN interface
+./ipvsadm --add-laddr -z 10.0.0.3 -t [2001::1]:80 -F dpdk0
+```
+OSPF can just be configured like IPv6-IPv6. If you prefer keepalived, you can configure it like IPv6-IPv6 except real_server/local_address_group.
+
+**IPv6 and Flow Director**
+
+We found there exists some NICs do not (fully) support Flow Director for IPv6.
+For example, 82599 10GE Controller do not support IPv6 *perfect mode*, and IPv4/IPv6 *signature mode* supports only one locall IP.
+
+If you would like to use Flow Director signature mode, add the following lines into the device configs of `dpvs.conf`:
+
+```
+fdir {
+    mode                signature
+    pballoc             64k
+    status              matched
+}
+```
+
+Another method to avoid Flow Director problem is to use the redirect forwarding, which forwards the recieved packets to the right lcore where the session resides by using lockless DPDK rings.
+If you want to try this method, turn on the `redirect` switch in the `dpvs.conf`.
+
+```
+ipvs_defs {
+    conn {
+        ......
+        redirect    on
+    }
+    ......
+}
+```
+It should note that the redirect forwarding may harm performance to a certain degree. Keep it in `off` state unless you have no other solutions.
+
+
 <a id='virt-dev'/>
 
 # Virtual Devices
@@ -991,7 +1051,7 @@ To achieve this,
 1. The kernel module `uoa.ko` is needed to be installed on `RS`, and
 2. the program on `RS` just need a `getsockopt(2)` call to get the real client IP/port.
 
-The example C code for RS to fetch Real Client IP can be found [here](../uoa/example/udp_serv.c).
+The example C code for RS to fetch Real Client IP can be found [here](../kmod/uoa/example/udp_serv.c).
 
 ```bash
 rs$ insmod `uoa`

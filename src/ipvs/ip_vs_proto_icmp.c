@@ -34,6 +34,7 @@
 #include "ipvs/proto_icmp.h"
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
+#include "ipvs/redirect.h"
 
 /*
  * o ICMP tuple
@@ -181,8 +182,9 @@ static bool is_icmp6_reply(uint8_t type) {
 
 static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
                                            const struct dp_vs_iphdr *iph,
-                                           struct rte_mbuf *mbuf, int *direct, 
-                                           bool reverse, bool *drop)
+                                           struct rte_mbuf *mbuf, int *direct,
+                                           bool reverse, bool *drop,
+                                           lcoreid_t *peer_cid)
 {
     void *ich = NULL;
     __be16 sport, dport; /* dummy ports */
@@ -191,6 +193,7 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
     /* true icmp type/code, used for v4/v6 */
     uint8_t icmp_type = 0;
     uint8_t icmp_code = 0;
+    struct dp_vs_conn *conn;
     assert(proto && iph && mbuf);
 
     if (AF_INET6 == af) {
@@ -217,6 +220,7 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
                                                   (void *)&_icmph);
         if (unlikely(!ich))
             return NULL;
+
         /* icmp v4 */
         icmp_type = ((struct icmphdr *)ich)->type;
         icmp_code = ((struct icmphdr *)ich)->code;
@@ -231,8 +235,22 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
         }
     }
 
-    return dp_vs_conn_get(iph->af, iph->proto, &iph->saddr, &iph->daddr,
+    conn = dp_vs_conn_get(iph->af, iph->proto, &iph->saddr, &iph->daddr,
                           sport, dport, direct, reverse);
+    if (conn) {
+        return conn;
+    } else {
+        struct dp_vs_redirect *r;
+
+        r = dp_vs_redirect_get(iph->af, iph->proto,
+                               &iph->saddr, &iph->daddr,
+                               sport, dport);
+        if (r) {
+            *peer_cid = r->cid;
+        }
+    }
+
+    return conn;
 }
 
 static int icmp6_csum_handler(struct dp_vs_proto *proto,

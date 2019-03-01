@@ -24,7 +24,7 @@ char* cycles_to_stime(uint64_t cycles)
 {
     time_t ts;
     static char time_str[SYS_TIME_STR_LEN];
- 
+
     memset(time_str, 0, SYS_TIME_STR_LEN);
     ts = (cycles - g_start_cycles) / rte_get_timer_hz();
     ts += g_dpvs_timer;

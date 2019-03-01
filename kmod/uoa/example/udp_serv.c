@@ -32,8 +32,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
-#include "common.h" /* for __u8, __be16, __be32, __u64 only,
-               just define them if not want common.h */
+/* for __u8, __be16, __be32, __u64 only */
+#include "common.h"
+
+/* for union inet_addr only */
+#include "uoa_extra.h"
 #include "uoa.h"
 
 #define MAX_SUPP_AF         2
@@ -50,6 +53,7 @@ void handle_reply(int efd, int fd)
     struct uoa_param_map map;
     socklen_t len, mlen;
     int n;
+    uint8_t af = AF_INET;
 
     len = sizeof(peer);
     n = recvfrom(fd, buff, sizeof(buff), 0, (SA *)&peer, &len);
@@ -58,8 +62,9 @@ void handle_reply(int efd, int fd)
         exit(1);
     }
     buff[n]='\0';
+    af = ((SA *)&peer)->sa_family;
 
-    if (((SA *)&peer)->sa_family == AF_INET) {
+    if (AF_INET == af) {
         sin = (struct sockaddr_in *)&peer;
         inet_ntop(AF_INET, &sin->sin_addr.s_addr, from, sizeof(from));
         printf("Receive %d bytes from %s:%d -- %s\n",
@@ -72,13 +77,13 @@ void handle_reply(int efd, int fd)
          * lookup for daddr (or local IP) is supported.
          * */
         memset(&map, 0, sizeof(map));
-        map.saddr = sin->sin_addr.s_addr;
+        map.af    = af;
         map.sport = sin->sin_port;
-        map.daddr = htonl(INADDR_ANY);
         map.dport = htons(SERV_PORT);
+        memmove(&map.saddr, &sin->sin_addr.s_addr, sizeof(struct in_addr));
         mlen = sizeof(map);
         if (getsockopt(fd, IPPROTO_IP, UOA_SO_GET_LOOKUP, &map, &mlen) == 0) {
-            inet_ntop(AF_INET, &map.real_saddr, from, sizeof(from));
+            inet_ntop(map.real_af, &map.real_saddr.in, from, sizeof(from));
             printf("  real client %s:%d\n", from, ntohs(map.real_sport));
         }
 
@@ -89,9 +94,20 @@ void handle_reply(int efd, int fd)
         inet_ntop(AF_INET6, &sin6->sin6_addr, from, sizeof(from));
         printf("Receive %d bytes from %s:%d -- %s\n",
                 n, from, ntohs(sin6->sin6_port), buff);
+        /* get real client address */
+        memset(&map, 0, sizeof(map));
+        map.af    = af;
+        map.sport = sin6->sin6_port;
+        map.dport = htons(SERV_PORT);
+        memmove(&map.saddr, &sin6->sin6_addr, sizeof(struct in6_addr));
+        mlen = sizeof(map);
 
-        /* Todo: IPv6 uoa support */
+        if (getsockopt(fd, IPPROTO_IP, UOA_SO_GET_LOOKUP, &map, &mlen) == 0) {
+            inet_ntop(map.real_af, &map.real_saddr.in6, from, sizeof(from));
+            printf("  real client %s:%d\n", from, ntohs(map.real_sport));
+        }
 
+        len = sizeof(peer);
         sendto(fd, buff, n, 0, (SA *)&peer, len);
     }
 }

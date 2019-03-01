@@ -227,7 +227,7 @@ neigh_defs {
 
 ! dpvs ipv4 config
 ipv4_defs {
-    forwarding off ! set this to on, dpvs will forward packets that NOT hit rules directly
+    forwarding                 off
     <init> default_ttl         64
     fragment {
         <init> bucket_number   4096
@@ -242,7 +242,7 @@ ipv6_defs {
     disable                     off
     forwarding                  off
     route6 {
-        method                  "hlist"
+        <init> method           "hlist"
         recycle_time            10
     }
 }
@@ -267,6 +267,7 @@ ipvs_defs {
         conn_init_timeout           3
         ! expire_quiescent_template
         ! fast_xmit_close
+        ! <init> redirect           off
     }
 
     udp {

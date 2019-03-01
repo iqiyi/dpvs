@@ -43,7 +43,6 @@ static void dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct 
         param->addr.in  = ipaddress->u.sin.sin_addr;
     else
         param->addr.in6 = ipaddress->u.sin6_addr;
-    strcpy(param->ifname, dpdk_port);
     param->plen = ipaddress->ifa.ifa_prefixlen;
     param->flags &= ~IFA_F_SAPOOL;
 }
@@ -51,13 +50,21 @@ static void dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct 
 static int
 netlink_ipaddress(ip_address_t *ipaddress, char *dpdk_port, int cmd)
 {
-    char *tmp_ip;
     struct inet_addr_param param;
-    tmp_ip = ipaddresstos(ipaddress);
+    int err;
     memset(&param, 0, sizeof(param));
     dpvs_fill_addrconf(ipaddress, dpdk_port, &param);
-    ipvs_set_ipaddr(&param, cmd);
-    FREE(tmp_ip);
+    err = ipvs_set_ipaddr(&param, cmd);
+
+    if (err) {
+        char addr_str[64];
+        void *addr = (IP_IS6(ipaddress)) ? (void *) &ipaddress->u.sin6_addr :
+              (void *) &ipaddress->u.sin.sin_addr;
+        inet_ntop(IP_FAMILY(ipaddress), addr, addr_str, 41);
+        log_message(LOG_INFO, "ip address %s cmd %s failed\n", addr_str, \
+                            cmd == IPADDRESS_DEL ? "del" : "add");
+        return -1;
+    }
     return 1;
 }
 

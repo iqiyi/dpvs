@@ -36,7 +36,7 @@ struct dp_vs_proto {
     int (*exit)(struct dp_vs_proto *proto);
 
     /* schedule RS and create new conn */
-    int (*conn_sched)(struct dp_vs_proto *proto, 
+    int (*conn_sched)(struct dp_vs_proto *proto,
                       const struct dp_vs_iphdr *iph,
                       struct rte_mbuf *mbuf,
                       struct dp_vs_conn **conn,
@@ -45,12 +45,12 @@ struct dp_vs_proto {
     /* lookup conn by <proto, saddr, sport, daddr, dport>
      * return conn and direction or NULL if miss */
     struct dp_vs_conn *
-        (*conn_lookup)(struct dp_vs_proto *proto, 
+        (*conn_lookup)(struct dp_vs_proto *proto,
                        const struct dp_vs_iphdr *iph,
-                       struct rte_mbuf *mbuf, int *direct, 
-                       bool reverse, bool *drop);
+                       struct rte_mbuf *mbuf, int *direct,
+                       bool reverse, bool *drop, lcoreid_t *peer_cid);
 
-    int (*conn_expire)(struct dp_vs_proto *proto, 
+    int (*conn_expire)(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn);
 
     /* for NAT mode */
@@ -87,13 +87,13 @@ struct dp_vs_proto {
     int (*csum_check)(struct dp_vs_proto *proto, int af,
                        struct rte_mbuf *mbuf);
     int (*dump_packet)(struct dp_vs_proto *proto, int af,
-                       struct rte_mbuf *mbuf, int off, 
+                       struct rte_mbuf *mbuf, int off,
                        const char *msg);
 
     /* try trans connn's states by packet and direction */
-    int (*state_trans)(struct dp_vs_proto *proto, 
-                       struct dp_vs_conn *conn, 
-                       struct rte_mbuf *mbuf, 
+    int (*state_trans)(struct dp_vs_proto *proto,
+                       struct dp_vs_conn *conn,
+                       struct rte_mbuf *mbuf,
                        int direct);
 
     const char *

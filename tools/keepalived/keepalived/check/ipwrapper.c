@@ -30,7 +30,6 @@
 #ifdef _WITH_SNMP_
   #include "check_snmp.h"
 #endif
-
 /* out-of-order functions declarations */
 static void update_quorum_state(virtual_server_t * vs);
 
@@ -197,16 +196,20 @@ init_service_vs(virtual_server_t * vs)
 			SET_ALIVE(vs);
 	}
 
-	/*Set local ip address in "FNAT" mode of IPVS */
-	if ((vs->loadbalancing_kind == IP_VS_CONN_F_FULLNAT) && vs->local_addr_gname) { 
+	/* Set local ip address in "FNAT" mode of IPVS */
+	if (vs->local_addr_gname &&
+        (vs->loadbalancing_kind == IP_VS_CONN_F_FULLNAT ||
+         vs->loadbalancing_kind == IP_VS_CONN_F_SNAT)) {
 		if (!ipvs_cmd(LVS_CMD_ADD_LADDR, check_data->vs_group, vs, NULL))
 			return 0; 
 	}
-        /*Set blacklist ip address */
-        if (vs->blklst_addr_gname) {
-                if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, check_data->vs_group, vs, NULL))
-                        return 0;
-        }
+    
+    /*Set blacklist ip address */
+    if (vs->blklst_addr_gname) {
+        if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, check_data->vs_group, vs, NULL))
+            return 0;
+    }
+        
 	/* Processing real server queue */
 	if (!LIST_ISEMPTY(vs->rs)) {
 		if (vs->alpha && ! vs->reloaded)
@@ -385,7 +388,7 @@ update_quorum_state(virtual_server_t * vs)
 }
 
 /* manipulate add/remove rs according to alive state */
-void
+bool
 perform_svr_state(int alive, virtual_server_t * vs, real_server_t * rs)
 {
 	/*
@@ -402,7 +405,10 @@ perform_svr_state(int alive, virtual_server_t * vs, real_server_t * rs)
 				    , FMT_VS(vs));
 		/* Add only if we have quorum or no sorry server */
 		if (vs->quorum_state == UP || !vs->s_svr || !ISALIVE(vs->s_svr)) {
-			ipvs_cmd(LVS_CMD_ADD_DEST, check_data->vs_group, vs, rs);
+			if (ipvs_cmd(LVS_CMD_ADD_DEST, check_data->vs_group, vs, rs) != IPVS_SUCCESS) {
+				log_message(LOG_INFO, "LVS cmd add dest fail!");
+				return false;
+			}
 		}
 		rs->alive = alive;
 		if (rs->notify_up) {
@@ -430,7 +436,10 @@ perform_svr_state(int alive, virtual_server_t * vs, real_server_t * rs)
 		 * Remove only if we have quorum or no sorry server
 		 */
 		if (vs->quorum_state == UP || !vs->s_svr || !ISALIVE(vs->s_svr)) {
-			ipvs_cmd(LVS_CMD_DEL_DEST, check_data->vs_group, vs, rs);
+			if (ipvs_cmd(LVS_CMD_DEL_DEST, check_data->vs_group, vs, rs) != IPVS_SUCCESS) {
+				log_message(LOG_INFO, "LVS cmd del dest fail!");
+				return false;
+			}
 		}
 		rs->alive = alive;
 		if (rs->notify_down) {
@@ -447,6 +456,7 @@ perform_svr_state(int alive, virtual_server_t * vs, real_server_t * rs)
 		/* We may have lost quorum */
 		update_quorum_state(vs);
 	}
+	return true;
 }
 
 /* Store new weight in real_server struct and then update kernel. */
@@ -496,40 +506,62 @@ svr_checker_up(checker_id_t cid, real_server_t *rs)
 	return 1;
 }
 
-/* Update checker's state */
-void
-update_svr_checker_state(int alive, checker_id_t cid, virtual_server_t *vs, real_server_t *rs)
+static int
+remove_failed_checker_list(checker_id_t cid, real_server_t *rs)
 {
 	element e;
 	list l = rs->failed_checkers;
 	checker_id_t *id;
 
+	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+		id = ELEMENT_DATA(e);
+		if (*id == cid) {
+			free_list_element(l, e);
+			/* If we don't break, the next iteration will trigger
+			 * a SIGSEGV.
+			 */
+			break;
+		}
+	}
+	return 0;
+}
+
+static int
+add_failed_checker_list(checker_id_t cid, real_server_t *rs)
+{
+	list l = rs->failed_checkers;
+	checker_id_t *id;
+
+	id = (checker_id_t *) MALLOC(sizeof(checker_id_t));
+	*id = cid;
+	list_add(l, id);
+
+	return 0;
+}
+
+/* Update checker's state */
+void
+update_svr_checker_state(int alive, checker_id_t cid, virtual_server_t *vs, real_server_t *rs)
+{
 	/* Handle alive state. Depopulate failed_checkers and call
 	 * perform_svr_state() independently, letting the latter sort
 	 * things out itself.
 	 */
 	if (alive) {
 		/* Remove the succeeded check from failed_checkers list. */
-		for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-			id = ELEMENT_DATA(e);
-			if (*id == cid) {
-				free_list_element(l, e);
-				/* If we don't break, the next iteration will trigger
-				 * a SIGSEGV.
-				 */
-				break;
-			}
+		remove_failed_checker_list(cid, rs);
+		if (LIST_SIZE(rs->failed_checkers) == 0) {
+			if (!perform_svr_state(alive, vs, rs))
+				add_failed_checker_list(cid, rs);
 		}
-		if (LIST_SIZE(l) == 0)
-			perform_svr_state(alive, vs, rs);
 	}
 	/* Handle not alive state */
 	else {
-		id = (checker_id_t *) MALLOC(sizeof(checker_id_t));
-		*id = cid;
-		list_add(l, id);
-		if (LIST_SIZE(l) == 1)
-			perform_svr_state(alive, vs, rs);
+		add_failed_checker_list(cid, rs);
+		if (LIST_SIZE(rs->failed_checkers) == 1) {
+			if (!perform_svr_state(alive, vs, rs))
+				remove_failed_checker_list(cid, rs);
+		}
 	}
 }
 
@@ -718,6 +750,7 @@ clear_diff_rs(list old_vs_group, virtual_server_t * old_vs)
 			log_message(LOG_INFO, "service %s no longer exist"
 					    , FMT_RS(rs));
 			rs->inhibit = 0;
+			SET_ALIVE(rs);
 			list_add (rs_to_remove, rs);
 		}
 	}

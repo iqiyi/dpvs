@@ -36,72 +36,74 @@
 #define IPOLEN_UOA_IPV4  (sizeof(struct ipopt_uoa) + 4)
 #define IPOLEN_UOA_IPV6  (sizeof(struct ipopt_uoa) + 16)
 
-/* 
+/*
  * UOA IP option
  * @op_code: operation code
- * @op_len:  length of struct ipopt_uoa + real op_addr (v4/v6) length
+ * @op_len:  length of (struct ipopt_uoa) + real op_addr (v4/v6) length
  *           i.e. IPOLEN_UOA_IPV4 or IPOLEN_UOA_IPV6
  * @op_port: port number
  * @op_addr: real ipv4 or ipv6 address following it
  */
 struct ipopt_uoa {
-	__u8	op_code;
-	__u8	op_len;
-	__be16  op_port;
-	__u8    op_addr[0];
+    __u8    op_code;
+    __u8    op_len;
+    __be16  op_port;
+    __u8    op_addr[0];
 } __attribute__((__packed__));
 
 /* per-cpu statistics */
 struct uoa_cpu_stats {
-	__u64   uoa_got;	/* UDP packet got UOA. */
-	__u64   uoa_none;	/* UDP packet has no UOA. */
-	__u64   uoa_saved;	/* UOA saved to mapping table */
-	__u64   uoa_ack_fail;	/* Fail to send UOA ACK. */
-	__u64   uoa_miss;	/* Fail to get UOA info from pkt. */
+    __u64   uoa_got;    /* UDP packet got UOA. */
+    __u64   uoa_none;    /* UDP packet has no UOA. */
+    __u64   uoa_saved;    /* UOA saved to mapping table */
+    __u64   uoa_ack_fail;    /* Fail to send UOA ACK. */
+    __u64   uoa_miss;    /* Fail to get UOA info from pkt. */
 
-	__u64   success;	/* uoa address returned. */
-	__u64   miss;		/* no such uoa info . */
-	__u64   invalid;	/* bad uoa info found. */
+    __u64   success;    /* uoa address returned. */
+    __u64   miss;        /* no such uoa info . */
+    __u64   invalid;    /* bad uoa info found. */
 
 #ifdef __KERNEL__
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
-	struct u64_stats_sync syncp;
+    struct u64_stats_sync syncp;
 #endif
 #endif
 } __attribute__((__packed__));
 
 /* normal kernel statistics (global) */
 struct uoa_kstats {
-	__u64   uoa_got;	/* UDP packet got UOA. */
-	__u64   uoa_none;	/* UDP packet has no UOA. */
-	__u64   uoa_saved;	/* UOA saved to mapping table */
-	__u64   uoa_ack_fail;	/* Fail to shand UOA ACK. */
-	__u64   uoa_miss;	/* Fail to get UOA info from pkt. */
+    __u64   uoa_got;    /* UDP packet got UOA. */
+    __u64   uoa_none;    /* UDP packet has no UOA. */
+    __u64   uoa_saved;    /* UOA saved to mapping table */
+    __u64   uoa_ack_fail;    /* Fail to shand UOA ACK. */
+    __u64   uoa_miss;    /* Fail to get UOA info from pkt. */
 
-	__u64   success;	/* uoa address returned. */
-	__u64   miss;		/* no such uoa info . */
-	__u64   invalid;	/* bad uoa info found. */
+    __u64   success;    /* uoa address returned. */
+    __u64   miss;        /* no such uoa info . */
+    __u64   invalid;    /* bad uoa info found. */
 } __attribute__((__packed__));
 
 /* uoa socket options */
 enum {
-	UOA_BASE_CTL		= 2048,
-	/* set */
-	UOA_SO_SET_MAX		= UOA_BASE_CTL,
-	/* get */
-	UOA_SO_GET_LOOKUP	= UOA_BASE_CTL,
-	UOA_SO_GET_MAX		= UOA_SO_GET_LOOKUP,
+    UOA_BASE_CTL        = 2048,
+    /* set */
+    UOA_SO_SET_MAX        = UOA_BASE_CTL,
+    /* get */
+    UOA_SO_GET_LOOKUP    = UOA_BASE_CTL,
+    UOA_SO_GET_MAX        = UOA_SO_GET_LOOKUP,
 };
 
 struct uoa_param_map {
-	/* input */
-	__be32	saddr;
-	__be32	daddr;
-	__be16	sport;
-	__be16	dport;
-	/* output */
-	__be32	real_saddr;
-	__be16	real_sport;
+    /* input */
+    __be16           af;
+    union inet_addr  saddr;
+    union inet_addr  daddr;
+    __be16           sport;
+    __be16           dport;
+    /* output */
+    __be16           real_af;
+    union inet_addr  real_saddr;
+    __be16           real_sport;
 } __attribute__((__packed__));
 
 /**
@@ -136,11 +138,11 @@ struct uoa_param_map {
  *                       0x2 (2) for ipv6 address family, OPPHDR_IPV6
  *  Rsvd.   Reserved bits, must be zero.
  *  Protocol    Next level protocol, e.g., IPPROTO_UDP.
- *  Length	Length of fixed header and options, not include payloads.
- *  Options	Compatible with IPv4 options, including IPOPT_UOA.
+ *  Length    Length of fixed header and options, not include payloads.
+ *  Options    Compatible with IPv4 options, including IPOPT_UOA.
  */
 
-#define IPPROTO_OPT	0xf8 /* 248 */
+#define IPPROTO_OPT    0xf8 /* 248 */
 
 #define OPPHDR_IPV6 0x02
 #define OPPHDR_IPV4 0x01
@@ -148,21 +150,21 @@ struct uoa_param_map {
 /* OPtion Protocol header */
 struct opphdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD) || (__BYTE_ORDER == __LITTLE_ENDIAN)
-	unsigned int rsvd0:4;
-	unsigned int version:4;
+    unsigned int rsvd0:4;
+    unsigned int version:4;
 #elif defined (__BIG_ENDIAN_BITFIELD) || (__BYTE_ORDER == __BIG_ENDIAN)
-	unsigned int version:4;
-	unsigned int rsvd0:4;
+    unsigned int version:4;
+    unsigned int rsvd0:4;
 #else
 #ifndef __KERNEL__
-# error	"Please fix <bits/endian.h>"
+# error    "Please fix <bits/endian.h>"
 #else
-# error	"Please fix <asm/byteorder.h>"
+# error    "Please fix <asm/byteorder.h>"
 #endif
 #endif
-	__u8	protocol;	/* IPPROTO_XXX */
-	__be16	length;		/* length of fixed header and options */
-	__u8	options[0];
+    __u8    protocol;    /* IPPROTO_XXX */
+    __be16    length;        /* length of fixed header and options */
+    __u8    options[0];
 } __attribute__((__packed__));
 
 #endif

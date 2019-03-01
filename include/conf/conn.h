@@ -59,7 +59,8 @@ struct ip_vs_sockpair {
 typedef struct ip_vs_sockpair ipvs_sockpair_t;
 
 struct ip_vs_conn_entry {
-    uint16_t            af;
+    uint16_t            in_af;
+    uint16_t            out_af;
     uint16_t            proto;
     union inet_addr     caddr;
     union inet_addr     vaddr;
