@@ -149,6 +149,7 @@ struct dp_vs_conn {
     struct dp_vs_conn *control;         /* master who controlls me */
     rte_atomic32_t n_control;           /* number of connections controlled by me*/
     uint64_t ctime;                     /* create time */
+    struct timeval rtime;               /* refresh time for dpvs timing wheel */
 
     /* connection redirect in fnat/snat/nat modes */
     struct dp_vs_redirect  *redirect;
@@ -187,6 +188,9 @@ dp_vs_ct_in_get(int af, uint16_t proto,
                 const union inet_addr *saddr,
                 const union inet_addr *daddr,
                 uint16_t sport, uint16_t dport);
+
+/* get the lifetime of a connection */
+uint32_t dp_vs_conn_get_left_lifetime(const struct dp_vs_conn *conn);
 
 void dp_vs_conn_put(struct dp_vs_conn *conn);
 /* put conn without reset the timer */

@@ -20,6 +20,16 @@ static void sys_time_to_str(time_t* ts, char* time_str, int str_len)
             tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
 }
 
+void cycles_to_systime(uint64_t cycles, char* time_str, int str_len)
+{
+    time_t ts;
+
+    memset(time_str, 0, str_len);
+    ts = (cycles - g_start_cycles) / rte_get_timer_hz();
+    ts += g_dpvs_timer;
+    sys_time_to_str(&ts, time_str, str_len);
+}
+
 char* cycles_to_stime(uint64_t cycles)
 {
     time_t ts;
