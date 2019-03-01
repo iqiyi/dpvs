@@ -782,14 +782,12 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			if (strcmp(ce->svc.sched_name, "conhash"))
 				fail(2 , "hash target can only be set when schedule is conhash\n");
 			if (!memcmp(optarg, "sip", strlen("sip"))) {
-				set_option(options, OPT_SIPHASH);
 				ce->svc.flags = ce->svc.flags | IP_VS_SVC_F_SIP_HASH;
 				ce->svc.flags = ce->svc.flags & (~IP_VS_SVC_F_QID_HASH);
 			}
 			else if (!memcmp(optarg, "qid", strlen("qid"))) {
 				if (ce->svc.protocol != IPPROTO_UDP)
 					fail(2 , "qid hash can only be set in udp service\n");
-				set_option(options, OPT_QIDHASH);
 				ce->svc.flags = ce->svc.flags | IP_VS_SVC_F_QID_HASH;
 				ce->svc.flags = ce->svc.flags & (~IP_VS_SVC_F_SIP_HASH);
 			}
