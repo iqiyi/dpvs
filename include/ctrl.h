@@ -193,6 +193,7 @@ int msg_type_table_print(char *buf, int len); /* debug */
 #define MSG_TYPE_IPV6_STATS                 16
 #define MSG_TYPE_ROUTE6                     17
 #define MSG_TYPE_NEIGH_GET                  18
+#define MSG_TYPE_NETIF_LCORE_ZERO           19
 
 #define SOCKOPT_VERSION_MAJOR               1
 #define SOCKOPT_VERSION_MINOR               0

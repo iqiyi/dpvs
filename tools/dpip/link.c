@@ -1097,6 +1097,11 @@ static int link_del(struct link_param *param)
     return EDPVS_OK;
 }
 
+static int link_zero_stats()
+{
+    return dpvs_setsockopt(SOCKOPT_NETIF_SET_ZERO, NULL, 0);
+}
+
 static int link_set(struct link_param *param)
 {
     assert(param);
@@ -1166,6 +1171,8 @@ static int link_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         return link_set(&param);
     case DPIP_CMD_SHOW:
         return link_show(&param);
+    case DPIP_CMD_ZERO:
+        return link_zero_stats();
     default:
         return EDPVS_NOTSUPP;
     }

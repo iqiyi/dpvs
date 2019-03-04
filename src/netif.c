@@ -1323,6 +1323,28 @@ static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)
     memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
 }
 
+static inline void netif_lcore_stats_zero()
+{
+    lcoreid_t cid;
+    cid = rte_lcore_id();
+    assert(cid < DPVS_MAX_LCORE);
+
+    netif_lcore_stats *s;
+    s = &lcore_stats[cid];
+
+    s->lcore_loop = 0;
+    s->pktburst = 0;
+    s->zpktburst = 0;
+    s->fpktburst = 0;
+    s->z2hpktburst = 0;
+    s->h2fpktburst = 0;
+    s->ipackets = 0;
+    s->ibytes = 0;
+    s->opackets = 0;
+    s->obytes = 0;
+    s->dropped = 0;
+}
+
 static int port_rx_queues_get(portid_t pid)
 {
     int i = 0, j;
@@ -4249,6 +4271,16 @@ static int get_lcore_basic(lcoreid_t cid, void **out, size_t *out_len)
     return EDPVS_OK;
 }
 
+static int lcore_zero_msg_cb(struct dpvs_msg *msg)
+{
+    if (unlikely(!msg || msg->type != MSG_TYPE_NETIF_LCORE_ZERO ||
+            msg->mode != DPVS_MSG_MULTICAST))
+        return EDPVS_INVAL;
+
+    netif_lcore_stats_zero()
+    return EDPVS_OK;
+}
+
 static int lcore_stats_msg_cb(struct dpvs_msg *msg)
 {
     void *reply_data;
@@ -4291,6 +4323,25 @@ static inline int lcore_stats_msg_init(void)
         }
     }
 
+    struct dpvs_msg_type lcore_stats_msg_zero_type = {
+        .type = MSG_TYPE_NETIF_LCORE_ZERO,
+        .mode = DPVS_MSG_UNICAST,
+        .unicast_msg_cb = lcore_zero_msg_cb,
+        .multicast_msg_cb = NULL,
+    };
+
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
+        if ((ii == g_master_lcore_id) || (g_slave_lcore_mask & (1L << ii))) {
+            lcore_stats_msg_zero_type.cid = ii;
+            err = msg_type_register(&lcore_stats_msg_zero_type);
+            if (EDPVS_OK != err) {
+                RTE_LOG(WARNING, NETIF, "[%s] fail to register NETIF_LCORE_ZERO msg-type "
+                        "on lcore%d: %s\n", __func__, ii, dpvs_strerror(err));
+                return err;
+            }
+        }
+    }
+
     return EDPVS_OK;
 }
 
@@ -4316,6 +4367,27 @@ static inline int lcore_stats_msg_term(void)
         }
     }
 
+    return EDPVS_OK;
+}
+
+static int zero_lcore_stats()
+{
+    int err;
+    struct dpvs_msg *pmsg;
+
+    pmsg = msg_make(MSG_TYPE_NETIF_LCORE_ZERO, 0, DPVS_MSG_MULTICAST,
+            rte_lcore_id(), 0, NULL);
+    if (unlikely(!pmsg)) {
+        return EDPVS_NOMEM;
+    }
+
+    err = multicast_msg_send(pmsg, DPVS_MSG_F_ASYNC, NULL);
+    if (EDPVS_OK != err) {
+        msg_destroy(&pmsg);
+        return err;
+    }
+    
+    msg_destroy(&pmsg);
     return EDPVS_OK;
 }
 
@@ -4669,6 +4741,25 @@ static inline void copy_port_stats(netif_nic_stats_get_t *get,
     memcpy(&get->q_ibytes, &stats->q_ibytes, sizeof(stats->q_ibytes));
     memcpy(&get->q_obytes, &stats->q_obytes, sizeof(stats->q_obytes));
     memcpy(&get->q_errors, &stats->q_errors, sizeof(stats->q_errors));
+}
+
+// zero all port stats
+stats int zero_port_stats()
+{
+    int pid, nports;
+    nports = rte_eth_dev_count();
+    for (pid = 0; pid < nports; pid++) {
+        dev = netif_port_get(pid);
+        if (!dev) {
+            RTE_LOG(WARNING, DPVS, "port %d not found\n", pid);
+            continue;
+        }
+
+        err = rte_eth_stats_reset((uint16_t)dev->id);
+        if (err)
+            return EDPVS_DPDKAPIFAIL;
+    }
+    return EDPVS_OK;
 }
 
 static int get_port_stats(struct netif_port *port, void **out, size_t *out_len)
@@ -5108,6 +5199,12 @@ static int netif_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
             if (!port || port->type != PORT_TYPE_BOND_MASTER)
                 return EDPVS_INVAL;
             ret = set_bond(port, in);
+            break;
+        }
+        case SOCKOPT_NETIF_SET_ZERO:
+        {
+            zero_port_stats();
+            zero_lcore_stats();
             break;
         }
         default:

@@ -31,6 +31,7 @@ typedef enum dpip_cmd_e {
     DPIP_CMD_REPLACE,
     DPIP_CMD_FLUSH,
     DPIP_CMD_HELP,
+    DPIP_CMD_ZERO,
 } dpip_cmd_t;
 
 struct dpip_conf {
