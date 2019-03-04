@@ -1097,7 +1097,7 @@ static int link_del(struct link_param *param)
     return EDPVS_OK;
 }
 
-static int link_zero_stats()
+static int link_zero_stats(void)
 {
     return dpvs_setsockopt(SOCKOPT_NETIF_SET_ZERO, NULL, 0);
 }

@@ -1323,13 +1323,13 @@ static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)
     memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
 }
 
-static inline void netif_lcore_stats_zero()
+static inline void netif_lcore_stats_zero(void)
 {
     lcoreid_t cid;
     cid = rte_lcore_id();
     assert(cid < DPVS_MAX_LCORE);
 
-    netif_lcore_stats *s;
+    struct netif_lcore_stats *s;
     s = &lcore_stats[cid];
 
     s->lcore_loop = 0;
@@ -4277,7 +4277,7 @@ static int lcore_zero_msg_cb(struct dpvs_msg *msg)
             msg->mode != DPVS_MSG_MULTICAST))
         return EDPVS_INVAL;
 
-    netif_lcore_stats_zero()
+    netif_lcore_stats_zero();
     return EDPVS_OK;
 }
 
@@ -4370,7 +4370,7 @@ static inline int lcore_stats_msg_term(void)
     return EDPVS_OK;
 }
 
-static int zero_lcore_stats()
+static int zero_lcore_stats(void)
 {
     int err;
     struct dpvs_msg *pmsg;
@@ -4744,14 +4744,15 @@ static inline void copy_port_stats(netif_nic_stats_get_t *get,
 }
 
 // zero all port stats
-stats int zero_port_stats()
+static int zero_port_stats(void)
 {
-    int pid, nports;
+    int pid, nports, err;
+    struct netif_port *dev;
+    
     nports = rte_eth_dev_count();
     for (pid = 0; pid < nports; pid++) {
         dev = netif_port_get(pid);
         if (!dev) {
-            RTE_LOG(WARNING, DPVS, "port %d not found\n", pid);
             continue;
         }
 
@@ -5203,8 +5204,10 @@ static int netif_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
         }
         case SOCKOPT_NETIF_SET_ZERO:
         {
-            zero_port_stats();
-            zero_lcore_stats();
+            ret = zero_port_stats();
+            if (EDPVS_OK != ret)
+                break;
+            ret = zero_lcore_stats();
             break;
         }
         default:
