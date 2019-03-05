@@ -483,7 +483,7 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
         return EDPVS_NOMEM;
     }
     rte_atomic32_set(&svc->usecnt, 1);
-    rte_atomic32_set(&svc->refcnt, 0);
+    rte_atomic32_set(&svc->refcnt, 1);
 
     svc->af = u->af;
     svc->proto = u->protocol;
@@ -646,7 +646,7 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
     /*
      *    Free the service if nobody refers to it
      */
-    if (rte_atomic32_read(&svc->refcnt) == 0) {
+    if (rte_atomic32_dec_and_test(&svc->refcnt)) {
         dp_vs_del_stats(svc->stats);
         if (svc->match)
             rte_free(svc->match);
@@ -1088,27 +1088,22 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     }
                 }
 
+                if (!svc) {
+                    *outlen = 0;
+                    return EDPVS_NOTEXIST;
+                }
+
                 output = rte_zmalloc("get_service",
                                      sizeof(struct dp_vs_service_entry), 0);
                 if (unlikely(NULL == output)) {
-                    if (svc) {
-                        dp_vs_service_put(svc);
-                    }
+                    dp_vs_service_put(svc);
                     return EDPVS_NOMEM;
                 }
                 memcpy(output, entry, sizeof(struct dp_vs_service_entry));
-                if(svc) {
-                    ret = dp_vs_copy_service(output, svc);
-                    dp_vs_service_put(svc);
-                    *out = output;
-                    *outlen = sizeof(struct dp_vs_service_entry);
-                }else{
-                    *outlen = 0;
-                    if (output) {
-                        rte_free(output);
-                    }
-                    ret = EDPVS_NOTEXIST;
-                }
+                ret = dp_vs_copy_service(output, svc);
+                dp_vs_service_put(svc);
+                *out = output;
+                *outlen = sizeof(struct dp_vs_service_entry);
             }
             break;
         case DPVS_SO_GET_DESTS:
@@ -1150,12 +1145,8 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     }
                 }
 
-                if (!svc) {
-                    if (output) {
-                        rte_free(output);
-                    }
+                if (!svc)
                     ret = EDPVS_NOTEXIST;
-                }
                 else {
                     ret = dp_vs_get_dest_entries(svc, get, output);
                     dp_vs_service_put(svc);
