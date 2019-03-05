@@ -134,6 +134,7 @@ static void link_help(void)
             "    dpip link show\n"
             "    dpip -s -v link show dpdk0\n"
             "    dpip link show cpu\n"
+            "    dpip link zero\n"
             "    dpip -s link show cpu2 -i 3 -c 5\n"
             "    dpip -s -v link show cpu3 -i 2\n"
             "    dpip link show bond0 status\n"

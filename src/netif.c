@@ -4274,7 +4274,7 @@ static int get_lcore_basic(lcoreid_t cid, void **out, size_t *out_len)
 static int lcore_zero_msg_cb(struct dpvs_msg *msg)
 {
     if (unlikely(!msg || msg->type != MSG_TYPE_NETIF_LCORE_ZERO ||
-            msg->mode != DPVS_MSG_MULTICAST))
+            msg->mode != DPVS_MSG_UNICAST))
         return EDPVS_INVAL;
 
     netif_lcore_stats_zero();
@@ -4372,22 +4372,32 @@ static inline int lcore_stats_msg_term(void)
 
 static int zero_lcore_stats(void)
 {
-    int err;
+    int ii, err;
     struct dpvs_msg *pmsg;
+    uint64_t slave_lcore_mask;
 
-    pmsg = msg_make(MSG_TYPE_NETIF_LCORE_ZERO, 0, DPVS_MSG_MULTICAST,
-            rte_lcore_id(), 0, NULL);
-    if (unlikely(!pmsg)) {
-        return EDPVS_NOMEM;
-    }
+    netif_get_slave_lcores(NULL, &slave_lcore_mask);
 
-    err = multicast_msg_send(pmsg, DPVS_MSG_F_ASYNC, NULL);
-    if (EDPVS_OK != err) {
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
+        if (ii != g_master_lcore_id && !(slave_lcore_mask & (1L << ii))) {
+            continue;
+        }
+            
+        pmsg = msg_make(MSG_TYPE_NETIF_LCORE_ZERO, 0, DPVS_MSG_UNICAST,
+                ii, 0, NULL);
+        if (unlikely(!pmsg)) {
+            return EDPVS_NOMEM;
+        }
+
+        err = msg_send(pmsg, ii, 0, NULL);
+        if (EDPVS_OK != err) {
+            msg_destroy(&pmsg);
+            return err;
+        }
+        
         msg_destroy(&pmsg);
-        return err;
     }
-    
-    msg_destroy(&pmsg);
+
     return EDPVS_OK;
 }
 
