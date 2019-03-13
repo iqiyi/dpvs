@@ -219,9 +219,9 @@ static struct route6 *rt6_lpm_input(const struct rte_mbuf *mbuf, struct flow6 *f
     /* FIXME: search hash list for detailed match ? */
     if (rt6->rt6_dev && fl6->fl6_oif && rt6->rt6_dev->id != fl6->fl6_oif->id)
         goto miss;
-    if (!ipv6_addr_any(&rt6->rt6_src.addr) && !ipv6_addr_any(&fl6->fl6_saddr)
-            && !ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr))
-        goto miss;
+    // if (!ipv6_addr_any(&rt6->rt6_src.addr) && !ipv6_addr_any(&fl6->fl6_saddr)
+    //         && !ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr))
+    //    goto miss;
 
     rte_atomic32_inc(&rt6->refcnt);
     return rt6;
@@ -243,9 +243,9 @@ static struct route6 *rt6_lpm_output(const struct rte_mbuf *mbuf, struct flow6 *
     /* FIXME: search hash list for detailed match ? */
     if (rt6->rt6_dev && fl6->fl6_oif && rt6->rt6_dev->id != fl6->fl6_oif->id)
         goto miss;
-    if (!ipv6_addr_any(&rt6->rt6_src.addr) && !ipv6_addr_any(&fl6->fl6_saddr)
-                && !ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr))
-        goto miss;
+    // if (!ipv6_addr_any(&rt6->rt6_src.addr) && !ipv6_addr_any(&fl6->fl6_saddr)
+    //             && !ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr))
+    //    goto miss;
 
     rte_atomic32_inc(&rt6->refcnt);
     return rt6;
