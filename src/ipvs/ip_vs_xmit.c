@@ -2225,23 +2225,14 @@ static int __dp_vs_xmit_tunnel6(struct dp_vs_proto *proto,
     new_ip6h->ip6_nxt = IPPROTO_IPV6;
     new_ip6h->ip6_hops = old_ip6h->ip6_hops;
 
-    /* FIXME: How to set outter IP source ?
-     * 1. why not use `rt6->rt6_src.addr` ?
-     *   `rt6->rt6_src` is not set due to src-validation in route6
-     * 2. why not use `inet_addr_select` ?
-     *   `inet_addr_select` return the vip as source(note the vip is configured on
-     *    ip6tnl0), and has performance concerns because of locking.
-     * For a compromise, the original source IP is used. Routing problem may exist.
-     */
-    new_ip6h->ip6_src = old_ip6h->ip6_src;
-
-    /*
     new_ip6h->ip6_src = rt6->rt6_src.addr;
-    if (ipv6_addr_any(&new_ip6h->ip6_src))
+    if (unlikely(ipv6_addr_any(&new_ip6h->ip6_src))) {
+        RTE_LOG(INFO, IPVS, "%s: route6 without source, slect source"
+                " address from inetaddr.\n", __func__);
         inet_addr_select(AF_INET6, rt6->rt6_dev,
                 (const union inet_addr*)&fl6.fl6_daddr, 0,
                 (union inet_addr*)&new_ip6h->ip6_src);
-    */
+    }
 
     new_ip6h->ip6_dst = conn->daddr.in6;
 
