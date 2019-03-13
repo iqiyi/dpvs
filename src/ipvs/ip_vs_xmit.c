@@ -2255,16 +2255,112 @@ errout:
     return err;
 }
 
+static int __dp_vs_xmit_tunnel_6o4(struct dp_vs_proto *proto,
+                    struct dp_vs_conn *conn,
+                    struct rte_mbuf *mbuf)
+{
+    int err, mtu;
+    struct flow4 fl4;
+    struct route_entry *rt;
+    struct ipv4_hdr *new_iph;
+    struct ip6_hdr *old_ip6h = ip6_hdr(mbuf);
+
+    /*
+     * drop old route. just for safe, because
+     * TUNNEL is PREROUTING, should not have route.
+     */
+    if (unlikely(mbuf->userdata != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n",
+                __func__, mbuf->userdata);
+        route6_put((struct route6*)mbuf->userdata);
+    }
+
+    memset(&fl4, 0, sizeof(struct flow4));
+    fl4.fl4_daddr = conn->daddr.in;
+    fl4.fl4_tos = 0;
+    rt = route4_output(&fl4);
+    if (!rt) {
+        err = EDPVS_NOROUTE;
+        goto errout;
+    }
+
+    dp_vs_conn_cache_rt(conn, rt, true);
+
+    mtu = rt->mtu;
+    mbuf->userdata = rt;
+
+    new_iph = (struct ipv4_hdr*)rte_pktmbuf_prepend(mbuf, sizeof(struct ipv4_hdr));
+    if (!new_iph) {
+        RTE_LOG(WARNING, IPVS, "%s: mbuf has not enough headroom"
+                " space for ipvs tunnel\n", __func__);
+        err = EDPVS_NOROOM;
+        goto errout;
+    }
+
+    if (mbuf->pkt_len > mtu) {
+        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(mtu));
+        err = EDPVS_FRAG;
+        goto errout;
+    }
+
+    memset(new_iph, 0, sizeof(struct ipv4_hdr));
+    new_iph->version_ihl = 0x45;
+    new_iph->type_of_service = 0;
+    new_iph->total_length = htons(mbuf->pkt_len);
+    new_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+    new_iph->time_to_live = old_ip6h->ip6_hlim;
+    new_iph->next_proto_id = IPPROTO_IPV6;
+    new_iph->src_addr = rt->src.s_addr;
+    new_iph->dst_addr=conn->daddr.in.s_addr;
+    new_iph->packet_id = ip4_select_id(new_iph);
+
+    if (rt->port && rt->port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD) {
+        mbuf->ol_flags |= PKT_TX_IP_CKSUM;
+        new_iph->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(new_iph);
+    }
+
+    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt->port, ipv4_output);
+
+errout:
+    if (rt)
+        route4_put(rt);
+    rte_pktmbuf_free(mbuf);
+    return err;
+}
+
 int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
                       struct dp_vs_conn *conn,
                       struct rte_mbuf *mbuf)
 {
-    int af = conn->af;
+    int iaf = conn->af;
+    int oaf = tuplehash_out(conn).af;
 
-    assert(af == AF_INET || af == AF_INET6);
+    assert(iaf == AF_INET || iaf == AF_INET6);
+    assert(oaf == AF_INET || oaf == AF_INET6);
 
-    return af == AF_INET ? __dp_vs_xmit_tunnel4(proto, conn, mbuf)
-        : __dp_vs_xmit_tunnel6(proto, conn, mbuf);
+    /*
+     * dp_vs_xmit_tunnel encapsulates packets directly rather than using tunnel device.
+     * But on RealServers, corresponding tunnel device should be configured up. For Linux,
+     * the following configs may be made:
+     * 1. ifconfig tunl0/ip6tnl0/sit0 up for ip-ip/ip6-ip6/ip6-over-ip4 tunnel respectively
+     * 2. add vip onto the configured tunnel device, then ignore arp for it
+     * 3. set proper rp_filter mode for the tunnel device
+     */
+
+    /* ip-ip tunnel */
+    if (AF_INET == iaf)
+        return __dp_vs_xmit_tunnel4(proto, conn, mbuf);
+
+    /* ip6-ip6 tunnel */
+    if (AF_INET6 == oaf)
+        return __dp_vs_xmit_tunnel6(proto, conn, mbuf);
+
+    /* ip6-over-ip4 tunnel */
+    return __dp_vs_xmit_tunnel_6o4(proto, conn, mbuf);
 }
 
 static void conn_fast_xmit_handler(vector_t tockens)
