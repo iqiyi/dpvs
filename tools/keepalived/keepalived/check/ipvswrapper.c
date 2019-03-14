@@ -549,7 +549,7 @@ ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs
 
 		/* Talk to the IPVS channel */
 		if (IPVS_ALIVE(cmd, vsg_entry, rs)) {
-			if (ipvs_talk(cmd) != IPVS_SUCCESS) 
+			if (ipvs_talk(cmd) != IPVS_SUCCESS)
 				return IPVS_ERROR;
 			IPVS_SET_ALIVE(cmd, vsg_entry);
 		}
@@ -573,7 +573,7 @@ ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs
 
 		/* Talk to the IPVS channel */
 		if (IPVS_ALIVE(cmd, vsg_entry, rs)) {
-			if (ipvs_talk(cmd) != IPVS_SUCCESS) 
+			if (ipvs_talk(cmd) != IPVS_SUCCESS)
 				return IPVS_ERROR;
 			IPVS_SET_ALIVE(cmd, vsg_entry);
 		}
