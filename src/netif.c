@@ -4104,6 +4104,12 @@ int netif_virtual_devices_add(void)
         RTE_LOG(INFO, NETIF, "create bondig device %s: mode=%d, primary=%s, socket=%d\n",
                 bond_cfg->name, bond_cfg->mode, bond_cfg->primary, socket_id);
         bond_cfg->port_id = pid; /* relate port_id with port_name, used by netif_rte_port_alloc */
+        if (bond_cfg->mode == BONDING_MODE_8023AD) {
+            if (!rte_eth_bond_8023ad_dedicated_queues_enable(bond_cfg->port_id))
+            {
+                RTE_LOG(INFO, NETIF, "bonding mode4 dedicated queues enable failed!\n");
+            }
+        }
     }
 
     if (!list_empty(&bond_list)) {
