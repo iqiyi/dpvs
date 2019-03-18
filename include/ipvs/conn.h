@@ -50,6 +50,7 @@ struct dp_vs_conn_param {
     uint16_t            cport;
     uint16_t            vport;
     uint16_t            ct_dport; /* RS port for template connection */
+    bool                outwall;
 };
 
 struct conn_tuple_hash {
@@ -147,6 +148,7 @@ struct dp_vs_conn {
     struct dp_vs_conn *control;         /* master who controlls me */
     rte_atomic32_t n_control;           /* number of connections controlled by me*/
     uint64_t ctime;                     /* create time */
+    bool outwall;
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */

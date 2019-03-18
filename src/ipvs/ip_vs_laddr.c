@@ -465,7 +465,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     svc = dp_vs_service_lookup(laddr_conf->af, laddr_conf->proto, 
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match);
+                               laddr_conf->fwmark, NULL, &match, NULL);
     if (!svc)
         return EDPVS_NOSERV;
 
@@ -511,7 +511,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     svc = dp_vs_service_lookup(laddr_conf->af, laddr_conf->proto, 
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match);
+                               laddr_conf->fwmark, NULL, &match, NULL);
     if (!svc)
         return EDPVS_NOSERV;
 

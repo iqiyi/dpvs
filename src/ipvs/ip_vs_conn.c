@@ -153,7 +153,6 @@ static inline int conn_hash(struct dp_vs_conn *conn)
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_unlock(&this_conn_lock);
 #endif
-
     return err;
 }
 
@@ -682,6 +681,7 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
         new->daddr  = dest->addr;
     }
     new->dport  = rport;
+    new->outwall = param->outwall;
 
     /* neighbour confirm cache */
     if (AF_INET == param->af) {

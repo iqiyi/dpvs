@@ -107,7 +107,7 @@ struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
 {
     struct dp_vs_dest *dest;
     struct dp_vs_service *svc;
-    svc = dp_vs_service_lookup(af, protocol, vaddr, vport, 0, NULL, NULL);
+    svc = dp_vs_service_lookup(af, protocol, vaddr, vport, 0, NULL, NULL, NULL);
     if(!svc)
         return NULL;
     dest = dp_vs_lookup_dest(svc, daddr, dport);
@@ -542,8 +542,6 @@ int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
         entry.inactconns = rte_atomic32_read(&dest->inactconns);
         entry.persistconns = rte_atomic32_read(&dest->persistconns);
         ret = dp_vs_copy_stats(&(entry.stats), dest->stats);
-        if (ret != EDPVS_OK)
-            break;
 
         memcpy(&uptr->entrytable[count], &entry, sizeof(entry));
         count++;

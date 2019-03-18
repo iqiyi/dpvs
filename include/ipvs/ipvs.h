@@ -53,6 +53,7 @@ struct dp_vs_service;
 struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                                   const struct dp_vs_iphdr *iph,
                                   struct rte_mbuf *mbuf,
-                                  bool is_synproxy_on);
+                                  bool is_synproxy_on,
+                                  bool outwall);
 
 #endif /* __DPVS_IPVS_H__ */

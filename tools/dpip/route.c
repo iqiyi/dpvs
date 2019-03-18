@@ -232,7 +232,12 @@ static int route4_parse_args(struct dpip_conf *conf,
             ;/* on-link is output only */
         } else if (strcmp(conf->argv[0], "local") == 0) {
             route->scope = ROUTE_CF_SCOPE_HOST;
-        } else {
+        } else if (strcmp(conf->argv[0], "table") == 0) {
+	    NEXTARG_CHECK(conf, "outwall");
+            if (strcmp(conf->argv[0], "outwall") != 0)
+                return -1;
+	    route->outwalltb = 1;
+	}else {
             prefix = conf->argv[0];
         }
 
@@ -528,3 +533,5 @@ static void __exit route_exit(void)
 {
     dpip_unregister_obj(&dpip_route);
 }
+
+
