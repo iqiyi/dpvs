@@ -30,6 +30,7 @@
 
 #define MSG_TYPE_IPSET_ADD                  19
 #define MSG_TYPE_IPSET_DEL                  20
+#define MSG_TYPE_IPSET_FLUSH                21
 
 
 struct ipset_lcore{
@@ -128,8 +129,9 @@ int ipset_del(int af, union inet_addr *dest)
 	if (!ipset_node)
 		return EDPVS_NOTEXIST;
 	list_del(&ipset_node->list);
-    rte_atomic32_dec(&this_num_ipset);
-    return EDPVS_OK; 
+        rte_free(ipset_node);
+        rte_atomic32_dec(&this_num_ipset);
+        return EDPVS_OK; 
 }
 
 int ipset_list(void)
@@ -227,11 +229,48 @@ static int ipset_add_del(bool add, int af, union inet_addr *dest)
     return EDPVS_OK;
 }
 
+static int ipset_flush_lcore(void)
+{
+	struct ipset_entry *ipset_node, *next;
+	int i;
+	for (i = 0; i < IPSET_TAB_SIZE; i++) {
+	    list_for_each_entry_safe(ipset_node, next, &this_ipset_table_lcore[i], list){
+                if (ipset_node) {
+		    list_del(&ipset_node->list);
+		    rte_free(ipset_node);
+    		    rte_atomic32_dec(&this_num_ipset);
+                }
+            }
+        }
+    return 0;
+}
+
+static int ipset_flush(void)
+{
+	lcoreid_t cid = rte_lcore_id();
+	struct dpvs_msg *msg;	
+	int err = 0;
+
+	ipset_flush_lcore();
+	msg = msg_make(MSG_TYPE_IPSET_FLUSH, 0, DPVS_MSG_MULTICAST,
+						   cid, 0, NULL);
+	
+	err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
+	if (err != EDPVS_OK) {
+		msg_destroy(&msg);
+		return err;
+	}
+	msg_destroy(&msg);
+
+	return EDPVS_OK;
+}
 
 static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
     struct dp_vs_ipset_conf *cf = (void *)conf;
 
+    if (opt == SOCKOPT_SET_IPSET_FLUSH)
+        return ipset_flush();
 	
     if (!conf || size < sizeof(*cf))
         return EDPVS_INVAL;
@@ -244,8 +283,6 @@ static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         	return ipset_add_del(true, cf->af, &cf->addr);
 	case SOCKOPT_SET_IPSET_DEL:
     	    return ipset_add_del(false, cf->af, &cf->addr);
-	case SOCKOPT_SET_IPSET_FLUSH:
-    	    return EDPVS_NOTSUPP;
 	default:
     	    return EDPVS_NOTSUPP;
     }
@@ -314,6 +351,10 @@ static int ipset_del_msg_cb(struct dpvs_msg *msg)
     return ipset_msg_process(false, msg);
 }		
 
+static int ipset_flush_msg_cb(struct dpvs_msg *msg)
+{
+    return ipset_flush_lcore();
+}
 
 static int ipset_lcore_init(void *arg)
 {
@@ -370,6 +411,16 @@ int ipset_init(void)
     msg_type.mode   = DPVS_MSG_MULTICAST;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = ipset_del_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+        return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_IPSET_FLUSH;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = ipset_flush_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
         return err;
