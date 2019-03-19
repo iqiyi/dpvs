@@ -1478,12 +1478,20 @@ static int __dp_vs_out_xmit_snat6(struct dp_vs_proto *proto,
         memset(&fl6, 0, sizeof(struct flow6));
         fl6.fl6_daddr = conn->caddr.in6;
         fl6.fl6_saddr = conn->vaddr.in6;
-        rt6 = route6_output(mbuf, &fl6);
-        if (!rt6) {
-            err = EDPVS_NOROUTE;
-            goto errout;
+        
+        if (conn->outwall) {
+             rt6 = route6_gfw_lookup(mbuf, &fl6);
+             if (!rt6) {
+                 err = EDPVS_NOROUTE;
+                 goto errout;
+             } 
+        }else {
+            rt6 = route6_output(mbuf, &fl6);
+            if (!rt6) {
+                err = EDPVS_NOROUTE;
+                goto errout;
+            }
         }
-
         mbuf->userdata = rt6;
 
         dp_vs_conn_cache_rt6(conn, rt6, false);

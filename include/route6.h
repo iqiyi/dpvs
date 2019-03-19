@@ -46,6 +46,7 @@ struct route6 {
 
 struct route6 *route6_input(const struct rte_mbuf *mbuf, struct flow6 *fl6);
 struct route6 *route6_output(const struct rte_mbuf *mbuf, struct flow6 *fl6);
+struct route6 *route6_gfw_lookup(const struct rte_mbuf *mbuf, struct flow6 *fl6);
 int route6_get(struct route6 *rt);
 int route6_put(struct route6 *rt);
 

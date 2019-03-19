@@ -212,15 +212,13 @@ __dp_vs_svc_match_get4(const struct rte_mbuf *mbuf, bool *outwall)
         if ((rt->flag & RTF_KNI) || (rt->flag & RTF_LOCALIN))
             return NULL;
         oif = rt->port->id;
-    }
-    else if ((NULL != ipset_addr_lookup(AF_INET, &daddr))
-		    		&& (rt = route_gfw_net_lookup(&daddr.in))) {
+    } else if ((NULL != ipset_addr_lookup(AF_INET, &daddr))
+    		     && (rt = route_gfw_net_lookup(&daddr.in))) {
    	oif = rt->port->id;
 	route4_put(rt);
         printf("%s: This IP is outwall!\n", __FUNCTION__);
         *outwall = true;
-    } 
-    else {
+    } else {
         rt = route4_input(mbuf, &daddr.in, &saddr.in,
                           iph->type_of_service,
                           netif_port_get(mbuf->port));
@@ -260,7 +258,7 @@ __dp_vs_svc_match_get4(const struct rte_mbuf *mbuf, bool *outwall)
 }
 
 static struct dp_vs_service *
-__dp_vs_svc_match_get6(const struct rte_mbuf *mbuf)
+__dp_vs_svc_match_get6(const struct rte_mbuf *mbuf, bool *outwall)
 {
     struct route6 *rt = mbuf->userdata;
     struct ip6_hdr *iph = ip6_hdr(mbuf);
@@ -289,6 +287,12 @@ __dp_vs_svc_match_get6(const struct rte_mbuf *mbuf)
         if ((rt->rt6_flags & RTF_KNI) || (rt->rt6_flags & RTF_LOCALIN))
             return NULL;
         oif = rt->rt6_dev->id;
+    } else if ((NULL != ipset_addr_lookup(AF_INET6, &daddr))
+		     && (rt = route6_gfw_lookup(mbuf, &fl6))) {
+   	oif = rt->rt6_dev->id;
+	route6_put(rt);
+        printf("%s: This IPv6 is outwall!\n", __FUNCTION__);
+        *outwall = true;
     } else {
         rt = route6_input(mbuf, &fl6);
         if (!rt)
@@ -337,7 +341,7 @@ __dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf, bool *outwall)
     if (af == AF_INET)
         return __dp_vs_svc_match_get4(mbuf, outwall);
     else if (af == AF_INET6)
-        return __dp_vs_svc_match_get6(mbuf);
+        return __dp_vs_svc_match_get6(mbuf, outwall);
     else
         return NULL;
 }

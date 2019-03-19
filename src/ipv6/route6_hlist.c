@@ -397,6 +397,25 @@ out:
     return rt6_arr;
 }
 
+struct route6 *route6_gfw_lookup(const struct rte_mbuf *mbuf, struct flow6 *fl6)
+{
+    struct rt6_hlist *hlist;
+    struct route6 *rt6;
+    int hashkey;
+
+    list_for_each_entry(hlist, &this_rt6_outwall_htable, node) {
+        hashkey = rt6_hlist_hashkey(&fl6->fl6_daddr, hlist->plen, hlist->nbuckets);
+	list_for_each_entry(rt6, &hlist->hlist[hashkey], hnode) {
+	    if (rt6_hlist_flow_match(rt6, fl6)) {
+		rte_atomic32_inc(&rt6->refcnt);
+		return rt6;
+	    }
+	}
+    }
+
+    return NULL;
+}
+
 static struct route6_method rt6_hlist_method = {
     .name = "hlist",
     .rt6_setup_lcore = rt6_hlist_setup_lcore,
