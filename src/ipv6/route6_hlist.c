@@ -27,7 +27,11 @@
 #define this_rt6_htable     (RTE_PER_LCORE(dpvs_rt6_htable).htable)
 #define this_rt6_nroutes    (RTE_PER_LCORE(dpvs_rt6_htable).nroutes)
 
+#define this_rt6_outwall_htable  (RTE_PER_LCORE(dpvs_rt6_outwall_htable).htable)
+#define this_rt6_outwall_nroutes (RTE_PER_LCORE(dpvs_rt6_outwall_htable).nroutes)
+
 #define g_nroutes           this_rt6_nroutes
+#define g_outwall_nroutes   this_rt6_outwall_nroutes
 
 struct rt6_hlist
 {
@@ -45,11 +49,16 @@ struct rt6_htable
 };
 
 static RTE_DEFINE_PER_LCORE(struct rt6_htable, dpvs_rt6_htable);
+static RTE_DEFINE_PER_LCORE(struct rt6_htable, dpvs_rt6_outwall_htable);
 
 static int rt6_hlist_setup_lcore(void *arg)
 {
     this_rt6_nroutes = 0;
     INIT_LIST_HEAD(&this_rt6_htable);
+
+    this_rt6_outwall_nroutes = 0;
+    INIT_LIST_HEAD(&this_rt6_outwall_htable);
+	
     return EDPVS_OK;
 }
 
@@ -125,8 +134,12 @@ static struct route6 *__rt6_hlist_get(const struct dp_vs_route6_conf *cf,
     int hashkey;
     struct rt6_hlist *hlist;
     struct route6 *rt6;
+    struct list_head *route6_htable = &this_rt6_htable;
 
-    list_for_each_entry(hlist, &this_rt6_htable, node) {
+    if (cf->outwalltb)
+	route6_htable = &this_rt6_outwall_htable;
+
+    list_for_each_entry(hlist, route6_htable, node) {
         if (hlist->plen > cf->dst.plen)
             continue;
         if (hlist->plen < cf->dst.plen)
@@ -158,11 +171,15 @@ static int rt6_hlist_add_lcore(const struct dp_vs_route6_conf *cf)
 #ifdef DPVS_ROUTE6_DEBUG
     char buf[64];
 #endif
+    struct list_head *route6_htable = &this_rt6_htable;
 
     if (rt6_hlist_get(cf))
         return EDPVS_EXIST;
+	
+    if (cf->outwalltb)
+	route6_htable = &this_rt6_outwall_htable;
 
-    list_for_each_entry(hlist, &this_rt6_htable, node) {
+    list_for_each_entry(hlist, route6_htable, node) {
         if (hlist->plen <= cf->dst.plen) {
             if (hlist->plen == cf->dst.plen)
                 hlist_exist = true;
@@ -218,7 +235,10 @@ static int rt6_hlist_add_lcore(const struct dp_vs_route6_conf *cf)
     hashkey = rt6_hlist_hashkey(&cf->dst.addr, cf->dst.plen, hlist->nbuckets);
     list_add_tail(&rt6->hnode, &hlist->hlist[hashkey]);
     hlist->nroutes++;
-    this_rt6_nroutes++;
+    if (cf->outwalltb)
+        this_rt6_outwall_nroutes++;
+    else
+        this_rt6_nroutes++;
 
 #ifdef DPVS_ROUTE6_DEBUG
     dump_rt6_prefix(&rt6->rt6_dst, buf, sizeof(buf));
@@ -252,7 +272,11 @@ static int rt6_hlist_del_lcore(const struct dp_vs_route6_conf *cf)
 
     assert(hlist != NULL);
     hlist->nroutes--;
-    this_rt6_nroutes--;
+	
+    if (cf->outwalltb)
+        this_rt6_outwall_nroutes--;
+    else
+        this_rt6_nroutes--;
 
     if (hlist->nroutes == 0) {
 #ifdef DPVS_ROUTE6_DEBUG
@@ -326,6 +350,8 @@ static struct dp_vs_route6_conf_array*
     struct route6 *entry;
     struct dp_vs_route6_conf_array *rt6_arr;
     struct netif_port *dev = NULL;
+    struct list_head *route6_htable;
+    int route6_num = g_nroutes;
 
     if (cf && strlen(cf->ifname) > 0) {
         dev = netif_port_get_by_name(cf->ifname);
@@ -336,17 +362,24 @@ static struct dp_vs_route6_conf_array*
         }
     }
 
+    route6_htable = &this_rt6_htable;
+	
+    if (cf->outwalltb) {
+ 	route6_htable = &this_rt6_outwall_htable;
+	route6_num = g_outwall_nroutes;		
+    }
+
     *nbytes = sizeof(struct dp_vs_route6_conf_array) +
-            g_nroutes * sizeof(struct dp_vs_route6_conf);
+            route6_num * sizeof(struct dp_vs_route6_conf);
     rt6_arr = rte_zmalloc_socket("rt6_sockopt_get", *nbytes, 0, rte_socket_id());
     if (unlikely(!rt6_arr))
         return NULL;
 
     off = 0;
-    list_for_each_entry(hlist, &this_rt6_htable, node) {
+    list_for_each_entry(hlist, route6_htable, node) {
         for (i = 0; i < hlist->nbuckets; i++) {
             list_for_each_entry(entry, &hlist->hlist[i], hnode) {
-                if (off >= g_nroutes)
+                if (off >= route6_num)
                     goto out;
                 if (dev && dev->id != entry->rt6_dev->id)
                     continue;
@@ -356,7 +389,7 @@ static struct dp_vs_route6_conf_array*
     }
 
 out:
-    if (off < g_nroutes)
+    if (off < route6_num)
         *nbytes = sizeof(struct dp_vs_route6_conf_array) +
             off * sizeof(struct dp_vs_route6_conf);
     rt6_arr->nroute = off;
