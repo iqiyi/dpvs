@@ -216,7 +216,6 @@ __dp_vs_svc_match_get4(const struct rte_mbuf *mbuf, bool *outwall)
     		     && (rt = route_gfw_net_lookup(&daddr.in))) {
    	oif = rt->port->id;
 	route4_put(rt);
-        printf("%s: This IP is outwall!\n", __FUNCTION__);
         *outwall = true;
     } else {
         rt = route4_input(mbuf, &daddr.in, &saddr.in,
@@ -291,7 +290,6 @@ __dp_vs_svc_match_get6(const struct rte_mbuf *mbuf, bool *outwall)
 		     && (rt = route6_gfw_lookup(mbuf, &fl6))) {
    	oif = rt->rt6_dev->id;
 	route6_put(rt);
-        printf("%s: This IPv6 is outwall!\n", __FUNCTION__);
         *outwall = true;
     } else {
         rt = route6_input(mbuf, &fl6);

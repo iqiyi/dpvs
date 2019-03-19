@@ -27,13 +27,19 @@
 #include "common.h"
 #include "flow.h"
 
+#define RTE_LOGTYPE_IPSET       RTE_LOGTYPE_USER1
+
+int ipset_init(void);
 int ipset_add(int af, union inet_addr *dest);
 int ipset_del(int af, union inet_addr *dest);
-int ipset_list(void);
-int ipset_init(void);
 
 struct ipset_entry *ipset_dest_lookup(struct in_addr *dest);
-
 struct ipset_entry *ipset_addr_lookup(int af, union inet_addr *dest);
+
+#ifdef CONFIG_DPVS_IPSET_DEBUG
+int ipset_list(void);
 int ipset_test(void);
+#endif
+
+
 #endif

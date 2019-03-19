@@ -59,7 +59,7 @@ static inline unsigned int ipset_addr_hash(int af, union inet_addr *addr)
     addr_fold = inet_addr_fold(af, addr);
 
     if (!addr_fold) {
-        printf("%s: IP proto not support.\n", __func__);
+        RTE_LOG(DEBUG, IPSET, "%s: IP proto not support.\n", __func__);
         return 0;
     }
 
@@ -134,6 +134,7 @@ int ipset_del(int af, union inet_addr *dest)
         return EDPVS_OK; 
 }
 
+#ifdef CONFIG_DPVS_IPSET_DEBUG
 int ipset_list(void)
 {
 	struct ipset_entry *ipset_node;
@@ -153,8 +154,6 @@ int ipset_list(void)
 	}
     return 0;
 }
-
-
 
 int ipset_test(void)
 {
@@ -190,8 +189,7 @@ int ipset_test(void)
 
 	return this_num_ipset.cnt;
 }
-
-
+#endif
 
 static int ipset_add_del(bool add, int af, union inet_addr *dest)
 {
@@ -336,7 +334,7 @@ static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
  		 err = ipset_del(cf->af, &cf->addr);
 	 
 	 if (err != EDPVS_OK)
-               printf("process fail\n");
+         RTE_LOG(ERR, IPSET, "%s: fail to %s ipset.\n", __func__, add? "add":"del");
 	 return err;
  }
 
@@ -392,6 +390,8 @@ int ipset_init(void)
     rte_eal_mp_remote_launch(ipset_lcore_init, NULL, CALL_MASTER);
     RTE_LCORE_FOREACH_SLAVE(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
+            RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
+                    __func__, cid, dpvs_strerror(err));
             return err;
         }
     }
@@ -403,6 +403,7 @@ int ipset_init(void)
     msg_type.unicast_msg_cb = ipset_add_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPSET, "%s: fail to register msg.\n", __func__);
         return err;
     }
 
@@ -413,6 +414,7 @@ int ipset_init(void)
     msg_type.unicast_msg_cb = ipset_del_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPSET, "%s: fail to register msg.\n", __func__);
         return err;
     }
 
@@ -423,6 +425,7 @@ int ipset_init(void)
     msg_type.unicast_msg_cb = ipset_flush_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPSET, "%s: fail to register msg.\n", __func__);
         return err;
     }
 
