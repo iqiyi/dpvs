@@ -988,6 +988,8 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
             break;
         case DPVS_SO_SET_DEL:
             ret = dp_vs_del_service(svc);
+            // reset svc to avoid use after free
+            svc = NULL;
             break;
         case DPVS_SO_SET_ZERO:
             ret = dp_vs_zero_service(svc);
