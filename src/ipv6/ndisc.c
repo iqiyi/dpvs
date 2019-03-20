@@ -464,7 +464,7 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     }
 
     /* notice: override flag ignored */
-    hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)saddr, dev);
+    hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)&msg->target, dev);
     neigh = neigh_lookup_entry(AF_INET6, (union inet_addr *)&msg->target, dev, hashkey);
     if (neigh && !(neigh->flag & NEIGHBOUR_STATIC)) {
         neigh_edit(neigh, (struct ether_addr *)lladdr);
@@ -541,4 +541,3 @@ free:
     rte_pktmbuf_free(mbuf);
     return ret;
 }
-

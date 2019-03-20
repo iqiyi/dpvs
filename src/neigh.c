@@ -595,10 +595,9 @@ int neigh_output(int af, union inet_addr *nexhop,
                 neigh_entry_state_trans(neighbour, 0);
             }
             return EDPVS_OK;
-        }
-        else if ((neighbour->state == DPVS_NUD_S_REACHABLE) ||
-                 (neighbour->state == DPVS_NUD_S_PROBE) ||
-                 (neighbour->state == DPVS_NUD_S_DELAY)) {
+        } else if ((neighbour->state == DPVS_NUD_S_REACHABLE) ||
+                   (neighbour->state == DPVS_NUD_S_PROBE) ||
+                   (neighbour->state == DPVS_NUD_S_DELAY)) {
 
             neigh_fill_mac(neighbour, m, NULL, port);
             netif_xmit(m, neighbour->port);
@@ -612,24 +611,26 @@ int neigh_output(int af, union inet_addr *nexhop,
         }
 
         return EDPVS_IDLE;
-    }
-    else{
+    } else {
         neighbour = neigh_add_table(af, nexhop, NULL, port, hashkey, 0);
-        if(!neighbour){
+        if (!neighbour) {
             RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
             rte_pktmbuf_free(m);
             return EDPVS_NOMEM;
         }
-        if(neighbour->que_num > arp_unres_qlen){
+
+        if (neighbour->que_num > arp_unres_qlen) {
             rte_pktmbuf_free(m);
             return EDPVS_DROP;
         }
+
         m_buf = rte_zmalloc("neigh_new_mbuf",
                            sizeof(struct neighbour_mbuf_entry), RTE_CACHE_LINE_SIZE);
-        if(!m_buf){
+        if (!m_buf) {
             rte_pktmbuf_free(m);
             return EDPVS_DROP;
         }
+
         m_buf->m = m;
         list_add_tail(&m_buf->neigh_mbuf_list, &neighbour->queue_list);
         neighbour->que_num++;
@@ -638,6 +639,15 @@ int neigh_output(int af, union inet_addr *nexhop,
             neigh_state_confirm(neighbour);
             neigh_entry_state_trans(neighbour, 0);
         }
+
+        /*
+         * Sync to other cores though it has not been resolved. And the reason
+         * is that neighbour solicitation is sent from core A where the related
+         * neighbour entry is created. However the related neighbour
+         * advertisement is received on core B. So if not synced, we have no
+         * chance to resolve it.
+         */
+        neigh_sync_core(neighbour, 1, NEIGH_ENTRY);
 
         return EDPVS_OK;
     }
@@ -1079,4 +1089,3 @@ int neigh_term(void)
 
     return EDPVS_OK;
 }
-
