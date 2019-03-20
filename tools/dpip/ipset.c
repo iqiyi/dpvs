@@ -43,7 +43,6 @@ static int ipset_parse_args(struct dpip_conf *conf, struct dp_vs_ipset_conf *ip_
 
     while (conf->argc > 0) {
 	ipaddr = conf->argv[0];
-	printf("%s\n", ipaddr);
         NEXTARG(conf);
     }
 	
