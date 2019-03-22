@@ -265,7 +265,9 @@ static int ipset_flush(void)
 
 static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
-    struct dp_vs_ipset_conf *cf = (void *)conf;
+    struct dp_vs_multi_ipset_conf *cf = (void *)conf;
+    struct dp_vs_ipset_conf *ip_cf = NULL;
+    int i, err;
 
     if (opt == SOCKOPT_SET_IPSET_FLUSH)
         return ipset_flush();
@@ -273,17 +275,28 @@ static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (!conf || size < sizeof(*cf))
         return EDPVS_INVAL;
 
-    if (cf->af != AF_INET && cf->af != AF_INET6)
-        return EDPVS_NOTSUPP;
-
-    switch (opt) {
-    	case SOCKOPT_SET_IPSET_ADD:
-        	return ipset_add_del(true, cf->af, &cf->addr);
-	case SOCKOPT_SET_IPSET_DEL:
-    	    return ipset_add_del(false, cf->af, &cf->addr);
-	default:
-    	    return EDPVS_NOTSUPP;
-    }
+    for (i = 0; i < cf->num; i++) {
+        ip_cf = &cf->ipset_conf[i];
+        if (ip_cf == NULL)
+            return EDPVS_NOTSUPP;
+        if (ip_cf->af != AF_INET && ip_cf->af != AF_INET6)
+            return EDPVS_NOTSUPP;	
+        switch (opt) {
+    	    case SOCKOPT_SET_IPSET_ADD:
+                 err = ipset_add_del(true, ip_cf->af, &ip_cf->addr);
+	         if (err != EDPVS_OK)
+	             return err;
+	          continue;
+            case SOCKOPT_SET_IPSET_DEL:
+                 err = ipset_add_del(false, ip_cf->af, &ip_cf->addr);
+                 if (err != EDPVS_OK)
+	             return err;
+	         continue;
+            default:
+    	         return EDPVS_NOTSUPP;		
+	}
+    } 
+    return EDPVS_OK;
 }
 
 static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,

@@ -37,10 +37,14 @@ struct dp_vs_ipset_conf {
 	union inet_addr    addr;
 };
 
+struct dp_vs_multi_ipset_conf {
+    int num;
+    struct dp_vs_ipset_conf ipset_conf[0];
+};
+
 struct dp_vs_ipset_conf_array {
     int                 nipset;
     struct dp_vs_ipset_conf   ips[0];
 } __attribute__((__packed__));
-
 
 #endif /* __DPVS_IPSET_CONF_H__ */
