@@ -44,7 +44,6 @@ enum {
 
 struct dp_vs_dest {
     struct list_head    n_list;     /* for the dests in the service */
-    struct list_head    d_list;     /* for table with all the dests */
 
     int                 af;         /* address family */
     /*
