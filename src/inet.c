@@ -126,6 +126,8 @@ int inet_term(void)
         return err;
     if ((err = neigh_term()) != 0)
         return err;
+    if ((err = ipset_term()) != 0)
+        return err;
 
     return EDPVS_OK;
 }

@@ -32,8 +32,8 @@
 int ipset_init(void);
 int ipset_add(int af, union inet_addr *dest);
 int ipset_del(int af, union inet_addr *dest);
+int ipset_term(void);
 
-struct ipset_entry *ipset_dest_lookup(struct in_addr *dest);
 struct ipset_entry *ipset_addr_lookup(int af, union inet_addr *dest);
 
 #ifdef CONFIG_DPVS_IPSET_DEBUG

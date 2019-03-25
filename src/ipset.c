@@ -227,10 +227,14 @@ static int ipset_add_del(bool add, int af, union inet_addr *dest)
     return EDPVS_OK;
 }
 
-static int ipset_flush_lcore(void)
+static int ipset_flush_lcore(void *arg)
 {
 	struct ipset_entry *ipset_node, *next;
 	int i;
+        
+        if (!rte_lcore_is_enabled(rte_lcore_id()))
+            return EDPVS_DISABLED;
+
 	for (i = 0; i < IPSET_TAB_SIZE; i++) {
 	    list_for_each_entry_safe(ipset_node, next, &this_ipset_table_lcore[i], list){
                 if (ipset_node) {
@@ -249,7 +253,7 @@ static int ipset_flush(void)
 	struct dpvs_msg *msg;	
 	int err = 0;
 
-	ipset_flush_lcore();
+	ipset_flush_lcore(NULL);
 	msg = msg_make(MSG_TYPE_IPSET_FLUSH, 0, DPVS_MSG_MULTICAST,
 						   cid, 0, NULL);
 	
@@ -364,7 +368,7 @@ static int ipset_del_msg_cb(struct dpvs_msg *msg)
 
 static int ipset_flush_msg_cb(struct dpvs_msg *msg)
 {
-    return ipset_flush_lcore();
+    return ipset_flush_lcore(NULL);
 }
 
 static int ipset_lcore_init(void *arg)
@@ -390,6 +394,25 @@ static struct dpvs_sockopts ipset_sockopts = {
     .get_opt_max    = SOCKOPT_GET_IPSET_SHOW,
     .get            = ipset_sockopt_get,
 };
+
+int ipset_term(void)
+{
+    int err;
+    lcoreid_t cid;
+
+    if ((err = sockopt_unregister(&ipset_sockopts)) != EDPVS_OK)
+        return err;
+
+    rte_eal_mp_remote_launch(ipset_flush_lcore, NULL, CALL_MASTER);
+    RTE_LCORE_FOREACH_SLAVE(cid) {
+        if ((err = rte_eal_wait_lcore(cid)) < 0) {
+            RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
+                    __func__, cid, dpvs_strerror(err));
+        }
+    }
+
+    return EDPVS_OK;
+}
 
 int ipset_init(void)
 {
