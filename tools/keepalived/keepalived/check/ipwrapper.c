@@ -41,6 +41,9 @@ weigh_live_realservers(virtual_server_t * vs)
 	real_server_t *svr;
 	long unsigned count = 0;
 
+	if (LIST_ISEMPTY(vs->rs))
+		return count;
+
 	for (e = LIST_HEAD(vs->rs); e; ELEMENT_NEXT(e)) {
 		svr = ELEMENT_DATA(e);
 		if (ISALIVE(svr))
