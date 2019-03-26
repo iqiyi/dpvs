@@ -489,8 +489,12 @@ static int ip6_rcv_fin(struct rte_mbuf *mbuf)
     if (rt->rt6_flags & RTF_LOCALIN) {
         return ip6_local_in(mbuf);
     } else if (rt->rt6_flags & RTF_FORWARD) {
-        /* pass multi-/broad-cast to kni */
-        if (etype != ETH_PKT_HOST)
+        /*
+         * pass the packet to kni in the below two cases.
+         * - multi-/broad-cast packets;
+         * - to-host packets when ipv6 forwarding is disabled;
+         */
+        if (etype != ETH_PKT_HOST || !conf_ipv6_forwarding)
             goto kni;
 
         return ip6_forward(mbuf);
