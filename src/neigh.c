@@ -431,13 +431,6 @@ static void neigh_state_confirm(struct neighbour_entry *neighbour)
             RTE_LOG(ERR, NEIGHBOUR, "[%s] send arp failed\n", __func__);
         }
     } else if (neighbour->af == AF_INET6) {
-        /*to be continue*/
-        ipv6_addr_copy(&daddr.in6, &neighbour->ip_addr.in6);
-        inet_addr_select(AF_INET6, neighbour->port, &daddr, 0, &saddr);
-
-        if (ipv6_addr_any(&saddr.in6))
-            RTE_LOG(ERR, NEIGHBOUR, "[%s]no source ip\n", __func__);
-
         ndisc_solicit(neighbour, &saddr.in6);
     }
 }
@@ -1079,4 +1072,3 @@ int neigh_term(void)
 
     return EDPVS_OK;
 }
-
