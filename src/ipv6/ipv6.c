@@ -75,6 +75,22 @@ static RTE_DEFINE_PER_LCORE(struct inet_stats, ip6_stats);
         this_ip6_stats.__f__##octets += (val); \
     } while (0)
 
+#ifdef CONFIG_DPVS_IP_HEADER_DEBUG
+static inline void ip6_show_hdr(const char *func, struct rte_mbuf *mbuf)
+{
+    struct ip6_hdr *hdr;
+    char sbuf[64], dbuf[64];
+
+    hdr = ip6_hdr(mbuf);
+
+    inet_ntop(AF_INET6, &hdr->ip6_src, sbuf, sizeof(sbuf));
+    inet_ntop(AF_INET6, &hdr->ip6_dst, dbuf, sizeof(dbuf));
+
+    RTE_LOG(DEBUG, IPV6, "%s: [%d] proto %d, %s -> %s\n",
+            func, rte_lcore_id(), hdr->ip6_nxt, sbuf, dbuf);
+}
+#endif
+
 /*
  * internal functions
  */
@@ -601,6 +617,10 @@ static int ip6_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
         if (ipv6_parse_hopopts(mbuf) != EDPVS_OK)
             goto err;
     }
+
+#ifdef CONFIG_DPVS_IP_HEADER_DEBUG
+    ip6_show_hdr(__func__, mbuf);
+#endif
 
     return INET_HOOK(AF_INET6, INET_HOOK_PRE_ROUTING, mbuf,
                      dev, NULL, ip6_rcv_fin);
