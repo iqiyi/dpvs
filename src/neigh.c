@@ -549,6 +549,20 @@ static int neigh_send_arp(struct netif_port *port, uint32_t src_ip, uint32_t dst
     return EDPVS_OK;
 }
 
+#ifdef CONFIG_DPVS_NEIGH_DEBUG
+static inline void neigh_show_nexthop(const char *func, int af,
+                                      const union inet_addr *nexhop,
+                                      const struct netif_port *port)
+{
+    char buf[64];
+
+    RTE_LOG(DEBUG, NEIGHBOUR,
+            "%s: [%d] port %s, nexthop %s\n",
+            __func__, rte_lcore_id(), port->name,
+            nexhop ? inet_ntop(af, nexhop, buf, sizeof(buf)) : "::");
+}
+#endif
+
 int neigh_output(int af, union inet_addr *nexhop,
                  struct rte_mbuf *m, struct netif_port *port)
 {
@@ -563,6 +577,10 @@ int neigh_output(int af, union inet_addr *nexhop,
         neigh_fill_mac(NULL, m, (struct in6_addr *)nexhop, port);
         return netif_xmit(m, port);
     }
+
+#ifdef CONFIG_DPVS_NEIGH_DEBUG
+    neigh_show_nexthop(__func__, af, nexhop, port);
+#endif
 
     hashkey = neigh_hashkey(af, nexhop, port);
     neighbour = neigh_lookup_entry(af, nexhop, port, hashkey);
@@ -1079,4 +1097,3 @@ int neigh_term(void)
 
     return EDPVS_OK;
 }
-
