@@ -47,9 +47,8 @@ struct ipset_addr {
 };
 
 struct ipset_entry {
-    struct list_head list;
-    struct ipset_addr daddr;
-	int route_table_num;
+        struct list_head list;
+        struct ipset_addr daddr;
 };
 
 static inline unsigned int ipset_addr_hash(int af, union inet_addr *addr)
@@ -76,9 +75,8 @@ static struct ipset_entry *ipset_new_entry(int af, union inet_addr * dest)
     if (new_ipset == NULL){
         return NULL;
     }
-	new_ipset->daddr.af = af;
-	memcpy(&new_ipset->daddr.addr, dest, sizeof(union inet_addr));
-    new_ipset->route_table_num = 0;
+    new_ipset->daddr.af = af;
+    memcpy(&new_ipset->daddr.addr, dest, sizeof(union inet_addr));
     return new_ipset;
 }
 
@@ -127,7 +125,7 @@ int ipset_del(int af, union inet_addr *dest)
 
 	ipset_node = ipset_addr_lookup(af, dest);
 	if (!ipset_node)
-		return EDPVS_NOTEXIST;
+	    return EDPVS_NOTEXIST;
 	list_del(&ipset_node->list);
         rte_free(ipset_node);
         rte_atomic32_dec(&this_num_ipset);
@@ -174,58 +172,58 @@ int ipset_test(void)
 	ipset_del(AF_INET, (union inet_addr *)&ipv4);
 	ipset_list();	
 	printf("%d\n", this_num_ipset.cnt);
-        ip4 = inet_addr("192.168.168.166");
-        memcpy(&ipv4, &ip4, sizeof(ip4));
-	ipset_del(AF_INET, (union inet_addr *)&ipv4);
-	ipset_list();	
-	printf("%d\n", this_num_ipset.cnt);
 	ipset_del(AF_INET6, (union inet_addr *)&ipv6);
 	ipset_list();	
 	printf("%d\n", this_num_ipset.cnt);
-        ip4 = inet_addr("192.168.14.57");
-        memcpy(&ipv4, &ip4, sizeof(ip4));
-	ipset_add(AF_INET, (union inet_addr *)&ipv4);
-	ipset_list();	
 
 	return this_num_ipset.cnt;
 }
 #endif
 
-static int ipset_add_del(bool add, int af, union inet_addr *dest)
+static int ipset_add_del(bool add, struct dp_vs_multi_ipset_conf *cf)
 {
 	lcoreid_t cid = rte_lcore_id();
 	struct dpvs_msg *msg;
-    struct dp_vs_ipset_conf cf;
+        struct dp_vs_ipset_conf *ip_cf;
 	int err = 0;
+	int i, multi_ipset_msg_size;
 
-	if (add)
-		err = ipset_add(af, dest);
-	else
-		err = ipset_del(af, dest);
+        for (i = 0; i < cf->num; i++) {
+            ip_cf = &cf->ipset_conf[i];
+            if (ip_cf == NULL)
+               return EDPVS_INVAL;
+            if (ip_cf->af != AF_INET && ip_cf->af != AF_INET6)
+               return EDPVS_NOTSUPP;
+    	    if (add)
+	       err = ipset_add(ip_cf->af, &ip_cf->addr);
+     	    else
+	       err = ipset_del(ip_cf->af, &ip_cf->addr); 
+	}
+	
 	if (err != EDPVS_OK) {
 		return err;
 	}
 
-	memset(&cf, 0, sizeof(struct dp_vs_ipset_conf));
-	cf.af = af;
-	memcpy(&cf.addr, dest, sizeof(union inet_addr));
-
+	multi_ipset_msg_size = sizeof(struct dp_vs_multi_ipset_conf) 
+	                            + cf->num*sizeof(struct dp_vs_ipset_conf);
 	if (add)
-        msg = msg_make(MSG_TYPE_IPSET_ADD, 0, DPVS_MSG_MULTICAST,
-                       cid, sizeof(struct dp_vs_ipset_conf), &cf);
-    else
-        msg = msg_make(MSG_TYPE_IPSET_DEL, 0, DPVS_MSG_MULTICAST,
-                       cid, sizeof(struct dp_vs_ipset_conf), &cf);
+            msg = msg_make(MSG_TYPE_IPSET_ADD, 0, DPVS_MSG_MULTICAST,
+                           cid, multi_ipset_msg_size, cf);
+        else
+            msg = msg_make(MSG_TYPE_IPSET_DEL, 0, DPVS_MSG_MULTICAST,
+                           cid, multi_ipset_msg_size, cf);
 
-    err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
-    if (err != EDPVS_OK) {
+        err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
+        if (err != EDPVS_OK) {
+            msg_destroy(&msg);
+            return err;
+        }
+
         msg_destroy(&msg);
-        return err;
-    }
-    msg_destroy(&msg);
 
-    return EDPVS_OK;
+        return EDPVS_OK;
 }
+
 
 static int ipset_flush_lcore(void *arg)
 {
@@ -270,51 +268,40 @@ static int ipset_flush(void)
 static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
     struct dp_vs_multi_ipset_conf *cf = (void *)conf;
-    struct dp_vs_ipset_conf *ip_cf = NULL;
-    int i, err;
+    int err;
 
     if (opt == SOCKOPT_SET_IPSET_FLUSH)
         return ipset_flush();
 	
-    if (!conf || size < sizeof(*cf))
+    if (!conf || size < sizeof(struct dp_vs_multi_ipset_conf) + sizeof(struct dp_vs_ipset_conf))
         return EDPVS_INVAL;
+	
+    switch (opt) {
+        case SOCKOPT_SET_IPSET_ADD:
+            err = ipset_add_del(true, cf);
+            break;
+        case SOCKOPT_SET_IPSET_DEL:
+            err = ipset_add_del(false, cf);
+            break;
+        default:
+ 	    return EDPVS_NOTSUPP;		
+    }
 
-    for (i = 0; i < cf->num; i++) {
-        ip_cf = &cf->ipset_conf[i];
-        if (ip_cf == NULL)
-            return EDPVS_NOTSUPP;
-        if (ip_cf->af != AF_INET && ip_cf->af != AF_INET6)
-            return EDPVS_NOTSUPP;	
-        switch (opt) {
-    	    case SOCKOPT_SET_IPSET_ADD:
-                 err = ipset_add_del(true, ip_cf->af, &ip_cf->addr);
-	         if (err != EDPVS_OK)
-	             return err;
-	          continue;
-            case SOCKOPT_SET_IPSET_DEL:
-                 err = ipset_add_del(false, ip_cf->af, &ip_cf->addr);
-                 if (err != EDPVS_OK)
-	             return err;
-	         continue;
-            default:
-    	         return EDPVS_NOTSUPP;		
-	}
-    } 
-    return EDPVS_OK;
+    return err;
 }
 
 static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                              void **out, size_t *outsize)
 {
     size_t nips;
-	struct ipset_entry *ipset_node;
+    struct ipset_entry *ipset_node;
     struct dp_vs_ipset_conf_array *array;
-	int i;
-	int off = 0;
+    int i;
+    int off = 0;
 	
-	nips = rte_atomic32_read(&this_num_ipset);
-	*outsize = sizeof(struct dp_vs_ipset_conf_array) + \
-               nips * sizeof(struct dp_vs_ipset_conf);
+    nips = rte_atomic32_read(&this_num_ipset);
+    *outsize = sizeof(struct dp_vs_ipset_conf_array) + \
+                   nips * sizeof(struct dp_vs_ipset_conf);
     *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
     if (!(*out))
         return EDPVS_NOMEM;
@@ -324,7 +311,7 @@ static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             list_for_each_entry(ipset_node, &this_ipset_table_lcore[i], list) {
                 if (off >= nips)
                     break;
-				memcpy(&array->ips[off].addr.in, &ipset_node->daddr.addr, sizeof(union inet_addr));
+		memcpy(&array->ips[off].addr.in, &ipset_node->daddr.addr, sizeof(union inet_addr));
                 array->ips[off++].af = ipset_node->daddr.af;
             }
         }
@@ -333,26 +320,33 @@ static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 	return 0;
 }
 
- static int ipset_msg_process(bool add, struct dpvs_msg *msg)
- {
-	 struct dp_vs_ipset_conf *cf;
-	 int err;
+static int ipset_msg_process(bool add, struct dpvs_msg *msg)
+{
+    struct dp_vs_multi_ipset_conf *cf;
+    struct dp_vs_ipset_conf *ip_cf;
+    int err;
+    int i;
  
-	 assert(msg);
-	 if (msg->len != sizeof(struct dp_vs_ipset_conf)) {
-		 return EDPVS_INVAL;
-	 }
+    assert(msg);
  
-	 /* set route config */
-	 cf = (struct dp_vs_ipset_conf *)msg->data;
-	 if (add)
-		 err = ipset_add(cf->af, &cf->addr);
-	 else
- 		 err = ipset_del(cf->af, &cf->addr);
+    if (msg->len < sizeof(struct dp_vs_multi_ipset_conf) + sizeof(struct dp_vs_ipset_conf)) {
+	 return EDPVS_INVAL;
+    }
 	 
-	 if (err != EDPVS_OK)
+    cf = (struct dp_vs_multi_ipset_conf *)msg->data;
+
+    for (i = 0; i < cf->num; i++) {
+        ip_cf = &cf->ipset_conf[i];
+    	if (add)
+            err = ipset_add(ip_cf->af, &ip_cf->addr);
+     	else
+	    err = ipset_del(ip_cf->af, &ip_cf->addr); 
+    }
+	 
+    if (err != EDPVS_OK)
          RTE_LOG(ERR, IPSET, "%s: fail to %s ipset.\n", __func__, add? "add":"del");
-	 return err;
+
+    return err;
  }
 
 
@@ -439,7 +433,7 @@ int ipset_init(void)
     msg_type.unicast_msg_cb = ipset_add_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, IPSET, "%s: fail to register msg.\n", __func__);
+        RTE_LOG(ERR, IPSET, "%s: fail to register add msg.\n", __func__);
         return err;
     }
 
@@ -450,7 +444,7 @@ int ipset_init(void)
     msg_type.unicast_msg_cb = ipset_del_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, IPSET, "%s: fail to register msg.\n", __func__);
+        RTE_LOG(ERR, IPSET, "%s: fail to register del msg.\n", __func__);
         return err;
     }
 
@@ -461,7 +455,7 @@ int ipset_init(void)
     msg_type.unicast_msg_cb = ipset_flush_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, IPSET, "%s: fail to register msg.\n", __func__);
+        RTE_LOG(ERR, IPSET, "%s: fail to register flush msg.\n", __func__);
         return err;
     }
 
