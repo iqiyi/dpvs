@@ -422,6 +422,9 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
     ip4_dump_hdr(iph, mbuf->port);
 #endif
 
+    if (unlikely(iph->next_proto_id == IPPROTO_OSPF))
+        return EDPVS_KNICONTINUE;
+
     return INET_HOOK(AF_INET, INET_HOOK_PRE_ROUTING,
                      mbuf, port, NULL, ipv4_rcv_fin);
 

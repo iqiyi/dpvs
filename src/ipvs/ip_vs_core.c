@@ -1074,8 +1074,7 @@ static int __dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
         return INET_ACCEPT;
 
     /* Drop all ip fragment except ospf */
-    if ((af == AF_INET) && ip4_is_frag(ip4_hdr(mbuf))
-            && (iph.proto != IPPROTO_OSPF)) {
+    if ((af == AF_INET) && ip4_is_frag(ip4_hdr(mbuf))) {
         dp_vs_estats_inc(DEFENCE_IP_FRAG_DROP);
         return INET_DROP;
     }
