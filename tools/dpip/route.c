@@ -357,12 +357,7 @@ static int route6_parse_args(struct dpip_conf *conf,
             ;/* on-link is output only */
         } else if (strcmp(conf->argv[0], "local") == 0) {
             rt6_cfg->flags |= RTF_LOCALIN;
-        } else if (strcmp(conf->argv[0], "table") == 0) {
-	    NEXTARG_CHECK(conf, "outwall");
-            if (strcmp(conf->argv[0], "outwall") != 0)
-                return -1;
-	    rt6_cfg->outwalltb = 1;
-	} else {
+        } else {
             prefix = conf->argv[0];
         }
 
