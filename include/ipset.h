@@ -29,6 +29,9 @@
 
 #define RTE_LOGTYPE_IPSET       RTE_LOGTYPE_USER1
 
+#define IPSET_CFG_FILE_NAME "/etc/gfwip.conf"
+#define IPSET_CFG_MEMBERS   "members:"
+
 int ipset_init(void);
 int ipset_add(int af, union inet_addr *dest);
 int ipset_del(int af, union inet_addr *dest);

@@ -17,9 +17,15 @@
  */
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
+#include <libgen.h>
+#include <errno.h>
+#include <glob.h>
 #include "ipset.h"
 #include "conf/ipset.h"
 #include "ctrl.h"
+#include "common.h"
+#include "parser/parser.h"
 
 #define IPSET_TAB_SIZE (1<<8)
 #define IPSET_TAB_MASK (IPSET_TAB_SIZE - 1)
@@ -192,8 +198,8 @@ static int ipset_add_del(bool add, struct dp_vs_multi_ipset_conf *cf)
             ip_cf = &cf->ipset_conf[i];
             if (ip_cf == NULL)
                return EDPVS_INVAL;
-            if (ip_cf->af != AF_INET && ip_cf->af != AF_INET6)
-               return EDPVS_NOTSUPP;
+            if (ip_cf->af != AF_INET && ip_cf->af != AF_INET6)              
+                continue;
     	    if (add)
 	       err = ipset_add(ip_cf->af, &ip_cf->addr);
      	    else
@@ -324,7 +330,7 @@ static int ipset_msg_process(bool add, struct dpvs_msg *msg)
 {
     struct dp_vs_multi_ipset_conf *cf;
     struct dp_vs_ipset_conf *ip_cf;
-    int err;
+    int err = 0;
     int i;
  
     assert(msg);
@@ -408,6 +414,86 @@ int ipset_term(void)
     return EDPVS_OK;
 }
 
+static int ipset_parse_conf_file(void)
+{
+    char *buf, *pstr;
+    bool found_num = false;
+    struct dp_vs_multi_ipset_conf *ips = NULL;
+    int ip_num = 0, ipset_size = 0, ip_index = 0;
+
+    buf = (char *) MALLOC(CFG_FILE_MAX_BUF_SZ);
+    while (read_line(buf, CFG_FILE_MAX_BUF_SZ)) {
+        if (false == found_num && NULL != (pstr = strstr(buf, IPSET_CFG_MEMBERS))) {
+	    pstr += strlen(IPSET_CFG_MEMBERS);
+	    ip_num = atoi(pstr);
+            found_num = true;
+            ipset_size = sizeof(struct dp_vs_multi_ipset_conf) + ip_num*sizeof(struct dp_vs_ipset_conf);
+	    ips = rte_calloc_socket(NULL, 1, ipset_size, 0, rte_socket_id());
+            if (ips == NULL) {
+                RTE_LOG(WARNING, IPSET, "no memory for ipset conf\n");
+                break;
+            }                        
+	    ips->num = ip_num;
+	    continue;
+	}
+        if (ips == NULL) {
+            RTE_LOG(WARNING, IPSET, "cannot get gfwip members\n");
+            break;
+        }                        
+	if (inet_pton(AF_INET, buf, &ips->ipset_conf[ip_index].addr) <= 0)
+             ips->ipset_conf[ip_index].af = 0;
+        else                     
+             ips->ipset_conf[ip_index].af = AF_INET;
+	ip_index++;
+    }                
+    if (ips != NULL) {
+        ipset_sockopt_set(SOCKOPT_SET_IPSET_ADD, ips, ipset_size);
+        rte_free(ips);
+        FREE(buf);
+        return 0;
+    }
+
+    FREE(buf);
+    return -1;
+}
+
+static void ipset_read_conf_file(char *conf_file)
+{
+    FILE *stream;
+    int i;
+    char *confpath;
+    char prev_path[CFG_FILE_MAX_BUF_SZ];
+
+    glob_t globbuf = { .gl_offs = 0, };
+    glob(conf_file, 0, NULL, &globbuf);
+
+    for (i = 0; i < globbuf.gl_pathc; i++) {
+        RTE_LOG(INFO, CFG_FILE, "Opening gfwip file '%s'.\n", globbuf.gl_pathv[i]);
+        stream = fopen(globbuf.gl_pathv[i], "r");
+        if (!stream) {
+            RTE_LOG(WARNING, CFG_FILE, "Fail to open gfwip file '%s': %s.\n",
+                    globbuf.gl_pathv[i], strerror(errno));
+            return;
+        }
+        g_current_stream = stream;	
+        if (getcwd(prev_path, CFG_FILE_MAX_BUF_SZ) != NULL) {
+            confpath= strdup(globbuf.gl_pathv[i]);
+            dirname(confpath);
+            if (chdir(confpath) == 0) {
+                if (ipset_parse_conf_file() < 0) {
+                    RTE_LOG(ERR, IPSET, "Fail to parse gfwip conf\n");
+                }
+                if (chdir(prev_path) != 0)
+                    RTE_LOG(ERR, CFG_FILE, "Fail to chdir()\n");
+            }
+            free(confpath);
+        }
+        fclose(stream);
+    }
+
+    globfree(&globbuf);
+}
+
 int ipset_init(void)
 {
     int err;
@@ -462,8 +548,8 @@ int ipset_init(void)
     if ((err = sockopt_register(&ipset_sockopts)) != EDPVS_OK)
         return err;
 
+    ipset_read_conf_file(IPSET_CFG_FILE_NAME);
+
     return EDPVS_OK;
 }
-
-
 
