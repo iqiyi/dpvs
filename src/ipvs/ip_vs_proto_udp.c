@@ -82,6 +82,7 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
 {
     struct udp_hdr *uh, _udph;
     struct dp_vs_service *svc;
+    bool outwall = false;
     assert(proto && iph && mbuf && conn && verdict);
 
     uh = mbuf_header_pointer(mbuf, iph->len, sizeof(_udph), &_udph);
@@ -92,14 +93,14 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
 
     /* lookup service <vip:vport> */
     svc = dp_vs_service_lookup(iph->af, iph->proto,
-                               &iph->daddr, uh->dst_port, 0, mbuf, NULL, NULL);
+                               &iph->daddr, uh->dst_port, 0, mbuf, NULL, &outwall);
     if (!svc) {
         *verdict = INET_ACCEPT;
         return EDPVS_NOSERV;
     }
 
     /* schedule RS and create new connection */
-    *conn = dp_vs_schedule(svc, iph, mbuf, false, false);
+    *conn = dp_vs_schedule(svc, iph, mbuf, false, outwall);
     if (!*conn) {
         dp_vs_service_put(svc);
         *verdict = INET_DROP;
