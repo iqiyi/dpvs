@@ -280,10 +280,6 @@ rt6_hlist_flow_match(const struct route6 *rt6, const struct flow6 *fl6)
     if (fl6->fl6_oif && rt6->rt6_dev && (fl6->fl6_oif->id != rt6->rt6_dev->id))
         return false;
 
-    // if ((!ipv6_addr_any(&rt6->rt6_src.addr)) && (!ipv6_addr_any(&fl6->fl6_saddr)) &&
-    //         (ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr)) != true)
-    //     return false;
-
     /* anything else to check ? */
 
     return true;

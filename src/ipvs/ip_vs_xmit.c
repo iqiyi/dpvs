@@ -2327,7 +2327,7 @@ int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
                       struct dp_vs_conn *conn,
                       struct rte_mbuf *mbuf)
 {
-    int iaf = conn->af;
+    int iaf = tuplehash_in(conn).af;
     int oaf = tuplehash_out(conn).af;
 
     assert(iaf == AF_INET || iaf == AF_INET6);
