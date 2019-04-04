@@ -414,10 +414,7 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     struct neighbour_entry *neigh;
     struct inet_ifaddr *ifa;
     int hashkey;
-
-    struct in6_addr *saddr = &((struct ip6_hdr *)mbuf->userdata)->ip6_src;
     struct in6_addr *daddr = &((struct ip6_hdr *)mbuf->userdata)->ip6_dst;
-
     struct nd_msg *msg = rte_pktmbuf_mtod(mbuf, struct nd_msg *);
     uint32_t ndoptlen = mbuf->data_len - offsetof(struct nd_msg, opt);
 
@@ -464,16 +461,16 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     }
 
     /* notice: override flag ignored */
-    hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)saddr, dev);
+    hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)&msg->target, dev);
     neigh = neigh_lookup_entry(AF_INET6, (union inet_addr *)&msg->target, dev, hashkey);
     if (neigh && !(neigh->flag & NEIGHBOUR_STATIC)) {
         neigh_edit(neigh, (struct ether_addr *)lladdr);
         neigh_entry_state_trans(neigh, 1);
         neigh_sync_core(neigh, 1, NEIGH_ENTRY);
     } else {
-        neigh = neigh_add_table(AF_INET6, (union inet_addr *)saddr,
+        neigh = neigh_add_table(AF_INET6, (union inet_addr *)&msg->target,
                        (struct ether_addr *)lladdr, dev, hashkey, 0);
-        if(!neigh){
+        if (!neigh) {
            RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
            return EDPVS_NOMEM;
         }
@@ -541,4 +538,3 @@ free:
     rte_pktmbuf_free(mbuf);
     return ret;
 }
-
