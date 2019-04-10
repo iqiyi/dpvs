@@ -161,7 +161,7 @@ void install_ip4_frag_keywords(void)
  * that's not straightforward, so let's use array.
  */
 static struct ipv4_frag ip4_frags[RTE_MAX_LCORE];
-#define this_ip4_frag    (ip4_frags[rte_socket_id()])
+#define this_ip4_frag    (ip4_frags[rte_lcore_id()])
 
 /*
  * change mbuf in-place or have to change proto-type
