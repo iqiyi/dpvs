@@ -17,9 +17,9 @@
  */
 #include "ipvs/redirect.h"
 
-#define DPVS_REDIRECT_RING_SIZE  4096
+#define DPVS_REDIRECT_RING_SIZE  2048
 
-#define DPVS_CR_TBL_BITS   22
+#define DPVS_CR_TBL_BITS   20
 #define DPVS_CR_TBL_SIZE   (1 << DPVS_CR_TBL_BITS)
 #define DPVS_CR_TBL_MASK   (DPVS_CR_TBL_SIZE - 1)
 
@@ -359,12 +359,12 @@ static int dp_vs_redirect_ring_create(void)
     socket_id = rte_socket_id();
 
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
-        if (cid == rte_get_master_lcore() || !rte_lcore_is_enabled(cid)) {
+        if (cid == rte_get_master_lcore() || netif_lcore_is_idle(cid)) {
             continue;
         }
 
         for (peer_cid = 0; peer_cid < DPVS_MAX_LCORE; peer_cid++) {
-            if (!rte_lcore_is_enabled(peer_cid)
+            if (netif_lcore_is_idle(peer_cid)
                 || peer_cid == rte_get_master_lcore()
                 || cid == peer_cid) {
                 continue;

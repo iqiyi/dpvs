@@ -1222,11 +1222,13 @@ static void config_lcores(struct list_head *worker_list)
 }
 
 /* fast searching tables */
-lcoreid_t lcore2index[DPVS_MAX_LCORE];
+lcoreid_t lcore2index[DPVS_MAX_LCORE+1];
 portid_t port2index[DPVS_MAX_LCORE][NETIF_MAX_PORTS];
 
 bool netif_lcore_is_idle(lcoreid_t cid)
 {
+    if (cid > DPVS_MAX_LCORE)
+        return true;
     return (lcore_conf[lcore2index[cid]].nports == 0) ? true : false;
 }
 
@@ -1234,7 +1236,7 @@ static void lcore_index_init(void)
 {
     lcoreid_t ii;
     int tk = 0;
-    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
+    for (ii = 0; ii <= DPVS_MAX_LCORE; ii++) {
         if (rte_lcore_is_enabled(ii)) {
             if (likely(tk))
                 lcore2index[ii] = tk - 1;
@@ -1246,7 +1248,7 @@ static void lcore_index_init(void)
     }
 #ifdef CONFIG_DPVS_NETIF_DEBUG
     printf("lcore fast searching table: \n");
-    for (ii = 0; ii < DPVS_MAX_LCORE; ii++)
+    for (ii = 0; ii <= DPVS_MAX_LCORE; ii++)
         printf("lcore2index[%d] = %d\n", ii, lcore2index[ii]);
 #endif
 }
