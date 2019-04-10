@@ -208,7 +208,7 @@ static int __ifa_add_route6(struct inet_ifaddr *ifa)
 
     err = route6_add(&net, ifa->plen, RTF_FORWARD,
                      &in6addr_any, ifa->idev->dev,
-                     &in6addr_any, ifa->idev->dev->mtu);
+                     &ifa->addr.in6, ifa->idev->dev->mtu);
 
     if (err != EDPVS_OK && err != EDPVS_EXIST)
         goto errout;
