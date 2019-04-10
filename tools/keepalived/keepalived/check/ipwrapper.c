@@ -106,6 +106,23 @@ clear_service_rs(list vs_group, virtual_server_t * vs, list l)
 				check_snmp_quorum_trap(vs);
 #endif
 			}
+		} else if (rs->inhibit) { /* delete dead inhibited entry */
+			log_message(LOG_INFO, "Removing inhibited service %s from VS %s",
+					FMT_RS(rs), FMT_VS(vs));
+
+			/* reset inhibit flag */
+			rs->inhibit = 0;
+			/* set alive flag */
+			SET_ALIVE(rs);
+
+			if (!ipvs_cmd(LVS_CMD_DEL_DEST, vs_group, vs, rs)) {
+				UNSET_ALIVE(rs);
+				rs->inhibit = 1;
+				return 0;
+			}
+
+			UNSET_ALIVE(rs);
+			rs->inhibit = 1;
 		}
 	}
 
@@ -752,8 +769,8 @@ clear_diff_rs(list old_vs_group, virtual_server_t * old_vs)
 			/* Reset inhibit flag to delete inhibit entries */
 			log_message(LOG_INFO, "service %s no longer exist"
 					    , FMT_RS(rs));
-			rs->inhibit = 0;
-			SET_ALIVE(rs);
+			if (ISALIVE(rs))
+				rs->inhibit = 0;
 			list_add (rs_to_remove, rs);
 		}
 	}
