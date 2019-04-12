@@ -52,47 +52,47 @@ static struct ip_tunnel_tab gre_tunnel_tab;
 /* linux: gre_flags_to_tnl_flags */
 static inline __be16 flags_gre2tnl(__be16 flags)
 {
-	__be16 tflags = 0;
+    __be16 tflags = 0;
 
-	if (flags & GRE_F_CSUM)
-		tflags |= TUNNEL_F_CSUM;
-	if (flags & GRE_F_ROUTING)
-		tflags |= TUNNEL_F_ROUTING;
-	if (flags & GRE_F_KEY)
-		tflags |= TUNNEL_F_KEY;
-	if (flags & GRE_F_SEQ)
-		tflags |= TUNNEL_F_SEQ;
-	if (flags & GRE_F_STRICT)
-		tflags |= TUNNEL_F_STRICT;
-	if (flags & GRE_F_REC)
-		tflags |= TUNNEL_F_REC;
-	if (flags & GRE_F_VERSION)
-		tflags |= TUNNEL_F_VERSION;
+    if (flags & GRE_F_CSUM)
+        tflags |= TUNNEL_F_CSUM;
+    if (flags & GRE_F_ROUTING)
+        tflags |= TUNNEL_F_ROUTING;
+    if (flags & GRE_F_KEY)
+        tflags |= TUNNEL_F_KEY;
+    if (flags & GRE_F_SEQ)
+        tflags |= TUNNEL_F_SEQ;
+    if (flags & GRE_F_STRICT)
+        tflags |= TUNNEL_F_STRICT;
+    if (flags & GRE_F_REC)
+        tflags |= TUNNEL_F_REC;
+    if (flags & GRE_F_VERSION)
+        tflags |= TUNNEL_F_VERSION;
 
-	return tflags;
+    return tflags;
 }
 
 /* linux: gre_tnl_flags_to_gre_flags */
 static inline __be16 flags_tnl2gre(__be16 tflags)
 {
-	__be16 flags = 0;
+    __be16 flags = 0;
 
-	if (tflags & TUNNEL_F_CSUM)
-		flags |= GRE_F_CSUM;
-	if (tflags & TUNNEL_F_ROUTING)
-		flags |= GRE_F_ROUTING;
-	if (tflags & TUNNEL_F_KEY)
-		flags |= GRE_F_KEY;
-	if (tflags & TUNNEL_F_SEQ)
-		flags |= GRE_F_SEQ;
-	if (tflags & TUNNEL_F_STRICT)
-		flags |= GRE_F_STRICT;
-	if (tflags & TUNNEL_F_REC)
-		flags |= GRE_F_REC;
-	if (tflags & TUNNEL_F_VERSION)
-		flags |= GRE_F_VERSION;
+    if (tflags & TUNNEL_F_CSUM)
+        flags |= GRE_F_CSUM;
+    if (tflags & TUNNEL_F_ROUTING)
+        flags |= GRE_F_ROUTING;
+    if (tflags & TUNNEL_F_KEY)
+        flags |= GRE_F_KEY;
+    if (tflags & TUNNEL_F_SEQ)
+        flags |= GRE_F_SEQ;
+    if (tflags & TUNNEL_F_STRICT)
+        flags |= GRE_F_STRICT;
+    if (tflags & TUNNEL_F_REC)
+        flags |= GRE_F_REC;
+    if (tflags & TUNNEL_F_VERSION)
+        flags |= GRE_F_VERSION;
 
-	return flags;
+    return flags;
 }
 
 static inline __be16 gre_checksum(struct rte_mbuf *mbuf)

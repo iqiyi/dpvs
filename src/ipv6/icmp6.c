@@ -134,7 +134,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     struct inet_ifaddr *ifa;
     int room, err;
     int addr_type = 0;
-    
+
     ifa = inet_addr_ifa_get(AF_INET6, netif_port_get(imbuf->port),
                            (union inet_addr *)&iph->ip6_dst);
     if (ifa) {
@@ -153,7 +153,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
             !(type == ICMP6_PARAM_PROB &&
               code == ICMP6_PARAMPROB_OPTION &&
               (icmp6_opt_unrec(imbuf, info)))) {
-                
+
                 RTE_LOG(DEBUG, ICMP6,
                     "%s: l2 broadcast or l3 multicast don't support the error.\n",
                      __func__);

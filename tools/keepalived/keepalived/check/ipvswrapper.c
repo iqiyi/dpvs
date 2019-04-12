@@ -549,7 +549,7 @@ ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs
 
 		/* Talk to the IPVS channel */
 		if (IPVS_ALIVE(cmd, vsg_entry, rs)) {
-			if (ipvs_talk(cmd) != IPVS_SUCCESS) 
+			if (ipvs_talk(cmd) != IPVS_SUCCESS)
 				return IPVS_ERROR;
 			IPVS_SET_ALIVE(cmd, vsg_entry);
 		}
@@ -573,7 +573,7 @@ ipvs_group_cmd(int cmd, list vs_group, real_server_t * rs, virtual_server_t * vs
 
 		/* Talk to the IPVS channel */
 		if (IPVS_ALIVE(cmd, vsg_entry, rs)) {
-			if (ipvs_talk(cmd) != IPVS_SUCCESS) 
+			if (ipvs_talk(cmd) != IPVS_SUCCESS)
 				return IPVS_ERROR;
 			IPVS_SET_ALIVE(cmd, vsg_entry);
 		}
@@ -941,6 +941,7 @@ ipvs_blklst_vsg_cmd(int cmd, list vs_group, virtual_server_t * vs, blklst_addr_g
 static int
 ipvs_blklst_cmd(int cmd, list vs_group, virtual_server_t * vs)
 {
+        uint32_t ip_addr = 0;
         blklst_addr_group *blklst_group = ipvs_get_blklst_group_by_name(vs->blklst_addr_gname,
                                                         check_data->blklst_group);
         if (!blklst_group) {
@@ -959,8 +960,13 @@ ipvs_blklst_cmd(int cmd, list vs_group, virtual_server_t * vs)
                         srule->af = vs->addr.ss_family;
                         if (vs->addr.ss_family == AF_INET6)
                                 inet_sockaddrip6(&vs->addr, &srule->addr.in6);
-                        else
-                                srule->addr.ip = inet_sockaddrip4(&vs->addr);
+                        else {
+                            ip_addr = inet_sockaddrip4(&vs->addr);
+                            if (ip_addr == 0xffffffff)
+                                srule->addr.ip = 0;
+                            else
+                                srule->addr.ip = ip_addr;
+                        }
                         srule->port = inet_sockaddrport(&vs->addr);
                         ipvs_blklst_group_cmd(cmd, blklst_group);
                 }

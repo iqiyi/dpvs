@@ -12,7 +12,7 @@
 # Based on init script for ipchains by Joshua Jensen <joshua@redhat.com>
 #
 # Changes:
-#	Wenzhuo Zhang		:	fixed the typo of failure function 
+#	Wenzhuo Zhang		:	fixed the typo of failure function
 #
 # config: /etc/sysconfig/ipvsadm
 # config: /etc/ipvsadm.rules
@@ -47,7 +47,7 @@ fi
 
 # Check for ipvsadm in both /sbin and /usr/sbin
 # The default install puts it in /sbin, as it is analogos to commands such
-# as route and ipchains that live in /sbin.  Some vendors, most notibly 
+# as route and ipchains that live in /sbin.  Some vendors, most notibly
 # Red Hat insist on moving it to /usr/sbin
 if [ ! -x /sbin/ipvsadm -a  ! -x /usr/sbin/ipvsadm ]; then
     exit 0
@@ -77,7 +77,7 @@ case "$1" in
 	;;
 
   panic)
-	# I'm not sure what panic does but in the case of IPVS	
+	# I'm not sure what panic does but in the case of IPVS
         # it makes sense just to clear everything
         action "Clearing the current IPVS table:" ipvsadm -C
 	;;

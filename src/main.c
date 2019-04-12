@@ -56,6 +56,7 @@ static int set_all_thread_affinity(void)
 
     s = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
     if (s != 0) {
+        errno = s;
         perror("fail to set thread affinty");
         return -1;
     }
@@ -63,6 +64,7 @@ static int set_all_thread_affinity(void)
     CPU_ZERO(&cpuset);
     s = pthread_getaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
     if (s != 0) {
+        errno = s;
         perror("fail to get thread affinity");
         return -2;
     }
@@ -206,7 +208,7 @@ int main(int argc, char *argv[])
 
     if ((err = netif_init(NULL)) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init netif: %s\n", dpvs_strerror(err));
-    /* Default lcore conf and port conf are used and may be changed here 
+    /* Default lcore conf and port conf are used and may be changed here
      * with "netif_port_conf_update" and "netif_lcore_conf_set" */
 
     if ((err = ctrl_init()) != EDPVS_OK)
@@ -286,7 +288,7 @@ int main(int argc, char *argv[])
 
         /* process mac ring on master */
         neigh_process_ring(NULL);
- 
+
         /* increase loop counts */
         netif_update_master_loop_cnt();
     }

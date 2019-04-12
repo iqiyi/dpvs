@@ -1,40 +1,28 @@
 DPVS TODO list
 ==============
 
-Short-term
-----------
-
-* [x] Merge DPDK-17.05.2
-* [x] Basic traffic control
-* [x] Neighbour (ARP) refactor
-* [x] Tunnel Interface (gre/ipip)
-* [x] NAT/Tunnel forwarding mode
-* [x] Consistent hashing
-* [x] Get real client IP for UDP, like TCP TOA.
-* [x] Keepalive.conf support SNAT
-* [x] Numa/fdir auto check.
-* [ ] SNAT Related
-    - [ ] Multi-WIPs for schedule (auto switch to new WIP if one fails).
-    - [ ] Fixed group of WIPs for user, share or not share with other user.
-    - [ ] White/black list.
-    - [ ] Throughput and concurrency monitoring.
-    - [ ] Throughput and/or concurrency limiting.
+* [x] IPv6 Support.
+* [x] Documents update.
+* [ ] NIC without Flow-Director (FDIR)
+  - [x] Packet redirect to workers.
+  - [ ]RSS pre-calcuating.
+* [ ] Merge lastest DPDK stable
+* [ ] SNAT ACL
+* [ ] Refactor Keepalived (porting latest stable keepalived)
+* [ ] Packet Capture and Tcpdump Support
 * [ ] Logging
     - [ ] Packet based logging.
     - [ ] Session based logging (creation, expire, statistics)
-* [ ] CI, Test Automation setup.
-* [ ] Performance optimization for 25G/40G NIC.
-* [ ] Documents update.
-
-Long-term
----------
-
-* [ ] VM support
-* [ ] IP fragment support, for UDP apps.
+* [ ] CI, Test Automation Setup.
+* [ ] Performance Optimization
+    - [ ] CPU Performance Tuning
+    - [ ] Memory Performance Tuning
+    - [ ] Numa-aware NIC
+    - [ ] Minimal Running Resource
+* [ ] 25G/40G NIC Supports
+* [ ] VxLAN Support
+* [ ] IPv6 Tunnel Device 
+* [ ] VM Support
+* [ ] IP Fragment Support, for UDP APPs.
 * [ ] Session Sharing
 * [ ] ALG (ftp, sip, ...)
-* [ ] VxLAN Support
-* [ ] NIC without Flow-Director (fdir)
-  - Packet redirect to workers.
-  - RSS pre-calcuating.
-* [ ] IPv6 Support.

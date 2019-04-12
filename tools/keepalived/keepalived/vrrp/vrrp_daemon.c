@@ -83,7 +83,6 @@ stop_vrrp(void)
 	free_vrrp_data(vrrp_data);
 	free_vrrp_buffer();
 	free_interface_queue();
-	kernel_netlink_close();
 	thread_destroy_master(master);
 	gratuitous_arp_close();
 	ndisc_close();
@@ -106,7 +105,6 @@ start_vrrp(void)
 {
 	/* Initialize sub-system */
 	init_interface_queue();
-	kernel_netlink_init();
 	gratuitous_arp_init();
 	ndisc_init();
 #ifdef _WITH_SNMP_
@@ -211,7 +209,6 @@ reload_vrrp_thread(thread_t * thread)
 
 	/* Destroy master thread */
 	vrrp_dispatcher_release(vrrp_data);
-	kernel_netlink_close();
 	thread_destroy_master(master);
 	master = thread_make_master();
 	free_global_data(global_data);

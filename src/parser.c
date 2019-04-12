@@ -32,8 +32,8 @@ static vector_t g_current_keywords;
 static char *g_current_conf_file;
 static int g_sublevel = 0;
 
-/* 
- * keyword operations 
+/*
+ * keyword operations
  * */
 
 /* allocate and set a keyword in current level */

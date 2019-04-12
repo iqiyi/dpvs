@@ -68,7 +68,6 @@ struct multicast_wait_list {
     struct list_head list;
 };
 struct multicast_wait_list mc_wait_list;
-rte_rwlock_t mc_wait_lock;
 
 /* per-lcore msg queue */
 struct rte_ring *msg_ring[DPVS_MAX_LCORE];
@@ -482,9 +481,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     mc_msg->org_msg = msg; /* save original msg */
     INIT_LIST_HEAD(&mc_msg->mq);
 
-    rte_rwlock_write_lock(&mc_wait_lock);
     if (mc_wait_list.free_cnt <= 0) {
-        rte_rwlock_write_unlock(&mc_wait_lock);
         RTE_LOG(WARNING, MSGMGR, "%s: multicast msg wait queue full, "
                 "msg dropped and try later...\n", __func__);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
@@ -492,7 +489,6 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     }
     list_add_tail(&mc_msg->list, &mc_wait_list.list);
     --mc_wait_list.free_cnt;
-    rte_rwlock_write_unlock(&mc_wait_lock);
 
     if (flags & DPVS_MSG_F_ASYNC)
         return EDPVS_OK;
@@ -1251,8 +1247,6 @@ static inline int sockopt_term(void)
 int ctrl_init(void)
 {
     int ret;
-
-    rte_rwlock_init(&mc_wait_lock);
 
     ret = msg_init();
     if (unlikely(ret < 0)) {
