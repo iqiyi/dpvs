@@ -135,8 +135,8 @@ static int route_net_add(struct in_addr *dest, uint8_t netmask, uint32_t flag,
             __list_add(&route->list, (&route_node->list)->prev,
                        &route_node->list);
             if (flag & RTF_OUTWALL)
-	        rte_atomic32_inc(&this_num_out_routes);
-	    else
+                rte_atomic32_inc(&this_num_out_routes);
+            else
                 rte_atomic32_inc(&this_num_routes);
             rte_atomic32_inc(&route->refcnt);
             return EDPVS_OK;
@@ -627,13 +627,13 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         return EDPVS_NOMEM;
     array = *out;
 
-    if (outwall_table == true) {
-	list_for_each_entry(entry, &this_gfw_route_table, list) {
+    if (outwall_table) {
+        list_for_each_entry(entry, &this_gfw_route_table, list) {
             if (off >= nroute)
                 break;
             route_fill_conf(AF_INET, &array->routes[off++], entry);
         }
-	array->nroute = off;
+        array->nroute = off;
         return EDPVS_OK;
     }  
 

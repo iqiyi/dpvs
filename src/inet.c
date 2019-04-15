@@ -82,6 +82,8 @@ int inet_init(void)
 {
     int err;
 
+    if ((err = ipset_init()) != 0)
+        return err;
     if ((err = neigh_init()) != 0)
         return err;
     if ((err = route_init()) != 0)
@@ -99,8 +101,6 @@ int inet_init(void)
     if ((err = icmpv6_init()) != 0)
         return err;
     if ((err = inet_addr_init()) != 0)
-        return err;
-    if ((err = ipset_init()) != 0)
         return err;
 
     return EDPVS_OK;

@@ -26,11 +26,11 @@
 static void ipset_help(void)
 {
 	fprintf(stderr, 
-	                "Usage:\n"
-			"    dpip gfwip { add | del } IPs\n"
-                        "    dpip gfwip show\n"
-                        "    dpip gfwip flush\n"
-		);
+                    "Usage:\n"
+                    "    dpip gfwip { add | del } IPs\n"
+                    "    dpip gfwip show\n"
+                    "    dpip gfwip flush\n"
+    );
 }
 
 static int ipset_parse_args(struct dpip_conf *conf, struct dp_vs_multi_ipset_conf **ips_conf, int *ips_size)
@@ -65,27 +65,24 @@ static int ipset_parse_args(struct dpip_conf *conf, struct dp_vs_multi_ipset_con
     while (conf->argc > 0) {
         ipaddr = conf->argv[0];
         ips->ipset_conf[index].af = AF_INET;
-   	if (inet_pton_try(&conf->af, ipaddr, &ips->ipset_conf[index].addr) <= 0)
- 	{
-             fprintf(stderr, "bad IP\n");
-   	     dpvs_sockopt_msg_free(ips);
-	     return -1;
-	}
-	index++;
+        if (inet_pton_try(&conf->af, ipaddr, &ips->ipset_conf[index].addr) <= 0)
+        {
+            fprintf(stderr, "bad IP\n");
+            dpvs_sockopt_msg_free(ips);
+            return -1;
+        }
+        index++;
         NEXTARG(conf);
     }
-	
+
     if (conf->argc > 0) {
         fprintf(stderr, "too many arguments\n");
-	dpvs_sockopt_msg_free(ips);
+        dpvs_sockopt_msg_free(ips);
         return -1;
     }
-	*ips_size = ipset_size;
+    *ips_size = ipset_size;
     return 0;
 }
-
-
-
 
 static int ipset_dump(const struct dp_vs_ipset_conf *ipconf)
 {

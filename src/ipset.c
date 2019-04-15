@@ -46,17 +46,6 @@ struct ipset_lcore{
 static RTE_DEFINE_PER_LCORE(struct ipset_lcore, ipset_lcore);
 static RTE_DEFINE_PER_LCORE(rte_atomic32_t, num_ipset);
 
-
-struct ipset_addr {
-	int af;
-	union inet_addr    addr;
-};
-
-struct ipset_entry {
-        struct list_head list;
-        struct ipset_addr daddr;
-};
-
 static inline unsigned int ipset_addr_hash(int af, union inet_addr *addr)
 {
     uint32_t addr_fold;
@@ -72,7 +61,7 @@ static inline unsigned int ipset_addr_hash(int af, union inet_addr *addr)
 }
 
 
-static struct ipset_entry *ipset_new_entry(int af, union inet_addr * dest)
+static struct ipset_entry *ipset_new_entry(int af, union inet_addr *dest)
 {
     struct ipset_entry *new_ipset=NULL;
     if(!dest)
@@ -106,7 +95,7 @@ int ipset_add(int af, union inet_addr *dest)
     }
  
     list_add(&ipset_new->list, &this_ipset_table_lcore[hashkey]);
-	rte_atomic32_inc(&this_num_ipset);	
+    rte_atomic32_inc(&this_num_ipset);	
     return EDPVS_OK;
 }
 
@@ -138,54 +127,6 @@ int ipset_del(int af, union inet_addr *dest)
         return EDPVS_OK; 
 }
 
-#ifdef CONFIG_DPVS_IPSET_DEBUG
-int ipset_list(void)
-{
-	struct ipset_entry *ipset_node;
-	int i;
-	char ip6str[64], ip4str[32];
-	for (i = 0; i < IPSET_TAB_SIZE; i++) {
-		list_for_each_entry(ipset_node, &this_ipset_table_lcore[i], list){
-			if (ipset_node && ipset_node->daddr.af == AF_INET) {
-                                inet_ntop(AF_INET, (union inet_addr*)&ipset_node->daddr.addr, ip4str, sizeof(ip4str));
-                                printf("%s\n", ip4str);
-			}
-			else if (ipset_node && ipset_node->daddr.af == AF_INET6) {
-				inet_ntop(AF_INET6, (union inet_addr*)&ipset_node->daddr.addr, ip6str, sizeof(ip6str));
-				printf("%s\n", ip6str);
-			}	
-		}		
-	}
-    return 0;
-}
-
-int ipset_test(void)
-{
-	ulong ip4;
-	char *ip6;
-	struct in_addr ipv4;
-	struct in6_addr ipv6;
-	ip4 = inet_addr("192.168.168.168");
-	ip6 = strdup("2a01:198:603:0:396e:4789:8e99:890f");
-	memcpy(&ipv4, &ip4, sizeof(ip4));
-	inet_pton(AF_INET6, ip6, &ipv6);
-	ipset_add(AF_INET, (union inet_addr *)&ipv4);
-	ipset_list();
-	printf("%d\n", this_num_ipset.cnt);
-	ipset_add(AF_INET6, (union inet_addr *)&ipv6);
-	ipset_list();	
-	printf("%d\n", this_num_ipset.cnt);
-	ipset_del(AF_INET, (union inet_addr *)&ipv4);
-	ipset_list();	
-	printf("%d\n", this_num_ipset.cnt);
-	ipset_del(AF_INET6, (union inet_addr *)&ipv6);
-	ipset_list();	
-	printf("%d\n", this_num_ipset.cnt);
-
-	return this_num_ipset.cnt;
-}
-#endif
-
 static int ipset_add_del(bool add, struct dp_vs_multi_ipset_conf *cf)
 {
 	lcoreid_t cid = rte_lcore_id();
@@ -194,81 +135,77 @@ static int ipset_add_del(bool add, struct dp_vs_multi_ipset_conf *cf)
 	int err = 0;
 	int i, multi_ipset_msg_size;
 
-        for (i = 0; i < cf->num; i++) {
-            ip_cf = &cf->ipset_conf[i];
-            if (ip_cf == NULL)
-               return EDPVS_INVAL;
-            if (ip_cf->af != AF_INET && ip_cf->af != AF_INET6)              
-                continue;
-    	    if (add)
-	       err = ipset_add(ip_cf->af, &ip_cf->addr);
-     	    else
-	       err = ipset_del(ip_cf->af, &ip_cf->addr); 
-	}
-	
-	if (err != EDPVS_OK) {
-		return err;
-	}
-
-	multi_ipset_msg_size = sizeof(struct dp_vs_multi_ipset_conf) 
-	                            + cf->num*sizeof(struct dp_vs_ipset_conf);
-	if (add)
-            msg = msg_make(MSG_TYPE_IPSET_ADD, 0, DPVS_MSG_MULTICAST,
-                           cid, multi_ipset_msg_size, cf);
+    for (i = 0; i < cf->num; i++) {
+        ip_cf = &cf->ipset_conf[i];
+        if (ip_cf->af != AF_INET && ip_cf->af != AF_INET6)              
+            continue;
+        if (add)
+            err = ipset_add(ip_cf->af, &ip_cf->addr);
         else
-            msg = msg_make(MSG_TYPE_IPSET_DEL, 0, DPVS_MSG_MULTICAST,
+            err = ipset_del(ip_cf->af, &ip_cf->addr); 
+    }
+    
+    if (err != EDPVS_OK) {
+        return err;
+    }
+
+    multi_ipset_msg_size = sizeof(struct dp_vs_multi_ipset_conf) 
+                                + cf->num*sizeof(struct dp_vs_ipset_conf);
+    if (add)
+        msg = msg_make(MSG_TYPE_IPSET_ADD, 0, DPVS_MSG_MULTICAST,
+                           cid, multi_ipset_msg_size, cf);
+    else
+        msg = msg_make(MSG_TYPE_IPSET_DEL, 0, DPVS_MSG_MULTICAST,
                            cid, multi_ipset_msg_size, cf);
 
-        err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
-        if (err != EDPVS_OK) {
-            msg_destroy(&msg);
-            return err;
-        }
-
+    err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
+    if (err != EDPVS_OK) {
         msg_destroy(&msg);
+        return err;
+    }
 
-        return EDPVS_OK;
+    msg_destroy(&msg);
+    return EDPVS_OK;
 }
 
 
 static int ipset_flush_lcore(void *arg)
 {
-	struct ipset_entry *ipset_node, *next;
-	int i;
-        
-        if (!rte_lcore_is_enabled(rte_lcore_id()))
-            return EDPVS_DISABLED;
+    struct ipset_entry *ipset_node, *next;
+    int i;
+    if (!rte_lcore_is_enabled(rte_lcore_id()))
+        return EDPVS_DISABLED;
 
-	for (i = 0; i < IPSET_TAB_SIZE; i++) {
-	    list_for_each_entry_safe(ipset_node, next, &this_ipset_table_lcore[i], list){
-                if (ipset_node) {
-		    list_del(&ipset_node->list);
-		    rte_free(ipset_node);
-    		    rte_atomic32_dec(&this_num_ipset);
-                }
+    for (i = 0; i < IPSET_TAB_SIZE; i++) {
+        list_for_each_entry_safe(ipset_node, next, &this_ipset_table_lcore[i], list){
+            if (ipset_node) {
+                list_del(&ipset_node->list);
+                rte_free(ipset_node);
+                rte_atomic32_dec(&this_num_ipset);
             }
         }
+    }
     return 0;
 }
 
 static int ipset_flush(void)
 {
-	lcoreid_t cid = rte_lcore_id();
-	struct dpvs_msg *msg;	
-	int err = 0;
+    lcoreid_t cid = rte_lcore_id();
+    struct dpvs_msg *msg;	
+    int err = 0;
 
-	ipset_flush_lcore(NULL);
-	msg = msg_make(MSG_TYPE_IPSET_FLUSH, 0, DPVS_MSG_MULTICAST,
-						   cid, 0, NULL);
-	
-	err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
-	if (err != EDPVS_OK) {
-		msg_destroy(&msg);
-		return err;
-	}
-	msg_destroy(&msg);
+    ipset_flush_lcore(NULL);
+    msg = msg_make(MSG_TYPE_IPSET_FLUSH, 0, DPVS_MSG_MULTICAST,
+                   cid, 0, NULL);
+    
+    err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
+    if (err != EDPVS_OK) {
+        msg_destroy(&msg);
+        return err;
+    }
+    msg_destroy(&msg);
 
-	return EDPVS_OK;
+    return EDPVS_OK;
 }
 
 static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
@@ -290,7 +227,7 @@ static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
             err = ipset_add_del(false, cf);
             break;
         default:
- 	    return EDPVS_NOTSUPP;		
+            return EDPVS_NOTSUPP;		
     }
 
     return err;
@@ -311,19 +248,19 @@ static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
     if (!(*out))
         return EDPVS_NOMEM;
-	array = *out;
+    array = *out;
 
-	for (i = 0; i < IPSET_TAB_SIZE; i++) {
-            list_for_each_entry(ipset_node, &this_ipset_table_lcore[i], list) {
-                if (off >= nips)
-                    break;
-		memcpy(&array->ips[off].addr.in, &ipset_node->daddr.addr, sizeof(union inet_addr));
+    for (i = 0; i < IPSET_TAB_SIZE; i++) {
+        list_for_each_entry(ipset_node, &this_ipset_table_lcore[i], list) {
+            if (off >= nips)
+                break;
+        memcpy(&array->ips[off].addr.in, &ipset_node->daddr.addr, sizeof(union inet_addr));
                 array->ips[off++].af = ipset_node->daddr.af;
-            }
         }
-	array->nipset = off;
+    }
+    array->nipset = off;
 	
-	return 0;
+    return 0;
 }
 
 static int ipset_msg_process(bool add, struct dpvs_msg *msg)
@@ -336,17 +273,17 @@ static int ipset_msg_process(bool add, struct dpvs_msg *msg)
     assert(msg);
  
     if (msg->len < sizeof(struct dp_vs_multi_ipset_conf) + sizeof(struct dp_vs_ipset_conf)) {
-	 return EDPVS_INVAL;
+        return EDPVS_INVAL;
     }
-	 
+    
     cf = (struct dp_vs_multi_ipset_conf *)msg->data;
 
     for (i = 0; i < cf->num; i++) {
         ip_cf = &cf->ipset_conf[i];
-    	if (add)
+        if (add)
             err = ipset_add(ip_cf->af, &ip_cf->addr);
-     	else
-	    err = ipset_del(ip_cf->af, &ip_cf->addr); 
+        else
+            err = ipset_del(ip_cf->af, &ip_cf->addr); 
     }
 	 
     if (err != EDPVS_OK)
@@ -378,6 +315,9 @@ static int ipset_lcore_init(void *arg)
     if (!rte_lcore_is_enabled(rte_lcore_id()))
         return EDPVS_DISABLED;
 
+    if (netif_lcore_is_idle(rte_lcore_id()))
+        return EDPVS_IDLE;
+
     for (i = 0; i < IPSET_TAB_SIZE; i++)
         INIT_LIST_HEAD(&this_ipset_table_lcore[i]);
 
@@ -395,25 +335,6 @@ static struct dpvs_sockopts ipset_sockopts = {
     .get            = ipset_sockopt_get,
 };
 
-int ipset_term(void)
-{
-    int err;
-    lcoreid_t cid;
-
-    if ((err = sockopt_unregister(&ipset_sockopts)) != EDPVS_OK)
-        return err;
-
-    rte_eal_mp_remote_launch(ipset_flush_lcore, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
-        if ((err = rte_eal_wait_lcore(cid)) < 0) {
-            RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
-                    __func__, cid, dpvs_strerror(err));
-        }
-    }
-
-    return EDPVS_OK;
-}
-
 static int ipset_parse_conf_file(void)
 {
     char *buf, *pstr;
@@ -422,29 +343,33 @@ static int ipset_parse_conf_file(void)
     int ip_num = 0, ipset_size = 0, ip_index = 0;
 
     buf = (char *) MALLOC(CFG_FILE_MAX_BUF_SZ);
+    if (buf == NULL) {
+        RTE_LOG(WARNING, IPSET, "no memory for ipset buf\n");
+        return -1;
+    }
     while (read_line(buf, CFG_FILE_MAX_BUF_SZ)) {
         if (false == found_num && NULL != (pstr = strstr(buf, IPSET_CFG_MEMBERS))) {
-	    pstr += strlen(IPSET_CFG_MEMBERS);
-	    ip_num = atoi(pstr);
+            pstr += strlen(IPSET_CFG_MEMBERS);
+            ip_num = atoi(pstr);
             found_num = true;
             ipset_size = sizeof(struct dp_vs_multi_ipset_conf) + ip_num*sizeof(struct dp_vs_ipset_conf);
-	    ips = rte_calloc_socket(NULL, 1, ipset_size, 0, rte_socket_id());
+            ips = rte_calloc_socket(NULL, 1, ipset_size, 0, rte_socket_id());
             if (ips == NULL) {
                 RTE_LOG(WARNING, IPSET, "no memory for ipset conf\n");
                 break;
             }                        
-	    ips->num = ip_num;
-	    continue;
-	}
+        ips->num = ip_num;
+        continue;
+        }
         if (ips == NULL) {
             RTE_LOG(WARNING, IPSET, "cannot get gfwip members\n");
             break;
         }                        
-	if (inet_pton(AF_INET, buf, &ips->ipset_conf[ip_index].addr) <= 0)
+        if (inet_pton(AF_INET, buf, &ips->ipset_conf[ip_index].addr) <= 0)
              ips->ipset_conf[ip_index].af = 0;
         else                     
              ips->ipset_conf[ip_index].af = AF_INET;
-	ip_index++;
+        ip_index++;
     }                
     if (ips != NULL) {
         ipset_sockopt_set(SOCKOPT_SET_IPSET_ADD, ips, ipset_size);
@@ -494,23 +419,10 @@ static void ipset_read_conf_file(char *conf_file)
     globfree(&globbuf);
 }
 
-int ipset_init(void)
+static int ipset_register_msg_cb(void)
 {
-    int err;
-    lcoreid_t cid;
     struct dpvs_msg_type msg_type;
-
-    rte_atomic32_set(&this_num_ipset, 0);    
-
-    /* master core also need routes */
-    rte_eal_mp_remote_launch(ipset_lcore_init, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
-        if ((err = rte_eal_wait_lcore(cid)) < 0) {
-            RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
-                    __func__, cid, dpvs_strerror(err));
-            return err;
-        }
-    }
+    int err;
 
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_IPSET_ADD;
@@ -544,11 +456,99 @@ int ipset_init(void)
         RTE_LOG(ERR, IPSET, "%s: fail to register flush msg.\n", __func__);
         return err;
     }
+    return EDPVS_OK;
+}
 
-    if ((err = sockopt_register(&ipset_sockopts)) != EDPVS_OK)
+static int ipset_unregister_msg_cb(void)
+{
+    struct dpvs_msg_type msg_type;
+    int err;
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_IPSET_ADD;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = ipset_add_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPSET, "%s: fail to register add msg.\n", __func__);
+        return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_IPSET_DEL;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = ipset_del_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPSET, "%s: fail to register del msg.\n", __func__);
+        return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_IPSET_FLUSH;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = ipset_flush_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPSET, "%s: fail to register flush msg.\n", __func__);
+        return err;
+    }
+    return EDPVS_OK;
+}
+
+int ipset_init(void)
+{
+    int err, i;
+    lcoreid_t cid;
+
+    rte_atomic32_set(&this_num_ipset, 0);    
+
+    for (i = 0; i < IPSET_TAB_SIZE; i++)
+        INIT_LIST_HEAD(&this_ipset_table_lcore[i]);
+
+    rte_eal_mp_remote_launch(ipset_lcore_init, NULL, CALL_MASTER);
+    RTE_LCORE_FOREACH_SLAVE(cid) {
+        if ((err = rte_eal_wait_lcore(cid)) < 0) {
+            RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
+                    __func__, cid, dpvs_strerror(err));
+        }
+    }
+    
+    if ((err = ipset_register_msg_cb()) != EDPVS_OK) {
+        RTE_LOG(WARNING, IPSET, "fail to register ipset msg type.\n");
+        ipset_unregister_msg_cb();
+        return err;
+    }
+
+    if ((err = sockopt_register(&ipset_sockopts)) != EDPVS_OK) {
+        ipset_unregister_msg_cb();
+        return err;
+    }
+    ipset_read_conf_file(IPSET_CFG_FILE_NAME);
+
+    return EDPVS_OK;
+}
+
+int ipset_term(void)
+{
+    int err;
+    lcoreid_t cid;
+    
+    if ((err = ipset_unregister_msg_cb()) != EDPVS_OK)
+        return err;
+    if ((err = sockopt_unregister(&ipset_sockopts)) != EDPVS_OK)
         return err;
 
-    ipset_read_conf_file(IPSET_CFG_FILE_NAME);
+    rte_eal_mp_remote_launch(ipset_flush_lcore, NULL, CALL_MASTER);
+    RTE_LCORE_FOREACH_SLAVE(cid) {
+        if ((err = rte_eal_wait_lcore(cid)) < 0) {
+            RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
+                    __func__, cid, dpvs_strerror(err));
+        }
+    }
 
     return EDPVS_OK;
 }
