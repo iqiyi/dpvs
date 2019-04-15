@@ -44,7 +44,7 @@ struct ipset_lcore{
 };
 
 static RTE_DEFINE_PER_LCORE(struct ipset_lcore, ipset_lcore);
-static RTE_DEFINE_PER_LCORE(rte_atomic32_t, num_ipset);
+static RTE_DEFINE_PER_LCORE(uint32_t, num_ipset);
 
 static inline unsigned int ipset_addr_hash(int af, union inet_addr *addr)
 {
@@ -95,7 +95,7 @@ int ipset_add(int af, union inet_addr *dest)
     }
  
     list_add(&ipset_new->list, &this_ipset_table_lcore[hashkey]);
-    rte_atomic32_inc(&this_num_ipset);	
+    this_num_ipset++;	
     return EDPVS_OK;
 }
 
@@ -116,15 +116,15 @@ struct ipset_entry *ipset_addr_lookup(int af, union inet_addr *dest)
 
 int ipset_del(int af, union inet_addr *dest)
 {
-	struct ipset_entry *ipset_node;
+    struct ipset_entry *ipset_node;
 
-	ipset_node = ipset_addr_lookup(af, dest);
-	if (!ipset_node)
-	    return EDPVS_NOTEXIST;
-	list_del(&ipset_node->list);
-        rte_free(ipset_node);
-        rte_atomic32_dec(&this_num_ipset);
-        return EDPVS_OK; 
+    ipset_node = ipset_addr_lookup(af, dest);
+    if (!ipset_node)
+        return EDPVS_NOTEXIST;
+    list_del(&ipset_node->list);
+    rte_free(ipset_node);
+    this_num_ipset--;
+    return EDPVS_OK; 
 }
 
 static int ipset_add_del(bool add, struct dp_vs_multi_ipset_conf *cf)
@@ -181,7 +181,7 @@ static int ipset_flush_lcore(void *arg)
             if (ipset_node) {
                 list_del(&ipset_node->list);
                 rte_free(ipset_node);
-                rte_atomic32_dec(&this_num_ipset);
+                this_num_ipset--;
             }
         }
     }
@@ -242,7 +242,7 @@ static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     int i;
     int off = 0;
 	
-    nips = rte_atomic32_read(&this_num_ipset);
+    nips = this_num_ipset;
     *outsize = sizeof(struct dp_vs_ipset_conf_array) + \
                    nips * sizeof(struct dp_vs_ipset_conf);
     *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
@@ -504,7 +504,7 @@ int ipset_init(void)
     int err, i;
     lcoreid_t cid;
 
-    rte_atomic32_set(&this_num_ipset, 0);    
+    this_num_ipset = 0;    
 
     for (i = 0; i < IPSET_TAB_SIZE; i++)
         INIT_LIST_HEAD(&this_ipset_table_lcore[i]);
