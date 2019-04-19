@@ -386,6 +386,8 @@ static inline void conn_table_dump(void)
 static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
 {
     char cbuf[64], vbuf[64], lbuf[64], dbuf[64];
+    char end_time[SYS_TIME_STR_LEN];
+    char start_time[SYS_TIME_STR_LEN];
     const char *caddr, *vaddr, *laddr, *daddr;
 
     if (rte_log_get_global_level() >= RTE_LOG_DEBUG) {
@@ -396,7 +398,7 @@ static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
 
         RTE_LOG(DEBUG, IPVS, "[%s->%s]%s [%d] %s %s/%u %s/%u %s/%u %s/%u"
                 " inpkts=%ld, inbytes=%ld, outpkts=%ld, outbytes=%ld\n",
-                cycles_to_stime(conn->ctime), sys_localtime_str(),
+                cycles_to_stime(conn->ctime, start_time, SYS_TIME_STR_LEN), sys_localtime_str(end_time, SYS_TIME_STR_LEN),
                 msg ? msg : "", rte_lcore_id(), inet_proto_name(conn->proto),
                 caddr, ntohs(conn->cport), vaddr, ntohs(conn->vport),
                 laddr, ntohs(conn->lport), daddr, ntohs(conn->dport),
