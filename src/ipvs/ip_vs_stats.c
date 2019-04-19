@@ -141,7 +141,7 @@ static int get_stats_uc_cb(struct dpvs_msg *msg)
     }
     src = (struct dp_vs_stats **)msg->data;
     char *reply = rte_malloc(NULL, sizeof(struct dp_vs_stats), RTE_CACHE_LINE_SIZE);
-    memcpy(reply, &((*src)[cid]), sizeof(struct dp_vs_stats));
+    rte_memcpy(reply, &((*src)[cid]), sizeof(struct dp_vs_stats));
     msg->reply.len = sizeof(struct dp_vs_stats);
     msg->reply.data = (void *)reply;
     return EDPVS_OK;

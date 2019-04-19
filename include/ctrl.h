@@ -24,8 +24,6 @@
 
 #define RTE_LOGTYPE_MSGMGR RTE_LOGTYPE_USER2
 
-#define  DPVS_WAIT_WHILE(expr) while(expr){;}
-
 typedef uint32_t msgid_t;
 
 typedef enum msg_mode {
@@ -125,10 +123,10 @@ struct dpvs_multicast_queue {
 typedef int (*UNICAST_MSG_CB)(struct dpvs_msg *);
 typedef int (*MULTICAST_MSG_CB)(struct dpvs_multicast_queue *);
 
-/* unicast only needs UNICAST_MSG_CB,
- * while multicast need both UNICAST_MSG_CB and MULTICAST_MSG_CB.
- * As for mulitcast msg, UNICAST_MSG_CB return a dpvs_msg to Master with the SAME
- * seq number as the msg recieved. */
+/* Unicast only needs UNICAST_MSG_CB, multicast need both UNICAST_MSG_CB and
+ * MULTICAST_MSG_CB, and MULTICAST_MSG_CB is set to a default function which does
+ * nothing if not set. For mulitcast msg, UNICAST_MSG_CB return a dpvs_msg to
+ * Master with the SAME seq number as the msg recieved. */
 struct dpvs_msg_type {
     msgid_t type;
     lcoreid_t cid;          /* on which lcore the callback func registers */
@@ -157,7 +155,7 @@ int msg_destroy(struct dpvs_msg **pmsg);
 /* send msg to lcore cid */
 int msg_send(struct dpvs_msg *msg,
         lcoreid_t cid, /* target lcore for the msg */
-        uint32_t flags, /* only  DPVS_MSG_F_ASYNC supported now */
+        uint32_t flags, /* only DPVS_MSG_F_ASYNC supported now */
         struct dpvs_msg_reply **reply); /* response, use it before msg_destroy */
 
 /* send multicast msg to Master lcore */
@@ -166,13 +164,14 @@ int multicast_msg_send(struct dpvs_msg *msg,
         struct dpvs_multicast_queue **reply); /* response, use it before msg_destroy */
 
 /* Master lcore msg process loop */
-int msg_master_process(void); /* Master lcore msg loop */
+int msg_master_process(int step); /* Master lcore msg loop */
 
 /* Slave lcore msg process loop */
-int msg_slave_process(void);  /* Slave lcore msg loop */
+int msg_slave_process(int step);  /* Slave lcore msg loop */
 
-/* print msg_type table on all configured lcores */
-int msg_type_table_print(char *buf, int len); /* debug */
+/* debug utility */
+int msg_type_table_print(char *buf, int len); /* print msg_type table on all configured lcores */
+int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 
 /***************************** built-in msg-type ******************************/
 #define MSG_TYPE_REG                        1

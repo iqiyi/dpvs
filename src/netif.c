@@ -1322,7 +1322,7 @@ static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)
     lcoreid_t cid;
     cid = rte_lcore_id();
     assert(cid < DPVS_MAX_LCORE);
-    memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
+    rte_memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
 }
 
 static int port_rx_queues_get(portid_t pid)
@@ -2028,7 +2028,7 @@ int netif_register_master_xmit_msg(void)
                     " exiting ...\n", __func__);
             return ret;
         }
-        RTE_LOG(DEBUG, NETIF, "[%s] mster_xmit_msg registered on lcore #%d\n",
+        RTE_LOG(DEBUG, NETIF, "[%s] master_xmit_msg registered on lcore #%d\n",
                 __func__, ii);
     }
 
@@ -4363,7 +4363,7 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
 
         assert(reply->len == sizeof(struct netif_lcore_stats));
         assert(reply->data);
-        memcpy(&stats, reply->data, sizeof(stats));
+        rte_memcpy(&stats, reply->data, sizeof(stats));
 
         msg_destroy(&pmsg);
     }
