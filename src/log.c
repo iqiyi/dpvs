@@ -1,0 +1,323 @@
+#include <string.h>
+#include <syslog.h>
+#include <rte_mempool.h>
+#include "netif.h"
+#include "sys_time.h"
+#include "log.h"
+#include "common.h"
+#include "dpdk.h"
+
+
+lcoreid_t g_dpvs_log_core = 0;
+struct rte_ring *log_ring;
+int g_dpvs_log_ready = 0;
+
+log_stats log_stats_info[DPVS_MAX_LCORE];
+
+int log_internal = LOG_INTERNAL_TIME;
+log_buf_t w_buf;
+
+extern struct rte_logs rte_logs;
+
+static struct rte_mempool *dp_vs_log_pool;
+static int log_pool_size  = DPVS_LOG_POOL_SIZE_DEF;
+static int log_pool_cache = DPVS_LOG_CACHE_SIZE_DEF;
+
+
+static int log_send(struct dpvs_log *msg)
+{
+    int res;
+
+    res = rte_ring_enqueue(log_ring, msg);
+    if (unlikely(-EDQUOT == res)) {
+        return EDPVS_DPDKAPIFAIL;
+    } else if (unlikely(-ENOBUFS == res)) {
+        return EDPVS_DPDKAPIFAIL;
+    } else if (res) {
+        return EDPVS_DPDKAPIFAIL;
+    }
+    return EDPVS_OK;
+}
+
+static inline void dpvs_log_thread_lcore_set(lcoreid_t core_num)
+{
+    g_dpvs_log_core = core_num;
+}
+
+static struct dpvs_log *dpvs_log_msg_make(int level, int type, lcoreid_t cid,
+        uint32_t len, const void *data)
+{
+    struct dpvs_log *log_msg;
+
+    if (unlikely(rte_mempool_get(dp_vs_log_pool, (void **)&log_msg) != 0)) {
+        return NULL;
+    }
+
+    log_msg->log_level = level;
+    log_msg->log_type = type;
+    log_msg->cid = cid;
+    log_msg->log_len = len;
+    if (len)
+        memcpy(log_msg->data, data, len);
+
+    return log_msg;
+}
+
+static void dpvs_log_free(struct dpvs_log *log_msg)
+{
+    if (!log_msg)
+        return;    
+    rte_mempool_put(dp_vs_log_pool, log_msg);
+}
+
+#if 1
+static unsigned int log_BKDRHash(char *str, int len)
+{
+    unsigned int seed = 131; // 31 131 1313 13131 131313 etc..
+    unsigned int hash = 0;
+ 
+    while (len--)
+    {
+        hash = hash * seed + (*str++);
+    }
+ 
+    return (hash & 0x7FFFFFFF);
+}
+static uint64_t log_get_time(char *time, int time_len)
+{
+    time_t tm;
+    long sec = 0; 
+    int yy = 0, mm = 0, dd = 0, hh = 0, mi = 0, ss = 0;
+    int ad = 0;
+    int y400 = 0, y100 = 0, y004 = 0, y001 = 0;
+    int m[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int i;
+    
+    tm = sys_current_time();
+    sec = tm + (60*60)*TIMEZONE;
+    ad = sec/DAY;
+    ad = ad - YEARSTART;
+    y400 = ad/YEAR400;
+    y100 = (ad - y400*YEAR400)/YEAR100;
+    y004 = (ad - y400*YEAR400 - y100*YEAR100)/YEAR004;
+    y001 = (ad - y400*YEAR400 - y100*YEAR100 - y004*YEAR004)/YEAR001;
+    yy = y400*4*100 + y100*100 + y004*4 + y001*1 + YEARFIRST;
+    dd = (ad - y400*YEAR400 - y100*YEAR100 - y004*YEAR004)%YEAR001;
+
+    if(0 == yy%1000)
+    {
+        if(0 == (yy/1000)%4)
+        {
+            m[1] = 29;
+        }
+    } else {
+        if(0 == yy%4)
+        { 
+            m[1] = 29;
+        }
+    }
+    for(i = 1; i <= 12; i++)
+    {
+        if(dd - m[i] < 0)
+        {
+            break;
+        } else {
+            dd = dd -m[i];
+        }
+    }
+    
+    mm = i;
+    hh = sec/(60*60)%24;
+    mi = sec/60 - sec/(60*60)*60;
+    ss = sec - sec/60*60;
+    snprintf(time, time_len, "%d-%02d-%02d %02d:%02d:%02d\n", yy, mm, dd, hh, mi, ss);
+    return tm;
+}
+#endif
+
+static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char *log, int len)
+{
+    struct dpvs_log *msg = NULL;
+    int log_hash_new;
+    int err;
+
+    log_hash_new = log_BKDRHash(log+LOG_SYS_TIME_LEN, len);
+    if (log_hash_new == log_stats_info[cid].log_hash 
+            && (rte_get_timer_cycles()-log_stats_info[cid].log_begin) < log_internal*rte_get_timer_hz()){  
+        return -1;
+    }
+
+    /* add time info and send out to log ring */ 
+    log_get_time(log, LOG_SYS_TIME_LEN);       
+    log[LOG_SYS_TIME_LEN-1] = ' '; 
+    log_stats_info[cid].log_hash = log_hash_new;
+    log_stats_info[cid].log_begin = rte_get_timer_cycles();
+    len += LOG_SYS_TIME_LEN;
+
+    msg = dpvs_log_msg_make(level, logtype, cid, len, log);
+    if (msg == NULL)
+        return -1;
+    
+    err = log_send(msg);
+    if (err != EDPVS_OK) {
+        dpvs_log_free(msg);
+        printf("log ring is full !\n");
+        log_stats_info[cid].slow = 1;
+        return -1;
+    }
+    return 0;
+}
+
+int dpvs_log(uint32_t level, uint32_t logtype, const char *func, const char *format, ...)
+{
+    va_list ap;
+    lcoreid_t cid;
+    char log_buf[DPVS_LOG_MAX_LINE_LEN];
+    int len = 0;
+
+    if (level > rte_logs.level)
+        return 0;
+    if (!g_dpvs_log_core)
+        return 0;
+
+    cid = rte_lcore_id();
+
+    va_start(ap, format);
+
+    do { 
+        if (!g_dpvs_log_ready) {
+            rte_vlog(level, logtype, format, ap);
+            break;
+        }
+        
+        if (logtype != RTE_LOGTYPE_USER1) {
+            rte_vlog(level, logtype, format, ap);
+            break;
+        }        
+        
+        if (log_stats_info[cid].slow) {
+            len = snprintf(log_buf+LOG_SYS_TIME_LEN, sizeof(log_buf)-LOG_SYS_TIME_LEN, "%s\n", func);
+            dpvs_async_log(level, logtype, cid, log_buf, len);
+            break;
+        }
+        
+        len = vsnprintf(log_buf+LOG_SYS_TIME_LEN, sizeof(log_buf)-LOG_SYS_TIME_LEN, format, ap);                
+        dpvs_async_log(level, logtype, cid, log_buf, len);
+    }while(0);
+    
+    va_end(ap);
+    return 0;
+}
+
+static int log_buf_flush(FILE *f)
+{
+    if (f == NULL ) {
+        syslog(w_buf.level, w_buf.buf, w_buf.pos);
+    } else {
+        fwrite(w_buf.buf, w_buf.pos, sizeof(w_buf.buf[0]), f);
+        fflush(f);
+    }
+    w_buf.pos = 0;
+    return 0;
+}
+
+static int log_buf_timeout_flush(FILE *f, int timeout)
+{
+    uint64_t now;
+    
+    now = rte_get_timer_cycles();
+    
+    if (w_buf.pos && ((now - w_buf.time) >= timeout*rte_get_timer_hz())) {
+        log_buf_flush(f);
+    }
+    return 0;
+}
+
+
+static int log_slave_process(void)
+{
+    struct dpvs_log *msg_log;
+    int ret = EDPVS_OK;
+    FILE *f = rte_logs.file;
+#if 0        
+    strcpy(w_buf.buf, "@log slave process test loop for write");     
+    w_buf.pos = 4096;
+    w_buf.buf[w_buf.pos-1] = '\n';
+   
+    while (1) {
+        log_buf_flush(f);   
+         w_buf.pos = 100;
+    }
+#endif
+    /* dequeue LOG from ring, no lock for ring and w_buf */
+    while (0 == rte_ring_dequeue(log_ring, (void **)&msg_log)) { 
+        if (msg_log->log_len > LOG_BUF_MAX_LEN) {
+            dpvs_log_free(msg_log);
+            continue;
+        }
+        if (w_buf.pos + msg_log->log_len >= LOG_BUF_MAX_LEN) {
+            log_buf_flush(f);
+        }
+        
+        if (!w_buf.pos) {
+            w_buf.level = msg_log->log_level - 1;
+            w_buf.time = rte_get_timer_cycles();        
+        }
+        strncpy(w_buf.buf+w_buf.pos, msg_log->data, msg_log->log_len);
+        w_buf.pos += msg_log->log_len;
+
+        log_buf_timeout_flush(f, 5);            
+        dpvs_log_free(msg_log);
+    }
+    
+    log_buf_timeout_flush(f, 5);
+    
+    return ret;
+}
+
+static void log_slave_loop_func(void)
+{
+    g_dpvs_log_ready = 1;
+    while(1){
+        log_slave_process();
+    }
+}
+
+int log_slave_init(void)
+{
+    char ring_name[16];
+    char log_pool_name[32];
+    int lcore_id;
+    
+    RTE_LCORE_FOREACH_SLAVE(lcore_id) {
+        if (rte_eal_get_lcore_state(lcore_id) == FINISHED) {
+            rte_eal_wait_lcore(lcore_id);
+            dpvs_log_thread_lcore_set(lcore_id);
+            break;
+        }
+    }
+    snprintf(ring_name, sizeof(ring_name), "log_ring_%d", g_dpvs_log_core);
+    log_ring = rte_ring_create(ring_name, DPVS_LOG_RING_SIZE_DEF,
+                   rte_socket_id(), 0/*RING_F_SC_DEQ*/);
+    if (unlikely(NULL == log_ring)) {
+        fprintf(stderr, "Fail to init log slave core\n");
+        return EDPVS_DPDKAPIFAIL;
+    }
+    /* use memory pool for log msg */
+    snprintf(log_pool_name, sizeof(log_pool_name), "log_msg_pool");
+    dp_vs_log_pool = rte_mempool_create(log_pool_name,
+                                log_pool_size,
+                                sizeof(struct dpvs_log) + DPVS_LOG_MAX_LINE_LEN,
+                                log_pool_cache,
+                                0, NULL, NULL, NULL, NULL,
+                                0, 0);
+    if (!dp_vs_log_pool) {
+        return EDPVS_DPDKAPIFAIL;
+    }
+    
+    
+    rte_eal_remote_launch((lcore_function_t *)log_slave_loop_func, NULL, lcore_id);
+    
+    return EDPVS_OK;
+}
+

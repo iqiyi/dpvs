@@ -60,7 +60,7 @@ void sys_start_time(void)
 
     time(&g_dpvs_timer);
     gettimeofday(&tv, &tz);
-    g_dpvs_timer += tz.tz_minuteswest*60;
+    g_dpvs_timer -= tz.tz_minuteswest*60;
 
     g_start_cycles = rte_rdtsc();
 
