@@ -19,6 +19,8 @@
 
 #define LOG_INTERNAL_TIME 5
 
+#define LOG_SLOW_INTERNAL_TIME (60*10)
+
 #define DPVS_LOG_MAX_LINE_LEN 1024
 
 #define LOG_BUF_MAX_LEN 4096
@@ -47,6 +49,8 @@ typedef struct log_stats{
     int log_hash;
     uint64_t log_begin;
     int slow;
+    uint64_t slow_begin;
+    uint32_t missed;
 }log_stats;
 
 extern int g_dpvs_log_ready;
@@ -55,12 +59,12 @@ extern int g_dpvs_log_ready;
 #undef RTE_LOG
 #define RTE_LOG(l, t, ...)                  \
     dpvs_log(RTE_LOG_ ## l,                   \
-        RTE_LOGTYPE_ ## t,  __func__, # t ": " __VA_ARGS__) 
+        RTE_LOGTYPE_ ## t,  __func__, __LINE__, # t ": " __VA_ARGS__) 
 #endif 
 
 
 
-int dpvs_log(uint32_t level, uint32_t logtype, const char *func, const char *format, ...);
+int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const char *format, ...);
 int log_slave_init(void);    
 
 #endif

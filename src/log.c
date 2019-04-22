@@ -10,7 +10,8 @@
 
 lcoreid_t g_dpvs_log_core = 0;
 struct rte_ring *log_ring;
-int g_dpvs_log_ready = 0;
+int g_dpvs_log_thread_ready = 0;
+int g_dpvs_log_time_off = 0;
 
 log_stats log_stats_info[DPVS_MAX_LCORE];
 
@@ -19,10 +20,11 @@ log_buf_t w_buf;
 
 extern struct rte_logs rte_logs;
 
+#if CONFIG_DPVS_LOG_POOL_DEBUG
 static struct rte_mempool *dp_vs_log_pool;
 static int log_pool_size  = DPVS_LOG_POOL_SIZE_DEF;
 static int log_pool_cache = DPVS_LOG_CACHE_SIZE_DEF;
-
+#endif
 
 static int log_send(struct dpvs_log *msg)
 {
@@ -48,11 +50,15 @@ static struct dpvs_log *dpvs_log_msg_make(int level, int type, lcoreid_t cid,
         uint32_t len, const void *data)
 {
     struct dpvs_log *log_msg;
-
+#if CONFIG_DPVS_LOG_POOL_DEBUG
     if (unlikely(rte_mempool_get(dp_vs_log_pool, (void **)&log_msg) != 0)) {
         return NULL;
     }
-
+#else
+    log_msg = rte_zmalloc("log_msg", sizeof(struct dpvs_log) + len, RTE_CACHE_LINE_SIZE);
+    if (unlikely(NULL == log_msg))
+        return NULL; 
+#endif
     log_msg->log_level = level;
     log_msg->log_type = type;
     log_msg->cid = cid;
@@ -66,11 +72,14 @@ static struct dpvs_log *dpvs_log_msg_make(int level, int type, lcoreid_t cid,
 static void dpvs_log_free(struct dpvs_log *log_msg)
 {
     if (!log_msg)
-        return;    
+        return;  
+#if CONFIG_DPVS_LOG_POOL_DEBUG    
     rte_mempool_put(dp_vs_log_pool, log_msg);
+#else
+    rte_free(log_msg);
+#endif    
 }
 
-#if 1
 static unsigned int log_BKDRHash(char *str, int len)
 {
     unsigned int seed = 131; // 31 131 1313 13131 131313 etc..
@@ -83,6 +92,8 @@ static unsigned int log_BKDRHash(char *str, int len)
  
     return (hash & 0x7FFFFFFF);
 }
+
+
 static uint64_t log_get_time(char *time, int time_len)
 {
     time_t tm;
@@ -133,26 +144,28 @@ static uint64_t log_get_time(char *time, int time_len)
     snprintf(time, time_len, "%d-%02d-%02d %02d:%02d:%02d\n", yy, mm, dd, hh, mi, ss);
     return tm;
 }
-#endif
 
-static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char *log, int len)
+static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char *log, int len, int off)
 {
     struct dpvs_log *msg = NULL;
     int log_hash_new;
     int err;
 
-    log_hash_new = log_BKDRHash(log+LOG_SYS_TIME_LEN, len);
+    log_hash_new = log_BKDRHash(log+off, len);
     if (log_hash_new == log_stats_info[cid].log_hash 
             && (rte_get_timer_cycles()-log_stats_info[cid].log_begin) < log_internal*rte_get_timer_hz()){  
+        log_stats_info[cid].missed++;    
         return -1;
     }
 
     /* add time info and send out to log ring */ 
-    log_get_time(log, LOG_SYS_TIME_LEN);       
-    log[LOG_SYS_TIME_LEN-1] = ' '; 
+    if (off) {
+        log_get_time(log, LOG_SYS_TIME_LEN);       
+        log[LOG_SYS_TIME_LEN-1] = ' '; 
+        len += LOG_SYS_TIME_LEN;
+    }
     log_stats_info[cid].log_hash = log_hash_new;
     log_stats_info[cid].log_begin = rte_get_timer_cycles();
-    len += LOG_SYS_TIME_LEN;
 
     msg = dpvs_log_msg_make(level, logtype, cid, len, log);
     if (msg == NULL)
@@ -161,19 +174,22 @@ static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char 
     err = log_send(msg);
     if (err != EDPVS_OK) {
         dpvs_log_free(msg);
+        /* log ring is full, need to set limit rate */
         printf("log ring is full !\n");
         log_stats_info[cid].slow = 1;
+        log_stats_info[cid].slow_begin = rte_get_timer_cycles();
         return -1;
     }
     return 0;
 }
 
-int dpvs_log(uint32_t level, uint32_t logtype, const char *func, const char *format, ...)
+int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const char *format, ...)
 {
     va_list ap;
     lcoreid_t cid;
     char log_buf[DPVS_LOG_MAX_LINE_LEN];
     int len = 0;
+    int off = g_dpvs_log_time_off;
 
     if (level > rte_logs.level)
         return 0;
@@ -185,24 +201,33 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, const char *for
     va_start(ap, format);
 
     do { 
-        if (!g_dpvs_log_ready) {
+        if (!g_dpvs_log_thread_ready) {
             rte_vlog(level, logtype, format, ap);
             break;
         }
-        
+        /* async log is not used for ctrl message */
         if (logtype != RTE_LOGTYPE_USER1) {
             rte_vlog(level, logtype, format, ap);
             break;
-        }        
+        }
         
         if (log_stats_info[cid].slow) {
-            len = snprintf(log_buf+LOG_SYS_TIME_LEN, sizeof(log_buf)-LOG_SYS_TIME_LEN, "%s\n", func);
-            dpvs_async_log(level, logtype, cid, log_buf, len);
+            /* set log limit rate to 5 sec and keep for 10 mins */
+            if (rte_get_timer_cycles() - log_stats_info[cid].slow_begin > LOG_SLOW_INTERNAL_TIME*rte_get_timer_hz()) {
+                log_stats_info[cid].slow = 0;
+            }
+            if ((rte_get_timer_cycles() - log_stats_info[cid].log_begin) < log_internal*rte_get_timer_hz()) {
+                log_stats_info[cid].missed++;
+                break;
+            }
+            /* just output func and line if log is too fast */
+            len = snprintf(log_buf+off, sizeof(log_buf)-off, "%s:%d\n", func, line);
+            dpvs_async_log(level, logtype, cid, log_buf, len, off);
             break;
         }
         
-        len = vsnprintf(log_buf+LOG_SYS_TIME_LEN, sizeof(log_buf)-LOG_SYS_TIME_LEN, format, ap);                
-        dpvs_async_log(level, logtype, cid, log_buf, len);
+        len = vsnprintf(log_buf+off, sizeof(log_buf)-off, format, ap);                
+        dpvs_async_log(level, logtype, cid, log_buf, len, off);
     }while(0);
     
     va_end(ap);
@@ -212,6 +237,7 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, const char *for
 static int log_buf_flush(FILE *f)
 {
     if (f == NULL ) {
+        w_buf.buf[w_buf.pos] = '\0';
         syslog(w_buf.level, w_buf.buf, w_buf.pos);
     } else {
         fwrite(w_buf.buf, w_buf.pos, sizeof(w_buf.buf[0]), f);
@@ -239,16 +265,7 @@ static int log_slave_process(void)
     struct dpvs_log *msg_log;
     int ret = EDPVS_OK;
     FILE *f = rte_logs.file;
-#if 0        
-    strcpy(w_buf.buf, "@log slave process test loop for write");     
-    w_buf.pos = 4096;
-    w_buf.buf[w_buf.pos-1] = '\n';
-   
-    while (1) {
-        log_buf_flush(f);   
-         w_buf.pos = 100;
-    }
-#endif
+
     /* dequeue LOG from ring, no lock for ring and w_buf */
     while (0 == rte_ring_dequeue(log_ring, (void **)&msg_log)) { 
         if (msg_log->log_len > LOG_BUF_MAX_LEN) {
@@ -277,7 +294,7 @@ static int log_slave_process(void)
 
 static void log_slave_loop_func(void)
 {
-    g_dpvs_log_ready = 1;
+    g_dpvs_log_thread_ready = 1;
     while(1){
         log_slave_process();
     }
@@ -288,7 +305,12 @@ int log_slave_init(void)
     char ring_name[16];
     char log_pool_name[32];
     int lcore_id;
-    
+    FILE *f = rte_logs.file;
+
+    if (f != NULL) {
+        g_dpvs_log_time_off = LOG_SYS_TIME_LEN;
+    }
+            
     RTE_LCORE_FOREACH_SLAVE(lcore_id) {
         if (rte_eal_get_lcore_state(lcore_id) == FINISHED) {
             rte_eal_wait_lcore(lcore_id);
@@ -303,6 +325,7 @@ int log_slave_init(void)
         fprintf(stderr, "Fail to init log slave core\n");
         return EDPVS_DPDKAPIFAIL;
     }
+#if CONFIG_DPVS_LOG_POOL_DEBUG
     /* use memory pool for log msg */
     snprintf(log_pool_name, sizeof(log_pool_name), "log_msg_pool");
     dp_vs_log_pool = rte_mempool_create(log_pool_name,
@@ -314,7 +337,7 @@ int log_slave_init(void)
     if (!dp_vs_log_pool) {
         return EDPVS_DPDKAPIFAIL;
     }
-    
+#endif    
     
     rte_eal_remote_launch((lcore_function_t *)log_slave_loop_func, NULL, lcore_id);
     
