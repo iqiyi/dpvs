@@ -205,12 +205,13 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
             rte_vlog(level, logtype, format, ap);
             break;
         }
+
         /* async log is not used for ctrl message */
         if (logtype != RTE_LOGTYPE_USER1) {
             rte_vlog(level, logtype, format, ap);
             break;
         }
-        
+
         if (log_stats_info[cid].slow) {
             /* set log limit rate to 5 sec and keep for 10 mins */
             if (rte_get_timer_cycles() - log_stats_info[cid].slow_begin > LOG_SLOW_INTERNAL_TIME*rte_get_timer_hz()) {
@@ -303,9 +304,11 @@ static void log_slave_loop_func(void)
 int log_slave_init(void)
 {
     char ring_name[16];
-    char log_pool_name[32];
     int lcore_id;
     FILE *f = rte_logs.file;
+#if CONFIG_DPVS_LOG_POOL_DEBUG
+    char log_pool_name[32];
+#endif
 
     if (f != NULL) {
         g_dpvs_log_time_off = LOG_SYS_TIME_LEN;
