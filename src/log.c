@@ -6,7 +6,7 @@
 #include "log.h"
 #include "common.h"
 #include "dpdk.h"
-
+#include "signal.h"
 
 lcoreid_t g_dpvs_log_core = 0;
 struct rte_ring *log_ring;
@@ -175,7 +175,7 @@ static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char 
     if (err != EDPVS_OK) {
         dpvs_log_free(msg);
         /* log ring is full, need to set limit rate */
-        printf("log ring is full !\n");
+        fprintf(stderr, "log ring is full !\n");
         log_stats_info[cid].slow = 1;
         log_stats_info[cid].slow_begin = rte_get_timer_cycles();
         return -1;
@@ -192,9 +192,9 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
     int off = g_dpvs_log_time_off;
 
     if (level > rte_logs.level)
-        return 0;
+        return -1;
     if (!g_dpvs_log_core)
-        return 0;
+        return -1;
 
     cid = rte_lcore_id();
 
@@ -226,7 +226,7 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
             dpvs_async_log(level, logtype, cid, log_buf, len, off);
             break;
         }
-        
+
         len = vsnprintf(log_buf+off, sizeof(log_buf)-off, format, ap);                
         dpvs_async_log(level, logtype, cid, log_buf, len, off);
     }while(0);
@@ -239,7 +239,7 @@ static int log_buf_flush(FILE *f)
 {
     if (f == NULL ) {
         w_buf.buf[w_buf.pos] = '\0';
-        syslog(w_buf.level, w_buf.buf, w_buf.pos);
+        syslog(w_buf.level, "%s", w_buf.buf);
     } else {
         fwrite(w_buf.buf, w_buf.pos, sizeof(w_buf.buf[0]), f);
         fflush(f);
@@ -301,6 +301,18 @@ static void log_slave_loop_func(void)
     }
 }
 
+static void log_signal_handler(int signum)
+{
+    if (signum == SIGABRT || signum == SIGSEGV) {
+        printf("\nSignal %d received, preparing to exit...\n",
+                signum);
+    }
+    log_slave_process();
+    log_buf_flush(rte_logs.file); 
+    signal(signum, SIG_DFL);
+    kill(getpid(), signum);
+}
+
 int log_slave_init(void)
 {
     char ring_name[16];
@@ -341,7 +353,10 @@ int log_slave_init(void)
         return EDPVS_DPDKAPIFAIL;
     }
 #endif    
-    
+ 
+    signal(SIGABRT, log_signal_handler);
+    signal(SIGSEGV, log_signal_handler);
+   
     rte_eal_remote_launch((lcore_function_t *)log_slave_loop_func, NULL, lcore_id);
     
     return EDPVS_OK;
