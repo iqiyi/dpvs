@@ -269,7 +269,8 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
     struct udphdr *uh;
     struct ipopt_uoa *uoa = NULL;
     struct opphdr *opp;
-    int af = conn->af;
+    int iaf = tuplehash_in(conn).af;
+    int oaf = tuplehash_out(conn).af;
 
     assert(conn && ombuf && oiph && ouh && ombuf->userdata);
 
@@ -281,10 +282,10 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
     if (unlikely(!mbuf))
         return EDPVS_NOMEM;
 
-    int ipolen_uoa = (AF_INET6 == af) ? IPOLEN_UOA_IPV6 : IPOLEN_UOA_IPV4;
+    int ipolen_uoa = (AF_INET6 == iaf) ? IPOLEN_UOA_IPV6 : IPOLEN_UOA_IPV4;
 
     /* don't copy any ip options from oiph, is it ok ? */
-    if (AF_INET6 == af) {
+    if (AF_INET6 == oaf) {
         iph = (void *)rte_pktmbuf_append(mbuf, sizeof(struct ip6_hdr));
         if (unlikely(!iph))
             goto no_room;
@@ -309,6 +310,10 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
 
     if (mode == UOA_M_IPO) {
         /* only ipv4 support and use this ip option mode */
+        if (iaf != AF_INET || oaf != AF_INET) {
+            rte_pktmbuf_free(mbuf);
+            return EDPVS_NOTSUPP;
+        }
         ((struct iphdr *)iph)->ihl =
             (sizeof(struct iphdr) + IPOLEN_UOA_IPV4) / 4;
         ((struct iphdr *)iph)->tot_len  =
@@ -318,7 +323,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
         uoa = (void *)rte_pktmbuf_append(mbuf, ipolen_uoa);
     } else {
         /* UOA_M_OPP */
-        if (AF_INET6 == af) {
+        if (AF_INET6 == oaf) {
             ((struct ip6_hdr *)iph)->ip6_plen =
                                 htons(sizeof(*opp) + ipolen_uoa + sizeof(*uh));
             ((struct ip6_hdr *)iph)->ip6_nxt = IPPROTO_OPT;
@@ -335,13 +340,8 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
             goto no_room;
 
         memset(opp, 0, sizeof(*opp));
-        if (AF_INET6 == af) {
-            opp->version  = OPPHDR_IPV6;
-            opp->protocol = IPPROTO_UDP; /* set to IPPROTO_UDP */
-        } else {
-            opp->version  = OPPHDR_IPV4;
-            opp->protocol = IPPROTO_UDP;
-        }
+        opp->version = (AF_INET6 == iaf) ? OPPHDR_IPV6 : OPPHDR_IPV4;
+        opp->protocol = IPPROTO_UDP; /* set to IPPROTO_UDP */
         opp->length = htons(sizeof(*opp) + ipolen_uoa);
 
         uoa = (void *)rte_pktmbuf_append(mbuf, ipolen_uoa);
@@ -356,7 +356,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
     uoa->op_len  = ipolen_uoa;
     uoa->op_port = ouh->source;
     /* fix uoa->op_addr */
-    if (AF_INET6 == af) {
+    if (AF_INET6 == iaf) {
         memcpy(&uoa->op_addr, &((struct ip6_hdr *)oiph)->ip6_src,
                                IPV6_ADDR_LEN_IN_BYTES);
     } else {
@@ -376,7 +376,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
 
     /* ip checksum will calc later */
 
-    if (AF_INET6 == af) {
+    if (AF_INET6 == oaf) {
         struct route6 *rt6;
         /*
          * IPv6 UDP checksum is a must, packets with OPP header also need checksum.
@@ -407,6 +407,7 @@ static int insert_ipopt_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     struct iphdr *niph = NULL;
     struct ipopt_uoa *optuoa;
 
+    assert(AF_INET == tuplehash_in(conn).af && AF_INET == tuplehash_out(conn).af);
     if ((ip4_hdrlen(mbuf) + sizeof(struct ipopt_uoa) >
                 sizeof(struct iphdr) + MAX_IPOPTLEN)
             || (mbuf->pkt_len + sizeof(struct ipopt_uoa) > mtu))
@@ -472,8 +473,12 @@ static int insert_opp_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     void *niph;
     struct opphdr *opph   = NULL;
     struct ipopt_uoa *uoa = NULL;
-    int af = conn->af;
     int iphdrlen = 0, iptot_len = 0, ipolen_uoa = 0;
+
+    /* the current af of mbuf before possible nat64,
+     * i.e. the "tuplehash_in(conn).af" for FullNAT */
+    int af = conn->af;
+
     if (AF_INET6 == af) {
         /*
          * iphdrlen:  ipv6 total header length =
@@ -605,7 +610,7 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
         return EDPVS_INVPKT;
     }
 
-    if (AF_INET6 == af) {
+    if (AF_INET6 == tuplehash_out(conn).af) {
         mtu = ((struct route6*)rt)->rt6_mtu;
         iph = ip6_hdr(mbuf);
         iphdrlen = ip6_hdrlen(mbuf);
@@ -661,7 +666,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
     struct udp_hdr *uh = NULL;
     struct opphdr *opp = NULL;
     void *iph = NULL;
-    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4*/
+    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
     int af = tuplehash_out(conn).af;
     int iphdrlen = 0;
     uint8_t nxt_proto;

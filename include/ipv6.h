@@ -119,8 +119,8 @@ int ip6_hdrlen(const struct rte_mbuf *mbuf);
  *    The non-complemented checksum to set in the L4 header.
  */
 uint16_t ip6_phdr_cksum(struct ip6_hdr*, uint64_t ol_flags,
-		uint32_t exthdrlen, uint8_t l4_proto);
+        uint32_t exthdrlen, uint8_t l4_proto);
 uint16_t ip6_udptcp_cksum(struct ip6_hdr*, const void *l4_hdr,
-		uint32_t exthdrlen, uint8_t l4_proto);
+        uint32_t exthdrlen, uint8_t l4_proto);
 
 #endif /* __DPVS_IPV6_H__ */

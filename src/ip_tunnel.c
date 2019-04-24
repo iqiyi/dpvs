@@ -392,7 +392,7 @@ static int tunnel_so_set(sockoptid_t opt, const void *arg, size_t inlen)
             return EDPVS_INVAL;
         }
     }
-    
+
     if (!ops && (opt == SOCKOPT_TUNNEL_ADD || opt == SOCKOPT_TUNNEL_REPLACE)) {
         RTE_LOG(ERR, TUNNEL, "%s: cannot determine tunnel mode\n", __func__);
         return EDPVS_INVAL;
@@ -456,7 +456,7 @@ static int tunnel_so_get(sockoptid_t opt, const void *arg, size_t inlen,
     assert(params && inlen >= sizeof(*params) && out && outlen);
 
     rte_rwlock_read_lock(&ip_tunnel_lock);
-    
+
     /* device name is indicated */
     if (strlen(params->ifname)) {
         dev = netif_port_get_by_name(params->ifname);
@@ -687,7 +687,7 @@ struct ip_tunnel *ip_tunnel_lookup(struct ip_tunnel_tab *tab,
             remote != tnl->params.iph.daddr ||
             !(tnl->dev->flag & NETIF_PORT_FLAG_RUNNING))
             continue;
-        
+
         if (!tunnel_key_match(&tnl->params, flags, key))
             continue;
 

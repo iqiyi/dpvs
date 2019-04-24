@@ -1,9 +1,9 @@
 #!/bin/sh -
 # program: dpvs
-# commit: ff3e0b3159bb7562844b332b24178812f5612ea1
-# Jun 21, 2018
+# Feb 26, 2019
+# Features: NAT64, connection redirect
 
-export VERSION=1.6
-export RELEASE=1
+export VERSION=1.7
+export RELEASE=2
 
 echo $VERSION-$RELEASE

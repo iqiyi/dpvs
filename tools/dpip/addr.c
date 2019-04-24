@@ -26,7 +26,7 @@
 
 static void addr_help(void)
 {
-    fprintf(stderr, 
+    fprintf(stderr,
             "Usage:\n"
             "    dpip addr show [ dev STRING ]\n"
             "    dpip -6 addr show [ dev STRING ]\n"
@@ -88,7 +88,7 @@ static void addr_dump(const struct inet_addr_param *param)
     bcast[0] = '\0';
     if (!inet_is_addr_any(param->af, &param->bcast)) {
         snprintf(bcast, sizeof(bcast), "broadcast ");
-        if (inet_ntop(param->af, &param->bcast, bcast + strlen(bcast), 
+        if (inet_ntop(param->af, &param->bcast, bcast + strlen(bcast),
                       sizeof(bcast) - strlen(bcast)) == NULL)
             bcast[0] = '\0';
     }
@@ -133,7 +133,7 @@ static int addr_parse_args(struct dpip_conf *conf,
                 param->scope = IFA_SCOPE_LINK;
             else if (strcmp(conf->argv[0], "global") == 0)
                 param->scope = IFA_SCOPE_GLOBAL;
-            else 
+            else
                 param->scope = atoi(conf->argv[0]);
         } else if (strcmp(conf->argv[0], "broadcast") == 0) {
             NEXTARG_CHECK(conf, "broadcast");
@@ -167,7 +167,7 @@ static int addr_parse_args(struct dpip_conf *conf,
         return -1;
     }
 
-    if (conf->cmd == DPIP_CMD_ADD || conf->cmd == DPIP_CMD_DEL 
+    if (conf->cmd == DPIP_CMD_ADD || conf->cmd == DPIP_CMD_DEL
             || conf->cmd == DPIP_CMD_SET) {
         if (!prefix) {
             fprintf(stderr, "missing IFADDR\n");
@@ -261,7 +261,7 @@ struct dpip_obj dpip_addr = {
 static void __init addr_init(void)
 {
     dpip_register_obj(&dpip_addr);
-} 
+}
 
 static void __exit addr_exit(void)
 {

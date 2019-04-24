@@ -101,7 +101,7 @@ static inline int rt6_hlist_hashkey(const struct in6_addr *addr, int plen, int n
 
 static inline bool rt6_match(const struct route6 *rt6, const struct dp_vs_route6_conf *cf)
 {
-    /* Note: Do not use `ipv6_masked_addr_cmp` here for performance consideration 
+    /* Note: Do not use `ipv6_masked_addr_cmp` here for performance consideration
      *      here. We ensure the route6 entry is masked when added to route table. */
     if (ipv6_addr_cmp(&rt6->rt6_dst.addr, &cf->dst.addr) != 0)
         return false;
@@ -278,10 +278,6 @@ rt6_hlist_flow_match(const struct route6 *rt6, const struct flow6 *fl6)
     }
 
     if (fl6->fl6_oif && rt6->rt6_dev && (fl6->fl6_oif->id != rt6->rt6_dev->id))
-        return false;
-
-    if ((!ipv6_addr_any(&rt6->rt6_src.addr)) && (ipv6_addr_equal(&rt6->rt6_src.addr,
-                    &fl6->fl6_saddr)) != true)
         return false;
 
     /* anything else to check ? */

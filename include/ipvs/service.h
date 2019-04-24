@@ -178,12 +178,12 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
 
 int dp_vs_del_service(struct dp_vs_service *svc);
 
-int dp_vs_edit_service(struct dp_vs_service *svc, 
+int dp_vs_edit_service(struct dp_vs_service *svc,
                        struct dp_vs_service_conf *u);
 
 struct dp_vs_service *
 dp_vs_service_lookup(int af, uint16_t protocol,
-                     const union inet_addr *vaddr, 
+                     const union inet_addr *vaddr,
                      uint16_t vport, uint32_t fwmark,
                      const struct rte_mbuf *mbuf,
                      const struct dp_vs_match *match);

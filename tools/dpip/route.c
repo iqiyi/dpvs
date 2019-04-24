@@ -28,7 +28,7 @@
 
 static void route_help(void)
 {
-    fprintf(stderr, 
+    fprintf(stderr,
         "Usage:\n"
         "    dpip route { show | flush | help }\n"
         "    dpip route { add | del | set } ROUTE\n"
@@ -121,8 +121,8 @@ static void route4_dump(const struct dp_vs_route_conf *route)
 
     printf("%s %s/%d via %s src %s dev %s"
             " mtu %d tos %d scope %s metric %d proto %s %s\n",
-            af_itoa(route->af), 
-            inet_ntop(route->af, &route->dst, dst, sizeof(dst)) ? dst : "::", 
+            af_itoa(route->af),
+            inet_ntop(route->af, &route->dst, dst, sizeof(dst)) ? dst : "::",
             route->plen,
             inet_ntop(route->af, &route->via, via, sizeof(via)) ? via : "::",
             inet_ntop(route->af, &route->src, src, sizeof(src)) ? src : "::",
@@ -172,7 +172,7 @@ static void route6_dump(const struct dp_vs_route6_conf *rt6_cfg)
     printf("\n");
 }
 
-static int route4_parse_args(struct dpip_conf *conf, 
+static int route4_parse_args(struct dpip_conf *conf,
                             struct dp_vs_route_conf *route)
 {
     char *prefix = NULL;
@@ -206,7 +206,7 @@ static int route4_parse_args(struct dpip_conf *conf,
                 route->scope = ROUTE_CF_SCOPE_LINK;
             else if (strcmp(conf->argv[0], "global") == 0)
                 route->scope = ROUTE_CF_SCOPE_GLOBAL;
-            else 
+            else
                 route->scope = atoi(conf->argv[0]);
         } else if (strcmp(conf->argv[0], "src") == 0) {
             NEXTARG_CHECK(conf, "src");
@@ -226,7 +226,7 @@ static int route4_parse_args(struct dpip_conf *conf,
                 route->proto = ROUTE_CF_PROTO_STATIC;
             else if (strcmp(conf->argv[0], "ra") == 0)
                 route->proto = ROUTE_CF_PROTO_RA;
-            else 
+            else
                 route->proto = atoi(conf->argv[0]);
         } else if (strcmp(conf->argv[0], "onlink") == 0) {
             ;/* on-link is output only */
@@ -307,7 +307,7 @@ static int route4_parse_args(struct dpip_conf *conf,
     return 0;
 }
 
-static int route6_parse_args(struct dpip_conf *conf, 
+static int route6_parse_args(struct dpip_conf *conf,
                             struct dp_vs_route6_conf *rt6_cfg)
 {
     int af;
@@ -433,7 +433,7 @@ static int route4_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         if (err != 0)
             return err;
 
-        if (size < sizeof(*array) 
+        if (size < sizeof(*array)
                 || size != sizeof(*array) + \
                            array->nroute * sizeof(struct dp_vs_route_conf)) {
             fprintf(stderr, "corrupted response.\n");
@@ -522,7 +522,7 @@ struct dpip_obj dpip_route = {
 static void __init route_init(void)
 {
     dpip_register_obj(&dpip_route);
-} 
+}
 
 static void __exit route_exit(void)
 {

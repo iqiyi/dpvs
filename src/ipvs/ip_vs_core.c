@@ -533,8 +533,8 @@ static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
 
     /* no translation needed for DR/TUN. */
     if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
-	conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
-	conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
+    conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
+    conn->dest->fwdmode != DPVS_FWD_MODE_SNAT) {
         if (!conn->packet_xmit) {
             RTE_LOG(WARNING, IPVS, "%s: missing packet_xmit\n", __func__);
             rte_pktmbuf_free(mbuf);
@@ -1074,8 +1074,7 @@ static int __dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
         return INET_ACCEPT;
 
     /* Drop all ip fragment except ospf */
-    if ((af == AF_INET) && ip4_is_frag(ip4_hdr(mbuf))
-            && (iph.proto != IPPROTO_OSPF)) {
+    if ((af == AF_INET) && ip4_is_frag(ip4_hdr(mbuf))) {
         dp_vs_estats_inc(DEFENCE_IP_FRAG_DROP);
         return INET_DROP;
     }

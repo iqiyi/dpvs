@@ -35,6 +35,9 @@ all:
 clean:
 	for i in $(SUBDIRS); do $(MAKE) -C $$i clean || exit 1; done
 
+distclean:
+	$(MAKE) -C tools/keepalived distclean || exit 1
+
 install:all
 	-mkdir -p $(INSDIR)
 	for i in $(SUBDIRS); do $(MAKE) -C $$i install || exit 1; done

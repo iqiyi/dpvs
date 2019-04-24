@@ -25,7 +25,7 @@ struct blklst_entry {
     struct list_head    list;
     union inet_addr     vaddr;
     uint16_t            vport;
-    uint8_t             proto; 
+    uint8_t             proto;
     union inet_addr     blklst;
 };
 

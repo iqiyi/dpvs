@@ -335,7 +335,7 @@ static int route_add_del(bool add, struct in_addr* dest,
 
     err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
     if (err != EDPVS_OK) {
-        /* ignore timeout for msg, or keepalived will cause a lot bug. 
+        /* ignore timeout for msg, or keepalived will cause a lot bug.
          * Timeout error is ok because route can still be set,
          * no mem is another possible err, but problem will not just be here */
         RTE_LOG(INFO, ROUTE, "[%s] fail to send multicast message, error code = %d\n",
@@ -414,7 +414,7 @@ struct route_entry *route4_output(const struct flow4 *fl4)
     if(route){
         return route;
     }
-    
+
     route = route_out_net_lookup(&fl4->fl4_daddr);
     if(route){
         return route;

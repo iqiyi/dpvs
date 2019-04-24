@@ -127,7 +127,7 @@ int inet_term(void)
     return EDPVS_OK;
 }
 
-bool inet_addr_equal(int af, const union inet_addr *a1, 
+bool inet_addr_equal(int af, const union inet_addr *a1,
                      const union inet_addr *a2)
 {
     switch (af) {
@@ -166,7 +166,7 @@ int inet_plen_to_mask(int af, uint8_t plen, union inet_addr *mask)
     }
 }
 
-int inet_addr_net(int af, const union inet_addr *addr, 
+int inet_addr_net(int af, const union inet_addr *addr,
                   const union inet_addr *mask,
                   union inet_addr *net)
 {
