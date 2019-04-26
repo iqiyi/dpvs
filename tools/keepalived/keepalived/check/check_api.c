@@ -65,6 +65,14 @@ dump_conn_opts (conn_opts_t *conn)
 	log_message(LOG_INFO, "   Connection timeout = %d", conn->connection_to/TIMER_HZ);
 }
 
+void
+dump_checker_opts(void *data)
+{
+	checker_t *checker = data;
+	log_message(LOG_INFO, "   Retry count = %d", checker->retry);
+	log_message(LOG_INFO, "   Retry delay = %ld", checker->delay_before_retry / TIMER_HZ);
+}
+
 /* Queue a checker into the checkers_queue */
 void
 queue_checker(void (*free_func) (void *), void (*dump_func) (void *)
@@ -95,6 +103,9 @@ queue_checker(void (*free_func) (void *), void (*dump_func) (void *)
 #ifdef _WITHOUT_VRRP_
 	checker->enabled = 1;
 #endif
+	checker->retry_it = 0;
+	checker->retry = 1;
+	checker->delay_before_retry = 1 * TIMER_HZ;
 
 	/* queue the checker */
 	list_add(checkers_queue, checker);
@@ -197,11 +208,32 @@ install_connect_keywords(void)
 #endif
 }
 
+static void
+retry_handler(vector_t *strvec)
+{
+	checker_t *checker = CHECKER_GET_CURRENT();
+	checker->retry = CHECKER_VALUE_INT(strvec);
+}
+
+static void
+delay_before_retry_handler(vector_t *strvec)
+{
+	checker_t *checker = CHECKER_GET_CURRENT();
+	checker->delay_before_retry = (long)CHECKER_VALUE_INT(strvec) * TIMER_HZ;
+}
+
 /* "warmup" keyword */
 void warmup_handler(vector_t *strvec)
 {
 	checker_t *checker = CHECKER_GET_CURRENT();
 	checker->warmup = (long)CHECKER_VALUE_INT (strvec) * TIMER_HZ;
+}
+
+void
+install_checker_common_keywords(void)
+{
+	install_keyword("retry", &retry_handler);
+	install_keyword("delay_before_retry", &delay_before_retry_handler);
 }
 
 /* dump the checkers_queue */
