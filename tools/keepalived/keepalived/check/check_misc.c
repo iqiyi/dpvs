@@ -58,6 +58,7 @@ dump_misc_check(void *data)
 	log_message(LOG_INFO, "   script = %s", misck_checker->path);
 	log_message(LOG_INFO, "   timeout = %lu", misck_checker->timeout/TIMER_HZ);
 	log_message(LOG_INFO, "   dynamic = %s", misck_checker->dynamic ? "YES" : "NO");
+	dump_checker_opts(data);
 }
 
 void
@@ -96,6 +97,7 @@ install_misc_check_keyword(void)
 {
 	install_keyword("MISC_CHECK", &misc_check_handler);
 	install_sublevel();
+	install_checker_common_keywords();
 	install_keyword("misc_path", &misc_path_handler);
 	install_keyword("misc_timeout", &misc_timeout_handler);
 	install_keyword("misc_dynamic", &misc_dynamic_handler);
@@ -127,7 +129,7 @@ misc_check_thread(thread_t * thread)
 
 	/* Register next timer checker */
 	thread_add_timer(thread->master, misc_check_thread, checker,
-			 checker->vs->delay_loop);
+			 checker->retry_it ? checker->delay_before_retry : checker->vs->delay_loop);
 
 	/* Daemonization to not degrade our scheduling timer */
 	pid = fork();
@@ -190,15 +192,23 @@ misc_check_child_thread(thread_t * thread)
 
 		/* The child hasn't responded. Kill it off. */
 		if (svr_checker_up(checker->id, checker->rs)) {
-			log_message(LOG_INFO, "Misc check to [%s] for [%s] timed out"
-					    , inet_sockaddrtos(&checker->rs->addr)
-					    , misck_checker->path);
-			smtp_alert(checker->rs, NULL, NULL,
-				   "DOWN",
-				   "=> MISC CHECK script timeout on service <=");
-			update_svr_checker_state(DOWN, checker->id
-						     , checker->vs
-						     , checker->rs);
+			log_message(LOG_INFO, "Misc check to [%s] for [%s] timed out."
+				, inet_sockaddrtos(&checker->rs->addr)
+				, misck_checker->path);
+			if (checker->retry_it < checker->retry)
+				checker->retry_it++;
+			else {
+				log_message(LOG_INFO, "Check on service [%s] timed out after %d retry."
+						    , inet_sockaddrtos(&checker->rs->addr)
+						    , checker->retry);
+				smtp_alert(checker->rs, NULL, NULL,
+					   "DOWN",
+					   "=> MISC CHECK script timeout on service <=");
+				update_svr_checker_state(DOWN, checker->id
+							     , checker->vs
+							     , checker->rs);
+				checker->retry_it = 0;
+			}
 		}
 
 		kill(pid, SIGTERM);
@@ -234,17 +244,25 @@ misc_check_child_thread(thread_t * thread)
 							   , checker->vs
 							   , checker->rs);
 			}
-		} else {
-			if (svr_checker_up(checker->id, checker->rs)) {
-				log_message(LOG_INFO, "Misc check to [%s] for [%s] failed."
+
+			checker->retry_it = 0;
+		} else if (svr_checker_up(checker->id, checker->rs)) {
+			log_message(LOG_INFO, "Misc check to [%s] for [%s] failed."
+				, inet_sockaddrtos(&checker->rs->addr)
+				, misck_checker->path);
+			if (checker->retry_it < checker->retry)
+				checker->retry_it++;
+			else {
+				log_message(LOG_INFO, "Check on service [%s] failed after %d retry."
 						    , inet_sockaddrtos(&checker->rs->addr)
-						    , misck_checker->path);
+						    , checker->retry);
 				smtp_alert(checker->rs, NULL, NULL,
 					   "DOWN",
 					   "=> MISC CHECK failed on service <=");
 				update_svr_checker_state(DOWN, checker->id
 							     , checker->vs
 							     , checker->rs);
+				checker->retry_it = 0;
 			}
 		}
 	}
