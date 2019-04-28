@@ -81,9 +81,7 @@ dump_http_get_check(void *data)
 		log_message(LOG_INFO, "   Keepalive method = SSL_GET");
 	if (CHECKER_CO(data))
 		dump_conn_opts(CHECKER_CO(data));
-	log_message(LOG_INFO, "   Nb get retry = %d", http_get_chk->nb_get_retry);
-	log_message(LOG_INFO, "   Delay before retry = %lu",
-	       http_get_chk->delay_before_retry/TIMER_HZ);
+	dump_checker_opts(data);
 	dump_list(http_get_chk->url);
 }
 static http_checker_t *
@@ -96,8 +94,6 @@ alloc_http_get(char *proto)
 	http_get_chk->proto =
 	    (!strcmp(proto, "HTTP_GET")) ? PROTO_HTTP : PROTO_SSL;
 	http_get_chk->url = alloc_list(free_url, dump_url);
-	http_get_chk->nb_get_retry = 1;
-	http_get_chk->delay_before_retry = 3 * TIMER_HZ;
 
 	return http_get_chk;
 }
@@ -112,20 +108,6 @@ http_get_handler(vector_t *strvec)
 	http_get_chk = alloc_http_get(str);
 	queue_checker(free_http_get_check, dump_http_get_check,
 		      http_connect_thread, http_get_chk, CHECKER_NEW_CO());
-}
-
-void
-nb_get_retry_handler(vector_t *strvec)
-{
-	http_checker_t *http_get_chk = CHECKER_GET();
-	http_get_chk->nb_get_retry = CHECKER_VALUE_INT(strvec);
-}
-
-void
-delay_before_retry_handler(vector_t *strvec)
-{
-	http_checker_t *http_get_chk = CHECKER_GET();
-	http_get_chk->delay_before_retry = CHECKER_VALUE_INT(strvec) * TIMER_HZ;
 }
 
 void
@@ -173,9 +155,8 @@ install_http_check_keyword(void)
 	install_keyword("HTTP_GET", &http_get_handler);
 	install_sublevel();
 	install_connect_keywords();
+	install_checker_common_keywords();
 	install_keyword("warmup", &warmup_handler);
-	install_keyword("nb_get_retry", &nb_get_retry_handler);
-	install_keyword("delay_before_retry", &delay_before_retry_handler);
 	install_keyword("url", &url_handler);
 	install_sublevel();
 	install_keyword("path", &path_handler);
@@ -192,9 +173,8 @@ install_ssl_check_keyword(void)
 	install_keyword("SSL_GET", &http_get_handler);
 	install_sublevel();
 	install_connect_keywords();
+	install_checker_common_keywords();
 	install_keyword("warmup", &warmup_handler);
-	install_keyword("nb_get_retry", &nb_get_retry_handler);
-	install_keyword("delay_before_retry", &delay_before_retry_handler);
 	install_keyword("url", &url_handler);
 	install_sublevel();
 	install_keyword("path", &path_handler);
@@ -249,7 +229,7 @@ epilog(thread_t * thread, int method, int t, int c)
 
 	if (method) {
 		http->url_it += t ? t : -http->url_it;
-		http->retry_it += c ? c : -http->retry_it;
+		checker->retry_it += c ? c : -checker->retry_it;
 	}
 
 	/*
@@ -258,7 +238,7 @@ epilog(thread_t * thread, int method, int t, int c)
 	 * html buffer. This is sometime needed with some applications
 	 * servers.
 	 */
-	if (http->retry_it > http_get_check->nb_get_retry-1) {
+	if (checker->retry_it > checker->retry - 1) {
 		if (svr_checker_up(checker->id, checker->rs)) {
 			log_message(LOG_INFO, "Check on service %s failed after %d retry."
 			       , FMT_HTTP_RS(checker));
@@ -273,7 +253,7 @@ epilog(thread_t * thread, int method, int t, int c)
 
 		/* Reset it counters */
 		http->url_it = 0;
-		http->retry_it = 0;
+		checker->retry_it = 0;
 	}
 
 	/* register next timer thread */
@@ -282,14 +262,13 @@ epilog(thread_t * thread, int method, int t, int c)
 		if (req)
 			delay = checker->vs->delay_loop;
 		else
-			delay =
-			    http_get_check->delay_before_retry;
+			delay = checker->delay_before_retry;
 		break;
 	case 2:
-		if (http->url_it == 0 && http->retry_it == 0)
+		if (http->url_it == 0 && checker->retry_it == 0)
 			delay = checker->vs->delay_loop;
 		else
-			delay = http_get_check->delay_before_retry;
+			delay = checker->delay_before_retry;
 		break;
 	}
 
@@ -390,7 +369,7 @@ http_handle_response(thread_t * thread, unsigned char digest[16]
 				 * We set retry iterator to max value to not retry
 				 * when service is already know as die.
 				 */
-				http->retry_it = http_get_check->nb_get_retry;
+				checker->retry_it = checker->retry;
 			}
 			return epilog(thread, 2, 0, 1);
 		} else {
@@ -432,7 +411,7 @@ http_handle_response(thread_t * thread, unsigned char digest[16]
 				 * We set retry iterator to max value to not retry
 				 * when service is already know as die.
 				 */
-				http->retry_it = http_get_check->nb_get_retry;
+				checker->retry_it = checker->retry;
 			}
 			FREE(digest_tmp);
 			return epilog(thread, 2, 0, 1);

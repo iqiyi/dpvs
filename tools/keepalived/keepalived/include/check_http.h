@@ -51,7 +51,6 @@ typedef struct _request {
 
 /* http specific thread arguments defs */
 typedef struct _http {
-	int				retry_it;	/* current number of get retry */
 	int				url_it;		/* current url checked index */
 	request_t			*req;		/* GET buffer and SSL args */
 } http_t ;
@@ -64,8 +63,6 @@ typedef struct _url {
 
 typedef struct _http_checker {
 	int				proto;
-	int				nb_get_retry;
-	long				delay_before_retry;
 	list				url;
 	http_t				*arg;
 } http_checker_t;
