@@ -472,6 +472,7 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     uint32_t ndoptlen = mbuf->data_len - offsetof(struct nd_msg, opt);
 
 #ifdef CONFIG_NDISC_DEBUG
+    struct in6_addr *saddr = &((struct ip6_hdr *)mbuf->userdata)->ip6_src;
     ndisc_show_addr(__func__, saddr, daddr);
 #endif
 
