@@ -663,14 +663,15 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
 
     assert(mbuf && param && dest);
 
+
+    new = dp_vs_conn_alloc();
+    if (unlikely(!new))
+        return NULL;
+
     /* no need to create redirect for the global template connection */
     if ((flags & DPVS_CONN_F_TEMPLATE) == 0) {
         new_r = dp_vs_redirect_alloc(dest->fwdmode);
     }
-
-    new = dp_vs_conn_alloc();
-    if (unlikely(!new))
-        goto errout_redirect;
 
     new->redirect = new_r;
 
@@ -843,8 +844,6 @@ unbind_dest:
     conn_unbind_dest(new);
 errout:
     dp_vs_conn_free(new);
-errout_redirect:
-    dp_vs_redirect_free(new);
     return NULL;
 }
 
