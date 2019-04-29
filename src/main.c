@@ -136,6 +136,7 @@ static int parse_app_args(int argc, char **argv)
 
     return ret;
 }
+
 int main(int argc, char *argv[])
 {
     int err, nports;
@@ -187,7 +188,6 @@ int main(int argc, char *argv[])
     if (err < 0)
         rte_exit(EXIT_FAILURE, "Invalid EAL parameters\n");
     argc -= err, argv += err;
-
 
     RTE_LOG(INFO, DPVS, "dpvs version: %s, build on %s\n", DPVS_VERSION, DPVS_BUILD_DATE);
 
@@ -272,6 +272,7 @@ int main(int argc, char *argv[])
     assert(timer_sched_loop_interval > 0);
 
     dpvs_state_set(DPVS_STATE_NORMAL);
+
     /* start control plane thread */
     while (1) {
         /* reload configuations if reload flag is set */

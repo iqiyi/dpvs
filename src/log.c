@@ -18,6 +18,7 @@ log_stats log_stats_info[DPVS_MAX_LCORE];
 int log_internal = LOG_INTERNAL_TIME;
 log_buf_t w_buf;
 
+bool g_dpvs_log_async_mode = 0;
 extern struct rte_logs rte_logs;
 
 #if CONFIG_DPVS_LOG_POOL_DEBUG
@@ -92,7 +93,6 @@ static unsigned int log_BKDRHash(char *str, int len)
  
     return (hash & 0x7FFFFFFF);
 }
-
 
 static uint64_t log_get_time(char *time, int time_len)
 {
@@ -193,15 +193,11 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
 
     if (level > rte_logs.level)
         return -1;
-    if (!g_dpvs_log_core)
-        return -1;
-
-    cid = rte_lcore_id();
 
     va_start(ap, format);
 
     do { 
-        if (!g_dpvs_log_thread_ready) {
+        if (!g_dpvs_log_async_mode || !g_dpvs_log_core || !g_dpvs_log_thread_ready) {
             rte_vlog(level, logtype, format, ap);
             break;
         }
@@ -211,6 +207,8 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
             rte_vlog(level, logtype, format, ap);
             break;
         }
+
+        cid = rte_lcore_id();
 
         if (log_stats_info[cid].slow) {
             /* set log limit rate to 5 sec and keep for 10 mins */
@@ -259,7 +257,6 @@ static int log_buf_timeout_flush(FILE *f, int timeout)
     }
     return 0;
 }
-
 
 static int log_slave_process(void)
 {
