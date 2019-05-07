@@ -56,6 +56,9 @@
 #include <rte_ip_frag.h>
 #include <rte_eth_bond.h>
 #include <rte_eth_bond_8023ad.h>
+#ifdef DPVS_CFG_I40E_PMD
+#include <rte_pmd_i40e.h>
+#endif
 #include "mbuf.h"
 
 typedef uint8_t lcoreid_t;
