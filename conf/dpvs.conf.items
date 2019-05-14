@@ -175,6 +175,7 @@ ctrl_defs {
         <init> ring_size                4096    <4096, 256-524288>
         <init> multicast_queue_length   257     <256, 16-32768>
         sync_msg_timeout_us             2000    <2000, 1-∞>
+        priority_level                  low     <low, low|norm|high|ign>
     }
     ipc_msg {
         <init> unix_domain /var/run/dpvs_ctrl   </var/run/dpvs_ctrl, max chars: 256>

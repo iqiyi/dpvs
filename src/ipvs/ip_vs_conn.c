@@ -1507,6 +1507,7 @@ static int register_conn_get_msg(void)
     memset(&conn_get, 0, sizeof(struct dpvs_msg_type));
     conn_get.type = MSG_TYPE_CONN_GET;
     conn_get.mode = DPVS_MSG_MULTICAST;
+    conn_get.prio = MSG_PRIO_LOW;
     conn_get.unicast_msg_cb = conn_get_msgcb_slave;
     conn_get.multicast_msg_cb = NULL;
 
@@ -1519,6 +1520,7 @@ static int register_conn_get_msg(void)
     memset(&conn_get_all, 0, sizeof(struct dpvs_msg_type));
     conn_get_all.type = MSG_TYPE_CONN_GET_ALL;
     conn_get_all.mode = DPVS_MSG_UNICAST;
+    conn_get_all.prio = MSG_PRIO_LOW;
     conn_get_all.unicast_msg_cb = conn_get_all_msgcb_slave;
     conn_get_all.multicast_msg_cb = NULL;
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
@@ -1544,6 +1546,7 @@ static int unregister_conn_get_msg(void)
     memset(&conn_get, 0, sizeof(struct dpvs_msg_type));
     conn_get.type = MSG_TYPE_CONN_GET;
     conn_get.mode = DPVS_MSG_MULTICAST;
+    conn_get.prio = MSG_PRIO_LOW;
     conn_get.unicast_msg_cb = conn_get_msgcb_slave;
     conn_get.multicast_msg_cb = NULL;
     if ((ret = msg_type_mc_unregister(&conn_get)) < 0) {
@@ -1554,6 +1557,7 @@ static int unregister_conn_get_msg(void)
     memset(&conn_get_all, 0, sizeof(struct dpvs_msg_type));
     conn_get_all.type = MSG_TYPE_CONN_GET_ALL;
     conn_get_all.mode = DPVS_MSG_UNICAST;
+    conn_get_all.prio = MSG_PRIO_LOW;
     conn_get_all.unicast_msg_cb = conn_get_msgcb_slave;
     conn_get_all.multicast_msg_cb = NULL;
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {

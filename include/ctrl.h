@@ -31,6 +31,13 @@ typedef enum msg_mode {
     DPVS_MSG_MULTICAST
 } DPVS_MSG_MODE;
 
+typedef enum msg_priority {
+    MSG_PRIO_IGN = 0, /* used internally only */
+    MSG_PRIO_HIGH,    /* for critical instances, such as master packet xmit */
+    MSG_PRIO_NORM,    /* generally for SET operations */
+    MSG_PRIO_LOW      /* generally for GET operations */
+} msg_priority_t;
+
 /* nonblockable msg */
 #define DPVS_MSG_F_ASYNC            1
 /* msg has been sent from sender */
@@ -129,6 +136,7 @@ typedef int (*MULTICAST_MSG_CB)(struct dpvs_multicast_queue *);
  * Master with the SAME seq number as the msg recieved. */
 struct dpvs_msg_type {
     msgid_t type;
+    uint8_t prio;
     lcoreid_t cid;          /* on which lcore the callback func registers */
     DPVS_MSG_MODE mode;     /* distinguish unicast from multicast for the same msg type */
     UNICAST_MSG_CB unicast_msg_cb;     /* call this func if msg is unicast, i.e. 1:1 msg */

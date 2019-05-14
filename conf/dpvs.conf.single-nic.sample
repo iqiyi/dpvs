@@ -167,7 +167,7 @@ ipv6_defs {
     disable                     off
     forwarding                  off
     route6 {
-        <init> method           "hlist"
+        <init> method           hlist
         recycle_time            10
     }
 }
@@ -178,6 +178,7 @@ ctrl_defs {
         <init> ring_size                4096
         <init> multicast_queue_length   256
         sync_msg_timeout_us             20000
+        priority_level                  low
     }
     ipc_msg {
         <init> unix_domain /var/run/dpvs_ctrl

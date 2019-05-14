@@ -186,6 +186,7 @@ static void register_stats_cb(void)
     struct dpvs_msg_type mt;
     memset(&mt, 0 ,sizeof(mt));
     mt.type = MSG_TYPE_STATS_GET;
+    mt.prio = MSG_PRIO_LOW;
     mt.unicast_msg_cb = get_stats_uc_cb;
     mt.multicast_msg_cb = NULL;
     assert(msg_type_mc_register(&mt) == 0);
@@ -196,6 +197,7 @@ static void unregister_stats_cb(void)
     struct dpvs_msg_type mt;
     memset(&mt, 0, sizeof(mt));
     mt.type = MSG_TYPE_STATS_GET;
+    mt.prio = MSG_PRIO_LOW;
     mt.unicast_msg_cb = get_stats_uc_cb;
     mt.multicast_msg_cb = NULL;
     assert(msg_type_mc_unregister(&mt) == 0);
