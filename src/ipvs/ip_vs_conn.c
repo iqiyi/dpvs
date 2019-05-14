@@ -1369,8 +1369,10 @@ again:
         conn_arr->nconns = got;
         conn_arr->resl = GET_IPVS_CONN_RESL_FAIL;
         conn_arr->curcid = cid;
+        msg_destroy(&msg);
         return res;
     }
+    msg_destroy(&msg);
     cid++;
     goto again;
 }
