@@ -68,7 +68,7 @@ static int ipset_parse_args(struct dpip_conf *conf, struct dp_vs_multi_ipset_con
         if (inet_pton_try(&conf->af, ipaddr, &ips->ipset_conf[index].addr) <= 0)
         {
             fprintf(stderr, "bad IP\n");
-            dpvs_sockopt_msg_free(ips);
+            free(ips);
             return -1;
         }
         index++;
@@ -77,7 +77,7 @@ static int ipset_parse_args(struct dpip_conf *conf, struct dp_vs_multi_ipset_con
 
     if (conf->argc > 0) {
         fprintf(stderr, "too many arguments\n");
-        dpvs_sockopt_msg_free(ips);
+        free(ips);
         return -1;
     }
     *ips_size = ipset_size;
@@ -105,12 +105,12 @@ static int ipset_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
     switch (conf->cmd) {
     case DPIP_CMD_ADD:
         err = dpvs_setsockopt(SOCKOPT_SET_IPSET_ADD, ips_conf, ips_size);
-        dpvs_sockopt_msg_free(ips_conf);
+        free(ips_conf);
         return err;
 
     case DPIP_CMD_DEL:
         err = dpvs_setsockopt(SOCKOPT_SET_IPSET_DEL, ips_conf, ips_size);
-        dpvs_sockopt_msg_free(ips_conf);
+        free(ips_conf);
         return err;
 
     case DPIP_CMD_FLUSH:
