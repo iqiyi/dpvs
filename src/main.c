@@ -41,6 +41,8 @@
 
 #define LCORE_CONF_BUFFER_LEN 4096
 
+extern int log_slave_init(void);
+
 static int set_all_thread_affinity(void)
 {
     int s;
@@ -261,6 +263,7 @@ int main(int argc, char *argv[])
     /* start data plane threads */
     netif_lcore_start();
 
+    log_slave_init();
     /* write pid file */
     if (!pidfile_write(DPVS_PIDFILE, getpid()))
         goto end;
