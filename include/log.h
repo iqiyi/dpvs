@@ -43,7 +43,7 @@ typedef struct log_buf {
     int pos;
     int level;
     uint64_t time;
-}log_buf_t;
+} log_buf_t;
 
 typedef struct log_stats{
     int log_hash;
@@ -51,18 +51,7 @@ typedef struct log_stats{
     int slow;
     uint64_t slow_begin;
     uint32_t missed;
-}log_stats;
-
-extern int g_dpvs_log_ready;
-
-#ifdef RTE_LOG
-#undef RTE_LOG
-#define RTE_LOG(l, t, ...)                  \
-    dpvs_log(RTE_LOG_ ## l,                   \
-        RTE_LOGTYPE_ ## t,  __func__, __LINE__, # t ": " __VA_ARGS__) 
-#endif 
-
-
+} log_stats_t;
 
 int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const char *format, ...);
 int log_slave_init(void);    

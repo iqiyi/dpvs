@@ -1,19 +1,19 @@
 #include <string.h>
 #include <syslog.h>
 #include <rte_mempool.h>
+#include <signal.h>
 #include "netif.h"
 #include "sys_time.h"
 #include "log.h"
 #include "common.h"
 #include "dpdk.h"
-#include "signal.h"
 
 lcoreid_t g_dpvs_log_core = 0;
 struct rte_ring *log_ring;
 int g_dpvs_log_thread_ready = 0;
 int g_dpvs_log_time_off = 0;
 
-log_stats log_stats_info[DPVS_MAX_LCORE];
+log_stats_t log_stats_info[DPVS_MAX_LCORE];
 
 int log_internal = LOG_INTERNAL_TIME;
 log_buf_t w_buf;
@@ -21,11 +21,9 @@ log_buf_t w_buf;
 bool g_dpvs_log_async_mode = 0;
 extern struct rte_logs rte_logs;
 
-#if CONFIG_DPVS_LOG_POOL_DEBUG
 static struct rte_mempool *dp_vs_log_pool;
 static int log_pool_size  = DPVS_LOG_POOL_SIZE_DEF;
 static int log_pool_cache = DPVS_LOG_CACHE_SIZE_DEF;
-#endif
 
 static int log_send(struct dpvs_log *msg)
 {
@@ -51,21 +49,16 @@ static struct dpvs_log *dpvs_log_msg_make(int level, int type, lcoreid_t cid,
         uint32_t len, const void *data)
 {
     struct dpvs_log *log_msg;
-#if CONFIG_DPVS_LOG_POOL_DEBUG
+    
     if (unlikely(rte_mempool_get(dp_vs_log_pool, (void **)&log_msg) != 0)) {
         return NULL;
     }
-#else
-    log_msg = rte_zmalloc("log_msg", sizeof(struct dpvs_log) + len, RTE_CACHE_LINE_SIZE);
-    if (unlikely(NULL == log_msg))
-        return NULL; 
-#endif
     log_msg->log_level = level;
     log_msg->log_type = type;
     log_msg->cid = cid;
     log_msg->log_len = len;
     if (len)
-        memcpy(log_msg->data, data, len);
+        rte_memcpy(log_msg->data, data, len);
 
     return log_msg;
 }
@@ -74,11 +67,7 @@ static void dpvs_log_free(struct dpvs_log *log_msg)
 {
     if (!log_msg)
         return;  
-#if CONFIG_DPVS_LOG_POOL_DEBUG    
     rte_mempool_put(dp_vs_log_pool, log_msg);
-#else
-    rte_free(log_msg);
-#endif    
 }
 
 static unsigned int log_BKDRHash(char *str, int len)
@@ -212,10 +201,10 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
 
         if (log_stats_info[cid].slow) {
             /* set log limit rate to 5 sec and keep for 10 mins */
-            if (rte_get_timer_cycles() - log_stats_info[cid].slow_begin > LOG_SLOW_INTERNAL_TIME*rte_get_timer_hz()) {
+            if (rte_get_timer_cycles() - log_stats_info[cid].slow_begin > LOG_SLOW_INTERNAL_TIME * rte_get_timer_hz()) {
                 log_stats_info[cid].slow = 0;
             }
-            if ((rte_get_timer_cycles() - log_stats_info[cid].log_begin) < log_internal*rte_get_timer_hz()) {
+            if ((rte_get_timer_cycles() - log_stats_info[cid].log_begin) < log_internal * rte_get_timer_hz()) {
                 log_stats_info[cid].missed++;
                 break;
             }
@@ -235,7 +224,7 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
 
 static int log_buf_flush(FILE *f)
 {
-    if (f == NULL ) {
+    if (f == NULL) {
         w_buf.buf[w_buf.pos] = '\0';
         syslog(w_buf.level, "%s", w_buf.buf);
     } else {
@@ -252,7 +241,7 @@ static int log_buf_timeout_flush(FILE *f, int timeout)
     
     now = rte_get_timer_cycles();
     
-    if (w_buf.pos && ((now - w_buf.time) >= timeout*rte_get_timer_hz())) {
+    if (w_buf.pos && ((now - w_buf.time) >= timeout * rte_get_timer_hz())) {
         log_buf_flush(f);
     }
     return 0;
@@ -266,10 +255,6 @@ static int log_slave_process(void)
 
     /* dequeue LOG from ring, no lock for ring and w_buf */
     while (0 == rte_ring_dequeue(log_ring, (void **)&msg_log)) { 
-        if (msg_log->log_len > LOG_BUF_MAX_LEN) {
-            dpvs_log_free(msg_log);
-            continue;
-        }
         if (w_buf.pos + msg_log->log_len >= LOG_BUF_MAX_LEN) {
             log_buf_flush(f);
         }
@@ -315,9 +300,7 @@ int log_slave_init(void)
     char ring_name[16];
     int lcore_id;
     FILE *f = rte_logs.file;
-#if CONFIG_DPVS_LOG_POOL_DEBUG
     char log_pool_name[32];
-#endif
 
     if (f != NULL) {
         g_dpvs_log_time_off = LOG_SYS_TIME_LEN;
@@ -337,7 +320,6 @@ int log_slave_init(void)
         fprintf(stderr, "Fail to init log slave core\n");
         return EDPVS_DPDKAPIFAIL;
     }
-#if CONFIG_DPVS_LOG_POOL_DEBUG
     /* use memory pool for log msg */
     snprintf(log_pool_name, sizeof(log_pool_name), "log_msg_pool");
     dp_vs_log_pool = rte_mempool_create(log_pool_name,
@@ -349,7 +331,6 @@ int log_slave_init(void)
     if (!dp_vs_log_pool) {
         return EDPVS_DPDKAPIFAIL;
     }
-#endif    
  
     signal(SIGABRT, log_signal_handler);
     signal(SIGSEGV, log_signal_handler);
