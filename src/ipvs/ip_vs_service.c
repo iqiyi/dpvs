@@ -31,6 +31,7 @@
 #include "netif.h"
 #include "assert.h"
 #include "neigh.h"
+#include "ipset.h"
 
 static int dp_vs_num_services = 0;
 
@@ -190,7 +191,7 @@ static inline bool __svc_in_range(int af,
 }
 
 static struct dp_vs_service *
-__dp_vs_svc_match_get4(const struct rte_mbuf *mbuf)
+__dp_vs_svc_match_get4(const struct rte_mbuf *mbuf, bool *outwall)
 {
     struct route_entry *rt = mbuf->userdata;
     struct ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
@@ -211,6 +212,14 @@ __dp_vs_svc_match_get4(const struct rte_mbuf *mbuf)
         if ((rt->flag & RTF_KNI) || (rt->flag & RTF_LOCALIN))
             return NULL;
         oif = rt->port->id;
+    } else if (outwall != NULL && (NULL != ipset_addr_lookup(AF_INET, &daddr))
+                               && (rt = route_gfw_net_lookup(&daddr.in))) {
+        char dst[64];	     
+        RTE_LOG(DEBUG, IPSET, "%s: IP %s is in the gfwip set, found route in the outwall table.\n", __func__, 
+                              inet_ntop(AF_INET, &daddr, dst, sizeof(dst))? dst: "");	    
+        oif = rt->port->id;
+        route4_put(rt);
+        *outwall = true;
     } else {
         rt = route4_input(mbuf, &daddr.in, &saddr.in,
                           iph->type_of_service,
@@ -323,10 +332,10 @@ __dp_vs_svc_match_get6(const struct rte_mbuf *mbuf)
 }
 
 static struct dp_vs_service *
-__dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf)
+__dp_vs_svc_match_get(int af, const struct rte_mbuf *mbuf, bool *outwall)
 {
     if (af == AF_INET)
-        return __dp_vs_svc_match_get4(mbuf);
+        return __dp_vs_svc_match_get4(mbuf, outwall);
     else if (af == AF_INET6)
         return __dp_vs_svc_match_get6(mbuf);
     else
@@ -384,7 +393,8 @@ struct dp_vs_service *dp_vs_service_lookup(int af, uint16_t protocol,
                                         const union inet_addr *vaddr,
                                         uint16_t vport, uint32_t fwmark,
                                         const struct rte_mbuf *mbuf,
-                                        const struct dp_vs_match *match)
+                                        const struct dp_vs_match *match,
+                                        bool *outwall)
 {
     struct dp_vs_service *svc = NULL;
 
@@ -401,7 +411,7 @@ struct dp_vs_service *dp_vs_service_lookup(int af, uint16_t protocol,
             goto out;
 
     if (mbuf) /* lowest priority */
-        svc = __dp_vs_svc_match_get(af, mbuf);
+        svc = __dp_vs_svc_match_get(af, mbuf, outwall);
 
 out:
     rte_rwlock_read_unlock(&__dp_vs_svc_lock);
@@ -1141,6 +1151,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                         rte_free(output);
                         return ret;
                     }
+
                     if (!is_empty_match(&match)) {
                         svc = __dp_vs_svc_match_find(match.af, get->proto,
                                                      &match);
@@ -1160,7 +1171,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
         default:
             return EDPVS_INVAL;
     }
-
+    
     if (ret != EDPVS_OK) {
         if (*out)
             rte_free(*out);

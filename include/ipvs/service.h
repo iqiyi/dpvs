@@ -186,7 +186,8 @@ dp_vs_service_lookup(int af, uint16_t protocol,
                      const union inet_addr *vaddr,
                      uint16_t vport, uint32_t fwmark,
                      const struct rte_mbuf *mbuf,
-                     const struct dp_vs_match *match);
+                     const struct dp_vs_match *match,
+                     bool *outwall);
 
 int dp_vs_match_parse(const char *srange, const char *drange,
                       const char *iifname, const char *oifname,

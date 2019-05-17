@@ -1520,12 +1520,21 @@ static int __dp_vs_out_xmit_snat4(struct dp_vs_proto *proto,
         fl4.fl4_daddr = conn->caddr.in;
         fl4.fl4_saddr = conn->vaddr.in;
         fl4.fl4_tos = iph->type_of_service;
-        rt = route4_output(&fl4);
-        if (!rt) {
-            err = EDPVS_NOROUTE;
-            goto errout;
-        }
+        
 
+        if (conn->outwall) {
+	    rt = route_gfw_net_lookup(&conn->caddr.in);
+            if (!rt) {
+                err = EDPVS_NOROUTE;
+                goto errout;
+            }
+        } else {
+            rt = route4_output(&fl4);
+            if (!rt) {
+                err = EDPVS_NOROUTE;
+                goto errout;
+            }
+        }
         mbuf->userdata = rt;
 
         dp_vs_conn_cache_rt(conn, rt, false);

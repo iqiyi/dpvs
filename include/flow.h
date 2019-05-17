@@ -48,6 +48,7 @@
 #define RTF_LOCALIN     0x0800
 #define RTF_DEFAULT     0x1000
 #define RTF_KNI         0X2000
+#define RTF_OUTWALL     0x4000
 
 struct rt6_prefix {
     struct in6_addr     addr;

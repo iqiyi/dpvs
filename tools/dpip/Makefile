@@ -33,7 +33,7 @@ DEFS = -D DPVS_MAX_LCORE=64
 CFLAGS += $(DEFS)
 
 OBJS = dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
-	   qsch.o cls.o tunnel.o ipv6.o ../../src/common.o \
+	   qsch.o cls.o tunnel.o ipset.o ipv6.o ../../src/common.o \
 	   ../keepalived/keepalived/libipvs-2.6/sockopt.o
 
 all: $(TARGET)

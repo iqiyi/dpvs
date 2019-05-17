@@ -689,8 +689,8 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         goto syn_rcv_out;
 
     if (th->syn && !th->ack && !th->rst && !th->fin &&
-            (svc = dp_vs_service_lookup(af, iph->proto,
-                                        &iph->daddr, th->dest, 0, NULL, NULL)) &&
+            (svc = dp_vs_service_lookup(af, iph->proto, 
+                                        &iph->daddr, th->dest, 0, NULL, NULL, NULL)) &&
             (svc->flags & DP_VS_SVC_F_SYNPROXY)) {
         /* if service's weight is zero (non-active realserver),
          * do noting and drop the packet */
@@ -961,7 +961,7 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
     /* Do not check svc syn-proxy flag, as it may be changed after syn-proxy step 1. */
     if (!th->syn && th->ack && !th->rst && !th->fin &&
             (svc = dp_vs_service_lookup(af, iph->proto, &iph->daddr,
-                                        th->dest, 0, NULL, NULL))) {
+                                        th->dest, 0, NULL, NULL, NULL))) {
         if (dp_vs_synproxy_ctrl_defer &&
                 !syn_proxy_ack_has_data(mbuf, iph, th)) {
             /* Update statistics */
@@ -995,7 +995,7 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
 
         /* Let the virtual server select a real server for the incoming connetion,
          * and create a connection entry */
-        *cpp = dp_vs_schedule(svc, iph, mbuf, 1);
+        *cpp = dp_vs_schedule(svc, iph, mbuf, 1, 0);
         if (unlikely(!*cpp)) {
             RTE_LOG(WARNING, IPVS, "%s: ip_vs_schedule failed\n", __func__);
             /* FIXME: What to do when virtual service is available but no destination
