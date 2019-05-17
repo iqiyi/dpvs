@@ -8,19 +8,15 @@
 #include "common.h"
 #include "dpdk.h"
 
-lcoreid_t g_dpvs_log_core = 0;
-struct rte_ring *log_ring;
 int g_dpvs_log_thread_ready = 0;
 int g_dpvs_log_time_off = 0;
-
-log_stats_t log_stats_info[DPVS_MAX_LCORE];
-
 int log_internal = LOG_INTERNAL_TIME;
 log_buf_t w_buf;
-
+lcoreid_t g_dpvs_log_core = 0;
+log_stats_t log_stats_info[DPVS_MAX_LCORE];
+struct rte_ring *log_ring;
 bool g_dpvs_log_async_mode = 0;
 extern struct rte_logs rte_logs;
-
 static struct rte_mempool *dp_vs_log_pool;
 static int log_pool_size  = DPVS_LOG_POOL_SIZE_DEF;
 static int log_pool_cache = DPVS_LOG_CACHE_SIZE_DEF;
@@ -146,7 +142,6 @@ static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char 
         log_stats_info[cid].missed++;    
         return -1;
     }
-
     /* add time info and send out to log ring */ 
     if (off) {
         log_get_time(log, LOG_SYS_TIME_LEN);       
@@ -190,15 +185,12 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
             rte_vlog(level, logtype, format, ap);
             break;
         }
-
         /* async log is not used for ctrl message */
         if (logtype != RTE_LOGTYPE_USER1) {
             rte_vlog(level, logtype, format, ap);
             break;
         }
-
         cid = rte_lcore_id();
-
         if (log_stats_info[cid].slow) {
             /* set log limit rate to 5 sec and keep for 10 mins */
             if (rte_get_timer_cycles() - log_stats_info[cid].slow_begin > LOG_SLOW_INTERNAL_TIME * rte_get_timer_hz()) {
@@ -213,7 +205,6 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
             dpvs_async_log(level, logtype, cid, log_buf, len, off);
             break;
         }
-
         len = vsnprintf(log_buf+off, sizeof(log_buf)-off, format, ap);                
         dpvs_async_log(level, logtype, cid, log_buf, len, off);
     }while(0);
@@ -258,18 +249,15 @@ static int log_slave_process(void)
         if (w_buf.pos + msg_log->log_len >= LOG_BUF_MAX_LEN) {
             log_buf_flush(f);
         }
-        
         if (!w_buf.pos) {
             w_buf.level = msg_log->log_level - 1;
             w_buf.time = rte_get_timer_cycles();        
         }
         strncpy(w_buf.buf+w_buf.pos, msg_log->data, msg_log->log_len);
         w_buf.pos += msg_log->log_len;
-
         log_buf_timeout_flush(f, 5);            
         dpvs_log_free(msg_log);
     }
-    
     log_buf_timeout_flush(f, 5);
     
     return ret;
