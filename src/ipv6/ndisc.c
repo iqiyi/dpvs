@@ -60,6 +60,47 @@ struct ndisc_options {
 #define nd_opts_rh              nd_opt_array[ND_OPT_REDIRECTED_HEADER]
 #define nd_opts_mtu             nd_opt_array[ND_OPT_MTU]
 
+#ifdef CONFIG_NDISC_DEBUG
+static inline void ndisc_show_addr(const char *func,
+                                   const struct in6_addr *saddr,
+                                   const struct in6_addr *daddr)
+{
+    char sbuf[64], dbuf[64];
+
+    RTE_LOG(DEBUG, NEIGHBOUR, "%s: [%d] %s -> %s\n",
+            func, rte_lcore_id(),
+            saddr ? inet_ntop(AF_INET6, saddr, sbuf, sizeof(sbuf)) : "::",
+            daddr ? inet_ntop(AF_INET6, daddr, dbuf, sizeof(dbuf)) : "::");
+}
+
+static inline void ndisc_show_target(const char *func,
+                                     const struct in6_addr *addr,
+                                     const uint8_t *lladdr,
+                                     const struct netif_port *dev)
+{
+    char buf[64];
+
+    if (!addr) {
+        return;
+    }
+
+    inet_ntop(AF_INET6, addr, buf, sizeof(buf));
+
+    if (lladdr) {
+        RTE_LOG(DEBUG, NEIGHBOUR,
+                "%s: [%d] address: %s, "
+                "lladdr %02x:%02x:%02x:%02x:%02x:%02x, dev %s\n",
+                __func__, rte_lcore_id(), buf,
+                lladdr[0], lladdr[1], lladdr[2],
+                lladdr[3], lladdr[4], lladdr[5], dev->name);
+    } else {
+        RTE_LOG(DEBUG, NEIGHBOUR,
+                "%s: [%d] address: %s, dev %s\n",
+                __func__, rte_lcore_id(), buf, dev->name);
+    }
+}
+#endif
+
 /* ipv6 neighbour */
 static inline uint8_t *ndisc_opt_addr_data(struct nd_opt_hdr *p,
                                            struct netif_port *dev)
@@ -237,6 +278,10 @@ static void ndisc_send_na(struct netif_port *dev,
     fl6.fl6_proto = IPPROTO_ICMPV6;
     fl6.fl6_ttl   = 255;
 
+#ifdef CONFIG_NDISC_DEBUG
+    ndisc_show_addr(__func__, src_addr, daddr);
+#endif
+
     ipv6_xmit(mbuf, &fl6);
 }
 
@@ -273,6 +318,10 @@ static void ndisc_send_ns(struct netif_port *dev,
     fl6.fl6_daddr = *daddr;
     fl6.fl6_proto = IPPROTO_ICMPV6;
     fl6.fl6_ttl   = 255;
+
+#ifdef CONFIG_NDISC_DEBUG
+    ndisc_show_addr(__func__, saddr, daddr);
+#endif
 
     ipv6_xmit(mbuf, &fl6);
 }
@@ -311,6 +360,10 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
 
     struct nd_msg *msg = rte_pktmbuf_mtod(mbuf, struct nd_msg *);
     int dad = ipv6_addr_any(saddr);
+
+#ifdef CONFIG_NDISC_DEBUG
+    ndisc_show_addr(__func__, saddr, daddr);
+#endif
 
     if (mbuf_may_pull(mbuf, sizeof(struct nd_msg)))
         return EDPVS_DROP;
@@ -418,6 +471,10 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     struct nd_msg *msg = rte_pktmbuf_mtod(mbuf, struct nd_msg *);
     uint32_t ndoptlen = mbuf->data_len - offsetof(struct nd_msg, opt);
 
+#ifdef CONFIG_NDISC_DEBUG
+    ndisc_show_addr(__func__, saddr, daddr);
+#endif
+
     if (mbuf_may_pull(mbuf, sizeof(struct nd_msg))) {
         RTE_LOG(ERR, NEIGHBOUR, "ICMPv6 NA: packet too short.\n");
         return EDPVS_DROP;
@@ -437,7 +494,6 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
         RTE_LOG(ERR, NEIGHBOUR, "ICMPv6 NA: invalid ND option.\n");
         return EDPVS_DROP;
     }
-
 
     ifa = inet_addr_ifa_get(AF_INET6, dev, (union inet_addr *)&msg->target);
     if (ifa) {
@@ -459,6 +515,10 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
         /* ingnore mbuf without opt */
         return EDPVS_KNICONTINUE;
     }
+
+#ifdef CONFIG_NDISC_DEBUG
+    ndisc_show_target(__func__, &msg->target, lladdr, dev);
+#endif
 
     /* notice: override flag ignored */
     hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)&msg->target, dev);

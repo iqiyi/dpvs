@@ -37,7 +37,7 @@ static void dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct 
     if (dpdk_port) {
         strcpy(param->ifname, dpdk_port);
     } else {
-        strcpy(param->ifname, ipaddress->ifp->ifname);
+        strcpy(param->ifname, IF_NAME(if_get_by_ifindex(ipaddress->ifa.ifa_index)));
     }
     if (param->af == AF_INET)
         param->addr.in  = ipaddress->u.sin.sin_addr;
@@ -272,12 +272,22 @@ address_exist(list l, ip_address_t *ipaddress, char *old_dpdk_port, char *dpdk_p
 	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
 		ipaddr = ELEMENT_DATA(e);
 		if (ipaddr->u.sin.sin_addr.s_addr ==
-            ipaddress->u.sin.sin_addr.s_addr &&
-            !strcmp(old_dpdk_port, dpdk_port)) {
-			ipaddr->set = ipaddress->set;
-			return 1;
+            ipaddress->u.sin.sin_addr.s_addr) {
+			if (old_dpdk_port == NULL || dpdk_port == NULL) {
+				if (ipaddr->ifa.ifa_index == ipaddress->ifa.ifa_index) {
+					log_message(LOG_INFO, "interface index: %d is already existed",
+					            ipaddr->ifa.ifa_index);
+					ipaddr->set = ipaddress->set;
+					return 1;
+				}
+			} else if (!strcmp(old_dpdk_port, dpdk_port)) {
+				log_message(LOG_INFO, "interface: %s is already existed",
+					        old_dpdk_port);
+				ipaddr->set = ipaddress->set;
+				return 1;
+			}
 		}
-	}
+    }
 
 	return 0;
 }

@@ -386,6 +386,8 @@ static inline void conn_table_dump(void)
 static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
 {
     char cbuf[64], vbuf[64], lbuf[64], dbuf[64];
+    char end_time[SYS_TIME_STR_LEN];
+    char start_time[SYS_TIME_STR_LEN];
     const char *caddr, *vaddr, *laddr, *daddr;
 
     if (rte_log_get_global_level() >= RTE_LOG_DEBUG) {
@@ -396,7 +398,7 @@ static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
 
         RTE_LOG(DEBUG, IPVS, "[%s->%s]%s [%d] %s %s/%u %s/%u %s/%u %s/%u"
                 " inpkts=%ld, inbytes=%ld, outpkts=%ld, outbytes=%ld\n",
-                cycles_to_stime(conn->ctime), sys_localtime_str(),
+                cycles_to_stime(conn->ctime, start_time, SYS_TIME_STR_LEN), sys_localtime_str(end_time, SYS_TIME_STR_LEN),
                 msg ? msg : "", rte_lcore_id(), inet_proto_name(conn->proto),
                 caddr, ntohs(conn->cport), vaddr, ntohs(conn->vport),
                 laddr, ntohs(conn->lport), daddr, ntohs(conn->dport),
@@ -663,15 +665,13 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
 
     assert(mbuf && param && dest);
 
-    /* no need to create redirect for the global template connection */
-    if ((flags & DPVS_CONN_F_TEMPLATE) == 0) {
-        new_r = dp_vs_redirect_alloc(dest->fwdmode);
-    }
-
     new = dp_vs_conn_alloc();
     if (unlikely(!new))
-        goto errout_redirect;
+        return NULL;
 
+    /* no need to create redirect for the global template connection */
+    if (likely((flags & DPVS_CONN_F_TEMPLATE) == 0))
+        new_r = dp_vs_redirect_alloc(dest->fwdmode);
     new->redirect = new_r;
 
     /* set proper RS port */
@@ -842,9 +842,8 @@ unbind_laddr:
 unbind_dest:
     conn_unbind_dest(new);
 errout:
-    dp_vs_conn_free(new);
-errout_redirect:
     dp_vs_redirect_free(new);
+    dp_vs_conn_free(new);
     return NULL;
 }
 

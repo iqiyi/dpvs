@@ -224,14 +224,14 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 		user.flags |= IP_VS_SVC_F_ONEPACKET;
 	}
 
-	if( options & OPT_SIPHASH ) {
-		user.flags |= IP_VS_SVC_F_SIP_HASH;
-		user.flags &= ~IP_VS_SVC_F_QID_HASH;
-	}
-
-	if( options & OPT_QIDHASH ) {
-		user.flags |= IP_VS_SVC_F_QID_HASH;
-		user.flags &= ~IP_VS_SVC_F_SIP_HASH;
+	if( options & OPT_HASHTAG ) {
+		if ( svc->flags & IP_VS_SVC_F_SIP_HASH ) {
+			user.flags |= IP_VS_SVC_F_SIP_HASH;
+		} else if ( svc->flags & IP_VS_SVC_F_QID_HASH ) {
+			user.flags |= IP_VS_SVC_F_QID_HASH;
+		} else {
+			user.flags |= IP_VS_SVC_F_SIP_HASH;
+		}
 	}
 
 	return ipvs_update_service(&user);

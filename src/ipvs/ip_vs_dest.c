@@ -26,65 +26,10 @@
 #include "ipvs/conn.h"
 
 /*
- * locks
- */
-
-static rte_rwlock_t __dp_vs_rs_lock;
-
-
-/*
- * hash table for rs
- */
-#define DP_VS_RTAB_BITS 4
-#define DP_VS_RTAB_SIZE (1 << DP_VS_RTAB_BITS)
-#define DP_VS_RTAB_MASK (DP_VS_RTAB_SIZE - 1)
-
-static struct list_head dp_vs_rtable[DP_VS_RTAB_SIZE];
-
-/*
  * Trash for destinations
  */
 
 struct list_head dp_vs_dest_trash = LIST_HEAD_INIT(dp_vs_dest_trash);
-
-static inline unsigned dp_vs_rs_hashkey(int af,
-                    const union inet_addr *addr,
-                    uint32_t port)
-{
-    register unsigned porth = ntohs(port);
-    uint32_t addr_fold;
-
-    addr_fold = inet_addr_fold(af, addr);
-
-    if (!addr_fold) {
-        RTE_LOG(DEBUG, SERVICE, "%s: IP proto not support.\n", __func__);
-        return 0;
-    }
-
-    return (ntohl(addr_fold) ^ (porth >> DP_VS_RTAB_BITS) ^ porth)
-        & DP_VS_RTAB_MASK;
-}
-
-static int dp_vs_rs_hash(struct dp_vs_dest *dest)
-{
-    unsigned hash;
-    if (!list_empty(&dest->d_list)){
-        return EDPVS_EXIST;
-    }
-    hash = dp_vs_rs_hashkey(dest->af, &dest->addr, dest->port);
-    list_add(&dest->d_list, &dp_vs_rtable[hash]);
-    return EDPVS_OK;
-}
-
-static int dp_vs_rs_unhash(struct dp_vs_dest *dest)
-{
-    if(!list_empty(&dest->d_list)){
-        list_del(&dest->d_list);
-        INIT_LIST_HEAD(&dest->d_list);
-    }
-    return EDPVS_OK;
-}
-
 
 struct dp_vs_dest *dp_vs_lookup_dest(int af,
                                      struct dp_vs_service *svc,
@@ -169,9 +114,6 @@ static void __dp_vs_update_dest(struct dp_vs_service *svc,
     rte_atomic16_set(&dest->weight, udest->weight);
     conn_flags = udest->conn_flags | DPVS_CONN_F_INACTIVE;
 
-    rte_rwlock_write_lock(&__dp_vs_rs_lock);
-    dp_vs_rs_hash(dest);
-    rte_rwlock_write_unlock(&__dp_vs_rs_lock);
     rte_atomic16_set(&dest->conn_flags, conn_flags);
 
     /* bind the service */
@@ -224,8 +166,6 @@ int dp_vs_new_dest(struct dp_vs_service *svc,
     rte_atomic32_set(&dest->inactconns, 0);
     rte_atomic32_set(&dest->persistconns, 0);
     rte_atomic32_set(&dest->refcnt, 0);
-
-    INIT_LIST_HEAD(&dest->d_list);
 
     if (dp_vs_new_stats(&(dest->stats)) != EDPVS_OK) {
         rte_free(dest);
@@ -406,13 +346,6 @@ dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 void __dp_vs_del_dest(struct dp_vs_dest *dest)
 {
     /*
-     *  Remove it from the d-linked list with the real services.
-     */
-    rte_rwlock_write_lock(&__dp_vs_rs_lock);
-    dp_vs_rs_unhash(dest);
-    rte_rwlock_write_unlock(&__dp_vs_rs_lock);
-
-    /*
      *  Decrease the refcnt of the dest, and free the dest
      *  if nobody refers to it (refcnt=0). Otherwise, throw
      *  the destination into the trash.
@@ -424,8 +357,7 @@ void __dp_vs_del_dest(struct dp_vs_dest *dest)
            Only user context can release destination and service,
            and only one user context can update virtual service at a
            time, so the operation here is OK */
-        rte_atomic32_dec(&dest->svc->refcnt);
-        dest->svc = NULL;
+        __dp_vs_unbind_svc(dest);
         dp_vs_del_stats(dest->stats);
         rte_free(dest);
     } else {
@@ -537,11 +469,6 @@ int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
 
 int dp_vs_dest_init(void)
 {
-    int idx;
-    for (idx = 0; idx < DP_VS_RTAB_SIZE; idx++) {
-        INIT_LIST_HEAD(&dp_vs_rtable[idx]);
-    }
-    rte_rwlock_init(&__dp_vs_rs_lock);
     return EDPVS_OK;
 }
 
