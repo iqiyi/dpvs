@@ -105,10 +105,8 @@ void dp_vs_redirect_hash(struct dp_vs_conn *conn)
         return;
     }
 
-    hash = dp_vs_conn_hashkey(r->af,
-                    &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
-                    &tuplehash_out(conn).daddr, tuplehash_out(conn).dport,
-                    DPVS_CR_TBL_MASK);
+    hash = dp_vs_conn_hashkey(r->af, &r->saddr, r->sport,
+            &r->daddr, r->dport, DPVS_CR_TBL_MASK);
 
     rte_spinlock_lock(&dp_vs_cr_lock[hash]);
     list_add(&r->list, &dp_vs_cr_tbl[hash]);
@@ -123,10 +121,8 @@ void dp_vs_redirect_unhash(struct dp_vs_conn *conn)
     struct dp_vs_redirect *r = conn->redirect;
 
     if (r && likely(dp_vs_conn_is_redirect_hashed(conn))) {
-        hash = dp_vs_conn_hashkey(r->af,
-                                  &r->saddr, r->sport,
-                                  &r->daddr, r->dport,
-                                  DPVS_CR_TBL_MASK);
+        hash = dp_vs_conn_hashkey(r->af, &r->saddr, r->sport,
+                &r->daddr, r->dport, DPVS_CR_TBL_MASK);
 
         rte_spinlock_lock(&dp_vs_cr_lock[hash]);
         list_del(&r->list);
