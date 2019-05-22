@@ -558,7 +558,7 @@ static inline void neigh_show_nexthop(const char *func, int af,
 
     RTE_LOG(DEBUG, NEIGHBOUR,
             "%s: [%d] port %s, nexthop %s\n",
-            __func__, rte_lcore_id(), port->name,
+            func, rte_lcore_id(), port->name,
             nexhop ? inet_ntop(af, nexhop, buf, sizeof(buf)) : "::");
 }
 #endif
