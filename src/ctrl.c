@@ -134,7 +134,7 @@ static inline int mt_hashkey(msgid_t type)
     return type & DPVS_MSG_MASK;
 }
 
-static struct dpvs_msg_type* msg_type_get(msgid_t type, /*DPVS_MSG_MODE mode, */lcoreid_t cid)
+static struct dpvs_msg_type* msg_type_get(msgid_t type, lcoreid_t cid)
 {
     int hashkey = mt_hashkey(type);
     struct dpvs_msg_type *mt;
@@ -324,7 +324,7 @@ int msg_type_mc_unregister(const struct dpvs_msg_type *msg_type)
 }
 
 struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
-        DPVS_MSG_MODE mode,
+        msg_mode_t mode,
         lcoreid_t cid,
         uint32_t len, const void *data)
 {

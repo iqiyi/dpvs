@@ -29,7 +29,7 @@ typedef uint32_t msgid_t;
 typedef enum msg_mode {
     DPVS_MSG_UNICAST   = 1,
     DPVS_MSG_MULTICAST
-} DPVS_MSG_MODE;
+} msg_mode_t;
 
 typedef enum msg_priority {
     MSG_PRIO_IGN = 0, /* used internally only */
@@ -65,7 +65,7 @@ struct dpvs_msg {
     struct list_head mq_node;
     msgid_t type;
     uint32_t seq;           /* msg sequence number */
-    DPVS_MSG_MODE mode;     /* msg mode */
+    msg_mode_t mode;        /* msg mode */
     lcoreid_t cid;          /* which lcore the msg from, for multicast always Master */
     uint32_t flags;         /* msg flags */
     rte_atomic16_t refcnt;  /* reference count */
@@ -138,7 +138,7 @@ struct dpvs_msg_type {
     msgid_t type;
     uint8_t prio;
     lcoreid_t cid;          /* on which lcore the callback func registers */
-    DPVS_MSG_MODE mode;     /* distinguish unicast from multicast for the same msg type */
+    msg_mode_t mode;        /* distinguish unicast from multicast for the same msg type */
     UNICAST_MSG_CB unicast_msg_cb;     /* call this func if msg is unicast, i.e. 1:1 msg */
     MULTICAST_MSG_CB multicast_msg_cb; /* call this func if msg is multicast, i.e. 1:N msg */
     rte_atomic32_t refcnt;
@@ -155,7 +155,7 @@ int msg_type_mc_unregister(const struct dpvs_msg_type *msg_type);
 
 /* make a msg for 'msg_send' or 'multicast_msg_send' */
 struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
-        DPVS_MSG_MODE mode,
+        msg_mode_t mode,
         lcoreid_t cid,
         uint32_t len, const void *data);
 int msg_destroy(struct dpvs_msg **pmsg);
