@@ -215,6 +215,7 @@ void dp_vs_dest_put(struct dp_vs_dest *dest)
     if (rte_atomic32_dec_and_test(&dest->refcnt)) {
         dp_vs_unbind_svc(dest);
         rte_free(dest);
+        RTE_LOG(ERR, SERVICE, "%s delete rs\n", __func__);
     }
 }
 
