@@ -429,6 +429,7 @@ static int tc_msg_get_stats(struct dpvs_msg *msg)
 
 static struct dpvs_msg_type tc_stats_msg = {
     .type           = MSG_TYPE_TC_STATS,
+    .prio           = MSG_PRIO_LOW,
     .unicast_msg_cb = tc_msg_get_stats,
 };
 

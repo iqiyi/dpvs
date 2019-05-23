@@ -249,8 +249,6 @@ enum{
 
 #define MAX_ARG_LEN    (sizeof(struct dp_vs_service_user) +    \
                          sizeof(struct dp_vs_dest_user))
-
-#define DPVS_WAIT_WHILE(expr) while(expr){;}
 #endif
 
 #endif /* __DPVS_SVC_H__ */

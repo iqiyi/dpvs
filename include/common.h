@@ -71,6 +71,8 @@ typedef uint16_t    __u16;
 typedef uint32_t    __u32;
 #endif
 
+#define DPVS_WAIT_WHILE(expr) while(expr){;}
+
 typedef enum {
     DPVS_STATE_STOP = 1,
     DPVS_STATE_INIT,

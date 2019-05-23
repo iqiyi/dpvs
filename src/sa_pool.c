@@ -844,6 +844,7 @@ reply:
 
 static struct dpvs_msg_type sa_stats_msg = {
     .type           = MSG_TYPE_SAPOOL_STATS,
+    .prio           = MSG_PRIO_LOW,
     .unicast_msg_cb = sa_msg_get_stats,
 };
 

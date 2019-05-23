@@ -280,7 +280,7 @@ int main(int argc, char *argv[])
         /* IPC loop */
         sockopt_ctl(NULL);
         /* msg loop */
-        msg_master_process();
+        msg_master_process(0);
 
         /* timer */
         loop_cnt++;

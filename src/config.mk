@@ -38,6 +38,7 @@ CFLAGS += -D DPVS_MAX_LCORE=64
 #CFLAGS += -D CONFIG_DPVS_MBUF_DEBUG
 #CFLAGS += -D CONFIG_DPVS_IPSET_DEBUG
 #CFLAGS += -D CONFIG_NDISC_DEBUG
+#CFLAGS += -D CONFIG_MSG_DEBUG
 
 GCC_MAJOR = $(shell echo __GNUC__ | $(CC) -E -x c - | tail -n 1)
 GCC_MINOR = $(shell echo __GNUC_MINOR__ | $(CC) -E -x c - | tail -n 1)

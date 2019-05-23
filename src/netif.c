@@ -1322,7 +1322,7 @@ static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)
     lcoreid_t cid;
     cid = rte_lcore_id();
     assert(cid < DPVS_MAX_LCORE);
-    memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
+    rte_memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
 }
 
 static int port_rx_queues_get(portid_t pid)
@@ -2000,8 +2000,8 @@ static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
         //fflush(stdout);
         return netif_xmit(data->mbuf, data->dev);
     }
-    else
-        return EDPVS_INVAL;
+
+    return EDPVS_INVAL;
 }
 
 /* master_xmit_msg should be registered on all slave lcores */
@@ -2016,6 +2016,7 @@ int netif_register_master_xmit_msg(void)
     memset(&mt, 0, sizeof(mt));
     mt.type = MSG_TYPE_MASTER_XMIT;
     mt.mode = DPVS_MSG_UNICAST;
+    mt.prio = MSG_PRIO_HIGH;
     mt.unicast_msg_cb = msg_type_master_xmit_cb;
 
     netif_get_slave_lcores(&slave_lcore_nb, &slave_lcore_mask);
@@ -2028,7 +2029,7 @@ int netif_register_master_xmit_msg(void)
                     " exiting ...\n", __func__);
             return ret;
         }
-        RTE_LOG(DEBUG, NETIF, "[%s] mster_xmit_msg registered on lcore #%d\n",
+        RTE_LOG(DEBUG, NETIF, "[%s] master_xmit_msg registered on lcore #%d\n",
                 __func__, ii);
     }
 
@@ -4283,6 +4284,7 @@ static inline int lcore_stats_msg_init(void)
     struct dpvs_msg_type lcore_stats_msg_type = {
         .type = MSG_TYPE_NETIF_LCORE_STATS,
         .mode = DPVS_MSG_UNICAST,
+        .prio = MSG_PRIO_LOW,
         .unicast_msg_cb = lcore_stats_msg_cb,
         .multicast_msg_cb = NULL,
     };
@@ -4308,6 +4310,7 @@ static inline int lcore_stats_msg_term(void)
     struct dpvs_msg_type lcore_stats_msg_type = {
         .type = MSG_TYPE_NETIF_LCORE_STATS,
         .mode = DPVS_MSG_UNICAST,
+        .prio = MSG_PRIO_LOW,
         .unicast_msg_cb = lcore_stats_msg_cb,
         .multicast_msg_cb = NULL,
     };
@@ -4363,7 +4366,7 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
 
         assert(reply->len == sizeof(struct netif_lcore_stats));
         assert(reply->data);
-        memcpy(&stats, reply->data, sizeof(stats));
+        rte_memcpy(&stats, reply->data, sizeof(stats));
 
         msg_destroy(&pmsg);
     }
