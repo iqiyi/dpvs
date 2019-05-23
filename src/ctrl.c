@@ -99,7 +99,7 @@ inline static void msg_debug_dump(void)
 
     allc = rte_atomic64_read(&n_msg_allc);
 
-    if (likely(allc % 100000))
+    if (likely(allc % 10))
         return;
 
     RTE_LOG(INFO, MSGMGR, "%s: allocated=%ld, freed=%ld, processing=%d\n",

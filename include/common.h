@@ -71,6 +71,11 @@ typedef uint16_t    __u16;
 typedef uint32_t    __u32;
 #endif
 
+#ifndef lcoreid_t
+typedef uint8_t lcoreid_t;
+#endif
+
+
 #define DPVS_WAIT_WHILE(expr) while(expr){;}
 
 typedef enum {

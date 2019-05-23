@@ -442,6 +442,7 @@ alloc_vs(char *ip, char *port)
 	new->blklst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;
 	new->hash_target = 0;
+	new->af = 0;
 	memset(new->srange, 0, 256);
 	memset(new->drange, 0, 256);
 	memset(new->iifname, 0, IFNAMSIZ);

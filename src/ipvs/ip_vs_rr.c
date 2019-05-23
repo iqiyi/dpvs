@@ -40,8 +40,6 @@ static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
     struct list_head *p, *q;
     struct dp_vs_dest *dest;
 
-    rte_rwlock_write_lock(&svc->sched_lock);
-
     p = (struct list_head *)svc->sched_data;
     p = p->next;
     q = p;
@@ -59,13 +57,11 @@ static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
             goto out;
         q = q->next;
     } while (q != p);
-    rte_rwlock_write_unlock(&svc->sched_lock);
 
     return NULL;
 
 out:
     svc->sched_data = q;
-    rte_rwlock_write_unlock(&svc->sched_lock);
 
     return dest;
 }

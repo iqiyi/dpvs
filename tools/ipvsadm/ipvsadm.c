@@ -200,6 +200,7 @@ static const char* optnames[] = {
 	"ifname" ,
 	"sockpair" ,
 	"hash-target",
+        "cpu"
 };
 
 /*
@@ -212,27 +213,47 @@ static const char* optnames[] = {
  */
 static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 {
-        /* -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr blst syn ifname sockpair hashtag*/
-/*ADD*/      {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' '},
-/*EDIT*/     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' '},
-/*DEL*/      {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*FLUSH*/    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*LIST*/     {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x',  'x', 'x' ,' ' ,'x'},
-/*ADDSRV*/   {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*DELSRV*/   {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*EDITSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*TIMEOUT*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*STARTD*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*STOPD*/    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*RESTORE*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*SAVE*/     {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*ZERO*/     {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*ADDLADDR*/ {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x'},
-/*DELLADDR*/ {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x'},
-/*GETLADDR*/ {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
-/*ADDBLKLST*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x'},
-/*DELBLKLST*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x'},
-/*GETBLKLST*/{'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x'},
+/* -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr blst syn ifname sockpair hashtag cpu*/
+/*ADD*/   
+    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' ', 'x'},
+/*EDIT*/  
+    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' ', 'x'},
+/*DEL*/      
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*FLUSH*/    
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*LIST*/     
+    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x',  'x', 'x' ,' ' ,'x', ' '},
+/*ADDSRV*/   
+    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*DELSRV*/   
+    {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*EDITSRV*/  
+    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*TIMEOUT*/  
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*STARTD*/   
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*STOPD*/    
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*RESTORE*/  
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*SAVE*/     
+    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*ZERO*/     
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+/*ADDLADDR*/ 
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x', 'x'},
+/*DELLADDR*/ 
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x', 'x'},
+/*GETLADDR*/ 
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', ' '},
+/*ADDBLKLST*/
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x', 'x'},
+/*DELBLKLST*/
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x', 'x'},
+/*GETBLKLST*/
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
 };
 
 /* printing format flags */
@@ -265,6 +286,7 @@ struct ipvs_command_entry {
 	ipvs_laddr_t		laddr;
 	ipvs_blklst_t		blklst;
 	ipvs_sockpair_t		sockpair;
+	lcoreid_t		cid;
 };
 
 /* Use values outside ASCII range so that if an option has
@@ -285,6 +307,7 @@ enum {
 	TAG_NO_SORT,
 	TAG_PERSISTENCE_ENGINE,
 	TAG_SOCKPAIR,
+	TAG_CPU, 
 };
 
 /* various parsing helpers & parsing functions */
@@ -320,12 +343,12 @@ static void fail(int err, char *msg, ...);
 static void list_conn(int is_template, unsigned int format);
 static void list_conn_sockpair(int is_template,
 		ipvs_sockpair_t *sockpair, unsigned int format);
-static void list_service(ipvs_service_t *svc, unsigned int format);
-static void list_all(unsigned int format);
+static void list_service(ipvs_service_t *svc, unsigned int format, lcoreid_t cid);
+static void list_all(unsigned int format, lcoreid_t cid);
 static void list_timeout(void);
 static void list_daemon(void);
-static int list_laddrs(ipvs_service_t *svc, int with_title);
-static int list_all_laddrs(void);
+static int list_laddrs(ipvs_service_t *svc, int with_title, lcoreid_t cid);
+static int list_all_laddrs(lcoreid_t cid);
 static void list_blklsts_print_title(void);
 static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
 static int list_all_blklsts(void);
@@ -341,7 +364,7 @@ int main(int argc, char **argv)
 {
 	int result;
 
-	if (ipvs_init()) {
+	if (ipvs_init(0)) {
 		fail(2, "Can't initialize ipvs: %s\n"
 			"Are you sure that dpvs is running?",
 			ipvs_strerror(errno));
@@ -352,7 +375,7 @@ int main(int argc, char **argv)
 
 	/* list the table if there is no other arguement */
 	if (argc == 1){
-		list_all(FMT_NONE);
+		list_all(FMT_NONE, 0);
 		ipvs_close();
 		return 0;
 	}
@@ -404,7 +427,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		  NULL, NULL },
 		{ "icmp-service", 'q', POPT_ARG_STRING, &optarg, 'q',
 		  NULL, NULL },
-		{ "icmpv6-service", '1', POPT_ARG_STRING, &optarg, 'q',
+		{ "icmpv6-service", '1', POPT_ARG_STRING, &optarg, '1',
 		  NULL, NULL },
 		{ "fwmark-service", 'f', POPT_ARG_STRING, &optarg, 'f',
 		  NULL, NULL },
@@ -454,6 +477,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
 		{ "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
+		{ "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
 
@@ -567,7 +591,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			break;
 		case 'H':
 			set_option(options, OPT_SERVICE);
-		if (parse_match_snat(optarg, &ce->svc) != 0)
+			ce->svc.flags |= IP_VS_SVC_F_MATCH;
+			if (parse_match_snat(optarg, &ce->svc) != 0)
 				fail(2, "illegal match specified");
 			break;
 		case 'f':
@@ -795,6 +820,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 				fail(2 , "hash target not support\n");
 			break;
 			}
+		case TAG_CPU:
+			{
+			ce->cid = atoi(optarg);
+			break;
+			}
 		default:
 			fail(2, "invalid option `%s'",
 			     poptBadOption(context, POPT_BADOPTION_NOALIAS));
@@ -871,6 +901,8 @@ static int process_options(int argc, char **argv, int reading_stdin)
 	ce.dest.conn_flags = IP_VS_CONN_F_DROUTE;
 	/* Set the default persistent granularity to /32 mask */
 	ce.svc.netmask = ((u_int32_t) 0xffffffff);
+	/* Set the default cpu be master */
+	ce.cid = 0;
 
 	if (parse_options(argc, argv, &ce, &options, &format))
 		return -1;
@@ -912,6 +944,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
 	}
 
 	switch (ce.cmd) {
+	ipvs_init(ce.cid);
 	case CMD_LIST:
 		if ((options & (OPT_CONNECTION|OPT_TIMEOUT|OPT_DAEMON) &&
 		     options & (OPT_STATS|OPT_RATE|OPT_THRESHOLDS)) ||
@@ -926,13 +959,13 @@ static int process_options(int argc, char **argv, int reading_stdin)
             else
                 list_conn(options & OPT_PERSISTENTCONN, format);
 		else if (options & OPT_SERVICE)
-			list_service(&ce.svc, format);
+			list_service(&ce.svc, format, ce.cid);
 		else if (options & OPT_TIMEOUT)
 			list_timeout();
 		else if (options & OPT_DAEMON)
 			list_daemon();
 		else
-			list_all(format);
+			list_all(format, ce.cid);
 		return 0;
 
 	case CMD_RESTORE:
@@ -940,7 +973,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
 
 	case CMD_SAVE:
 		format |= FMT_RULE;
-		list_all(format);
+		list_all(format, ce.cid);
 		return 0;
 
 	case CMD_FLUSH:
@@ -997,9 +1030,9 @@ static int process_options(int argc, char **argv, int reading_stdin)
 
 	case CMD_GETLADDR:
 		if(options & OPT_SERVICE)
-			result = list_laddrs(&ce.svc , 1);
+			result = list_laddrs(&ce.svc , 1, ce.cid);
 		else
-			result = list_all_laddrs();
+			result = list_all_laddrs(ce.cid);
 		break;
 
 	case CMD_ADDBLKLST:
@@ -1259,6 +1292,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 
     return 1;
 }
+
 /*
  * comma separated parameters list, all fields is used to match packets.
  *
@@ -1278,10 +1312,11 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
     char params[256];
     char *arg, *start, *sp, key[32], val[128];
     int r;
+    bool range = false;
+    bool af = false;
 
     snprintf(params, sizeof(params), "%s", buf);
 
-    svc->af = AF_INET; /* now IPv4 only */
     svc->protocol = IPPROTO_NONE;
 
     for (start = params; (arg = strtok_r(start, ",", &sp)); start = NULL) {
@@ -1303,9 +1338,19 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
                 svc->protocol = IPPROTO_ICMPV6;
             else
                 return -1;
+        } else if (strcmp(key, "af") == 0){
+            af = true;
+            if (strcmp(val, "ipv4") == 0)
+                svc->af = AF_INET;
+            else if (strcmp(val, "ipv6") == 0)
+                svc->af = AF_INET6;
+            else
+                return -1;
         } else if (strcmp(key, "src-range") == 0) {
+            range = true;
             snprintf(svc->srange, sizeof(svc->srange), "%s", val);
         } else if (strcmp(key, "dst-range") == 0) {
+            range = true;
             snprintf(svc->drange, sizeof(svc->drange), "%s", val);
         } else if (strcmp(key, "iif") == 0) {
             snprintf(svc->iifname, sizeof(svc->iifname), "%s", val);
@@ -1316,6 +1361,8 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
         }
     }
 
+    if (!range && !af)
+        return -1;
     return 0;
 }
 
@@ -1486,8 +1533,9 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --numeric      -n                   numeric output of addresses and ports\n"
 		"  --ifname       -F                   nic interface for laddrs\n"
 		"  --synproxy     -j                   TCP syn proxy\n"
-		"  --match        -H MATCH             select service by MATCH 'proto,srange,drange,iif,oif'\n"
-		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n",
+		"  --match        -H MATCH             select service by MATCH 'af,proto,srange,drange,iif,oif', af should be defined if no range defined\n"
+		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
+		"  --cpu            cid                choose cid to show\n",
 		DEF_SCHED);
 
 	exit(exit_status);
@@ -1734,13 +1782,13 @@ static void print_title(unsigned int format)
 
 
 static void
-print_service_entry(ipvs_service_entry_t *se, unsigned int format)
+print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid)
 {
 	struct ip_vs_get_dests *d;
 	char svc_name[256];
 	int i;
 
-	if (!(d = ipvs_get_dests(se))) {
+	if (!(d = ipvs_get_dests(se, cid))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		exit(1);
 	}
@@ -1788,6 +1836,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		free(vname);
 	} else { /* match */
 		char *proto;
+		char af[10];
 
 		if (se->protocol == IPPROTO_TCP)
 			proto = "tcp";
@@ -1798,10 +1847,15 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 		else
 			proto = "icmpv6";
 
+		if (se->af == AF_INET)
+			sprintf(af, "ipv4");
+		else if (se->af == AF_INET6)
+			sprintf(af, "ipv6");
+
 		if (format & FMT_RULE) {
 			snprintf(svc_name, sizeof(svc_name),
-			"-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
-			proto, se->srange, se->drange, se->iifname, se->oifname);
+			"-H af=%s, proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
+			proto, af, se->srange, se->drange, se->iifname, se->oifname);
 
 		} else {
 			int left = sizeof(svc_name);
@@ -1809,6 +1863,9 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
 				"MATCH %s", proto);
+
+			left -= snprintf(svc_name + strlen(svc_name), left,
+				",af=%s", af);
 
 			if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
                             strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
@@ -2009,17 +2066,17 @@ static void print_service_and_laddrs(struct ip_vs_get_laddrs* d, int with_title)
 }
 
 
-static int list_laddrs(ipvs_service_t *svc , int with_title)
+static int list_laddrs(ipvs_service_t *svc , int with_title, lcoreid_t cid)
 {
 	ipvs_service_entry_t *entry;
 	struct ip_vs_get_laddrs *d;
 
-	if (!(entry = ipvs_get_service(svc))) {
+	if (!(entry = ipvs_get_service(svc, cid))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		return -1;
 	}
 
-	if (!(d = ipvs_get_laddrs(entry))) {
+	if (!(d = ipvs_get_laddrs(entry, cid))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		free(entry);
 		return -1;
@@ -2034,20 +2091,20 @@ static int list_laddrs(ipvs_service_t *svc , int with_title)
 }
 
 
-static int list_all_laddrs(void)
+static int list_all_laddrs(lcoreid_t cid)
 {
 	struct ip_vs_get_services *get;
 	struct ip_vs_get_laddrs   *d;
 	int i;
 	int title_enable = 1;
 
-	if (!(get = ipvs_get_services())) {
+	if (!(get = ipvs_get_services(cid))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		return -1;
 	}
 
 	for (i = 0; i < get->num_services; i++){
-		if(!(d = ipvs_get_laddrs(&(get->entrytable[i])))) {
+		if(!(d = ipvs_get_laddrs(&(get->entrytable[i]), cid))) {
 			free(get);
 			fprintf(stderr, "%s\n", ipvs_strerror(errno));
 			return -1;
@@ -2114,7 +2171,7 @@ static int list_all_blklsts(void)
 	struct ip_vs_get_services *get;
 	int i;
 
-	if (!(get = ipvs_get_services())) {
+	if (!(get = ipvs_get_services(0))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		exit(1);
 	}
@@ -2128,23 +2185,23 @@ static int list_all_blklsts(void)
 	return 0;
 }
 
-static void list_service(ipvs_service_t *svc, unsigned int format)
+static void list_service(ipvs_service_t *svc, unsigned int format, lcoreid_t cid)
 {
 	ipvs_service_entry_t *entry;
 
-	if (!(entry = ipvs_get_service(svc))) {
+	if (!(entry = ipvs_get_service(svc, cid))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		exit(1);
 	}
 
 	print_title(format);
-	print_service_entry(entry, format);
+	print_service_entry(entry, format, cid);
 	free(entry);
 
 }
 
 
-static void list_all(unsigned int format)
+static void list_all(unsigned int format, lcoreid_t cid)
 {
 	struct ip_vs_get_services *get;
 	int i;
@@ -2153,7 +2210,7 @@ static void list_all(unsigned int format)
 		printf("IP Virtual Server version %d.%d.%d (size=%d)\n",
 		       NVERSION(ipvs_info.version), ipvs_info.size);
 
-	if (!(get = ipvs_get_services())) {
+	if (!(get = ipvs_get_services(cid))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		exit(1);
 	}
@@ -2163,7 +2220,7 @@ static void list_all(unsigned int format)
 
 	print_title(format);
 	for (i = 0; i < get->num_services; i++)
-		print_service_entry(&get->entrytable[i], format);
+		print_service_entry(&get->entrytable[i], format, cid);
 	free(get);
 }
 

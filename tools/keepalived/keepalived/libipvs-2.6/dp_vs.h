@@ -2,15 +2,6 @@
 #define _DP_VS_H
 
 #include <netinet/in.h>
-#include "conf/route.h"
-#include "conf/route6.h"
-#include "conf/inetaddr.h"
-#include "conf/laddr.h"
-#include "conf/blklst.h"
-#include "conf/conn.h"
-#include "ip_tunnel.h"
-#include "ipvs/service.h"
-#include "ipvs/dest.h"
 
 enum{
     DPVS_SO_SET_FLUSH = 200,
