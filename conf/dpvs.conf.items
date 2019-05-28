@@ -11,9 +11,10 @@
 
 ! global config
 global_defs {
-    #daemon                         <disalbe>
-    log_level   INFO                <none>
-    log_file    /var/log/dpvs.log   <none>
+    #daemon                             <disalbe>
+    log_level         INFO              <none>
+    log_file          /var/log/dpvs.log <none>
+    log_async_mode    off               <off, on|off>
 }
 
 ! netif config

@@ -14,7 +14,7 @@
 global_defs {
     log_level   WARNING
     ! log_file    /var/log/dpvs.log
-    ! log_async_mode    off
+    ! log_async_mode    on
 }
 
 ! netif config
@@ -274,6 +274,8 @@ ipvs_defs {
 
     udp {
         ! defence_udp_drop
+        uoa_mode        opp
+        uoa_max_trail   3
         timeout {
             normal      300
             last        3
