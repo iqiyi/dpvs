@@ -23,15 +23,15 @@
 #include "ctrl.h"
 #include "ipvs/service.h"
 
+struct dp_vs_iphdr;
 
 struct dp_vs_scheduler {
     struct list_head    n_list;
     char                *name;
 //    rte_atomic32_t      refcnt;
 
-    struct dp_vs_dest *
-        (*schedule)(struct dp_vs_service *svc,
-                    const struct rte_mbuf *mbuf);
+    struct dp_vs_dest *(*schedule)(struct dp_vs_service *svc,
+            const struct rte_mbuf *mbuf, const struct dp_vs_iphdr *iph);
 
     int (*init_service)(struct dp_vs_service *svc);
     int (*exit_service)(struct dp_vs_service *svc);
