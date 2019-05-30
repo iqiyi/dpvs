@@ -653,6 +653,15 @@ ipvs_set_rule(int cmd, virtual_server_t * vs, real_server_t * rs)
 		}
 	}
 
+	if (!strcmp(vs->sched , "mh"))
+	{
+		/* mh-port and mh-fallback flags are relevant for mh scheduler only */
+		if (vs->mh_port)
+			srule->flags |= IP_VS_SVC_F_SCHED_MH_PORT;
+		if (vs->mh_fallback)
+			srule->flags |= IP_VS_SVC_F_SCHED_MH_FALLBACK;
+	}
+
 	/* SVR specific */
 	if (rs) {
 		if (cmd == IP_VS_SO_SET_ADDDEST || cmd == IP_VS_SO_SET_DELDEST ||

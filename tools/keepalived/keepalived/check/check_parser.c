@@ -465,6 +465,24 @@ hash_target_handler(vector_t *strvec)
 	}
 }
 
+static void
+lbflags_handler(vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	char *str = vector_slot(strvec, 1);
+
+	if (!strcmp(vs->sched, "mh"))
+	{
+		/* mh-port and mh-fallback flags are relevant for mh scheduler only */
+		if (!strcmp(str, "mh-port"))
+			vs->mh_port = true;
+		if (!strcmp(str, "mh-fallback"))
+			vs->mh_fallback = true;
+	}
+	else
+		log_message(LOG_INFO, "%s only applies to sh scheduler - ignoring", str);
+}
+
 vector_t *
 check_init_keywords(void)
 {
@@ -516,6 +534,8 @@ check_init_keywords(void)
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
 	install_keyword("hash_target", &hash_target_handler);
+	install_keyword("mh-port", &lbflags_handler);
+	install_keyword("mh-fallback", &lbflags_handler);
 
 	/* Pool regression detection and handling. */
 	install_keyword("alpha", &alpha_handler);

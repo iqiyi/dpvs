@@ -188,6 +188,8 @@ typedef struct _virtual_server {
 	char				iifname[IFNAMSIZ];
 	char				oifname[IFNAMSIZ];
 	unsigned			hash_target;
+	bool				mh_port;	/* Enable mh-port for mh scheduler. */
+	bool				mh_fallback;	/* Enable mh-fallback for mh scheduler */
 #if defined(_WITH_SNMP_) && defined(_KRNL_2_6_) && defined(_WITH_LVS_)
 	/* Statistics */
 	time_t				lastupdated;

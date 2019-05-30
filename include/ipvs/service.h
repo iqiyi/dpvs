@@ -42,6 +42,10 @@
 #define DP_VS_SVC_F_SIP_HASH        0x0100      /* sip hash target */
 #define DP_VS_SVC_F_QID_HASH        0x0200      /* quic cid hash target */
 
+#define DP_VS_SVC_F_SCHED1          0x0008      /* scheduler flag 1 */
+#define DP_VS_SVC_F_SCHED2          0x0010      /* scheduler flag 2 */
+#define DP_VS_SVC_F_SCHED3          0x0020      /* scheduler flag 3 */
+
 rte_rwlock_t __dp_vs_svc_lock;
 
 /* virtual service */

@@ -488,14 +488,12 @@ static struct dp_vs_dest *dp_vs_mh_schedule(struct dp_vs_service *svc,
     RTE_LOG(DEBUG, SERVICE, "%s : Scheduling...\n", __func__);
 #endif
 
-#if 0
-    if (svc->flags & IP_VS_SVC_F_SCHED_MH_PORT)
-#endif
+    if (svc->flags & DP_VS_SVC_F_SCHED_MH_PORT)
         port = dp_vs_mh_get_port(mbuf, iph);
 
     s = (struct dp_vs_mh_state *)svc->sched_data;
 
-    if (1/*svc->flags & IP_VS_SVC_F_SCHED_MH_FALLBACK*/)
+    if (svc->flags & DP_VS_SVC_F_SCHED_MH_FALLBACK)
         dest = dp_vs_mh_get_fallback(svc, s, hash_addr, port);
     else
         dest = dp_vs_mh_get(svc, s, hash_addr, port);
