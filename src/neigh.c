@@ -515,6 +515,7 @@ static int neigh_send_arp(struct netif_port *port, uint32_t src_ip, uint32_t dst
     if(unlikely(m==NULL)){
         return EDPVS_NOMEM;
     }
+    m->userdata = NULL;
 
     eth = rte_pktmbuf_mtod(m, struct ether_hdr *);
     arp = (struct arp_hdr *)&eth[1];
