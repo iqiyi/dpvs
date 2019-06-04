@@ -45,7 +45,7 @@ static struct dpvs_log *dpvs_log_msg_make(int level, int type, lcoreid_t cid,
         uint32_t len, const void *data)
 {
     struct dpvs_log *log_msg;
-    
+
     if (unlikely(rte_mempool_get(dp_vs_log_pool, (void **)&log_msg) != 0)) {
         return NULL;
     }
@@ -62,7 +62,7 @@ static struct dpvs_log *dpvs_log_msg_make(int level, int type, lcoreid_t cid,
 static void dpvs_log_free(struct dpvs_log *log_msg)
 {
     if (!log_msg)
-        return;  
+        return;
     rte_mempool_put(dp_vs_log_pool, log_msg);
 }
 
@@ -70,25 +70,25 @@ static unsigned int log_BKDRHash(char *str, int len)
 {
     unsigned int seed = 131; // 31 131 1313 13131 131313 etc..
     unsigned int hash = 0;
- 
+
     while (len--)
     {
         hash = hash * seed + (*str++);
     }
- 
+
     return (hash & 0x7FFFFFFF);
 }
 
 static uint64_t log_get_time(char *time, int time_len)
 {
     time_t tm;
-    long sec = 0; 
+    long sec = 0;
     int yy = 0, mm = 0, dd = 0, hh = 0, mi = 0, ss = 0;
     int ad = 0;
     int y400 = 0, y100 = 0, y004 = 0, y001 = 0;
     int m[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     int i;
-    
+
     tm = sys_current_time();
     sec = tm + (60*60)*TIMEZONE;
     ad = sec/DAY;
@@ -108,7 +108,7 @@ static uint64_t log_get_time(char *time, int time_len)
         }
     } else {
         if(0 == yy%4)
-        { 
+        {
             m[1] = 29;
         }
     }
@@ -121,7 +121,7 @@ static uint64_t log_get_time(char *time, int time_len)
             dd = dd -m[i];
         }
     }
-    
+
     mm = i;
     hh = sec/(60*60)%24;
     mi = sec/60 - sec/(60*60)*60;
@@ -137,15 +137,15 @@ static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char 
     int err;
 
     log_hash_new = log_BKDRHash(log+off, len);
-    if (log_hash_new == log_stats_info[cid].log_hash 
-            && (rte_get_timer_cycles()-log_stats_info[cid].log_begin) < log_internal*rte_get_timer_hz()){  
-        log_stats_info[cid].missed++;    
+    if (log_hash_new == log_stats_info[cid].log_hash
+            && (rte_get_timer_cycles()-log_stats_info[cid].log_begin) < log_internal*rte_get_timer_hz()){
+        log_stats_info[cid].missed++;
         return -1;
     }
-    /* add time info and send out to log ring */ 
+    /* add time info and send out to log ring */
     if (off) {
-        log_get_time(log, LOG_SYS_TIME_LEN);       
-        log[LOG_SYS_TIME_LEN-1] = ' '; 
+        log_get_time(log, LOG_SYS_TIME_LEN);
+        log[LOG_SYS_TIME_LEN-1] = ' ';
         len += LOG_SYS_TIME_LEN;
     }
     log_stats_info[cid].log_hash = log_hash_new;
@@ -154,7 +154,7 @@ static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char 
     msg = dpvs_log_msg_make(level, logtype, cid, len, log);
     if (msg == NULL)
         return -1;
-    
+
     err = log_send(msg);
     if (err != EDPVS_OK) {
         dpvs_log_free(msg);
@@ -180,7 +180,7 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
 
     va_start(ap, format);
 
-    do { 
+    do {
         if (!g_dpvs_log_async_mode || !g_dpvs_log_core || !g_dpvs_log_thread_ready) {
             rte_vlog(level, logtype, format, ap);
             break;
@@ -205,10 +205,10 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
             dpvs_async_log(level, logtype, cid, log_buf, len, off);
             break;
         }
-        len = vsnprintf(log_buf+off, sizeof(log_buf)-off, format, ap);                
+        len = vsnprintf(log_buf+off, sizeof(log_buf)-off, format, ap);
         dpvs_async_log(level, logtype, cid, log_buf, len, off);
     }while(0);
-    
+
     va_end(ap);
     return 0;
 }
@@ -229,9 +229,9 @@ static int log_buf_flush(FILE *f)
 static int log_buf_timeout_flush(FILE *f, int timeout)
 {
     uint64_t now;
-    
+
     now = rte_get_timer_cycles();
-    
+
     if (w_buf.pos && ((now - w_buf.time) >= timeout * rte_get_timer_hz())) {
         log_buf_flush(f);
     }
@@ -245,21 +245,21 @@ static int log_slave_process(void)
     FILE *f = rte_logs.file;
 
     /* dequeue LOG from ring, no lock for ring and w_buf */
-    while (0 == rte_ring_dequeue(log_ring, (void **)&msg_log)) { 
+    while (0 == rte_ring_dequeue(log_ring, (void **)&msg_log)) {
         if (w_buf.pos + msg_log->log_len >= LOG_BUF_MAX_LEN) {
             log_buf_flush(f);
         }
         if (!w_buf.pos) {
             w_buf.level = msg_log->log_level - 1;
-            w_buf.time = rte_get_timer_cycles();        
+            w_buf.time = rte_get_timer_cycles();
         }
         strncpy(w_buf.buf+w_buf.pos, msg_log->data, msg_log->log_len);
         w_buf.pos += msg_log->log_len;
-        log_buf_timeout_flush(f, 5);            
+        log_buf_timeout_flush(f, 5);
         dpvs_log_free(msg_log);
     }
     log_buf_timeout_flush(f, 5);
-    
+
     return ret;
 }
 
@@ -278,12 +278,12 @@ static void log_signal_handler(int signum)
                 signum);
     }
     log_slave_process();
-    log_buf_flush(rte_logs.file); 
+    log_buf_flush(rte_logs.file);
     signal(signum, SIG_DFL);
     kill(getpid(), signum);
 }
 
-int log_slave_init(void)
+static int __log_slave_init(void)
 {
     char ring_name[16];
     int lcore_id;
@@ -293,7 +293,7 @@ int log_slave_init(void)
     if (f != NULL) {
         g_dpvs_log_time_off = LOG_SYS_TIME_LEN;
     }
-            
+
     RTE_LCORE_FOREACH_SLAVE(lcore_id) {
         if (rte_eal_get_lcore_state(lcore_id) == FINISHED) {
             rte_eal_wait_lcore(lcore_id);
@@ -319,12 +319,20 @@ int log_slave_init(void)
     if (!dp_vs_log_pool) {
         return EDPVS_DPDKAPIFAIL;
     }
- 
+
     signal(SIGABRT, log_signal_handler);
     signal(SIGSEGV, log_signal_handler);
-   
+
     rte_eal_remote_launch((lcore_function_t *)log_slave_loop_func, NULL, lcore_id);
-    
+
+    return EDPVS_OK;
+}
+
+int log_slave_init(void)
+{
+    if (g_dpvs_log_async_mode)
+        return __log_slave_init();
+
     return EDPVS_OK;
 }
 

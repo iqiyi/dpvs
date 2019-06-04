@@ -124,7 +124,7 @@ void install_global_keywords(void)
     install_keyword_root("global_defs", NULL);
     install_keyword("log_level", log_level_handler, KW_TYPE_NORMAL);
     install_keyword("log_file", log_file_handler, KW_TYPE_NORMAL);
-    install_keyword("log_async_mode", log_async_mode_handler, KW_TYPE_NORMAL);       
+    install_keyword("log_async_mode", log_async_mode_handler, KW_TYPE_INIT);
 }
 
 int global_conf_init(void)

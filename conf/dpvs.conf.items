@@ -14,7 +14,7 @@ global_defs {
     #daemon                             <disalbe>
     log_level         INFO              <none>
     log_file          /var/log/dpvs.log <none>
-    log_async_mode    off               <off, on|off>
+    <init> log_async_mode    off        <off, on|off>
 }
 
 ! netif config
@@ -190,7 +190,7 @@ ipvs_defs {
         <init> conn_pool_cache      256         <256, 1-∞>
         conn_init_timeout           3           <3, 1-31535999>
         expire_quiescent_template               <disable>
-        fast_xmit_close                         <disable>
+        <init> fast_xmit_close                  <disable>
         <init> redirect             off         <off/on: disable/enable packet redirect>
     }
 
