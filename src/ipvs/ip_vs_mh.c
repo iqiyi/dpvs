@@ -243,6 +243,9 @@ static inline struct dp_vs_dest *dp_vs_mh_get_fallback(struct dp_vs_service *svc
     unsigned int offset, roffset;
     unsigned int hash, ihash;
     struct dp_vs_dest *dest;
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    char buf[INET6_ADDRSTRLEN];
+#endif
 
     /* First try the dest it's supposed to go to */
     ihash = dp_vs_mh_hashkey(svc->af, addr, port, &s->hash1, 0)
@@ -255,9 +258,11 @@ static inline struct dp_vs_dest *dp_vs_mh_get_fallback(struct dp_vs_service *svc
     if (!is_unavailable(dest))
         return dest;
 
-#if 0
-    IP_VS_DBG_BUF(6, "MH: selected unavailable server %s:%u, reselecting",
-            IP_VS_DBG_ADDR(dest->af, &dest->addr), ntohs(dest->port));
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    RTE_LOG(DEBUG, SERVICE,
+            "MH: selected unavailable server %s:%u, reselecting",
+            inet_ntop(dest->af, &dest->addr, buf, sizeof(buf)),
+            ntohs(dest->port));
 #endif
 
     /* If the original dest is unavailable, loop around the table
@@ -274,10 +279,11 @@ static inline struct dp_vs_dest *dp_vs_mh_get_fallback(struct dp_vs_service *svc
             break;
         if (!is_unavailable(dest))
             return dest;
-#if 0
-        IP_VS_DBG_BUF(6,
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+        RTE_LOG(DEBUG, SERVICE,
                 "MH: selected unavailable server %s:%u (offset %u), reselecting",
-                IP_VS_DBG_ADDR(dest->af, &dest->addr),
+                inet_ntop(dest->af, &dest->addr, buf, sizeof(buf)),
                 ntohs(dest->port), roffset);
 #endif
     }
@@ -290,6 +296,9 @@ static int dp_vs_mh_reassign(struct dp_vs_mh_state *s,
         struct dp_vs_service *svc)
 {
     int ret;
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    char buf[INET6_ADDRSTRLEN];
+#endif
 
     if (svc->num_dests > DPVS_MH_TAB_SIZE)
         return EDPVS_INVAL;
@@ -307,9 +316,9 @@ static int dp_vs_mh_reassign(struct dp_vs_mh_state *s,
     if (ret < 0)
         goto out;
 
-#if 0
-    RTE_LOG(ERR, SERVICE, "MH: reassign lookup table of %s:%u\n",
-            IP_VS_DBG_ADDR(svc->af, &svc->addr),
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    RTE_LOG(DEBUG, SERVICE, "MH: reassign lookup table of %s:%u\n",
+            inet_ntop(svc->af, &svc->addr, buf, sizeof(buf)),
             ntohs(svc->port));
 #endif
 
@@ -478,7 +487,7 @@ static struct dp_vs_dest *dp_vs_mh_schedule(struct dp_vs_service *svc,
     __be16 port = 0;
     const union inet_addr *hash_addr;
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-    char sbuf[64], dbuf[64];
+    char sbuf[INET6_ADDRSTRLEN], dbuf[INET6_ADDRSTRLEN];
 #endif
 
     // always use source address
