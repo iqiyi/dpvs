@@ -1,9 +1,11 @@
 #!/bin/sh -
 # program: dpvs
-# Feb 26, 2019
-# Features: NAT64, connection redirect
+# May 28, 2019
+# Features: 
+#  * Bugfix in ctrl, including msg, keepalived.
+#  * Berformance enhancement in inet, logging.
 
 export VERSION=1.7
-export RELEASE=2
+export RELEASE=4
 
 echo $VERSION-$RELEASE
