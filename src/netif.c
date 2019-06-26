@@ -1394,7 +1394,7 @@ static int check_lcore_conf(int lcores, const struct netif_lcore_conf *lcore_con
     queueid_t qid;
     struct netif_lcore_conf mark;
     memset(&mark, 0, sizeof(mark));
-    nports = rte_eth_dev_count_avail();
+    nports = dpvs_rte_eth_dev_count();
     while (lcore_conf[i].nports > 0)
     {
         if (lcore2index[lcore_conf[i].id] != i) {
@@ -2438,7 +2438,7 @@ static void lcore_job_xmit(void *args)
     for (i = 0; i < lcore_conf[lcore2index[cid]].nports; i++) {
         pid = lcore_conf[lcore2index[cid]].pqs[i].id;
 #ifdef CONFIG_DPVS_NETIF_DEBUG
-        if (unlikely(pid >= rte_eth_dev_count_avail())) {
+        if (unlikely(pid >= dpvs_rte_eth_dev_count())) {
             RTE_LOG(DEBUG, NETIF, "[%s] No enough NICs\n", __func__);
             continue;
         }
@@ -3926,7 +3926,7 @@ inline static void netif_port_init(const struct rte_eth_conf *conf)
     struct rte_eth_conf this_eth_conf;
     char *kni_name;
 
-    nports = rte_eth_dev_count_avail();
+    nports = dpvs_rte_eth_dev_count();
     if (nports <= 0)
         rte_exit(EXIT_FAILURE, "No dpdk ports found!\n"
                 "Possibly nic or driver is not dpdk-compatible.\n");
@@ -4153,7 +4153,7 @@ int netif_virtual_devices_add(void)
     }
 #endif
 
-    phy_pid_end = rte_eth_dev_count_avail();
+    phy_pid_end = dpvs_rte_eth_dev_count();
 
     port_id_end = max(port_id_end, phy_pid_end);
     /* set bond_pid_offset before create bonding device */
@@ -4209,7 +4209,7 @@ int netif_virtual_devices_add(void)
     }
 
     if (!list_empty(&bond_list)) {
-        bond_pid_end = rte_eth_dev_count_avail();
+        bond_pid_end = dpvs_rte_eth_dev_count();
 
         port_id_end = max(port_id_end, bond_pid_end);
         RTE_LOG(INFO, NETIF, "bonding device port id range: [%d, %d)\n",
@@ -4566,18 +4566,22 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
 static inline void copy_dev_info(struct netif_nic_dev_get *get,
         const struct rte_eth_dev_info *dev_info)
 {
+    const struct rte_pci_device *pci_dev = NULL;
+#if RTE_VERSION < RTE_VERSION_NUM(18, 11, 0, 0)
+    pci_dev = dev_info->pci_dev;
+#else
     if (dev_info->device) {
         const struct rte_bus *bus = NULL;
         bus = rte_bus_find_by_device(dev_info->device);
         if (bus && !strcmp(bus->name, "pci")) {
-            const struct rte_pci_device *pci_dev = RTE_DEV_TO_PCI(dev_info->device);
-            snprintf(get->pci_addr, sizeof(get->pci_addr), "%04x:%02x:%02x:%0x",
-                     pci_dev->addr.domain,
-                     pci_dev->addr.bus,
-                     pci_dev->addr.devid,
-                     pci_dev->addr.function);
+            pci_dev = RTE_DEV_TO_PCI(dev_info->device);
         }
     }
+#endif
+    if (pci_dev)
+        snprintf(get->pci_addr, sizeof(get->pci_addr), "%04x:%02x:%02x:%0x",
+                 pci_dev->addr.domain, pci_dev->addr.bus,
+                 pci_dev->addr.devid, pci_dev->addr.function);
     if (dev_info->driver_name)
         strncpy(get->driver_name, dev_info->driver_name, sizeof(get->driver_name));
     get->if_index = dev_info->if_index;

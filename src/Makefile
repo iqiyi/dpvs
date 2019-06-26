@@ -57,7 +57,7 @@ else
 	CFLAGS += -rdynamic
 endif
 
-LIBS += -lpthread -lnuma
+LIBS += -lpthread -lnuma -lmnl
 
 CFLAGS += $(INCDIRS) $(LIBS)
 
