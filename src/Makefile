@@ -34,8 +34,8 @@ DATE_STRING := $(shell date +%Y.%m.%d.%H:%M:%S)
 # same path of THIS Makefile
 SRCDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-include $(SRCDIR)/dpdk.mk
 include $(SRCDIR)/config.mk
+include $(SRCDIR)/dpdk.mk
 
 INCDIRS += -I $(SRCDIR)/../include
 
@@ -57,7 +57,7 @@ else
 	CFLAGS += -rdynamic
 endif
 
-LIBS += -lpthread -lnuma -lmnl
+LIBS += -lpthread -lnuma
 
 CFLAGS += $(INCDIRS) $(LIBS)
 
