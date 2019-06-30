@@ -3533,8 +3533,10 @@ int netif_port_start(struct netif_port *port)
         port->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_UDP_CKSUM;
     if (port->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD)
         port->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_TCP_CKSUM;
+    port->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_MBUF_FAST_FREE;
     adapt_device_conf(port->id, &port->dev_conf.rx_adv_conf.rss_conf.rss_hf,
             &port->dev_conf.rxmode.offloads, &port->dev_conf.txmode.offloads);
+
     ret = rte_eth_dev_configure(port->id, port->nrxq, port->ntxq, &port->dev_conf);
     if (ret < 0 ) {
         RTE_LOG(ERR, NETIF, "%s: fail to config %s\n", __func__, port->name);
@@ -3558,6 +3560,14 @@ int netif_port_start(struct netif_port *port)
     if (port->ntxq > 0) {
         for (qid = 0; qid < port->ntxq; qid++) {
             memcpy(&txconf, &port->dev_info.default_txconf, sizeof(struct rte_eth_txconf));
+#if RTE_VERSION < RTE_VERSION_NUM(18, 11, 0, 0)
+            if (port->dev_conf.rxmode.jumbo_frame
+                    || (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
+                    || (port->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD)
+                    || (port->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))
+                txconf.txq_flags = 0;
+#endif
+            txconf.offloads = port->dev_conf.txmode.offloads;
             ret = rte_eth_tx_queue_setup(port->id, qid, port->txq_desc_nb,
                     port->socket, &txconf);
             if (ret < 0) {
