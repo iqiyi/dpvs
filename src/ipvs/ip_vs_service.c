@@ -214,9 +214,9 @@ __dp_vs_svc_match_get4(const struct rte_mbuf *mbuf, bool *outwall)
         oif = rt->port->id;
     } else if (outwall != NULL && (NULL != ipset_addr_lookup(AF_INET, &daddr))
                                && (rt = route_gfw_net_lookup(&daddr.in))) {
-        char dst[64];	     
-        RTE_LOG(DEBUG, IPSET, "%s: IP %s is in the gfwip set, found route in the outwall table.\n", __func__, 
-                              inet_ntop(AF_INET, &daddr, dst, sizeof(dst))? dst: "");	    
+        char dst[64];
+        RTE_LOG(DEBUG, IPSET, "%s: IP %s is in the gfwip set, found route in the outwall table.\n", __func__,
+                              inet_ntop(AF_INET, &daddr, dst, sizeof(dst))? dst: "");
         oif = rt->port->id;
         route4_put(rt);
         *outwall = true;
@@ -997,10 +997,9 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
             ret = dp_vs_edit_service(svc, &usvc);
             break;
         case DPVS_SO_SET_DEL:
+            dp_vs_service_put(svc);
             ret = dp_vs_del_service(svc);
-            // reset svc to avoid use after free
-            svc = NULL;
-            break;
+            return ret;
         case DPVS_SO_SET_ZERO:
             ret = dp_vs_zero_service(svc);
             break;
@@ -1171,13 +1170,13 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
         default:
             return EDPVS_INVAL;
     }
-    
+
     if (ret != EDPVS_OK) {
         if (*out)
             rte_free(*out);
     }
 
-    return ret; 
+    return ret;
 }
 
 struct dpvs_sockopts sockopts_svc = {
