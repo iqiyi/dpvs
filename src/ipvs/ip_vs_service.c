@@ -25,6 +25,7 @@
 #include "ipvs/sched.h"
 #include "ipvs/laddr.h"
 #include "ipvs/blklst.h"
+#include "ipvs/sync.h"
 #include "ctrl.h"
 #include "route.h"
 #include "route6.h"
@@ -949,6 +950,11 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     }
     if (opt == DPVS_SO_SET_FLUSH)
         return dp_vs_flush();
+
+#ifdef CONFIG_DPVS_SYNC
+    if (opt == DPVS_SO_SET_CONN_SYNC)
+        return dp_vs_sync_conn_start();
+#endif
 
     memcpy(arg, user, len);
     usvc_compat = (struct dp_vs_service_user *)arg;

@@ -77,6 +77,10 @@ int sa_release(const struct netif_port *dev,
 
 int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats);
 
+int sa_bind_conn(int af, struct netif_port *dev, lcoreid_t cid,
+                                const union inet_addr *dip,
+                                __be16 dport, queueid_t queue);
+
 /* config file */
 void install_sa_pool_keywords(void);
 

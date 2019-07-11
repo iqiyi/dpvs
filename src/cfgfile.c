@@ -33,6 +33,7 @@
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
 #include "ipvs/synproxy.h"
+#include "ipvs/sync.h"
 
 typedef void (*sighandler_t)(int);
 
@@ -86,7 +87,9 @@ static vector_t install_keywords(void)
     install_sublevel();
     install_proto_udp_keywords();
     install_sublevel_end();
-
+#ifdef CONFIG_DPVS_SYNC
+    install_session_sync_keywords();
+#endif
     install_ipv6_keywords();
 
     return g_keywords;

@@ -241,6 +241,7 @@ enum{
     DPVS_SO_SET_EDITDEST,
     DPVS_SO_SET_DELDEST,
     DPVS_SO_SET_GRATARP,
+    DPVS_SO_SET_CONN_SYNC,
 };
 
 enum{
@@ -253,7 +254,7 @@ enum{
 
 
 #define SOCKOPT_SVC_BASE         DPVS_SO_SET_FLUSH
-#define SOCKOPT_SVC_SET_CMD_MAX  DPVS_SO_SET_GRATARP
+#define SOCKOPT_SVC_SET_CMD_MAX  DPVS_SO_SET_CONN_SYNC
 #define SOCKOPT_SVC_GET_CMD_MAX  DPVS_SO_GET_DESTS
 
 #define MAX_ARG_LEN    (sizeof(struct dp_vs_service_user) +    \

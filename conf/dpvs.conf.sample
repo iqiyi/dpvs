@@ -326,3 +326,19 @@ sa_pool {
     pool_hash_size   16
     pool_mode        laddr_lcore_mapping
 }
+
+session_sync {
+    sync_session_enable
+    sync_session_elapse   2  !secondes elapsed since the connection is established
+    sync_buff_delay       2
+    laddr_ifname    dpdk0
+    sync_id 10
+
+    socket {
+        mcast_addr  224.0.1.100
+        mcast_port  8088
+        mcast_ttl   20
+        mtu   1500
+        unicast_port 8089
+    }
+}

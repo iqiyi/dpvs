@@ -36,6 +36,7 @@ enum {
 };
 
 enum {
+    DPVS_CONN_F_SYNCED          = 0x0020,
     DPVS_CONN_F_HASHED          = 0x0040,
     DPVS_CONN_F_REDIRECT_HASHED = 0x0080,
     DPVS_CONN_F_INACTIVE        = 0x0100,
@@ -95,6 +96,11 @@ struct dp_vs_conn {
     rte_atomic32_t          refcnt;
     struct dpvs_timer       timer;
     struct timeval          timeout;
+
+    struct dpvs_timer       conn_sync_timer;
+    struct timeval          conn_sync_timeout;
+    queueid_t               qid;    /* used in session synchronization*/
+    
     lcoreid_t               lcore;
     struct dp_vs_dest       *dest;  /* real server */
     void                    *prot_data;  /* protocol specific data */
@@ -179,6 +185,11 @@ dp_vs_conn_new(struct rte_mbuf *mbuf,
                struct dp_vs_dest *dest,
                uint32_t flags);
 int dp_vs_conn_del(struct dp_vs_conn *conn);
+
+struct dp_vs_conn * dp_vs_conn_copy_from_sync(void *sync_conn, 
+                                                struct dp_vs_dest *dest);
+
+int dp_vs_conn_lcore_tx(lcoreid_t cid);
 
 struct dp_vs_conn *
 dp_vs_conn_get(int af, uint16_t proto,

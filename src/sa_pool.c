@@ -71,6 +71,7 @@
 
 #define LPORT_LCORE_MAPPING_POOL_MODE_NAME "lport_lcore_mapping"
 #define LADDR_LCORE_MAPPING_POOL_MODE_NAME "laddr_lcore_mapping"
+#define INVALID_QUEUE_ID (0xFFFF)
 
 enum {
     SA_F_USED               = 0x01,
@@ -146,8 +147,8 @@ uint8_t                     sa_pool_mode = LPORT_LCORE_MAPPING_POOL_MODE;
 extern uint32_t             lcore_ids[RTE_MAX_LCORE];
 
 static int __add_del_filter_addr_mode(int af, struct netif_port *dev, lcoreid_t cid,
-                            const union inet_addr *dip,
-                            uint32_t filter_id[MAX_FDIR_PROTO], bool add)
+                            const union inet_addr *dip, uint32_t filter_id[MAX_FDIR_PROTO],
+                            bool add, queueid_t queue)
 {
     struct rte_eth_fdir_filter filt = {
             .action.behavior = RTE_ETH_FDIR_ACCEPT,
@@ -165,7 +166,6 @@ static int __add_del_filter_addr_mode(int af, struct netif_port *dev, lcoreid_t 
         return EDPVS_NOTSUPP;
     }
 
-    queueid_t queue;
     int err;
     enum rte_filter_op op;
 #ifdef CONFIG_DPVS_SAPOOL_DEBUG
@@ -186,12 +186,18 @@ static int __add_del_filter_addr_mode(int af, struct netif_port *dev, lcoreid_t 
         return EDPVS_INVAL;
     }
 
-    err = netif_get_queue(dev, cid, &queue);
-    if (err != EDPVS_OK)
-        return err;
+    if (queue == INVALID_QUEUE_ID) {
+        err = netif_get_queue(dev, cid, &queue);
+        if (err != EDPVS_OK)
+            return err;
+    }
 
     filt.action.rx_queue = queue;
-    op = add ? RTE_ETH_FILTER_ADD : RTE_ETH_FILTER_DELETE;
+
+    /**add change to update, purpose is to resolve the problem
+       of returning collision errors when send duplicate configurations
+    **/
+    op = add ? RTE_ETH_FILTER_UPDATE : RTE_ETH_FILTER_DELETE;
 
     err = netif_fdir_filter_set(dev, op, &filt);
     if (err != EDPVS_OK)
@@ -270,7 +276,11 @@ static int __add_del_filter_port_mode(int af, struct netif_port *dev, lcoreid_t 
         return err;
 
     filt[0].action.rx_queue = filt[1].action.rx_queue = queue;
-    op = add ? RTE_ETH_FILTER_ADD : RTE_ETH_FILTER_DELETE;
+
+    /**add change to update, purpose is to resolve the problem
+       of returning collision errors when send duplicate configurations
+    **/
+    op = add ? RTE_ETH_FILTER_UPDATE : RTE_ETH_FILTER_DELETE;
 
     netif_mask_fdir_filter(af, dev, &filt[0]);
     netif_mask_fdir_filter(af, dev, &filt[1]);
@@ -301,26 +311,26 @@ static int __add_del_filter_port_mode(int af, struct netif_port *dev, lcoreid_t 
 
 static int __add_del_filter(int af, struct netif_port *dev, lcoreid_t cid,
                             const union inet_addr *dip, __be16 dport,
-                            uint32_t filter_id[MAX_FDIR_PROTO], bool add)
+                            uint32_t filter_id[MAX_FDIR_PROTO], bool add, queueid_t queue)
 {
     if (SA_POOL_MODE == LPORT_LCORE_MAPPING_POOL_MODE)
         return __add_del_filter_port_mode(af, dev, cid, dip, dport, filter_id, add);
     else
-        return __add_del_filter_addr_mode(af, dev, cid, dip, filter_id, add);
+        return __add_del_filter_addr_mode(af, dev, cid, dip, filter_id, add, queue);
 }
 
 static inline int sa_add_filter(int af, struct netif_port *dev, lcoreid_t cid,
                                 const union inet_addr *dip, __be16 dport,
-                                uint32_t filter_id[MAX_FDIR_PROTO])
+                                uint32_t filter_id[MAX_FDIR_PROTO], queueid_t queue)
 {
-    return  __add_del_filter(af, dev, cid, dip, dport, filter_id, true);
+    return  __add_del_filter(af, dev, cid, dip, dport, filter_id, true, queue);
 }
 
 static inline int sa_del_filter(int af, struct netif_port *dev, lcoreid_t cid,
                                 const union inet_addr *dip, __be16 dport,
-                                uint32_t filter_id[MAX_FDIR_PROTO])
+                                uint32_t filter_id[MAX_FDIR_PROTO], queueid_t queue)
 {
-    return  __add_del_filter(af, dev, cid, dip, dport, filter_id, false);
+    return  __add_del_filter(af, dev, cid, dip, dport, filter_id, false, queue);
 }
 
 static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
@@ -398,8 +408,8 @@ static int __sa_pool_create(struct inet_ifaddr *ifa, lcoreid_t cid,
     /* if add filter failed, waste some soft-id is acceptable. */
     filtids[0] = fdir->soft_id++;
     filtids[1] = fdir->soft_id++;
-        err = sa_add_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
-                        fdir->port_base, filtids);
+    err = sa_add_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
+                    fdir->port_base, filtids, INVALID_QUEUE_ID);
     if (err != EDPVS_OK) {
         sa_pool_free_hash(ap);
         rte_free(ap);
@@ -482,7 +492,7 @@ int sa_pool_destroy(struct inet_ifaddr *ifa)
         }
 
         sa_del_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
-                      fdir->port_base, ap->filter_id);
+                      fdir->port_base, ap->filter_id, INVALID_QUEUE_ID);
         sa_pool_free_hash(ap);
         rte_free(ap);
         ifa->sa_pools[cid] = NULL;
@@ -864,6 +874,36 @@ int sa_release(const struct netif_port *dev,
         rte_atomic32_dec(&ifa->this_sa_pool->refcnt);
     inet_addr_ifa_put(ifa);
     return err;
+}
+
+int sa_bind_conn(int af, struct netif_port *dev, lcoreid_t cid,
+                                const union inet_addr *dip,
+                                __be16 dport, queueid_t queue)
+{
+    uint32_t filtids[MAX_FDIR_PROTO];
+    int err;
+#ifdef CONFIG_DPVS_SAPOOL_DEBUG
+    char ipaddr[64];
+#endif
+
+    filtids[0] = 1;
+    filtids[1] = 2;
+
+    err = sa_add_filter(af, dev, cid, dip, dport, filtids, queue);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, SAPOOL, "%s: add fdir filter failed.\n", __func__);
+        return err;
+    }
+
+#ifdef CONFIG_DPVS_SAPOOL_DEBUG
+    RTE_LOG(DEBUG, SAPOOL, "FDIR: %s %s %s "
+            "ip %s queue %d lcore %2d\n",
+            "bind", dev->name,
+            af == AF_INET ? "IPv4" : "IPv6",
+            inet_ntop(af, dip, ipaddr, sizeof(ipaddr)) ? : "::",
+            queue, cid);
+#endif
+    return EDPVS_OK;
 }
 
 int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats)

@@ -22,6 +22,7 @@ enum{
     DPVS_SO_SET_EDITDEST,
     DPVS_SO_SET_DELDEST,
     DPVS_SO_SET_GRATARP,
+    DPVS_SO_SET_CONN_SYNC,
 };
 
 enum{
