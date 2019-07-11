@@ -164,7 +164,7 @@ static int dp_vs_mh_populate(struct dp_vs_mh_state *s,
         return 0;
     }
 
-    table =  rte_calloc(NULL, BITS_TO_LONGS(DPVS_MH_TAB_SIZE),
+    table = rte_calloc(NULL, BITS_TO_LONGS(DPVS_MH_TAB_SIZE),
             sizeof(unsigned long), RTE_CACHE_LINE_SIZE);
     if (!table)
         return EDPVS_NOMEM;
@@ -186,7 +186,6 @@ static int dp_vs_mh_populate(struct dp_vs_mh_state *s,
             }
 
             c = ds->perm;
-#if 0
             while (test_bit(c, table)) {
                 /* Add skip, mod DPVS_MH_TAB_SIZE */
                 ds->perm += ds->skip;
@@ -196,7 +195,6 @@ static int dp_vs_mh_populate(struct dp_vs_mh_state *s,
             }
 
             __set_bit(c, table);
-#endif
 
             rte_rwlock_write_lock(&s->lock);
             new_dest = list_entry(p, struct dp_vs_dest, n_list);

@@ -16,6 +16,8 @@
 #ifndef __KCOMPAT_H__
 #define __KCOMPAT_H__
 
+#include <linux/types.h>
+
 #ifndef BITS_PER_BYTE
 #define BITS_PER_BYTE (8)
 #endif
@@ -58,5 +60,43 @@ inline unsigned long __ffs(unsigned long word);
  * Note fls(0) = 0, fls(1) = 1, fls(0x80000000) = 32.
  */
 inline int fls(unsigned int x);
+
+
+/**
+ * taken from definition in include/linux/bits.h
+ */
+#define BIT_MASK(nr) (1UL << ((nr) % __BITS_PER_LONG))
+#define BIT_WORD(nr) ((nr) / __BITS_PER_LONG)
+
+/**
+ * taken from definition in tools/include/asm-generic/bitops/non-atomic.h
+ *
+ * __set_bit - Set a bit in memory
+ * @nr: the bit to set
+ * @addr: the address to start counting from
+ *
+ * Unlike set_bit(), this function is non-atomic and may be reordered.
+ * If it's called on the same region of memory simultaneously, the effect
+ * may be that only one operation succeeds.
+ */
+static inline void __set_bit(int nr, volatile unsigned long *addr)
+{
+    unsigned long mask = BIT_MASK(nr);
+    unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+
+    *p |= mask;
+}
+
+/**
+ * taken from definition in tools/include/asm-generic/bitops/non-atomic.h
+ *
+ * test_bit - Determine whether a bit is set
+ * @nr: bit number to test
+ * @addr: Address to start counting from
+ */
+static inline int test_bit(int nr, const unsigned long *addr)
+{
+    return 1UL & (addr[BIT_WORD(nr)] >> (nr & (__BITS_PER_LONG - 1)));
+}
 
 #endif /* __KCOMPAT_H__ */
