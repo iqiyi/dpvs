@@ -26,7 +26,6 @@
  */
 
 #include "ipvs/siphash.h"
-#include "ipvs/gcd.h"
 #include "ipvs/mh.h"
 #include "ipvs/kcompat.h"
 

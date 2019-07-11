@@ -61,6 +61,10 @@ inline unsigned long __ffs(unsigned long word);
  */
 inline int fls(unsigned int x);
 
+/**
+ * taken from definition in include/linux/gcd.h
+ */
+unsigned long gcd(unsigned long a, unsigned long b) __attribute__((const));
 
 /**
  * taken from definition in include/linux/bits.h

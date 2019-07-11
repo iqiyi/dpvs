@@ -26,3 +26,34 @@ inline int fls(unsigned int x)
 {
     return x ? sizeof(x) * 8 - __builtin_clz(x) : 0;
 }
+
+/**
+ * taken from definition in lib/math/gcd.c
+ *
+ * gcd - calculate and return the greatest common divisor of 2 unsigned longs
+ * @a: first value
+ * @b: second value
+ */
+unsigned long gcd(unsigned long a, unsigned long b)
+{
+    unsigned long r = a | b;
+
+    if (!a || !b)
+        return r;
+
+    b >>= __ffs(b);
+    if (b == 1)
+        return r & -r;
+
+    for (;;) {
+        a >>= __ffs(a);
+        if (a == 1)
+            return r & -r;
+        if (a == b)
+            return a << __ffs(r);
+
+        if (a < b)
+            swap(a, b);
+        a -= b;
+    }
+}
