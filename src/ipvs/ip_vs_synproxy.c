@@ -1136,6 +1136,7 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
         RTE_LOG(WARNING, IPVS, "%s: %s\n", __func__, dpvs_strerror(EDPVS_NOMEM));
         return EDPVS_NOMEM;
     }
+    ack_mbuf->userdata = NULL;
 
     ack_th = (struct tcphdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct tcphdr));
     if (!ack_th) {

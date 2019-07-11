@@ -14,6 +14,7 @@
 global_defs {
     log_level   WARNING
     ! log_file    /var/log/dpvs.log
+    ! log_async_mode    off
 }
 
 ! netif config
@@ -128,14 +129,14 @@ worker_defs {
         port    bond0 {
             rx_queue_ids     0
             tx_queue_ids     0
-            isol_rx_cpu_ids  9
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  9
+            ! isol_rxq_ring_sz 1048576
         }
         port    bond1 {
             rx_queue_ids     0
             tx_queue_ids     0
-            isol_rx_cpu_ids  9
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  9
+            ! isol_rxq_ring_sz 1048576
         }
     }
 
@@ -145,14 +146,14 @@ worker_defs {
         port    bond0 {
             rx_queue_ids     1
             tx_queue_ids     1
-            isol_rx_cpu_ids  10
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  10
+            ! isol_rxq_ring_sz 1048576
         }
         port    bond1 {
             rx_queue_ids     1
             tx_queue_ids     1
-            isol_rx_cpu_ids  10
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  10
+            ! isol_rxq_ring_sz 1048576
         }
     }
 
@@ -162,14 +163,14 @@ worker_defs {
         port    bond0 {
             rx_queue_ids     2
             tx_queue_ids     2
-            isol_rx_cpu_ids  11
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  11
+            ! isol_rxq_ring_sz 1048576
         }
         port    bond1 {
             rx_queue_ids     2
             tx_queue_ids     2
-            isol_rx_cpu_ids  11
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  11
+            ! isol_rxq_ring_sz 1048576
         }
     }
 
@@ -179,14 +180,14 @@ worker_defs {
         port    bond0 {
             rx_queue_ids     3
             tx_queue_ids     3
-            isol_rx_cpu_ids  12
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  12
+            ! isol_rxq_ring_sz 1048576
         }
         port    bond1 {
             rx_queue_ids     3
             tx_queue_ids     3
-            isol_rx_cpu_ids  12
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  12
+            ! isol_rxq_ring_sz 1048576
         }
     }
 
@@ -196,14 +197,14 @@ worker_defs {
         port    bond0 {
             rx_queue_ids     4
             tx_queue_ids     4
-            isol_rx_cpu_ids  13
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  13
+            ! isol_rxq_ring_sz 1048576
         }
         port    bond1 {
             rx_queue_ids     4
             tx_queue_ids     4
-            isol_rx_cpu_ids  13
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  13
+            ! isol_rxq_ring_sz 1048576
         }
     }
 
@@ -213,14 +214,14 @@ worker_defs {
         port    bond0 {
             rx_queue_ids     5
             tx_queue_ids     5
-            isol_rx_cpu_ids  14
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  14
+            ! isol_rxq_ring_sz 1048576
         }
         port    bond1 {
             rx_queue_ids     5
             tx_queue_ids     5
-            isol_rx_cpu_ids  14
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  14
+            ! isol_rxq_ring_sz 1048576
         }
     }
 
@@ -230,14 +231,14 @@ worker_defs {
         port    bond0 {
             rx_queue_ids     6
             tx_queue_ids     6
-            isol_rx_cpu_ids  15
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  15
+            ! isol_rxq_ring_sz 1048576
         }
         port    bond1 {
             rx_queue_ids     6
             tx_queue_ids     6
-            isol_rx_cpu_ids  15
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  15
+            ! isol_rxq_ring_sz 1048576
         }
     }
 
@@ -247,14 +248,14 @@ worker_defs {
         port    bond0 {
             rx_queue_ids     7
             tx_queue_ids     7
-            isol_rx_cpu_ids  16
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  16
+            ! isol_rxq_ring_sz 1048576
         }
         port    bond1 {
             rx_queue_ids     7
             tx_queue_ids     7
-            isol_rx_cpu_ids  16
-            isol_rxq_ring_sz 1048576
+            ! isol_rx_cpu_ids  16
+            ! isol_rxq_ring_sz 1048576
         }
     }
 
@@ -319,7 +320,9 @@ ipvs_defs {
     }
 
     udp {
-        defence_udp_drop
+        ! defence_udp_drop
+        uoa_mode        opp
+        uoa_max_trail   3
         timeout {
             normal      300
             last        3
@@ -327,7 +330,7 @@ ipvs_defs {
     }
 
     tcp {
-        defence_tcp_drop
+        ! defence_tcp_drop
         timeout {
             none        2
             established 90

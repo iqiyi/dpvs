@@ -211,6 +211,7 @@ static struct rte_mbuf *ndisc_build_mbuf(struct netif_port *dev,
         RTE_LOG(ERR, NEIGHBOUR, "mbuf_pool alloc failed\n");
         return NULL;
     }
+    mbuf->userdata = NULL;
 
     icmp6hdr = (struct icmp6_hdr *)rte_pktmbuf_append(mbuf, sizeof(*icmp6h));
     rte_memcpy(icmp6hdr, icmp6h, sizeof(*icmp6h));

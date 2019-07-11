@@ -203,6 +203,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
         RTE_LOG(DEBUG, ICMP6, "%s: no memory.\n", __func__);
         return;
     }
+    mbuf->userdata = NULL;
     assert(rte_pktmbuf_headroom(mbuf) >= 128); /* for L2/L3 */
     ich = (struct icmp6_hdr*)rte_pktmbuf_append(mbuf, sizeof(struct icmp6_hdr));;
     if (!ich) {

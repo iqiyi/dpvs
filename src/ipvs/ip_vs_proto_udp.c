@@ -282,6 +282,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
     mbuf = rte_pktmbuf_alloc(ombuf->pool);
     if (unlikely(!mbuf))
         return EDPVS_NOMEM;
+    mbuf->userdata = NULL;
 
     int ipolen_uoa = (AF_INET6 == iaf) ? IPOLEN_UOA_IPV6 : IPOLEN_UOA_IPV4;
 
