@@ -85,9 +85,11 @@ static uint32_t dp_vs_conn_rnd; /* hash random */
  */
 static struct rte_mempool *dp_vs_conn_cache[DPVS_MAX_SOCKET];
 
-static struct dp_vs_conn *dp_vs_conn_alloc(void)
+static struct dp_vs_conn *dp_vs_conn_alloc(enum dpvs_fwd_mode fwdmode,
+                                           uint32_t flags)
 {
     struct dp_vs_conn *conn;
+    struct dp_vs_redirect *r = NULL;
 
     if (unlikely(rte_mempool_get(this_conn_cache, (void **)&conn) != 0)) {
         RTE_LOG(ERR, IPVS, "%s: no memory for connection\n", __func__);
@@ -97,6 +99,12 @@ static struct dp_vs_conn *dp_vs_conn_alloc(void)
     memset(conn, 0, sizeof(struct dp_vs_conn));
     conn->connpool = this_conn_cache;
     this_conn_count++;
+
+    /* no need to create redirect for the global template connection */
+    if (likely((flags & DPVS_CONN_F_TEMPLATE) == 0))
+        r = dp_vs_redirect_alloc(fwdmode);
+
+     conn->redirect = r;
 
     return conn;
 }
@@ -657,7 +665,6 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
                                   struct dp_vs_dest *dest, uint32_t flags)
 {
     struct dp_vs_conn *new;
-    struct dp_vs_redirect *new_r = NULL;
     struct conn_tuple_hash *t;
     uint16_t rport;
     __be16 _ports[2], *ports;
@@ -665,14 +672,9 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
 
     assert(mbuf && param && dest);
 
-    new = dp_vs_conn_alloc();
+    new = dp_vs_conn_alloc(dest->fwdmode, flags);
     if (unlikely(!new))
         return NULL;
-
-    /* no need to create redirect for the global template connection */
-    if (likely((flags & DPVS_CONN_F_TEMPLATE) == 0))
-        new_r = dp_vs_redirect_alloc(dest->fwdmode);
-    new->redirect = new_r;
 
     /* set proper RS port */
     if ((flags & DPVS_CONN_F_TEMPLATE) || param->ct_dport != 0)
@@ -843,7 +845,6 @@ unbind_laddr:
 unbind_dest:
     conn_unbind_dest(new);
 errout:
-    dp_vs_redirect_free(new);
     dp_vs_conn_free(new);
     return NULL;
 }
