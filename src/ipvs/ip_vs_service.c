@@ -471,6 +471,7 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
 {
     int ret = 0;
     int size;
+    int cid = 0;
     struct dp_vs_scheduler *sched = NULL;
     struct dp_vs_service *svc = NULL;
 
@@ -522,6 +523,11 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     svc->num_laddrs = 0;
     svc->laddr_curr = &svc->laddr_list;
 
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        INIT_LIST_HEAD(&svc->pre_list[cid].laddr_list);
+        svc->pre_list[cid].laddr_curr = &svc->pre_list[cid].laddr_list;
+        svc->pre_list[cid].num_laddrs = 0;
+    }
     INIT_LIST_HEAD(&svc->dests);
     rte_rwlock_init(&svc->sched_lock);
 
