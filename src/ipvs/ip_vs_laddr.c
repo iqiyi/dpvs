@@ -108,6 +108,7 @@ struct dp_vs_laddr {
 };
 
 static uint32_t dp_vs_laddr_max_trails = 16;
+static uint64_t lcore_mask;
 
 static inline int __laddr_step(struct dp_vs_service *svc)
 {
@@ -124,7 +125,7 @@ static inline int __laddr_step(struct dp_vs_service *svc)
     return 1;
 }
 
-static inline struct dp_vs_laddr *__get_laddr(struct dp_vs_service *svc)
+static inline struct dp_vs_laddr *__get_laddr_port_mode(struct dp_vs_service *svc)
 {
     int step;
     struct dp_vs_laddr *laddr = NULL;
@@ -153,6 +154,45 @@ static inline struct dp_vs_laddr *__get_laddr(struct dp_vs_service *svc)
     return laddr;
 }
 
+static inline struct dp_vs_laddr *__get_laddr_addr_mode(struct dp_vs_service *svc)
+{
+    struct dp_vs_laddr *laddr = NULL;
+
+    /* if list not inited ? list_empty() returns true ! */
+    assert(svc->this_pre_list.laddr_list.next);
+
+    if (list_empty(&svc->this_pre_list.laddr_list)) {
+        return NULL;
+    }
+
+    /* In LADDR_LCORE_MAPPING_POOL_MODE, the iteration step is different
+    * between laddr_list and realserver rr/wrr scheduler internally since every
+    * laddr is bound to a dedicated lcore. So we don't need to get a random
+    * laddr_list step any more.
+    **/
+    if (unlikely(!svc->this_pre_list.laddr_curr))
+        svc->this_pre_list.laddr_curr = svc->this_pre_list.laddr_list.next;
+    else
+        svc->this_pre_list.laddr_curr = svc->this_pre_list.laddr_curr->next;
+
+    if (svc->this_pre_list.laddr_curr == &svc->this_pre_list.laddr_list)
+        svc->this_pre_list.laddr_curr = svc->this_pre_list.laddr_list.next;
+
+    laddr = list_entry(svc->this_pre_list.laddr_curr, struct dp_vs_laddr, list);
+    rte_atomic32_inc(&laddr->refcnt);
+
+    return laddr;
+}
+
+static inline struct dp_vs_laddr *__get_laddr(struct dp_vs_service *svc)
+{
+    if (SA_POOL_MODE == LADDR_LCORE_MAPPING_POOL_MODE) {
+        return __get_laddr_addr_mode(svc);
+    } else {
+        return __get_laddr_port_mode(svc);
+    }
+}
+
 static inline void put_laddr(struct dp_vs_laddr *laddr)
 {
     /* use lock if other field need by changed */
@@ -164,8 +204,10 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 {
     struct dp_vs_laddr *laddr = NULL;
     int i;
+    int num_laddrs = 0;
     uint16_t sport = 0;
     struct sockaddr_storage dsin, ssin;
+    struct inet_ifaddr *ifa;
 
     if (!conn || !conn->dest || !svc)
         return EDPVS_INVAL;
@@ -182,13 +224,32 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
      * 2. we uses svc->num_laddrs;
      */
     rte_rwlock_write_lock(&svc->laddr_lock);
-    for (i = 0; i < dp_vs_laddr_max_trails && i < svc->num_laddrs; i++) {
+    if (SA_POOL_MODE == LADDR_LCORE_MAPPING_POOL_MODE)
+        num_laddrs = svc->this_pre_list.num_laddrs;
+    else
+        num_laddrs = svc->num_laddrs;
+    for (i = 0; i < dp_vs_laddr_max_trails && i < num_laddrs; i++) {
         /* select a local IP from service */
         laddr = __get_laddr(svc);
         if (!laddr) {
             RTE_LOG(ERR, IPVS, "%s: no laddr available.\n", __func__);
             rte_rwlock_write_unlock(&svc->laddr_lock);
             return EDPVS_RESOURCE;
+        }
+
+        if (SA_POOL_MODE == LADDR_LCORE_MAPPING_POOL_MODE) {
+            ifa = inet_addr_ifa_get(conn->af, laddr->iface, &laddr->addr);
+            assert(ifa);
+            if (!ifa->this_sa_pool) {
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+                char buf[64];
+                if (inet_ntop(conn->af, &laddr->addr, buf, sizeof(buf)) == NULL)
+                    snprintf(buf, sizeof(buf), "::");
+                RTE_LOG(DEBUG, IPVS, "%s: %s is not assigned on [%d], "
+                        "try next laddr.\n",__func__, buf, rte_lcore_id());
+#endif
+                continue;
+            }
         }
 
         memset(&dsin, 0, sizeof(struct sockaddr_storage));
@@ -299,11 +360,71 @@ int dp_vs_laddr_unbind(struct dp_vs_conn *conn)
     return EDPVS_OK;
 }
 
+static int __dp_vs_laddr_add_port_mode(struct dp_vs_service *svc,
+                                                int af, struct dp_vs_laddr *new)
+{
+    struct dp_vs_laddr *curr;
+
+    rte_rwlock_write_lock(&svc->laddr_lock);
+    list_for_each_entry(curr, &svc->laddr_list, list) {
+        if (af == curr->af && inet_addr_equal(af, &curr->addr, &new->addr)) {
+            rte_rwlock_write_unlock(&svc->laddr_lock);
+            //rte_free(new);
+            return EDPVS_EXIST;
+        }
+    }
+
+    list_add_tail(&new->list, &svc->laddr_list);
+    svc->num_laddrs++;
+
+    rte_rwlock_write_unlock(&svc->laddr_lock);
+    return EDPVS_OK;
+}
+
+static int __dp_vs_laddr_add_addr_mode(struct dp_vs_service *svc,
+                                                int af, struct dp_vs_laddr *new)
+{
+    struct dp_vs_laddr *curr;
+    struct inet_ifaddr *ifa;
+    int cid = 0;
+
+    rte_rwlock_write_lock(&svc->laddr_lock);
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        list_for_each_entry(curr, &svc->pre_list[cid].laddr_list, list) {
+            if (af == curr->af && inet_addr_equal(af, &curr->addr, &new->addr)) {
+                rte_rwlock_write_unlock(&svc->laddr_lock);
+                //rte_free(new);
+                return EDPVS_EXIST;
+            }
+        }
+    }
+
+    ifa = inet_addr_ifa_get(af, new->iface, &new->addr);
+    if (!ifa) {
+        rte_rwlock_write_unlock(&svc->laddr_lock);
+        return EDPVS_NOTEXIST;
+    }
+
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        /* skip master and unused cores */
+        if ((cid == rte_get_master_lcore()) || !is_lcore_id_valid(cid))
+            continue;
+        if (ifa->sa_pools[cid]) {
+            list_add_tail(&new->list, &svc->pre_list[cid].laddr_list);
+            svc->pre_list[cid].num_laddrs++;
+        }
+    }
+
+    rte_rwlock_write_unlock(&svc->laddr_lock);
+    return EDPVS_OK;
+}
+
 int dp_vs_laddr_add(struct dp_vs_service *svc,
                     int af, const union inet_addr *addr,
                     const char *ifname)
 {
-    struct dp_vs_laddr *new, *curr;
+    struct dp_vs_laddr *new;
+    int err = 0;
 
     if (!svc || !addr)
         return EDPVS_INVAL;
@@ -325,23 +446,19 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
         return EDPVS_NOTEXIST;
     }
 
-    rte_rwlock_write_lock(&svc->laddr_lock);
-    list_for_each_entry(curr, &svc->laddr_list, list) {
-        if (af == curr->af && inet_addr_equal(af, &curr->addr, &new->addr)) {
-            rte_rwlock_write_unlock(&svc->laddr_lock);
-            rte_free(new);
-            return EDPVS_EXIST;
-        }
+    if (SA_POOL_MODE == LADDR_LCORE_MAPPING_POOL_MODE) {
+        err = __dp_vs_laddr_add_addr_mode(svc, af, new);
+    } else {
+        err = __dp_vs_laddr_add_port_mode(svc, af, new);
     }
 
-    list_add_tail(&new->list, &svc->laddr_list);
-    svc->num_laddrs++;
-    rte_rwlock_write_unlock(&svc->laddr_lock);
-
-    return EDPVS_OK;
+    if (err != EDPVS_OK)
+        rte_free(new);
+    return err;
 }
 
-int dp_vs_laddr_del(struct dp_vs_service *svc, int af, const union inet_addr *addr)
+static int __dp_vs_laddr_del_port_mode(struct dp_vs_service *svc, int af, 
+                                                        const union inet_addr *addr)
 {
     struct dp_vs_laddr *laddr, *next;
     int err = EDPVS_NOTEXIST;
@@ -373,13 +490,70 @@ int dp_vs_laddr_del(struct dp_vs_service *svc, int af, const union inet_addr *ad
     rte_rwlock_write_unlock(&svc->laddr_lock);
 
     if (err == EDPVS_BUSY)
-        RTE_LOG(DEBUG, IPVS, "%s: laddr is in use.\n", __func__);
+        RTE_LOG(DEBUG, SAPOOL, "%s: laddr is in use.\n", __func__);
 
     return err;
 }
 
-/* if success, it depend on caller to free @addrs by rte_free() */
-static int dp_vs_laddr_getall(struct dp_vs_service *svc,
+static int __dp_vs_laddr_del_addr_mode(struct dp_vs_service *svc, int af,
+                                                        const union inet_addr *addr)
+{
+    struct dp_vs_laddr *laddr, *next;
+    int cid = 0;
+    int err = EDPVS_NOTEXIST;
+
+    if (!svc || !addr)
+        return EDPVS_INVAL;
+
+    rte_rwlock_write_lock(&svc->laddr_lock);
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        /* skip master and unused cores */
+        if ((cid == rte_get_master_lcore()) || !is_lcore_id_valid(cid))
+            continue;
+        list_for_each_entry_safe(laddr, next, &svc->pre_list[cid].laddr_list, list) {
+            if (!((af == laddr->af) && inet_addr_equal(af, &laddr->addr, addr)))
+                continue;
+
+            /* found */
+            if (rte_atomic32_read(&laddr->refcnt) == 0) {
+            /* update svc->curr_laddr */
+            if (svc->pre_list[cid].laddr_curr == &laddr->list)
+                svc->pre_list[cid].laddr_curr = laddr->list.next;
+                list_del(&laddr->list);
+                rte_free(laddr);
+                svc->pre_list[cid].num_laddrs--;
+                err = EDPVS_OK;
+            } else {
+                /* XXX: move to trash list and implement an garbage collector,
+                 * or just try del again ? */
+                err = EDPVS_BUSY;
+            }
+            break;
+        }
+    }
+
+    rte_rwlock_write_unlock(&svc->laddr_lock);
+
+    if (err == EDPVS_BUSY)
+        RTE_LOG(DEBUG, SAPOOL, "%s: laddr is in use.\n", __func__);
+
+    return err;
+}
+
+int dp_vs_laddr_del(struct dp_vs_service *svc, int af, const union inet_addr *addr)
+{
+    int err = 0;
+
+    if (SA_POOL_MODE == LADDR_LCORE_MAPPING_POOL_MODE) {
+        err = __dp_vs_laddr_del_addr_mode(svc,af, addr);
+    } else {
+        err = __dp_vs_laddr_del_port_mode(svc, af, addr);
+    }
+
+    return err;
+}
+
+static int __dp_vs_laddr_getall_port_mode(struct dp_vs_service *svc,
                               struct dp_vs_laddr_entry **addrs, size_t *naddr)
 {
     struct dp_vs_laddr *laddr;
@@ -416,7 +590,69 @@ static int dp_vs_laddr_getall(struct dp_vs_service *svc,
     return EDPVS_OK;
 }
 
-int dp_vs_laddr_flush(struct dp_vs_service *svc)
+static int __dp_vs_laddr_getall_addr_mode(struct dp_vs_service *svc,
+                              struct dp_vs_laddr_entry **addrs, size_t *naddr)
+{
+    struct dp_vs_laddr *laddr;
+    int i = 0;
+    int cid = 0;
+    int num_laddrs = 0;
+
+    if (!svc || !addrs || !naddr)
+        return EDPVS_INVAL;
+
+    rte_rwlock_write_lock(&svc->laddr_lock);
+
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        num_laddrs += svc->pre_list[cid].num_laddrs;
+    }
+
+    if (num_laddrs > 0) {
+        *naddr = num_laddrs;
+        *addrs = rte_malloc_socket(0, sizeof(struct dp_vs_laddr_entry) * num_laddrs,
+                RTE_CACHE_LINE_SIZE, rte_socket_id());
+        if (!(*addrs)) {
+            rte_rwlock_write_unlock(&svc->laddr_lock);
+            return EDPVS_NOMEM;
+        }
+
+        for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+            /* skip master and unused cores */
+            if ((cid == rte_get_master_lcore()) || !is_lcore_id_valid(cid))
+                continue;
+            list_for_each_entry(laddr, &svc->pre_list[cid].laddr_list, list) {
+                assert(i < *naddr);
+                (*addrs)[i].af = laddr->af;
+                (*addrs)[i].addr = laddr->addr;
+                (*addrs)[i].nconns = rte_atomic32_read(&laddr->conn_counts);
+                i++;
+            }
+        }
+    } else {
+        *naddr = 0;
+        *addrs = NULL;
+    }
+
+    rte_rwlock_write_unlock(&svc->laddr_lock);
+    return EDPVS_OK;
+}
+
+/* if success, it depend on caller to free @addrs by rte_free() */
+static int dp_vs_laddr_getall(struct dp_vs_service *svc,
+                              struct dp_vs_laddr_entry **addrs, size_t *naddr)
+{
+    int err = EDPVS_OK;
+
+    if (SA_POOL_MODE == LADDR_LCORE_MAPPING_POOL_MODE) {
+        err = __dp_vs_laddr_getall_addr_mode(svc, addrs, naddr);
+    } else {
+        err = __dp_vs_laddr_getall_port_mode(svc, addrs, naddr);
+    }
+
+    return err;
+}
+
+static int __dp_vs_laddr_flush_port_mode(struct dp_vs_service *svc)
 {
     struct dp_vs_laddr *laddr, *next;
     int err = EDPVS_OK;
@@ -436,11 +672,59 @@ int dp_vs_laddr_flush(struct dp_vs_service *svc)
             if (inet_ntop(laddr->af, &laddr->addr, buf, sizeof(buf)) == NULL)
                 snprintf(buf, sizeof(buf), "::");
 
-            RTE_LOG(DEBUG, IPVS, "%s: laddr %s is in use.\n", __func__, buf);
+            RTE_LOG(DEBUG, SAPOOL, "%s: laddr %s is in use.\n", __func__, buf);
             err = EDPVS_BUSY;
         }
     }
+
     rte_rwlock_write_unlock(&svc->laddr_lock);
+    return err;
+}
+
+static int __dp_vs_laddr_flush_addr_mode(struct dp_vs_service *svc)
+{
+    struct dp_vs_laddr *laddr, *next;
+    int cid = 0;
+    int err = EDPVS_OK;
+
+    if (!svc)
+        return EDPVS_INVAL;
+
+    rte_rwlock_write_lock(&svc->laddr_lock);
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        /* skip master and unused cores */
+        if ((cid == rte_get_master_lcore()) || !is_lcore_id_valid(cid))
+            continue;
+        list_for_each_entry_safe(laddr, next, &svc->pre_list[cid].laddr_list, list) {
+            if (rte_atomic32_read(&laddr->refcnt) == 0) {
+                list_del(&laddr->list);
+                rte_free(laddr);
+                svc->pre_list[cid].num_laddrs--;
+            } else {
+                char buf[64];
+
+                if (inet_ntop(laddr->af, &laddr->addr, buf, sizeof(buf)) == NULL)
+                    snprintf(buf, sizeof(buf), "::");
+
+                RTE_LOG(DEBUG, SAPOOL, "%s: laddr %s is in use.\n", __func__, buf);
+                err = EDPVS_BUSY;
+            }
+        }
+    }
+
+    rte_rwlock_write_unlock(&svc->laddr_lock);
+    return err;
+}
+
+int dp_vs_laddr_flush(struct dp_vs_service *svc)
+{
+    int err = EDPVS_OK;
+
+    if (SA_POOL_MODE == LADDR_LCORE_MAPPING_POOL_MODE) {
+        err = __dp_vs_laddr_flush_addr_mode(svc);
+    } else {
+        err = __dp_vs_laddr_flush_port_mode(svc);
+    }
 
     return err;
 }
@@ -571,6 +855,8 @@ int dp_vs_laddr_init(void)
     if ((err = sockopt_register(&laddr_sockopts)) != EDPVS_OK)
         return err;
 
+    /* enabled lcore should not change after init */
+    netif_get_slave_lcores(NULL, &lcore_mask);
     return EDPVS_OK;
 }
 
