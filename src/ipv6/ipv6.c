@@ -35,6 +35,7 @@
 #include "parser/parser.h"
 #include "neigh.h"
 #include "icmp6.h"
+#include "stats.h"
 
 /*
  * IPv6 inet hooks
@@ -367,6 +368,7 @@ int ip6_output(struct rte_mbuf *mbuf)
     }
 
     IP6_UPD_PO_STATS(out, mbuf->pkt_len);
+    stats_pkt_out(AF_INET6, mbuf);
     mbuf->port = dev->id;
 
     if (unlikely(conf_ipv6_disable)) {
@@ -536,6 +538,7 @@ static int ip6_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
     }
 
     IP6_UPD_PO_STATS(in, mbuf->pkt_len);
+    stats_pkt_in(AF_INET6, mbuf);
 
     if (unlikely(conf_ipv6_disable)) {
         IP6_INC_STATS(indiscards);
