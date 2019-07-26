@@ -24,6 +24,7 @@
 #include <assert.h>
 #include "ctrl.h"
 #include "netif.h"
+#include "mempool.h"
 #include "parser/parser.h"
 
 /////////////////////////////////// lcore  msg ///////////////////////////////////////////
@@ -33,6 +34,7 @@
 uint64_t slave_lcore_mask;     /* bit-wise enabled lcores */
 uint8_t slave_lcore_nb;        /* slave lcore number */
 lcoreid_t master_lcore;        /* master lcore id */
+struct dpvs_mempool *msg_pool; /* memory pool for msg */
 
 struct netif_lcore_loop_job ctrl_lcore_job;
 
@@ -323,23 +325,31 @@ int msg_type_mc_unregister(const struct dpvs_msg_type *msg_type)
     return EDPVS_OK;
 }
 
+void *msg_reply_alloc(int size)
+{
+    return dpvs_mempool_get(msg_pool, size);
+}
+
+void msg_reply_free(void *mptr)
+{
+    return dpvs_mempool_put(msg_pool, mptr);
+}
+
 struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
         msg_mode_t mode,
         lcoreid_t cid,
         uint32_t len, const void *data)
 {
+    int total_len;
     struct dpvs_msg *msg;
-    uint32_t flags;
 
-    msg  = rte_zmalloc("msg", sizeof(struct dpvs_msg) + len, RTE_CACHE_LINE_SIZE);
+    total_len = sizeof(struct dpvs_msg) + len;
+    msg = dpvs_mempool_get(msg_pool, total_len);
     if (unlikely(NULL == msg))
         return NULL;
+    memset(msg, 0, total_len);
 
     rte_spinlock_init(&msg->lock);
-
-    flags = get_msg_flags(msg);
-    if (flags)
-        RTE_LOG(WARNING, MSGMGR, "dirty msg flags: %d\n", flags);
 
     msg->type = type;
     msg->seq = seq;
@@ -350,7 +360,6 @@ struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
         rte_memcpy(msg->data, data, len);
     msg->reply.data = NULL;
     msg->reply.len = 0;
-    assert(0 == flags);
 
     rte_atomic16_init(&msg->refcnt);
     rte_atomic16_inc(&msg->refcnt);
@@ -402,10 +411,10 @@ int msg_destroy(struct dpvs_msg **pmsg)
     }
 
     if (msg->reply.data) {
-        rte_free(msg->reply.data);
+        msg_reply_free(msg->reply.data);
         msg->reply.len = 0;
     }
-    rte_free(msg);
+    dpvs_mempool_put(msg_pool, msg);
     *pmsg = NULL;
 
     msg_debug_free();
@@ -1001,6 +1010,11 @@ static inline int msg_init(void)
         return EDPVS_NOTSUPP;
     }
 
+    /* msg_pool uses about 10MB memory */
+    msg_pool = dpvs_mempool_create("mp_msg", 32, 65536, 1024);
+    if (!msg_pool)
+        return EDPVS_NOMEM;
+
     /* per-lcore msg type array init */
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         for (jj = 0; jj < DPVS_MSG_LEN; jj++) {
@@ -1020,6 +1034,7 @@ static inline int msg_init(void)
                 rte_socket_id(), RING_F_SC_DEQ);
         if (unlikely(NULL == msg_ring[ii])) {
             RTE_LOG(ERR, MSGMGR, "%s: fail to create msg ring\n", __func__);
+            dpvs_mempool_destroy(msg_pool);
             return EDPVS_DPDKAPIFAIL;
         }
     }
@@ -1031,6 +1046,7 @@ static inline int msg_init(void)
     ctrl_lcore_job.type = NETIF_LCORE_JOB_LOOP;
     if ((ret = netif_lcore_loop_job_register(&ctrl_lcore_job)) < 0) {
         RTE_LOG(ERR, MSGMGR, "%s: fail to register ctrl func on slave lcores\n", __func__);
+        dpvs_mempool_destroy(msg_pool);
         return ret;
     }
 
@@ -1058,6 +1074,7 @@ static inline int msg_term(void)
     /* per-lcore msg queue */
     for (ii= 0; ii < DPVS_MAX_LCORE; ii++)
         rte_ring_free(msg_ring[ii]);
+    dpvs_mempool_destroy(msg_pool);
 
     return EDPVS_OK;
 }

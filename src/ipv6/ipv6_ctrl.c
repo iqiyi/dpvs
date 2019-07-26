@@ -34,7 +34,7 @@ static int ip6_msg_get_stats(struct dpvs_msg *msg)
     struct inet_stats *stats;
     assert(msg);
 
-    stats = rte_zmalloc(NULL, sizeof(*stats), 0);
+    stats = msg_reply_alloc(sizeof(*stats));
     if (!stats)
         return EDPVS_NOMEM;
 

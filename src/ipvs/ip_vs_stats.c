@@ -131,6 +131,7 @@ void dp_vs_zero_stats(struct dp_vs_stats* stats)
 
 static int get_stats_uc_cb(struct dpvs_msg *msg)
 {
+    char *reply;
     struct dp_vs_stats **src;
     lcoreid_t cid;
     assert(msg);
@@ -140,7 +141,10 @@ static int get_stats_uc_cb(struct dpvs_msg *msg)
         return EDPVS_INVAL;
     }
     src = (struct dp_vs_stats **)msg->data;
-    char *reply = rte_malloc(NULL, sizeof(struct dp_vs_stats), RTE_CACHE_LINE_SIZE);
+
+    reply = msg_reply_alloc(sizeof(struct dp_vs_stats));
+    if (unlikely(!reply))
+        return EDPVS_NOMEM;
     rte_memcpy(reply, &((*src)[cid]), sizeof(struct dp_vs_stats));
     msg->reply.len = sizeof(struct dp_vs_stats);
     msg->reply.data = (void *)reply;

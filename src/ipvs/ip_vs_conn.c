@@ -1476,7 +1476,7 @@ static int conn_get_msgcb_slave(struct dpvs_msg *msg)
         reply_len = sizeof(struct ip_vs_conn_array) + sizeof(ipvs_conn_entry_t);
     else
         reply_len = sizeof(struct ip_vs_conn_array);
-    reply_data = rte_zmalloc("get_conns", reply_len, 0);
+    reply_data = msg_reply_alloc(reply_len);
     if (unlikely(!reply_data)) {
         dp_vs_conn_put(conn);
         return EDPVS_NOMEM;

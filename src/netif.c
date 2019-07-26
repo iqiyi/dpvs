@@ -4266,7 +4266,7 @@ static int lcore_stats_msg_cb(struct dpvs_msg *msg)
                 msg->mode != DPVS_MSG_UNICAST))
         return EDPVS_INVAL;
 
-    reply_data = rte_malloc(NULL, sizeof(struct netif_lcore_stats), RTE_CACHE_LINE_SIZE);
+    reply_data = msg_reply_alloc(sizeof(struct netif_lcore_stats));
     if (unlikely(!reply_data))
         return EDPVS_NOMEM;
 

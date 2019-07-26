@@ -177,6 +177,10 @@ int msg_master_process(int step); /* Master lcore msg loop */
 /* Slave lcore msg process loop */
 int msg_slave_process(int step);  /* Slave lcore msg loop */
 
+/* allocator for msg reply data */
+void *msg_reply_alloc(int size);
+void msg_reply_free(void *mptr);
+
 /* debug utility */
 int msg_type_table_print(char *buf, int len); /* print msg_type table on all configured lcores */
 int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
