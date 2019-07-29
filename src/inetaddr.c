@@ -396,6 +396,7 @@ static int inet_ifaddr_dad_completed(void *arg)
     struct inet_ifaddr *ifa = arg;
 
     rte_rwlock_write_lock(&in_addr_lock);
+    dpvs_timer_cancel(&ifa->timer, true);
     ifa->flags &= ~(IFA_F_TENTATIVE|IFA_F_OPTIMISTIC|IFA_F_DADFAILED);
     rte_rwlock_write_unlock(&in_addr_lock);
 
