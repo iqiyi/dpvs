@@ -821,7 +821,7 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
             htonl((uint32_t) ((ntohl(th->ack_seq) - 1)));
 
         /* save ack_seq */
-        new->fnat_seq.fdata_seq = htonl(th->ack_seq);
+        new->fnat_seq.fdata_seq = ntohl(th->ack_seq);
 
         /* FIXME: use DP_VS_TCP_S_SYN_SENT for syn */
         pp = dp_vs_proto_lookup(param->proto);
