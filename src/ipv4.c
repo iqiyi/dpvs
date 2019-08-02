@@ -26,7 +26,7 @@
 #include "neigh.h"
 #include "icmp.h"
 #include "parser/parser.h"
-#include "stats.h"
+#include "iftraf.h"
 
 #define IPV4
 #define RTE_LOGTYPE_IPV4    RTE_LOGTYPE_USER1
@@ -263,7 +263,8 @@ int ipv4_output(struct rte_mbuf *mbuf)
     assert(rt);
 
     IP4_UPD_PO_STATS(out, mbuf->pkt_len);
-    stats_pkt_out(AF_INET, mbuf);
+    mbuf->port = rt->port->id;
+    iftraf_pkt_out(AF_INET, mbuf, rt->port);
 
     return INET_HOOK(AF_INET, INET_HOOK_POST_ROUTING, mbuf,
             NULL, rt->port, ipv4_output_fin);
@@ -388,8 +389,7 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
     }
 
     IP4_UPD_PO_STATS(in, mbuf->pkt_len);
-    stats_pkt_in(AF_INET, mbuf);
-
+    iftraf_pkt_in(AF_INET, mbuf, port);
     if (mbuf_may_pull(mbuf, sizeof(struct ipv4_hdr)) != 0)
         goto inhdr_error;
 

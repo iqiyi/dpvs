@@ -15,39 +15,46 @@
  * GNU General Public License for more details.
  *
  */
-#ifndef __DPVS_STATS_CONF_H__
-#define __DPVS_STATS_CONF_H__
+#ifndef __DPVS_IFTRAF_CONF_H__
+#define __DPVS_IFTRAF_CONF_H__
 #include <stdint.h>
 #include <linux/if_addr.h>
 #include "inet.h"
-
+	
 enum {
     /* set */
-    SOCKOPT_SET_STATS_ADD  = 6400,
-    SOCKOPT_SET_STATS_DEL,
+    SOCKOPT_SET_IFTRAF_ADD = 6400,
+    SOCKOPT_SET_IFTRAF_DEL,
 
     /* get */
-    SOCKOPT_GET_STATS_SHOW,
+    SOCKOPT_GET_IFTRAF_SHOW,
 };
 
-struct stats_param {
-	uint8_t 			 af;
-	uint8_t 			 proto;
-	uint8_t			 cid;
+struct dp_vs_iftraf_conf {
+    char ifname[IFNAMSIZ];
+} __attribute__((__packed__));
 
-	union inet_addr 	 saddr;
-	union inet_addr 	 daddr;
-	uint16_t			 sport;
-	uint16_t			 dport;
 
-    double long total_recv;
-    double long total_sent;
+struct iftraf_param {
+    uint8_t af;
+    uint8_t proto;
+    uint8_t cid;
+    uint16_t devid;
+    char ifname[IFNAMSIZ];
+    union inet_addr saddr;
+    union inet_addr daddr;
+    uint16_t sport;
+    uint16_t dport;
+
+    uint32_t total_recv;
+    uint32_t total_sent;
 
 } __attribute__((__packed__));
 
-struct stats_param_array {
-    int                 nstats;
-    struct stats_param stats[0];
+struct iftraf_param_array {
+    int ntrafs;
+    struct iftraf_param iftraf[0];
 };
 
 #endif /* __DPVS_INETADDR_CONF_H__ */
+
