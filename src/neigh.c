@@ -856,7 +856,9 @@ static int get_neigh_uc_cb(struct dpvs_msg *msg)
 
     len = sizeof(struct dp_vs_neigh_conf_array) +
           sizeof(struct dp_vs_neigh_conf) * neigh_nums[cid];
-    array = rte_zmalloc("neigh_array", len, RTE_CACHE_LINE_SIZE);
+    array = msg_reply_alloc(len);
+    if (unlikely(!array))
+        return EDPVS_NOMEM;
 
     neigh_fill_array(dev, cid, array, neigh_nums[cid]);
     msg->reply.len = len;
