@@ -689,7 +689,7 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         goto syn_rcv_out;
 
     if (th->syn && !th->ack && !th->rst && !th->fin &&
-            (svc = dp_vs_service_lookup(af, iph->proto, 
+            (svc = dp_vs_service_lookup(af, iph->proto,
                                         &iph->daddr, th->dest, 0, NULL, NULL, NULL)) &&
             (svc->flags & DP_VS_SVC_F_SYNPROXY)) {
         /* if service's weight is zero (non-active realserver),
@@ -1227,7 +1227,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
     if ((th->syn) && (th->ack) && (!th->rst) &&
             (cp->flags & DPVS_CONN_F_SYNPROXY) &&
             (cp->state == DPVS_TCP_S_SYN_SENT)) {
-        cp->syn_proxy_seq.delta = htonl(cp->syn_proxy_seq.isn) - htonl(th->seq);
+        cp->syn_proxy_seq.delta = ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
         cp->state = DPVS_TCP_S_ESTABLISHED;
         conn_timeout = dp_vs_get_conn_timeout(cp);
         if (unlikely((conn_timeout != 0) && (cp->proto == IPPROTO_TCP)))
@@ -1308,8 +1308,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
                 __func__, ntohl(th->seq), ntohl(th->ack_seq));
 
         /* Count the delta of seq */
-        cp->syn_proxy_seq.delta =
-            ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
+        cp->syn_proxy_seq.delta = ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
         cp->state = DPVS_TCP_S_CLOSE;
         cp->timeout.tv_sec = pp->timeout_table[cp->state];
         dpvs_time_rand_delay(&cp->timeout, 1000000);
