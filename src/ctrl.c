@@ -394,6 +394,7 @@ int msg_destroy(struct dpvs_msg **pmsg)
     if (msg->mode == DPVS_MSG_MULTICAST) {
         struct dpvs_msg *cur, *next;
         struct dpvs_multicast_queue *mcq;
+        assert(rte_lcore_id() == master_lcore);
         mcq = mc_queue_get(msg->type, msg->seq);
         if (likely(mcq != NULL)) {
             list_for_each_entry_safe(cur, next, &mcq->mq, mq_node) {
@@ -546,7 +547,9 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
             if (unlikely(!new_msg)) {
                 RTE_LOG(ERR, MSGMGR, "%s:msg@%p, msg make fail\n", __func__, msg);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                rte_atomic16_dec(&msg->refcnt); /* decrease refcnt by 1 manually */
+                /* decrease refcnt so that the msg can be freed */
+                while (rte_atomic16_read(&msg->refcnt) > 1)
+                    rte_atomic16_dec(&msg->refcnt);
                 return EDPVS_NOMEM;
             }
 
@@ -557,12 +560,15 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
                     RTE_LOG(ERR, MSGMGR, "%s:msg@%p, new_msg@%p, msg send fail\n",
                             __func__, msg, new_msg);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                rte_atomic16_dec(&msg->refcnt); /* decrease refcnt by 1 manually */
+                /* decrease refcnt so that the msg can be freed */
+                while (rte_atomic16_read(&msg->refcnt) > 1)
+                    rte_atomic16_dec(&msg->refcnt);
                 msg_destroy(&new_msg);
                 return ret;
             }
             msg_destroy(&new_msg);
             rte_atomic16_inc(&msg->refcnt); /* refcnt increase by 1 for each slave */
+
         }
     }
 
@@ -570,6 +576,8 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     if (unlikely(!mc_msg)) {
         RTE_LOG(ERR, MSGMGR, "%s:msg@%p, no memory for mc_msg\n", __func__, msg);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
+        while (rte_atomic16_read(&msg->refcnt) > 1)
+            rte_atomic16_dec(&msg->refcnt);
         return EDPVS_NOMEM;
     }
 
@@ -583,6 +591,8 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
         RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, multicast msg wait queue full, "
                 "msg dropped and try later...\n", __func__, msg);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
+        while (rte_atomic16_read(&msg->refcnt) > 1)
+            rte_atomic16_dec(&msg->refcnt);
         return EDPVS_MSG_DROP;
     }
     list_add_tail(&mc_msg->list, &mc_wait_list.list);
@@ -631,7 +641,7 @@ int msg_master_process(int step)
         add_msg_flags(msg, DPVS_MSG_F_STATE_RECV);
         msg_type = msg_type_get(msg->type, master_lcore);
         if (!msg_type) {
-            RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, unregistered msg type %d on master\n",
+            RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, unregistered msg type %d on master\n",
                     __func__, msg, msg->type);
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg);
@@ -639,7 +649,7 @@ int msg_master_process(int step)
         }
         if (DPVS_MSG_UNICAST == msg_type->mode) { /* unicast msg */
             if (!msg_type->unicast_msg_cb) {
-                RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, no callback registered for unicast msg %d\n",
+                RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, no callback registered for unicast msg %d\n",
                         __func__, msg, msg->type);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
                 msg_destroy(&msg);
@@ -663,16 +673,9 @@ int msg_master_process(int step)
                 msg_type_put(msg_type);
                 continue;
             }
-            rte_atomic16_dec(&mcq->org_msg->refcnt); /* for each reply, decrease refcnt of org_msg */
-            if (!msg_type->multicast_msg_cb) {
-                RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, no callback registered for multicast msg %d\n",
-                        __func__, msg, msg->type);
-                add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                msg_destroy(&msg);
-                msg_type_put(msg_type);
-                continue;
-            }
+            assert(msg_type->multicast_msg_cb != NULL);
             if (mcq->mask & (1UL << msg->cid)) { /* you are the msg i'm waiting */
+                rte_atomic16_dec(&mcq->org_msg->refcnt); /* for each reply, decrease refcnt of org_msg */
                 list_add_tail(&msg->mq_node, &mcq->mq);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_QUEUE);/* set QUEUE flag for slave's reply msg */
                 mcq->mask &= ~(1UL << msg->cid);
@@ -687,8 +690,6 @@ int msg_master_process(int step)
                     }
                     add_msg_flags(mcq->org_msg, DPVS_MSG_F_STATE_FIN);
                     msg_destroy(&mcq->org_msg);
-                    msg_type_put(msg_type);
-                    continue;
                 }
                 msg_type_put(msg_type);
                 continue;
@@ -698,7 +699,6 @@ int msg_master_process(int step)
             assert(msg->mode = DPVS_MSG_UNICAST);
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg); /* sorry, you are late */
-            rte_atomic16_inc(&mcq->org_msg->refcnt); /* do not count refcnt for repeated msg */
         }
         msg_type_put(msg_type);
     }
