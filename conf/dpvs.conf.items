@@ -131,7 +131,7 @@ worker_defs {
 
 ! timer config
 timer_defs {
-    # cpu job loops to schedule dpdk timer management
+    # time interval(us) to schedule dpdk timer management
     schedule_interval    500            <10, 1-10000000>
 }
 
