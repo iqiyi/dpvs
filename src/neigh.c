@@ -859,6 +859,7 @@ static int get_neigh_uc_cb(struct dpvs_msg *msg)
     array = msg_reply_alloc(len);
     if (unlikely(!array))
         return EDPVS_NOMEM;
+    array->neigh_nums = 0;
 
     neigh_fill_array(dev, cid, array, neigh_nums[cid]);
     msg->reply.len = len;
@@ -922,7 +923,7 @@ static int neigh_sockopt_get(sockoptid_t opt, const void *conf,
     array->neigh_nums = neigh_nums_g;
     list_for_each_entry(cur, &reply->mq, mq_node) {
         array_msg = (struct dp_vs_neigh_conf_array *)(cur->data);
-        memcpy(&array->addrs[off], &array_msg->addrs,
+        memcpy(&array->addrs[off], &array_msg->addrs[0],
                array_msg->neigh_nums * sizeof(struct dp_vs_neigh_conf));
         off += array_msg->neigh_nums;
     }

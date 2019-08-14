@@ -221,6 +221,7 @@ void *dpvs_mempool_get(struct dpvs_mempool *mp, int size)
     cookie->pool_idx = arr_idx;
 
     //RTE_LOG(DEBUG, DPVS_MPOOL, "allocate %d memory from %s\n", size, mp->pool_array[arr_idx].name);
+    memset(data, 0, size);
     return data;
 
 alloc_from_heap:
