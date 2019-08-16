@@ -79,7 +79,7 @@ static RTE_DEFINE_PER_LCORE(struct timer_scheduler, timer_sched);
 /* global timer. */
 static struct timer_scheduler g_timer_sched;
 
-static inline dpvs_tick_t timeval_to_ticks(const struct timeval *tv)
+dpvs_tick_t timeval_to_ticks(const struct timeval *tv)
 {
     uint64_t ticks;
 
@@ -92,7 +92,7 @@ static inline dpvs_tick_t timeval_to_ticks(const struct timeval *tv)
     return (dpvs_tick_t)ticks;
 }
 
-static inline void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv)
+void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv)
 {
     tv->tv_sec = ticks / DPVS_TIMER_HZ;
     tv->tv_usec = ticks % DPVS_TIMER_HZ * 1000000 / DPVS_TIMER_HZ;
@@ -233,7 +233,7 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
 {
     struct timer_scheduler *sched = arg;
     struct dpvs_timer *timer, *next;
-    uint64_t left, hash, off;
+    uint64_t left, hash, off, remainder;
     int level, lower;
     uint32_t *cursor;
     bool carry;
@@ -271,12 +271,13 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
                 list_del(&timer->list);
 
                 lower = level;
+                remainder = timer->delay % get_level_ticks(level);
                 while (--lower >= 0) {
-                    off = timer->delay / get_level_ticks(lower);
+                    off = remainder / get_level_ticks(lower);
                     if (!off)
                         continue; /* next lower level */
 
-                    hash = (*cursor + off) % LEVEL_SIZE;
+                    hash = (sched->cursors[lower] + off) % LEVEL_SIZE;
                     list_add_tail(&timer->list, &sched->hashs[lower][hash]);
                     break;
                 }
@@ -308,6 +309,7 @@ static int timer_init_schedler(struct timer_scheduler *sched, lcoreid_t cid)
                                      sizeof(struct list_head) * LEVEL_SIZE, 0);
         if (!sched->hashs[l]) {
             RTE_LOG(ERR, DTIMER, "[%02d] no memory.\n", cid);
+            rte_spinlock_unlock(&sched->lock);
             return EDPVS_NOMEM;
         }
 
