@@ -416,6 +416,8 @@ static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
 }
 #endif
 
+static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn);
+
 /* timeout hanlder */
 static int conn_expire(void *priv)
 {
@@ -424,8 +426,10 @@ static int conn_expire(void *priv)
     struct rte_mbuf *cloned_syn_mbuf;
     struct dp_vs_synproxy_ack_pakcet *ack_mbuf, *t_ack_mbuf;
     struct rte_mempool *pool;
+
     assert(conn);
     assert(conn->af == AF_INET || conn->af == AF_INET6);
+    assert(rte_atomic32_read(&conn->refcnt) > 0);
 
     /* set proper timeout */
     unsigned conn_timeout = 0;
@@ -474,13 +478,13 @@ static int conn_expire(void *priv)
         dp_vs_estats_inc(SYNPROXY_RS_ERROR);
 
         /* expire later */
-        dp_vs_conn_put(conn);
+        dp_vs_conn_put_nolock(conn);
         return DTIMER_OK;
     }
 
     /* somebody is controlled by me, expire later */
     if (rte_atomic32_read(&conn->n_control)) {
-        dp_vs_conn_put(conn);
+        dp_vs_conn_put_nolock(conn);
         return DTIMER_OK;
     }
 
@@ -492,9 +496,9 @@ static int conn_expire(void *priv)
      * no one is using the conn and it's timed out. */
     if (rte_atomic32_read(&conn->refcnt) == 1) {
         if (conn->flags & DPVS_CONN_F_TEMPLATE)
-            dpvs_timer_cancel(&conn->timer, true);
+            dpvs_timer_cancel_nolock(&conn->timer, true);
         else
-            dpvs_timer_cancel(&conn->timer, false);
+            dpvs_timer_cancel_nolock(&conn->timer, false);
 
         /* I was controlled by someone */
         if (conn->control)
@@ -573,9 +577,9 @@ static int conn_expire(void *priv)
     /* some one is using it when expire,
      * try del it again later */
     if (conn->flags & DPVS_CONN_F_TEMPLATE)
-        dpvs_timer_update(&conn->timer, &conn->timeout, true);
+        dpvs_timer_update_nolock(&conn->timer, &conn->timeout, true);
     else
-        dpvs_timer_update(&conn->timer, &conn->timeout, false);
+        dpvs_timer_update_nolock(&conn->timer, &conn->timeout, false);
 
     rte_atomic32_dec(&conn->refcnt);
     return DTIMER_OK;
@@ -1027,6 +1031,19 @@ void dp_vs_conn_put(struct dp_vs_conn *conn)
     else
         dpvs_timer_update(&conn->timer, &conn->timeout, false);
 
+    assert(rte_atomic32_read(&conn->refcnt) > 0);
+    rte_atomic32_dec(&conn->refcnt);
+}
+
+/* used in conn timer handler: conn_expire */
+static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn)
+{
+    if (conn->flags & DPVS_CONN_F_TEMPLATE)
+        dpvs_timer_update_nolock(&conn->timer, &conn->timeout, true);
+    else
+        dpvs_timer_update_nolock(&conn->timer, &conn->timeout, false);
+
+    assert(rte_atomic32_read(&conn->refcnt) > 0);
     rte_atomic32_dec(&conn->refcnt);
 }
 
@@ -1478,7 +1495,8 @@ static int conn_get_msgcb_slave(struct dpvs_msg *msg)
         reply_len = sizeof(struct ip_vs_conn_array);
     reply_data = msg_reply_alloc(reply_len);
     if (unlikely(!reply_data)) {
-        dp_vs_conn_put(conn);
+        if (conn)
+            dp_vs_conn_put(conn);
         return EDPVS_NOMEM;
     }
 

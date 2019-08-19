@@ -91,7 +91,7 @@ static int minute_timer_expire( void *priv)
 
     tv.tv_sec = 60; /* one minute timer */
     tv.tv_usec = 0;
-    dpvs_timer_update(&g_minute_timer, &tv, true);
+    dpvs_timer_update_nolock(&g_minute_timer, &tv, true);
 
     return DTIMER_OK;
 }
@@ -108,7 +108,7 @@ static int second_timer_expire(void *priv)
 
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    dpvs_timer_sched(&g_second_timer, &tv, second_timer_expire, NULL, true);
+    dpvs_timer_sched_nolock(&g_second_timer, &tv, second_timer_expire, NULL, true);
 
     return DTIMER_OK;
 }
@@ -1018,7 +1018,7 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
         /* Count in the ack packet (STOLEN by synproxy) */
         dp_vs_stats_in(*cpp, mbuf);
 
-        /* Active session timer, and dec  refcnt.
+        /* Active session timer, and dec refcnt.
          * Also steal the mbuf, and let caller return immediately */
         dp_vs_conn_put(*cpp);
         *verdict = INET_STOLEN;

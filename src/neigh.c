@@ -232,7 +232,7 @@ static int neigh_entry_expire(struct neighbour_entry *neighbour)
     struct neighbour_mbuf_entry *mbuf, *mbuf_next;
     lcoreid_t cid = rte_lcore_id();
 
-    dpvs_timer_cancel(&neighbour->timer, false);
+    dpvs_timer_cancel_nolock(&neighbour->timer, false);
     neigh_unhash(neighbour);
         //release pkts saved in neighbour entry
     list_for_each_entry_safe(mbuf,mbuf_next,
@@ -270,7 +270,7 @@ void neigh_entry_state_trans(struct neighbour_entry *neighbour, int idx)
 
         timeout.tv_sec = nud_timeouts[neighbour->state];
         timeout.tv_usec = 0;
-        dpvs_timer_update(&neighbour->timer, &timeout, false);
+        dpvs_timer_update_nolock(&neighbour->timer, &timeout, false);
         neighbour->ts = now.tv_sec;
 #ifdef CONFIG_DPVS_NEIGH_DEBUG
         RTE_LOG(DEBUG, NEIGHBOUR, "%s trans state to %s.\n",
