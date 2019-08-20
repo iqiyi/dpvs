@@ -1,11 +1,12 @@
 #!/bin/sh -
 # program: dpvs
-# May 28, 2019
+# Aug 20, 2019
+# Commit: 843f76ca4579527b29789194db3feb9d2411ab3e "timer: fix lock problem in timer"
 # Features: 
-#  * Bugfix in ctrl, including msg, keepalived.
-#  * Berformance enhancement in inet, logging.
+# * msg: use mempool to allocate msg memory
+# * timer: fix inaccuracy and lock problem
 
 export VERSION=1.7
-export RELEASE=4
+export RELEASE=5
 
 echo $VERSION-$RELEASE
