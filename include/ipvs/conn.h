@@ -99,6 +99,7 @@ struct dp_vs_conn {
 
     struct dpvs_timer       conn_sync_timer;
     struct timeval          conn_sync_timeout;
+    uint16_t                syncid;
     queueid_t               qid;    /* used in session synchronization*/
     
     lcoreid_t               lcore;

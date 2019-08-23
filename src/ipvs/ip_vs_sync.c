@@ -100,6 +100,7 @@ void dp_vs_sync_conn_enqueue(struct dp_vs_conn *cp, dp_vs_sync_type type)
     s->daddr = cp->daddr;
     s->qid   = cp->qid;
     s->lcore = cp->lcore;
+    s->syncid = g_dp_vs_sync_conf.syncid;
 
     rte_memcpy(&s->fnat_seq, &cp->fnat_seq, sizeof(struct dp_vs_seq));
     s->rs_end_seq = cp->rs_end_seq;

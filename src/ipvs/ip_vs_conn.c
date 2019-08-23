@@ -743,6 +743,7 @@ struct dp_vs_conn * dp_vs_conn_copy_from_sync(void *param, struct dp_vs_dest *de
     new->rs_end_seq = sync_conn->rs_end_seq;
     new->rs_end_ack = sync_conn->rs_end_ack;
 
+    new->syncid = sync_conn->syncid;
     new->flags  = sync_conn->flags | DPVS_CONN_F_SYNCED;
     new->state  = sync_conn->state;
     new->qid    = sync_conn->qid;
@@ -1353,6 +1354,9 @@ static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
     entry->lport = conn->lport;
     entry->dport = conn->dport;
     entry->timeout = conn->timeout.tv_sec;
+    if (conn->flags & DPVS_CONN_F_SYNCED) {
+        entry->syncid = conn->syncid;
+    }
 }
 
 static int sockopt_conn_get_specified(const struct ip_vs_conn_req *conn_req,

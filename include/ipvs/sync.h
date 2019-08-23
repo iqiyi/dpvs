@@ -56,6 +56,7 @@ struct dp_vs_sync_conn {
     struct dp_vs_seq        fnat_seq;
     uint32_t                rs_end_seq;
     uint32_t                rs_end_ack;
+    uint16_t                syncid;
 };
 
 struct dp_vs_sync_head {

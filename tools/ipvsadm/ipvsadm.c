@@ -1573,9 +1573,15 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
                     ntohs(conn_entry->dport), conn_entry->proto, format)))
 		goto exit;
 
-	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
-			conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
-			cname, vname, lname, dname);
+    if (conn_entry->syncid) {
+        printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %-18s syncid:%d\n",
+                conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
+                cname, vname, lname, dname, conn_entry->syncid);
+    } else {
+    	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
+    			conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
+    			cname, vname, lname, dname);
+    }    
 exit:
 	if (cname)
 		free(cname);
