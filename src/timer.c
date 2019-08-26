@@ -502,7 +502,7 @@ int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
     struct timer_scheduler *sched = this_lcore_sched(global);
 
     timer_sched_lock(sched);
-    err = dpvs_timer_sched_abs(timer, expire, handler, arg, global);
+    err = dpvs_timer_sched_abs_nolock(timer, expire, handler, arg, global);
     timer_sched_unlock(sched);
 
     return err;
