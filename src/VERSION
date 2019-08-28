@@ -1,12 +1,12 @@
 #!/bin/sh -
 # program: dpvs
-# Aug 20, 2019
-# Commit: 843f76ca4579527b29789194db3feb9d2411ab3e "timer: fix lock problem in timer"
+# Aug 28, 2019
+# Commit: f393fa75e62639c1591f7157588d14630a653069
+#         "ctrl: serveral improvements and bugfix in dpvs_msg"
 # Features: 
-# * msg: use mempool to allocate msg memory
-# * timer: fix inaccuracy and lock problem
+#     bugfix in dpvs_msg and dpvs_timer
 
 export VERSION=1.7
-export RELEASE=5
+export RELEASE=6
 
 echo $VERSION-$RELEASE
