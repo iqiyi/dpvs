@@ -187,7 +187,6 @@ int main(int argc, char *argv[])
     err = rte_eal_init(argc, argv);
     if (err < 0)
         rte_exit(EXIT_FAILURE, "Invalid EAL parameters\n");
-    argc -= err, argv += err;
 
     RTE_LOG(INFO, DPVS, "dpvs version: %s, build on %s\n", DPVS_VERSION, DPVS_BUILD_DATE);
 
