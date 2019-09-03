@@ -1003,16 +1003,16 @@ int dp_vs_check_template(struct dp_vs_conn *ct)
 #endif
         /* invalidate the connection */
         if (ct->vport != htons(0xffff)) {
-            if (dp_vs_conn_unhash(ct)) {
-                ct->dport = htonl(0xffff);
-                ct->vport = htonl(0xffff);
+            if (dp_vs_conn_unhash(ct) == EDPVS_OK) {
+                ct->dport = htons(0xffff);
+                ct->vport = htons(0xffff);
                 ct->lport = 0;
                 ct->cport = 0;
                 dp_vs_conn_hash(ct);
             }
         }
         /* simply decrease the refcnt of the template, do not restart its timer */
-        rte_atomic32_dec(&ct->refcnt);
+        dp_vs_conn_put_no_reset(ct);
         return 0;
     }
     return 1;
