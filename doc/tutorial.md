@@ -21,6 +21,7 @@ DPVS Tutorial
   - [KNI for virtual device](#vdev-kni)
 * [UDP Option of Address (UOA)](#uoa)
 * [Launch DPVS in Virtual Machine (Ubuntu)](#Ubuntu16.04)
+* [Session synchronization](#session-sync)
 
 > To compile and launch DPVS, pls check *README.md* for this project.
 
@@ -1119,4 +1120,70 @@ worker_defs {
         }
     }
 
+```
+<a id='session-sync'/>
+
+# Session synchronization
+
+Session synchronization to decrease the connection break due to the DPVS node failure in the cluster.
+There are two synchronization modes: full and incremental
+* incremental synchronization is used for the new sessions
+* full synchronization is used for the existing sessions
+
+The basic synchronization principle,looks like below
+![synchronization-principle.png](pics/synchronization-principle.png)
+
+Adding new DPVS nodes in the cluster requires the following commands to select synchronous nodes and synchronize existing sessions.
+
+```bash
+$ ipvsadm --conn-sync
+```
+If you would like to use session synchronization, add the following lines into the device configs of `dpvs.conf`:
+
+```
+! worker config (lcores)
+worker_defs {
+    <init> worker cpu0 {
+        type    master
+        cpu_id  0
+    }
+
+    <init> worker cpu1 {
+        type    slave
+        cpu_id  1
+        port    dpdk0 {
+            rx_queue_ids     0
+            tx_queue_ids     0
+            ! isol_rx_cpu_ids  9
+            ! isol_rxq_ring_sz 1048576
+        }
+    }
+    .......
+
+    <init> worker cpu10 {
+        type    sync-tx
+        cpu_id  10
+    }
+
+    <init> worker cpu11 {
+        type    sync-rx
+        cpu_id  11
+    }
+}
+
+session_sync {
+    sync_session_enable
+    sync_session_elapse   2  !secondes elapsed since the connection is established
+    sync_buff_delay       2
+    laddr_ifname    dpdk0
+    sync_id 8
+
+    socket {
+        mcast_addr  224.0.1.100
+        mcast_port  8088
+        mcast_ttl   20
+        mtu   1500
+        unicast_port 8089
+    }
+}
 ```
