@@ -142,6 +142,14 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
 
     assert(timer && delay && handler);
 
+    /* just for debug */
+    if (unlikely((uint64_t)handler > 0x7ffffffffULL))
+        RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p new handler possibly invalid: %p -> %p\n",
+                rte_lcore_id(), timer, timer->handler, handler);
+    if (unlikely(timer->handler && timer->handler != handler))
+        RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p handler possibly changed maliciously: %p ->%p\n",
+                rte_lcore_id(), timer, timer->handler, handler);
+
     if (timer_pending(timer))
         RTE_LOG(WARNING, DTIMER, "schedule a pending timer ?\n");
 
