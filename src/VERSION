@@ -1,12 +1,13 @@
 #!/bin/sh -
 # program: dpvs
-# Aug 28, 2019
-# Commit: f393fa75e62639c1591f7157588d14630a653069
-#         "ctrl: serveral improvements and bugfix in dpvs_msg"
+# Sep 6, 2019
+# Commit: 33602b88b7a9cf3d9a0235673d952582c7680eb5
+#         "timer: add debug log when scheduled"
 # Features: 
-#     bugfix in dpvs_msg and dpvs_timer
+#     1. fix template conn crash problem
+#     2. add debug log in timer
 
 export VERSION=1.7
-export RELEASE=6
+export RELEASE=7
 
 echo $VERSION-$RELEASE
