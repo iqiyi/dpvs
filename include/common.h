@@ -137,6 +137,9 @@ ssize_t writen(int fd, const void *vptr, size_t n);
 /* send "n" bytes to a descriptor */
 ssize_t sendn(int fd, const void *vptr, size_t n, int flags);
 
+/* get backtrace for the calling program */
+int dpvs_backtrace(char *buf, int len);
+
 static inline char *strupr(char *str) {
     char *s;
     for (s = str; *s != '\0'; s++)

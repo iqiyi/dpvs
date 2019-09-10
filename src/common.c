@@ -27,6 +27,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <net/ethernet.h>
+#include <execinfo.h>
 #include "common.h"
 
 struct dpvs_err_tab {
@@ -262,4 +263,32 @@ ssize_t sendn(int fd, const void *vptr, size_t n, int flags)
     }
 
     return (n);
+}
+
+/* get backtrace for the calling program */
+#define TRACE_STACK_DEPTH_MAX   128
+int dpvs_backtrace(char *buf, int len)
+{
+    int ii, depth, slen;
+    char **trace;
+    void *btbuf[TRACE_STACK_DEPTH_MAX] = { NULL };
+
+    if (len <= 0)
+        return 0;
+    buf[0] = '\0';
+
+    depth = backtrace(btbuf, TRACE_STACK_DEPTH_MAX);
+    trace = backtrace_symbols(btbuf, depth);
+    if (!trace)
+        return 0;
+
+    for (ii = 0; ii < depth; ++ii) {
+        slen = strlen(buf);
+        if (slen + 1 >= len)
+            break;
+        snprintf(buf+slen, len-slen-1, "[%02d] %s\n", ii, trace[ii]);
+    }
+    free(trace);
+
+    return strlen(buf);
 }
