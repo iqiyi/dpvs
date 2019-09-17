@@ -991,7 +991,7 @@ static inline int msg_init(void)
     int ii, jj;
     int ret;
     char ring_name[16];
-    char buf[4096];
+    char buf[8192];
 
     if (DPVS_MAX_LCORE > MSG_MAX_LCORE_SUPPORTED)
         return EDPVS_NOTSUPP;
