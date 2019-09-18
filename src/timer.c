@@ -37,6 +37,11 @@
 #define DTIMER
 #define RTE_LOGTYPE_DTIMER      RTE_LOGTYPE_USER1
 
+#ifdef CONFIG_TIMER_DEBUG
+#define TIMER_DUMMY_DATA0       0x3659AC
+#define TIMER_DUMMY_DATA1       0x93C5A6
+#endif
+
 /*
  * the use case of dpvs timer is huge number of connections has concentrated
  * timeouts like 120s/60s, while other timeout values are not that much.
@@ -140,15 +145,27 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
     uint32_t off, hash;
     int level;
 
-    assert(timer && delay && handler);
+    assert(timer);
 
+#ifdef CONFIG_TIMER_DEBUG
     /* just for debug */
-    if (unlikely((uint64_t)handler > 0x7ffffffffULL))
-        RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p new handler possibly invalid: %p -> %p\n",
-                rte_lcore_id(), timer, timer->handler, handler);
-    if (unlikely(timer->handler && timer->handler != handler))
-        RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p handler possibly changed maliciously: %p ->%p\n",
-                rte_lcore_id(), timer, timer->handler, handler);
+    if (unlikely((uint64_t)handler > 0x7ffffffffULL)) {
+        char trace[8192];
+        dpvs_backtrace(trace, sizeof(trace));
+        RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p new handler possibly invalid: %p -> %p\n%s",
+                rte_lcore_id(), timer, timer->handler, handler, trace);
+    }
+    if (unlikely(timer->handler && timer->handler != handler)) {
+        char trace[8192];
+        dpvs_backtrace(trace, sizeof(trace));
+        RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p handler possibly changed maliciously: %p ->%p\n%s",
+                rte_lcore_id(), timer, timer->handler, handler, trace);
+    }
+    timer->dummy.next = (void *)TIMER_DUMMY_DATA0;
+    timer->dummy.prev = (void *)TIMER_DUMMY_DATA1;
+#endif
+
+    assert(delay && handler);
 
     if (timer_pending(timer))
         RTE_LOG(WARNING, DTIMER, "schedule a pending timer ?\n");
@@ -178,11 +195,15 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
         if (off > 0) {
             hash = (sched->cursors[level] + off) % LEVEL_SIZE;
             list_add_tail(&timer->list, &sched->hashs[level][hash]);
+#ifdef CONFIG_TIMER_DEBUG
+            assert(timer->handler == handler);
+#endif
             return EDPVS_OK;
         }
     }
 
     /* not adopted by any wheel (never happend) */
+    RTE_LOG(WARNING, DTIMER, "unexpected error\n");
     return EDPVS_INVAL;
 }
 
@@ -211,6 +232,17 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
     priv    = timer->priv;
     if (timer_pending(timer))
         list_del(&timer->list);
+
+#ifdef CONFIG_TIMER_DEBUG
+    if (unlikely(timer->dummy.next != (void *)TIMER_DUMMY_DATA0 ||
+                timer->dummy.prev != (void *)TIMER_DUMMY_DATA1)) {
+        char trace[8192];
+        dpvs_backtrace(trace, sizeof(trace));
+        RTE_LOG(WARNING, DTIMER, "[%02d]: timer(%p) dummy info invalid -- dummy.next:%p,"
+                "dummy.prev:%p, handler:%p, priv:%p, trace:\n%s", rte_lcore_id(), timer,
+                timer->dummy.next, timer->dummy.prev, timer->handler, timer->priv, trace);
+    }
+#endif
 
     err = handler(priv);
 
@@ -246,7 +278,7 @@ static inline void deviation_measure(void)
 
 /*
  * it takes exactly one tick between invokations,
- * except system (including time handles) takes more then
+ * except system (including timer handles) takes more than
  * one tick to get rte_timer_manage() called.
  * we needn't calculate ticks elapsed by ourself.
  */
@@ -271,7 +303,7 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
         cursor = &sched->cursors[level];
         (*cursor)++;
 
-        if (*cursor < LEVEL_SIZE) {
+        if (likely(*cursor < LEVEL_SIZE)) {
             carry = false;
         } else {
             /* reset the cursor and handle next level later. */
