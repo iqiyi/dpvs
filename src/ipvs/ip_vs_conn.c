@@ -31,6 +31,7 @@
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
 #include "ipvs/proto_icmp.h"
+#include "ipvs/sync.h"
 #include "parser/parser.h"
 #include "ctrl.h"
 #include "conf/conn.h"
@@ -491,10 +492,17 @@ static int conn_expire(void *priv)
     /* refcnt == 1 means we are the only referer.
      * no one is using the conn and it's timed out. */
     if (rte_atomic32_read(&conn->refcnt) == 1) {
-        if (conn->flags & DPVS_CONN_F_TEMPLATE)
+        if (conn->flags & DPVS_CONN_F_TEMPLATE) {
             dpvs_timer_cancel(&conn->timer, true);
-        else
+#ifdef CONFIG_DPVS_SYNC
+            dpvs_timer_cancel(&conn->conn_sync_timer, true);
+#endif
+        } else {
             dpvs_timer_cancel(&conn->timer, false);
+#ifdef CONFIG_DPVS_SYNC
+            dpvs_timer_cancel(&conn->conn_sync_timer, false);
+#endif
+        }
 
         /* I was controlled by someone */
         if (conn->control)
@@ -537,21 +545,24 @@ static int conn_expire(void *priv)
         }
 
         conn_unbind_dest(conn);
-        dp_vs_laddr_unbind(conn);
 
-        /* free stored ack packet */
-        list_for_each_entry_safe(ack_mbuf, t_ack_mbuf, &conn->ack_mbuf, list) {
-            list_del_init(&ack_mbuf->list);
-            rte_pktmbuf_free(ack_mbuf->mbuf);
-            sp_dbg_stats32_dec(sp_ack_saved);
-            rte_mempool_put(this_ack_mbufpool, ack_mbuf);
-        }
-        conn->ack_num = 0;
+        if (!(conn->flags & DPVS_CONN_F_SYNCED)) {
+            dp_vs_laddr_unbind(conn);
 
-        /* free stored syn mbuf */
-        if (conn->syn_mbuf) {
-            rte_pktmbuf_free(conn->syn_mbuf);
-            sp_dbg_stats32_dec(sp_syn_saved);
+            /* free stored ack packet */
+            list_for_each_entry_safe(ack_mbuf, t_ack_mbuf, &conn->ack_mbuf, list) {
+                list_del_init(&ack_mbuf->list);
+                rte_pktmbuf_free(ack_mbuf->mbuf);
+                sp_dbg_stats32_dec(sp_ack_saved);
+                rte_mempool_put(this_ack_mbufpool, ack_mbuf);
+            }
+            conn->ack_num = 0;
+
+            /* free stored syn mbuf */
+            if (conn->syn_mbuf) {
+                rte_pktmbuf_free(conn->syn_mbuf);
+                sp_dbg_stats32_dec(sp_syn_saved);
+            }
         }
 
         rte_atomic32_dec(&conn->refcnt);
@@ -594,10 +605,17 @@ static void conn_flush(void)
         list_for_each_entry_safe(tuphash, next, &this_conn_tbl[i], list) {
             conn = tuplehash_to_conn(tuphash);
 
-            if (conn->flags & DPVS_CONN_F_TEMPLATE)
+            if (conn->flags & DPVS_CONN_F_TEMPLATE) {
                 dpvs_timer_cancel(&conn->timer, true);
-            else
+#ifdef CONFIG_DPVS_SYNC
+                dpvs_timer_cancel(&conn->conn_sync_timer, true);
+#endif
+            } else {
                 dpvs_timer_cancel(&conn->timer, false);
+#ifdef CONFIG_DPVS_SYNC
+                dpvs_timer_cancel(&conn->conn_sync_timer, false);
+#endif
+            }
 
             rte_atomic32_inc(&conn->refcnt);
             if (rte_atomic32_read(&conn->refcnt) != 2) {
@@ -657,6 +675,156 @@ static void conn_flush(void)
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_unlock(&this_conn_lock);
 #endif
+}
+
+struct dp_vs_conn * dp_vs_conn_copy_from_sync(void *param, struct dp_vs_dest *dest)
+{
+    struct dp_vs_conn *new;
+    struct conn_tuple_hash *t;
+    uint32_t err;
+    struct dp_vs_proto *pp;
+    struct netif_port *dev = NULL;
+    struct dp_vs_sync_conn *sync_conn = (struct dp_vs_sync_conn *)param;
+
+    if (unlikely(rte_mempool_get(this_conn_cache, (void **)&new) != 0)) {
+        RTE_LOG(WARNING, IPVS, "%s: no memory\n", __func__);
+        return NULL;
+    }
+    memset(new, 0, sizeof(struct dp_vs_conn));
+    new->connpool = this_conn_cache;
+
+    /* init inbound conn tuple hash */
+    t = &tuplehash_in(new);
+    t->direct   = DPVS_CONN_DIR_INBOUND;
+    t->af       = sync_conn->af;
+    t->proto    = sync_conn->proto;
+    t->saddr    = sync_conn->caddr;
+    t->sport    = sync_conn->cport;
+    t->daddr    = sync_conn->vaddr;
+    t->dport    = sync_conn->vport;
+    INIT_LIST_HEAD(&t->list);
+
+    /* init outbound conn tuple hash */
+    t = &tuplehash_out(new);
+    t->direct   = DPVS_CONN_DIR_OUTBOUND;
+    t->af       = sync_conn->af;
+    t->proto    = sync_conn->proto;
+    t->saddr    = sync_conn->daddr;
+    t->sport    = sync_conn->dport;
+    t->daddr    = sync_conn->laddr;
+    t->dport    = sync_conn->lport;
+    INIT_LIST_HEAD(&t->list);
+
+    /* init connection */
+    new->af     = sync_conn->af;
+    new->proto  = sync_conn->proto;
+    new->caddr  = sync_conn->caddr;
+    new->cport  = sync_conn->cport;
+    new->vaddr  = sync_conn->vaddr;
+    new->vport  = sync_conn->vport;
+    new->laddr  = sync_conn->laddr;
+    new->lport  = sync_conn->lport;
+    new->daddr  = sync_conn->daddr;
+    new->dport  = sync_conn->dport;
+
+    /* L2 fast xmit */
+    new->in_dev = NULL;
+    new->out_dev = NULL;
+
+    /* Controll member */
+    new->control = NULL;
+    rte_atomic32_clear(&new->n_control);
+
+    /* caller will use it right after created,
+     * just like dp_vs_conn_get(). */
+    rte_atomic32_set(&new->refcnt, 1);
+
+    rte_memcpy(&new->fnat_seq, &sync_conn->fnat_seq, sizeof(struct dp_vs_seq));
+    new->rs_end_seq = sync_conn->rs_end_seq;
+    new->rs_end_ack = sync_conn->rs_end_ack;
+
+    new->syncid = sync_conn->syncid;
+    new->flags  = sync_conn->flags | DPVS_CONN_F_SYNCED;
+    new->state  = sync_conn->state;
+    new->qid    = sync_conn->qid;
+    new->lcore = rte_lcore_id();
+
+    dev = netif_port_get_by_name(dp_vs_sync_laddr_ifname());
+    if (!dev) {
+        RTE_LOG(ERR, IPVS, "%s: dpdk device not found\n", __func__);
+        return EDPVS_OK;
+    }
+
+    sa_bind_conn(new->af, dev, new->lcore, &new->laddr, 0, new->qid);
+
+    /* bind destination and corresponding trasmitter */
+    err = conn_bind_dest(new, dest);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, IPVS, "%s: fail to bind dest: %s\n", __func__,
+            dpvs_strerror(err));
+        goto errout;
+    }
+
+    if ((err = dp_vs_conn_hash(new)) != EDPVS_OK)
+        goto errout;
+
+    /* timer */
+    pp = dp_vs_proto_lookup(sync_conn->proto);
+    if (pp && pp->timeout_table)
+        new->timeout.tv_sec = pp->timeout_table[sync_conn->state];
+    else
+        new->timeout.tv_sec = 60;
+
+    new->timeout.tv_usec = 0;
+
+    this_conn_count++;
+
+    /* schedule conn timer */
+    dpvs_time_rand_delay(&new->timeout, 1000000);
+    if (new->flags & DPVS_CONN_F_TEMPLATE) {
+        dpvs_timer_sched(&new->timer, &new->timeout, conn_expire, new, true);
+    } else {
+        dpvs_timer_sched(&new->timer, &new->timeout, conn_expire, new, false);
+    }
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    conn_dump("sync conn: ", new);
+#endif
+    return new;
+
+errout:
+    rte_mempool_put(this_conn_cache, new);
+    return NULL;
+}
+
+int dp_vs_conn_lcore_tx(lcoreid_t cid)
+{
+    int i = 0;
+    int cnt = 0;
+    struct conn_tuple_hash *tuphash;
+    struct dp_vs_conn *conn;
+
+    if (!DP_VS_SYNC_FULL_IS_START(cid)) {
+        return EDPVS_OK;
+    }
+
+    i = DP_VS_SYNC_FULL_GET_LAST_INDEX(cid);
+    for (; i < DPVS_CONN_TBL_SIZE && cnt <= DP_VS_SYNC_FULL_CNT_PER_TIME; i++, cnt++) {
+        list_for_each_entry(tuphash, &this_conn_tbl[i], list) {
+            if (tuphash->direct != DPVS_CONN_DIR_INBOUND)
+                continue;
+            conn = tuplehash_to_conn(tuphash);
+            if (DPVS_TCP_S_ESTABLISHED == conn->state)
+                dp_vs_sync_conn_enqueue(conn, DP_VS_SYNC_UNICAST);
+        }
+    }
+
+    DP_VS_SYNC_FULL_SET_LAST_INDEX(cid, i);
+
+    if (i >= DPVS_CONN_TBL_SIZE)
+        dp_vs_sync_full_end(cid);
+
+    return EDPVS_OK;
 }
 
 struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
@@ -762,6 +930,10 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     rte_atomic32_set(&new->refcnt, 1);
     new->flags  = flags;
     new->state  = 0;
+#ifdef CONFIG_DPVS_SYNC
+    new->lcore = rte_lcore_id();
+    new->qid = mbuf->hash.usr;
+#endif
 #ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
     new->ctime = rte_rdtsc();
 #endif
@@ -1182,6 +1354,9 @@ static inline void sockopt_fill_conn_entry(const struct dp_vs_conn *conn,
     entry->lport = conn->lport;
     entry->dport = conn->dport;
     entry->timeout = conn->timeout.tv_sec;
+    if (conn->flags & DPVS_CONN_F_SYNCED) {
+        entry->syncid = conn->syncid;
+    }
 }
 
 static int sockopt_conn_get_specified(const struct ip_vs_conn_req *conn_req,

@@ -144,7 +144,8 @@
 #define CMD_ADDBLKLST		(CMD_NONE+18)
 #define CMD_DELBLKLST		(CMD_NONE+19)
 #define CMD_GETBLKLST		(CMD_NONE+20)
-#define CMD_MAX			CMD_GETBLKLST
+#define CMD_CONN_SYNC       (CMD_NONE+21)
+#define CMD_MAX             CMD_CONN_SYNC
 #define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
 
 static const char* cmdnames[] = {
@@ -284,6 +285,7 @@ enum {
 	TAG_SORT,
 	TAG_NO_SORT,
 	TAG_PERSISTENCE_ENGINE,
+	TAG_CONN_SYNC,
 	TAG_SOCKPAIR,
 };
 
@@ -392,6 +394,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		  TAG_START_DAEMON, NULL, NULL },
 		{ "stop-daemon", '\0', POPT_ARG_STRING, &optarg,
 		  TAG_STOP_DAEMON, NULL, NULL },
+		{ "conn-sync", '\0', POPT_ARG_NONE, &optarg,
+		  TAG_CONN_SYNC, NULL, NULL },
 		{ "add-laddr", 'P', POPT_ARG_NONE, NULL, 'P', NULL, NULL },
 		{ "del-laddr", 'Q', POPT_ARG_NONE, NULL, 'Q', NULL, NULL },
 		{ "get-laddr", 'G', POPT_ARG_NONE, NULL, 'G', NULL, NULL },
@@ -485,6 +489,9 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 	case 'C':
 		set_command(&ce->cmd, CMD_FLUSH);
 		break;
+    case TAG_CONN_SYNC:
+        set_command(&ce->cmd, CMD_CONN_SYNC);
+        break;
 	case 'L':
 	case 'l':
 		set_command(&ce->cmd, CMD_LIST);
@@ -946,6 +953,10 @@ static int process_options(int argc, char **argv, int reading_stdin)
 	case CMD_FLUSH:
 		result = ipvs_flush();
 		break;
+
+    case CMD_CONN_SYNC:
+        result = ipvs_conn_sync();
+        break;
 
 	case CMD_ADD:
 		result = ipvs_add_service(&ce.svc);
@@ -1562,9 +1573,15 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
                     ntohs(conn_entry->dport), conn_entry->proto, format)))
 		goto exit;
 
-	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
-			conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
-			cname, vname, lname, dname);
+    if (conn_entry->syncid) {
+        printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %-18s syncid:%d\n",
+                conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
+                cname, vname, lname, dname, conn_entry->syncid);
+    } else {
+    	printf("[%d]%-3s %-6s %-11s %-18s %-18s %-18s %s\n",
+    			conn_entry->lcoreid, proto_str, time_str, conn_entry->state,
+    			cname, vname, lname, dname);
+    }    
 exit:
 	if (cname)
 		free(cname);

@@ -62,6 +62,7 @@ struct ip_vs_conn_entry {
     uint16_t            in_af;
     uint16_t            out_af;
     uint16_t            proto;
+    uint16_t            syncid;
     union inet_addr     caddr;
     union inet_addr     vaddr;
     union inet_addr     laddr;

@@ -37,6 +37,7 @@
 #include <netinet/tcp.h>
 #include <openssl/sha.h>
 #include "ipvs/redirect.h"
+#include "ipvs/sync.h"
 
 static int g_defence_tcp_drop = 0;
 
@@ -923,6 +924,9 @@ tcp_state_out:
         }
     }
 
+#ifdef CONFIG_DPVS_SYNC
+    dp_vs_sync_conn_handler(conn, new_state);
+#endif
     return EDPVS_OK;
 }
 

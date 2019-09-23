@@ -366,5 +366,6 @@ static inline char *eth_addr_dump(const struct ether_addr *ea,
 portid_t netif_port_count(void);
 void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
                            lcoreid_t cid, uint16_t count, bool pkts_from_ring);
+lcoreid_t get_lcoreid(queueid_t qid);
 
 #endif /* __DPVS_NETIF_H__ */

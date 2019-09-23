@@ -37,11 +37,13 @@
 #include "timer.h"
 #include "parser/parser.h"
 #include "neigh.h"
+#include "sa_pool.h"
 
 #include <rte_arp.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ipvs/redirect.h>
+#include "ipvs/sync.h"
 
 #define NETIF_PKTPOOL_NB_MBUF_DEF   65535
 #define NETIF_PKTPOOL_NB_MBUF_MIN   1023
@@ -138,6 +140,8 @@ static struct list_head worker_list;    /* lcore configurations from cfgfile */
 #define NETIF_PORT_TABLE_MASK (NETIF_PORT_TABLE_BUCKETS - 1)
 static struct list_head port_tab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by id */
 static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name */
+uint32_t lcore_ids[RTE_MAX_LCORE];
+
 /* Note: Lockless, NIC can only be registered on initialization stage and
  *       unregistered on cleanup stage
  */
@@ -650,7 +654,8 @@ static void worker_type_handler(vector_t tokens)
             struct worker_conf_stream, worker_list_node);
 
     assert(str);
-    if (!strcmp(str, "master") || !strcmp(str, "slave")) {
+    if (!strcmp(str, "master") || !strcmp(str, "slave")
+        || !strcmp(str, "sync-rx") || !strcmp(str, "sync-tx")) {
         RTE_LOG(INFO, NETIF, "%s:type = %s\n", current_worker->name, str);
         strncpy(current_worker->type, str, sizeof(current_worker->type));
     } else {
@@ -678,6 +683,12 @@ static void cpu_id_handler(vector_t tokens)
         cpu_id = atoi(str);
         RTE_LOG(INFO, NETIF, "%s:cpu_id = %d\n", current_worker->name, cpu_id);
         current_worker->cpu_id = cpu_id;
+
+        if (!strcmp(current_worker->type, "sync-rx"))
+            dp_vs_sync_set_rx_core(cpu_id);
+
+        if (!strcmp(current_worker->type, "sync-tx"))
+            dp_vs_sync_set_tx_core(cpu_id);
     }
 
     FREE_PTR(str);
@@ -1149,20 +1160,28 @@ static void isol_rxq_del(struct rx_partner *isol_rxq, bool force);
 static void config_lcores(struct list_head *worker_list)
 {
     int ii, tk;
-    int cpu_id_min, cpu_left;
+    int cpu_id_min, cpu_left, cpu_cnt;
     lcoreid_t id = 0;
     portid_t pid;
     struct netif_port *port;
     struct queue_conf_stream *queue;
-    struct worker_conf_stream *worker, *worker_min;
+    struct worker_conf_stream *worker, *worker_next, *worker_min;
 
-    cpu_left = list_elems(worker_list);
-    list_for_each_entry(worker, worker_list, worker_list_node) {
+    /**
+    * move non-slave workers to tail of worker_list.
+    * cpu_cnt: number of wokers
+    * cpu_left: number of slave workers
+    * */
+    cpu_cnt = cpu_left = list_elems(worker_list);
+    list_for_each_entry_safe(worker, worker_next, worker_list, worker_list_node) {
         if (strcmp(worker->type, "slave")) {
             list_move_tail(&worker->worker_list_node, worker_list);
             cpu_left--;
         }
+        if (--cpu_cnt <= 0)
+            break;
     }
+
     while (cpu_left > 0) {
         cpu_id_min = DPVS_MAX_LCORE;
         worker_min = NULL;
@@ -1289,6 +1308,7 @@ void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask)
     while (lcore_conf[i].nports > 0) {
         slave_lcore_nb++;
         slave_lcore_mask |= (1L << lcore_conf[i].id);
+        lcore_ids[i] = lcore_conf[i].id;
         i++;
     }
 
@@ -1632,6 +1652,21 @@ struct port_queue_lcore_map {
 portid_t netif_max_pid;
 queueid_t netif_max_qid;
 struct port_queue_lcore_map pql_map[NETIF_MAX_PORTS];
+
+lcoreid_t get_lcoreid(queueid_t qid)
+{
+    struct netif_port *dev = NULL;
+    char* ifname = NULL;
+
+    ifname = dp_vs_sync_laddr_ifname();
+    dev = netif_port_get_by_name(ifname);
+    if (!dev) {
+        RTE_LOG(WARNING, IPVS, "%s: dpdk device not found\n", __func__);
+        return 16;
+    }
+
+    return pql_map[dev->id].rx_qid[qid];
+}
 
 static int build_port_queue_lcore_map(void)
 {
@@ -2309,6 +2344,9 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
     /* L2 filter */
     for (i = 0; i < count; i++) {
         struct rte_mbuf *mbuf = mbufs[i];
+#ifdef CONFIG_DPVS_SYNC         
+        mbuf->hash.usr = qconf->id; /* use in session synchronization*/
+#endif
         struct netif_port *dev = netif_port_get(mbuf->port);
 
         if (unlikely(!dev)) {
@@ -2412,6 +2450,11 @@ static void lcore_job_recv_fwd(void *arg)
 
     cid = rte_lcore_id();
     assert(LCORE_ID_ANY != cid);
+
+#ifdef CONFIG_DPVS_SYNC
+    dp_vs_sync_lcore_process_rx_msg(cid);
+    dp_vs_conn_lcore_tx(cid);
+#endif
 
     for (i = 0; i < lcore_conf[lcore2index[cid]].nports; i++) {
         pid = lcore_conf[lcore2index[cid]].pqs[i].id;
@@ -3476,7 +3519,8 @@ int netif_port_start(struct netif_port *port)
     }
 
     // device configure
-    if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
+    if (SA_POOL_MODE == LPORT_LCORE_MAPPING_POOL_MODE &&
+        (ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
     ret = rte_eth_dev_configure(port->id, port->nrxq, port->ntxq, &port->dev_conf);
     if (ret < 0 ) {
@@ -3768,9 +3812,10 @@ static struct rte_eth_conf default_port_conf = {
                 .dst_ip         = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF },
             },
             .src_port_mask      = 0x0000,
+            .dst_port_mask      = 0x0000,
 
             /* to be changed according to slave lcore number in use */
-            .dst_port_mask      = 0x00F8,
+           // .dst_port_mask      = 0x00F8,
 
             .mac_addr_byte_mask = 0x00,
             .tunnel_type_mask   = 0,
@@ -4008,6 +4053,9 @@ static int netif_loop(void *dummy)
 
     assert(LCORE_ID_ANY != cid);
 
+#ifdef CONFIG_DPVS_SYNC
+    dp_vs_sync_run_loop(cid);
+#endif
     try_isol_rxq_lcore_loop();
     if (0 == lcore_conf[lcore2index[cid]].nports) {
         RTE_LOG(INFO, NETIF, "[%s] Lcore %d has nothing to do.\n", __func__, cid);

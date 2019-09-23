@@ -42,11 +42,19 @@
 #ifndef __DPVS_SA_POOL__
 #define __DPVS_SA_POOL__
 
+enum {
+    LADDR_LCORE_MAPPING_POOL_MODE,
+    LPORT_LCORE_MAPPING_POOL_MODE,
+};
+
 struct sa_pool_stats {
     uint32_t used_cnt;
     uint32_t free_cnt;
     uint32_t miss_cnt;
 };
+
+extern uint8_t sa_pool_mode;
+#define SA_POOL_MODE sa_pool_mode
 
 int sa_pool_init(void);
 int sa_pool_term(void);
@@ -68,6 +76,10 @@ int sa_release(const struct netif_port *dev,
                const struct sockaddr_storage *saddr);
 
 int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats);
+
+int sa_bind_conn(int af, struct netif_port *dev, lcoreid_t cid,
+                                const union inet_addr *dip,
+                                __be16 dport, queueid_t queue);
 
 /* config file */
 void install_sa_pool_keywords(void);

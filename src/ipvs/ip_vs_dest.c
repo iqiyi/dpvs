@@ -47,6 +47,22 @@ struct dp_vs_dest *dp_vs_lookup_dest(int af,
     return NULL;
 }
 
+struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
+                                   uint16_t dport, const union inet_addr *vaddr,
+                                   uint16_t vport, uint16_t protocol)
+{
+    struct dp_vs_dest *dest;
+    struct dp_vs_service *svc;
+    svc = dp_vs_service_lookup(af, protocol, vaddr, vport, 0, NULL, NULL, NULL);
+    if(!svc)
+        return NULL;
+    dest = dp_vs_lookup_dest(af, svc, daddr, dport);
+    if(dest)
+        rte_atomic32_inc(&dest->refcnt);
+    dp_vs_service_put(svc);
+    return dest;
+}
+
 /*
  *  Lookup dest by {svc,addr,port} in the destination trash.
  *  The destination trash is used to hold the destinations that are removed

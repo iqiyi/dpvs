@@ -25,6 +25,7 @@
 #include "ipvs/sched.h"
 #include "ipvs/laddr.h"
 #include "ipvs/blklst.h"
+#include "ipvs/sync.h"
 #include "ctrl.h"
 #include "route.h"
 #include "route6.h"
@@ -471,6 +472,7 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
 {
     int ret = 0;
     int size;
+    int cid = 0;
     struct dp_vs_scheduler *sched = NULL;
     struct dp_vs_service *svc = NULL;
 
@@ -522,6 +524,11 @@ int dp_vs_add_service(struct dp_vs_service_conf *u,
     svc->num_laddrs = 0;
     svc->laddr_curr = &svc->laddr_list;
 
+    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+        INIT_LIST_HEAD(&svc->pre_list[cid].laddr_list);
+        svc->pre_list[cid].laddr_curr = &svc->pre_list[cid].laddr_list;
+        svc->pre_list[cid].num_laddrs = 0;
+    }
     INIT_LIST_HEAD(&svc->dests);
     rte_rwlock_init(&svc->sched_lock);
 
@@ -943,6 +950,11 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     }
     if (opt == DPVS_SO_SET_FLUSH)
         return dp_vs_flush();
+
+#ifdef CONFIG_DPVS_SYNC
+    if (opt == DPVS_SO_SET_CONN_SYNC)
+        return dp_vs_sync_conn_start();
+#endif
 
     memcpy(arg, user, len);
     usvc_compat = (struct dp_vs_service_user *)arg;

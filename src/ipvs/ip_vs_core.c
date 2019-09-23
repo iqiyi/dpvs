@@ -35,6 +35,7 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/blklst.h"
 #include "ipvs/proto_udp.h"
+#include "ipvs/sync.h"
 #include "route6.h"
 #include "ipvs/redirect.h"
 
@@ -1198,15 +1199,23 @@ int dp_vs_init(void)
         goto err_stats;
     }
 
+    err = dp_vs_sync_init();
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPVS, "fail to init stats: %s\n", dpvs_strerror(err));
+        goto err_hooks;
+    }
+
     err = inet_register_hooks(dp_vs_ops, NELEMS(dp_vs_ops));
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to register hooks: %s\n", dpvs_strerror(err));
-        goto err_hooks;
+        goto err_sync;
     }
 
     RTE_LOG(DEBUG, IPVS, "ipvs inialized.\n");
     return EDPVS_OK;
 
+err_sync:
+    dp_vs_sync_term();
 err_hooks:
     dp_vs_stats_term();
 err_stats:

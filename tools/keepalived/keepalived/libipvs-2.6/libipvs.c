@@ -159,6 +159,10 @@ int ipvs_flush(void)
 	return dpvs_setsockopt(DPVS_SO_SET_FLUSH, NULL, 0);
 }
 
+int ipvs_conn_sync(void)
+{
+	return dpvs_setsockopt(DPVS_SO_SET_CONN_SYNC, NULL, 0);
+}
 
 int ipvs_add_service(ipvs_service_t *svc)
 {

@@ -92,6 +92,7 @@ extern unsigned int ipvs_version(void);
 /* flush all the rules */
 extern int ipvs_flush(void);
 
+extern int ipvs_conn_sync(void);
 /* add a virtual service */
 extern int ipvs_add_service(ipvs_service_t *svc);
 

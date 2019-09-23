@@ -44,6 +44,12 @@
 
 rte_rwlock_t __dp_vs_svc_lock;
 
+struct laddr_list_pre_lcore {
+    struct list_head    laddr_list; /* local address (LIP) pool */
+    struct list_head    *laddr_curr;
+    uint32_t            num_laddrs;
+};
+
 /* virtual service */
 struct dp_vs_service {
     struct list_head    s_list;     /* node for normal service table */
@@ -87,6 +93,9 @@ struct dp_vs_service {
     struct list_head    *laddr_curr;
     rte_rwlock_t        laddr_lock;
     uint32_t            num_laddrs;
+
+    struct laddr_list_pre_lcore pre_list[RTE_MAX_LCORE];
+#define this_pre_list pre_list[rte_lcore_id()]
 
     /* ... flags, timer ... */
 } __rte_cache_aligned;
@@ -232,6 +241,7 @@ enum{
     DPVS_SO_SET_EDITDEST,
     DPVS_SO_SET_DELDEST,
     DPVS_SO_SET_GRATARP,
+    DPVS_SO_SET_CONN_SYNC,
 };
 
 enum{
@@ -244,7 +254,7 @@ enum{
 
 
 #define SOCKOPT_SVC_BASE         DPVS_SO_SET_FLUSH
-#define SOCKOPT_SVC_SET_CMD_MAX  DPVS_SO_SET_GRATARP
+#define SOCKOPT_SVC_SET_CMD_MAX  DPVS_SO_SET_CONN_SYNC
 #define SOCKOPT_SVC_GET_CMD_MAX  DPVS_SO_GET_DESTS
 
 #define MAX_ARG_LEN    (sizeof(struct dp_vs_service_user) +    \
