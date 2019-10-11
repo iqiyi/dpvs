@@ -84,8 +84,8 @@ static struct dp_vs_stats* alloc_percpu_stats(void)
     struct dp_vs_stats* svc_stats;
 
     netif_get_slave_lcores(&nlcore, &lcore_mask);
-    svc_stats = rte_malloc_socket(NULL, sizeof(struct dp_vs_stats) * DPVS_MAX_LCORE,
-                                   RTE_CACHE_LINE_SIZE, rte_socket_id());
+    svc_stats = rte_zmalloc(NULL, sizeof(struct dp_vs_stats) * DPVS_MAX_LCORE,
+            RTE_CACHE_LINE_SIZE);
     if (!svc_stats)
         return NULL;
 
