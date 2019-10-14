@@ -161,7 +161,6 @@ static inline char *eth_addr_itoa(const struct ether_addr *src, char *dst, size_
     return dst;
 }
 
-
 #ifdef CONFIG_DPVS_NEIGH_DEBUG
 static void dump_arp_hdr(const char *msg, const struct arp_hdr *ah, portid_t port)
 {
@@ -183,11 +182,6 @@ static void dump_arp_hdr(const char *msg, const struct arp_hdr *ah, portid_t por
         fprintf(stderr, " sha %s sip %s tha %s tip %s", sha, sip, tha, tip);
     }
     fprintf(stderr, "\n");
-}
-
-#else
-static inline void dump_arp_hdr(const char *msg, const struct arp_hdr *ah, portid_t port)
-{
 }
 #endif
 
@@ -545,7 +539,10 @@ static int neigh_send_arp(struct netif_port *port, uint32_t src_ip, uint32_t dst
 
     memset(&arp[1], 0, 18);
 
+#ifdef CONFIG_DPVS_NEIGH_DEBUG
     dump_arp_hdr("send", arp, port->id);
+#endif
+
     netif_xmit(m, port);
     return EDPVS_OK;
 }
@@ -563,6 +560,22 @@ static inline void neigh_show_nexthop(const char *func, int af,
             nexhop ? inet_ntop(af, nexhop, buf, sizeof(buf)) : "::");
 }
 #endif
+
+static inline void neigh_show_entry(const char *func,
+                                    struct neighbour_entry *neigh)
+{
+    char ipaddr[64];
+
+    RTE_LOG(ERR, NEIGHBOUR,
+            "%s: [%d] ip %s, state %s, %d (> %d) packets "
+            "queued on %s so drop the packet",
+            func, rte_lcore_id(),
+            inet_ntop(neigh->af, &neigh->ip_addr, ipaddr, sizeof(ipaddr))
+            ? ipaddr : "::",
+            nud_state_names[neigh->state],
+            neigh->que_num, arp_unres_qlen,
+            neigh->port ? neigh->port->name : "null i/f");
+}
 
 int neigh_output(int af, union inet_addr *nexhop,
                  struct rte_mbuf *m, struct netif_port *port)
@@ -590,13 +603,13 @@ int neigh_output(int af, union inet_addr *nexhop,
         if ((neighbour->state == DPVS_NUD_S_NONE) ||
            (neighbour->state == DPVS_NUD_S_SEND)) {
             if (neighbour->que_num > arp_unres_qlen) {
+                neigh_show_entry(__func__, neighbour);
                 /*
                  * don't need arp request now,
                  * since neighbour will not be confirmed
                  * and it will be released late
                  */
                 rte_pktmbuf_free(m);
-                RTE_LOG(ERR, NEIGHBOUR, "[%s] neigh_unres_queue is full, drop packet\n", __func__);
                 return EDPVS_DROP;
             }
             m_buf = rte_zmalloc("neigh_new_mbuf",
@@ -639,10 +652,7 @@ int neigh_output(int af, union inet_addr *nexhop,
             rte_pktmbuf_free(m);
             return EDPVS_NOMEM;
         }
-        if(neighbour->que_num > arp_unres_qlen){
-            rte_pktmbuf_free(m);
-            return EDPVS_DROP;
-        }
+
         m_buf = rte_zmalloc("neigh_new_mbuf",
                            sizeof(struct neighbour_mbuf_entry), RTE_CACHE_LINE_SIZE);
         if(!m_buf){
