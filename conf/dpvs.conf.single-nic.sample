@@ -177,7 +177,6 @@ ipv6_defs {
 ctrl_defs {
     lcore_msg {
         <init> ring_size                4096
-        <init> multicast_queue_length   256
         sync_msg_timeout_us             20000
         priority_level                  low
     }

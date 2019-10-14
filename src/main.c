@@ -145,8 +145,10 @@ int main(int argc, char *argv[])
     struct timeval tv;
     char pql_conf_buf[LCORE_CONF_BUFFER_LEN];
     int pql_conf_buf_len = LCORE_CONF_BUFFER_LEN;
-    uint32_t loop_cnt = 0;
-    int timer_sched_loop_interval;
+
+    int timer_sched_interval_us;
+    uint64_t cycles_per_sec;
+    uint64_t now_cycles, prev_cycles;
 
     /**
      * add application agruments parse before EAL ones.
@@ -268,8 +270,10 @@ int main(int argc, char *argv[])
     if (!pidfile_write(DPVS_PIDFILE, getpid()))
         goto end;
 
-    timer_sched_loop_interval = dpvs_timer_sched_interval_get();
-    assert(timer_sched_loop_interval > 0);
+    timer_sched_interval_us = dpvs_timer_sched_interval_get();
+    cycles_per_sec = rte_get_timer_hz();
+    prev_cycles = 0;
+    assert(timer_sched_interval_us > 0);
 
     dpvs_state_set(DPVS_STATE_NORMAL);
 
@@ -281,11 +285,12 @@ int main(int argc, char *argv[])
         sockopt_ctl(NULL);
         /* msg loop */
         msg_master_process(0);
-
         /* timer */
-        loop_cnt++;
-        if (loop_cnt % timer_sched_loop_interval == 0)
+        now_cycles = rte_get_timer_cycles();
+        if ((now_cycles - prev_cycles) * 1000000 / cycles_per_sec > timer_sched_interval_us) {
             rte_timer_manage();
+            prev_cycles = now_cycles;
+        }
         /* kni */
         kni_process_on_master();
 

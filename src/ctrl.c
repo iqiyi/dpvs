@@ -43,9 +43,9 @@ static int g_msg_timeout = MSG_TIMEOUT_US;
 
 static uint8_t g_msg_prio = MSG_PRIO_LOW;
 
-#define DPVS_MSG_BITS 8
-#define DPVS_MSG_LEN (1 << DPVS_MSG_BITS)
-#define DPVS_MSG_MASK (DPVS_MSG_LEN - 1)
+#define DPVS_MT_BITS 8
+#define DPVS_MT_LEN (1 << DPVS_MT_BITS)
+#define DPVS_MT_MASK (DPVS_MT_LEN - 1)
 
 #define DPVS_MSG_RING_SIZE_DEF 4096
 #define DPVS_MSG_RING_SIZE_MIN 256
@@ -53,25 +53,18 @@ static uint8_t g_msg_prio = MSG_PRIO_LOW;
 
 static uint32_t msg_ring_size = DPVS_MSG_RING_SIZE_DEF;
 
-/* maximum msg to send at a time */
-#define DPVS_MULTICAST_LIST_LEN_DEF  256
-#define DPVS_MSG_MC_QLEN_MIN 16
-#define DPVS_MSG_MC_QLEN_MAX 32768
-static uint32_t msg_mc_qlen = DPVS_MULTICAST_LIST_LEN_DEF;
-
 /* per-lcore msg-type array */
-typedef struct list_head msg_type_array_t[DPVS_MSG_LEN];
-typedef rte_rwlock_t msg_type_lock_t[DPVS_MSG_LEN];
+typedef struct list_head msg_type_array_t[DPVS_MT_LEN];
+typedef rte_rwlock_t msg_type_lock_t[DPVS_MT_LEN];
 
 msg_type_array_t mt_array[DPVS_MAX_LCORE];
 msg_type_lock_t mt_lock[DPVS_MAX_LCORE];
 
-/* multicast_queue list (Master lcore only) */
-struct multicast_wait_list {
-    int32_t free_cnt;
-    struct list_head list;
-};
-struct multicast_wait_list mc_wait_list;
+/* multicast msg hlist, to collect reply msg from slaves (used on master lcore only) */
+#define DPVS_MC_HLIST_BITS 8
+#define DPVS_MC_HLIST_LEN (1 << DPVS_MC_HLIST_BITS)
+#define DPVS_MC_HLIST_MASK (DPVS_MC_HLIST_LEN - 1)
+struct list_head mc_wait_hlist[DPVS_MC_HLIST_LEN];
 
 /* per-lcore msg queue */
 struct rte_ring *msg_ring[DPVS_MAX_LCORE];
@@ -109,7 +102,7 @@ inline static void msg_debug_dump(void)
     if (likely(allc % 100000))
         return;
 
-    RTE_LOG(DEBUG, MSGMGR, "%s: allocated=%ld, freed=%ld, processing=%d\n",
+    RTE_LOG(INFO, MSGMGR, "%s: allocated=%ld, freed=%ld, processing=%d\n",
             __func__, allc, rte_atomic64_read(&n_msg_free),
             rte_atomic32_read(&n_msg_using));
 }
@@ -131,9 +124,48 @@ inline static void msg_debug_dump(void) {}
 inline static int msg_memory_stats(char *buf, int len) { return 0; }
 #endif
 
+static inline int mc_queue_hashkey(msgid_t type, uint32_t seq)
+{
+    return (((uint32_t)type) ^ seq) & DPVS_MC_HLIST_MASK;
+}
+
+/* only be called on master lcore, thus no lock needed */
+static inline void mc_queue_hash(struct dpvs_multicast_queue *mcq)
+{
+    int hashkey;
+
+    if (unlikely(!mcq))
+        return;
+    hashkey = mc_queue_hashkey(mcq->type, mcq->seq);
+    list_add_tail(&mcq->list, &mc_wait_hlist[hashkey]);
+}
+
+static inline void mc_queue_unhash(struct dpvs_multicast_queue *mcq)
+{
+    if (unlikely(!mcq))
+        return;
+    list_del_init(&mcq->list);
+}
+
+static inline struct dpvs_multicast_queue* mc_queue_get(msgid_t type, uint32_t seq)
+{
+    int hashkey;
+    struct dpvs_multicast_queue *mcq;
+
+    assert(rte_lcore_id() == master_lcore);
+
+    hashkey = mc_queue_hashkey(type, seq);
+    list_for_each_entry(mcq, &mc_wait_hlist[hashkey], list) {
+        if (mcq->type == type && mcq->seq == seq) {
+            return mcq;
+        }
+    }
+    return NULL;
+}
+
 static inline int mt_hashkey(msgid_t type)
 {
-    return type & DPVS_MSG_MASK;
+    return type & DPVS_MT_MASK;
 }
 
 static struct dpvs_msg_type* msg_type_get(msgid_t type, lcoreid_t cid)
@@ -164,20 +196,6 @@ static inline void msg_type_put(struct dpvs_msg_type *mt)
     rte_atomic32_dec(&mt->refcnt);
 }
 
-/* only be called on Master, thus no lock needed */
-static inline struct dpvs_multicast_queue* mc_queue_get(msgid_t type, uint32_t seq)
-{
-    assert(rte_lcore_id() == master_lcore);
-
-    struct dpvs_multicast_queue *mcq;
-    list_for_each_entry(mcq, &mc_wait_list.list, list) {
-        if (mcq->type == type && mcq->seq == seq) {
-            return mcq;
-        }
-    }
-    return NULL;
-}
-
 int msg_type_register(const struct dpvs_msg_type *msg_type)
 {
     int hashkey;
@@ -194,7 +212,6 @@ int msg_type_register(const struct dpvs_msg_type *msg_type)
         RTE_LOG(WARNING, MSGMGR, "%s: msg type %d mode %s already registered\n",
                 __func__, mt->type, mt->mode == DPVS_MSG_UNICAST ? "UNICAST" : "MULTICAST");
         msg_type_put(mt);
-        rte_exit(EXIT_FAILURE, "Lcore msg type %d has already exist!\n", mt->type);
         return EDPVS_EXIST;
     }
 
@@ -263,7 +280,7 @@ int msg_type_mc_register(const struct dpvs_msg_type *msg_type)
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (cid == master_lcore) {
             mt.cid = cid;
-            mt.prio = MSG_PRIO_IGN; /* multi reply msg should always be sent */
+            mt.prio = msg_type->prio;
             mt.unicast_msg_cb = NULL;
             if (msg_type->multicast_msg_cb)
                 mt.multicast_msg_cb = msg_type->multicast_msg_cb;
@@ -271,7 +288,7 @@ int msg_type_mc_register(const struct dpvs_msg_type *msg_type)
                 mt.multicast_msg_cb = default_mc_msg_cb;
         } else if (slave_lcore_mask & (1L << cid)) {
             mt.cid = cid;
-            mt.prio = msg_type->prio;
+            mt.prio = MSG_PRIO_IGN; /* multi reply msg should always be sent */
             mt.unicast_msg_cb = msg_type->unicast_msg_cb;
             mt.multicast_msg_cb = NULL;
         } else
@@ -297,18 +314,20 @@ int msg_type_mc_unregister(const struct dpvs_msg_type *msg_type)
 
     memset(&mt, 0, sizeof(mt));
     mt.type = msg_type->type;
+    mt.mode = DPVS_MSG_MULTICAST;
 
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (cid == master_lcore) {
             mt.cid = cid;
-            mt.prio = MSG_PRIO_IGN;
-            mt.mode = DPVS_MSG_MULTICAST;
+            mt.prio = msg_type->prio;
             mt.unicast_msg_cb = NULL;
-            mt.multicast_msg_cb = msg_type->multicast_msg_cb;
+            if (msg_type->multicast_msg_cb)
+                mt.multicast_msg_cb = msg_type->multicast_msg_cb;
+            else
+                mt.multicast_msg_cb = default_mc_msg_cb;
         } else if (slave_lcore_mask & (1L << cid)) {
             mt.cid = cid;
-            mt.prio = msg_type->prio;
-            mt.mode = DPVS_MSG_UNICAST;
+            mt.prio = MSG_PRIO_IGN;
             mt.unicast_msg_cb = msg_type->unicast_msg_cb;
             mt.multicast_msg_cb = NULL;
         } else
@@ -325,7 +344,7 @@ int msg_type_mc_unregister(const struct dpvs_msg_type *msg_type)
     return EDPVS_OK;
 }
 
-void *msg_reply_alloc(int size)
+void* msg_reply_alloc(int size)
 {
     return dpvs_mempool_get(msg_pool, size);
 }
@@ -394,6 +413,7 @@ int msg_destroy(struct dpvs_msg **pmsg)
     if (msg->mode == DPVS_MSG_MULTICAST) {
         struct dpvs_msg *cur, *next;
         struct dpvs_multicast_queue *mcq;
+        assert(rte_lcore_id() == master_lcore);
         mcq = mc_queue_get(msg->type, msg->seq);
         if (likely(mcq != NULL)) {
             list_for_each_entry_safe(cur, next, &mcq->mq, mq_node) {
@@ -401,9 +421,8 @@ int msg_destroy(struct dpvs_msg **pmsg)
                 add_msg_flags(cur, DPVS_MSG_F_STATE_FIN); /* in case slaves reply with blockable msg */
                 msg_destroy(&cur);
             }
-            list_del_init(&mcq->list);
-            mc_wait_list.free_cnt++;
-            rte_free(mcq);
+            mc_queue_unhash(mcq);
+            dpvs_mempool_put(msg_pool, mcq);
         } else {
             RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, deleting multicast msg not found in queue:"
                     "type=%d, seq=%d\n", __func__, msg, msg->type, msg->seq);
@@ -481,8 +500,8 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
     /* blockable msg, wait here until done or timeout */
     add_msg_flags(msg, DPVS_MSG_F_STATE_SEND);
     start = rte_get_timer_cycles();
+    delay = (uint64_t)g_msg_timeout * rte_get_timer_hz() / 1000000;
     while(!(test_msg_flags(msg, (DPVS_MSG_F_STATE_FIN | DPVS_MSG_F_STATE_DROP)))) {
-        delay = (uint64_t)g_msg_timeout * rte_get_timer_hz() / 1E6;
         if (start + delay < rte_get_timer_cycles()) {
             RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, uc_msg(type:%d, cid:%d->%d, flags=%d) timeout"
                     "(%d us), drop...\n", __func__, msg, msg->type, msg->cid, cid,
@@ -513,7 +532,7 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
 int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multicast_queue **reply)
 {
     struct dpvs_msg *new_msg;
-    struct dpvs_multicast_queue *mc_msg;
+    struct dpvs_multicast_queue *mcq;
     uint32_t tflags;
     uint64_t start, delay;
     int ii, ret;
@@ -539,54 +558,48 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     }
 
     /* send unicast msgs from master to all alive slaves */
-    rte_atomic16_inc(&msg->refcnt); /* refcnt increase by 1 for itself */
+    rte_atomic16_inc(&msg->refcnt);
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         if (slave_lcore_mask & (1UL << ii)) {
             new_msg = msg_make(msg->type, msg->seq, DPVS_MSG_UNICAST, msg->cid, msg->len, msg->data);
             if (unlikely(!new_msg)) {
                 RTE_LOG(ERR, MSGMGR, "%s:msg@%p, msg make fail\n", __func__, msg);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                rte_atomic16_dec(&msg->refcnt); /* decrease refcnt by 1 manually */
+                rte_atomic16_dec(&msg->refcnt);
                 return EDPVS_NOMEM;
             }
 
-            /* must send F_ASYNC msg as mc_msg has not allocated */
+            /* must send F_ASYNC msg as mcq has not allocated */
             ret = msg_send(new_msg, ii, DPVS_MSG_F_ASYNC, NULL);
             if (ret < 0) { /* nonblock msg not equeued */
                 if (ret != EDPVS_DISABLED)
                     RTE_LOG(ERR, MSGMGR, "%s:msg@%p, new_msg@%p, msg send fail\n",
                             __func__, msg, new_msg);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                rte_atomic16_dec(&msg->refcnt); /* decrease refcnt by 1 manually */
+                rte_atomic16_dec(&msg->refcnt);
                 msg_destroy(&new_msg);
                 return ret;
             }
             msg_destroy(&new_msg);
-            rte_atomic16_inc(&msg->refcnt); /* refcnt increase by 1 for each slave */
         }
     }
 
-    mc_msg = rte_zmalloc("mc_msg", sizeof(struct dpvs_multicast_queue), RTE_CACHE_LINE_SIZE);
-    if (unlikely(!mc_msg)) {
-        RTE_LOG(ERR, MSGMGR, "%s:msg@%p, no memory for mc_msg\n", __func__, msg);
+    mcq = dpvs_mempool_get(msg_pool, sizeof(struct dpvs_multicast_queue));
+    if (unlikely(!mcq)) {
+        RTE_LOG(ERR, MSGMGR, "%s:msg@%p, no memory for mcq\n", __func__, msg);
         add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
+        rte_atomic16_dec(&msg->refcnt);
         return EDPVS_NOMEM;
     }
 
-    mc_msg->type = msg->type;
-    mc_msg->seq = msg->seq;
-    mc_msg->mask = slave_lcore_mask;
-    mc_msg->org_msg = msg; /* save original msg */
-    INIT_LIST_HEAD(&mc_msg->mq);
+    mcq->type = msg->type;
+    mcq->seq = msg->seq;
+    mcq->mask = slave_lcore_mask;
+    mcq->org_msg = msg; /* save original msg */
+    INIT_LIST_HEAD(&mcq->mq);
 
-    if (mc_wait_list.free_cnt <= 0) {
-        RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, multicast msg wait queue full, "
-                "msg dropped and try later...\n", __func__, msg);
-        add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-        return EDPVS_MSG_DROP;
-    }
-    list_add_tail(&mc_msg->list, &mc_wait_list.list);
-    --mc_wait_list.free_cnt;
+    /* hash mcq so that reply msg can be collected in msg_master_process */
+    mc_queue_hash(mcq);
 
     if (flags & DPVS_MSG_F_ASYNC)
         return EDPVS_OK;
@@ -594,19 +607,22 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     /* blockable msg wait here until done or timeout */
     add_msg_flags(msg, DPVS_MSG_F_STATE_SEND);
     start = rte_get_timer_cycles();
+    delay = (uint64_t)g_msg_timeout * rte_get_timer_hz() / 1000000;
     while(!(test_msg_flags(msg, (DPVS_MSG_F_STATE_FIN | DPVS_MSG_F_STATE_DROP)))) {
-        msg_master_process(slave_lcore_nb * 1.5); /* to avoid dead lock if send msg to myself */
-        delay = (uint64_t)g_msg_timeout * rte_get_timer_hz() / 1E6;
         if (start + delay < rte_get_timer_cycles()) {
-            RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, mc_msg(type:%d, cid:%d->slaves) timeout"
+            RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, mcq(type:%d, cid:%d->slaves) timeout"
                     "(%d us), drop...\n", __func__, msg,
                     msg->type, msg->cid, g_msg_timeout);
             add_msg_flags(msg, DPVS_MSG_F_TIMEOUT);
+            /* just in case slave send reply fail.
+             * it's safe here, because msg is used on master lcore only. */
+            msg_destroy(&msg);
             return EDPVS_MSG_DROP;
         }
+        msg_master_process(slave_lcore_nb * 1.5); /* to avoid dead lock if send msg to myself */
     }
     if (reply)
-        *reply = mc_msg; /* here, mc_msg store all slave's response msg */
+        *reply = mcq; /* here, mcq store all slave's reply msg */
 
     tflags = get_msg_flags(msg);
     if (tflags & DPVS_MSG_F_CALLBACK_FAIL)
@@ -617,7 +633,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
         return EDPVS_MSG_DROP;
 }
 
-/* both unicast msg and multicast msg can be recieved on Master lcore */
+/* both unicast msg and multicast msg can be recieved on master lcore */
 int msg_master_process(int step)
 {
     int n = 0;
@@ -625,53 +641,40 @@ int msg_master_process(int step)
     struct dpvs_msg_type *msg_type;
     struct dpvs_multicast_queue *mcq;
 
-    /* dequeue msg from ring on the Master and process it */
+    /* dequeue msg from ring on the master lcore and process it */
     while (((step <= 0) || ((step > 0) && (++n <= step))) &&
             (0 == rte_ring_dequeue(msg_ring[master_lcore], (void **)&msg))) {
         add_msg_flags(msg, DPVS_MSG_F_STATE_RECV);
         msg_type = msg_type_get(msg->type, master_lcore);
         if (!msg_type) {
-            RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, unregistered msg type %d on master\n",
+            RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, unregistered msg type %d on master\n",
                     __func__, msg, msg->type);
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg);
             continue;
         }
         if (DPVS_MSG_UNICAST == msg_type->mode) { /* unicast msg */
-            if (!msg_type->unicast_msg_cb) {
-                RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, no callback registered for unicast msg %d\n",
-                        __func__, msg, msg->type);
-                add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                msg_destroy(&msg);
-                msg_type_put(msg_type);
-                continue;
-            }
-            if (msg_type->unicast_msg_cb(msg) < 0) {
-                add_msg_flags(msg, DPVS_MSG_F_CALLBACK_FAIL);
-                RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, uc msg_type %d callback failed on master\n",
-                        __func__, msg, msg->type);
+            if (likely(msg_type->unicast_msg_cb != NULL)) {
+                if (msg_type->unicast_msg_cb(msg) < 0) {
+                    add_msg_flags(msg, DPVS_MSG_F_CALLBACK_FAIL);
+                    RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, uc msg_type %d callback failed on master\n",
+                            __func__, msg, msg->type);
+                }
             }
             add_msg_flags(msg, DPVS_MSG_F_STATE_FIN);
             msg_destroy(&msg);
         } else { /* multicast msg */
             mcq = mc_queue_get(msg->type, msg->seq);
             if (!mcq) {
-                RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, miss multicast msg <type=%d, seq=%d> from"
-                        " lcore %d\n", __func__, msg, msg->type, msg->seq, msg->cid);
+                /* probably previous msg timeout */
+                RTE_LOG(INFO, MSGMGR, "%s:msg@%p, multicast reply msg <type:%d, seq:%d> from"
+                        " lcore %d missed\n", __func__, msg, msg->type, msg->seq, msg->cid);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
                 msg_destroy(&msg);
                 msg_type_put(msg_type);
                 continue;
             }
-            rte_atomic16_dec(&mcq->org_msg->refcnt); /* for each reply, decrease refcnt of org_msg */
-            if (!msg_type->multicast_msg_cb) {
-                RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, no callback registered for multicast msg %d\n",
-                        __func__, msg, msg->type);
-                add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
-                msg_destroy(&msg);
-                msg_type_put(msg_type);
-                continue;
-            }
+            assert(msg_type->multicast_msg_cb != NULL);
             if (mcq->mask & (1UL << msg->cid)) { /* you are the msg i'm waiting */
                 list_add_tail(&msg->mq_node, &mcq->mq);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_QUEUE);/* set QUEUE flag for slave's reply msg */
@@ -687,18 +690,16 @@ int msg_master_process(int step)
                     }
                     add_msg_flags(mcq->org_msg, DPVS_MSG_F_STATE_FIN);
                     msg_destroy(&mcq->org_msg);
-                    msg_type_put(msg_type);
-                    continue;
                 }
                 msg_type_put(msg_type);
                 continue;
             }
-            /* blockable msg should never get here! */
-            RTE_LOG(INFO, MSGMGR, "%s:msg@%p, repeated late msg\n", __func__, msg);
+            /* probably previous msg timeout and new msg of this type sent */
+            RTE_LOG(INFO, MSGMGR, "%s:msg@%p, multicast reply msg <type:%d, seq:%d> from"
+                    " lcore %d repeated\n", __func__, msg, msg->type, msg->seq, msg->cid);
             assert(msg->mode = DPVS_MSG_UNICAST);
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg); /* sorry, you are late */
-            rte_atomic16_inc(&mcq->org_msg->refcnt); /* do not count refcnt for repeated msg */
         }
         msg_type_put(msg_type);
     }
@@ -734,32 +735,40 @@ int msg_slave_process(int step)
 
         msg_type = msg_type_get(msg->type, cid);
         if (!msg_type) {
-            RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, unregistered msg type %d on lcore %d\n",
+            RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, unregistered msg type %d on lcore %d\n",
                     __func__, msg, msg->type, cid);
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             goto cont;
         }
 
-        if (msg_type->unicast_msg_cb) {
+        if (likely(msg_type->unicast_msg_cb != NULL)) {
             if (msg_type->unicast_msg_cb(msg) < 0) {
                 add_msg_flags(msg, DPVS_MSG_F_CALLBACK_FAIL);
                 RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, msg_type %d callback failed on lcore %d\n",
                      __func__, msg, msg->type, cid);
             }
         }
-        /* send response msg to Master for multicast msg */
+        /* send reply msg to master for multicast msg */
         if (DPVS_MSG_MULTICAST == msg_type->mode) {
+            /* FIXME:
+             * What if fail here? The result is master lcore would never get the reply msg from slaves.
+             * - For blockable msg, no problem exists because the multicast_wait_hlist for it would be freed
+             * when timeout, making all its repsonse slave msg freed or invalid.
+             * - Nonblockable msg is difficult to end itself, and all this type msg sending afterwards would fail.
+             * Fortunately, chances of error happending here is very slim, and nonblockable mulitcast msg is
+             * rarely used. we just log an error and continue if fail here.
+             * */
             xmsg = msg_make(msg->type, msg->seq, DPVS_MSG_UNICAST, cid, msg->reply.len,
                     msg->reply.data);
             if (unlikely(!xmsg)) {
-                RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, no memory for msg_make\n", __func__, msg);
+                RTE_LOG(ERR, MSGMGR, "%s:msg@%p, no memory for msg_make\n", __func__, msg);
                 ret = EDPVS_NOMEM;
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
                 goto cont;
             }
             add_msg_flags(xmsg, DPVS_MSG_F_CALLBACK_FAIL & get_msg_flags(msg));
             if (msg_send(xmsg, master_lcore, DPVS_MSG_F_ASYNC, NULL)) {
-                RTE_LOG(WARNING, MSGMGR, "%s:msg@%p,xmsg@%p, xmsg send failed!\n",
+                RTE_LOG(ERR, MSGMGR, "%s:msg@%p,xmsg@%p, xmsg send failed!\n",
                         __func__, msg, xmsg);
                 add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
                 msg_destroy(&xmsg);
@@ -837,7 +846,7 @@ int msg_type_table_print(char *buf, int len)
         if (ii != master_lcore && !(slave_lcore_mask & (1L << ii)))
             continue;
 
-        for (jj = 0; jj < DPVS_MSG_LEN; jj++) {
+        for (jj = 0; jj < DPVS_MT_LEN; jj++) {
             rte_rwlock_read_lock(&mt_lock[ii][jj]);
             list_for_each_entry(mt, &mt_array[ii][jj], list) {
                 memset(line, 0, sizeof(line));
@@ -1017,15 +1026,15 @@ static inline int msg_init(void)
 
     /* per-lcore msg type array init */
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
-        for (jj = 0; jj < DPVS_MSG_LEN; jj++) {
+        for (jj = 0; jj < DPVS_MT_LEN; jj++) {
             INIT_LIST_HEAD(&mt_array[ii][jj]);
             rte_rwlock_init(&mt_lock[ii][jj]);
         }
     }
 
     /* multicast queue init */
-    mc_wait_list.free_cnt = msg_mc_qlen;
-    INIT_LIST_HEAD(&mc_wait_list.list);
+    for (ii = 0; ii < DPVS_MC_HLIST_LEN; ii++)
+        INIT_LIST_HEAD(&mc_wait_hlist[ii]);
 
     /* per-lcore msg queue */
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
@@ -1457,26 +1466,6 @@ static void msg_ring_size_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
-static void msg_mc_qlen_handler(vector_t tokens)
-{
-    char *str = set_value(tokens);
-    int mc_qlen;
-
-    assert(str);
-    mc_qlen = atoi(str);
-    if (mc_qlen >= DPVS_MSG_MC_QLEN_MIN && mc_qlen <= DPVS_MSG_MC_QLEN_MAX) {
-        is_power2(mc_qlen, 0, &mc_qlen);
-        RTE_LOG(INFO, MSGMGR, "msg_mc_qlen = %d (round to 2^n)\n", mc_qlen);
-        msg_mc_qlen = mc_qlen;
-    } else {
-        RTE_LOG(WARNING, MSGMGR, "invalid msg_mc_qlen %s, using default %d\n",
-                str, DPVS_MULTICAST_LIST_LEN_DEF);
-        msg_mc_qlen = DPVS_MULTICAST_LIST_LEN_DEF;
-    }
-
-    FREE_PTR(str);
-}
-
 static void msg_timeout_handler(vector_t tokens)
 {
     char *str = set_value(tokens);
@@ -1553,7 +1542,6 @@ void control_keyword_value_init(void)
     if (dpvs_state_get() == DPVS_STATE_INIT) {
         /* KW_TYPE_INIT keyword */
         msg_ring_size = DPVS_MSG_RING_SIZE_DEF;
-        msg_mc_qlen = DPVS_MULTICAST_LIST_LEN_DEF;
         strncpy(ipc_unix_domain, UNIX_DOMAIN_DEF, sizeof(ipc_unix_domain) - 1);
     }
     /* KW_TYPE_NORMAL keyword */
@@ -1567,7 +1555,6 @@ void install_control_keywords(void)
     install_keyword("lcore_msg", NULL, KW_TYPE_INIT);
     install_sublevel();
     install_keyword("ring_size", msg_ring_size_handler, KW_TYPE_INIT);
-    install_keyword("multicast_queue_length", msg_mc_qlen_handler, KW_TYPE_INIT);
     install_keyword("sync_msg_timeout_us", msg_timeout_handler, KW_TYPE_NORMAL);
     install_keyword("priority_level", msg_priority_level_handler, KW_TYPE_NORMAL);
     install_sublevel_end();
