@@ -4207,8 +4207,8 @@ static int get_lcore_mask(void **out, size_t *out_len)
 
     netif_lcore_mask_get_t *get;
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_lcore_mask_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_lcore_mask_get_t),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely (NULL == get))
         return EDPVS_NOMEM;
 
@@ -4242,8 +4242,8 @@ static int get_lcore_basic(lcoreid_t cid, void **out, size_t *out_len)
         return err;
     assert(len < NETIF_CTRL_BUFFER_LEN);
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_lcore_basic_get_t) + len,
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_lcore_basic_get_t) + len,
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(NULL == get))
         return EDPVS_NOMEM;
 
@@ -4337,8 +4337,8 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
     netif_lcore_stats_get_t *get;
     struct netif_lcore_stats stats;
 
-    get = rte_zmalloc_socket(NULL, sizeof(struct netif_lcore_stats_get),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(struct netif_lcore_stats_get),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
@@ -4438,8 +4438,8 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
     bool promisc;
     int err;
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_nic_basic_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_nic_basic_get_t),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
@@ -4694,8 +4694,8 @@ static int get_port_stats(struct netif_port *port, void **out, size_t *out_len)
     if (err != EDPVS_OK)
         return err;
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_nic_stats_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_nic_stats_get_t),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
@@ -4726,8 +4726,8 @@ static int get_bond_status(struct netif_port *port, void **out, size_t *out_len)
     if (mport->type != PORT_TYPE_BOND_MASTER)
         return EDPVS_INVAL;
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_bond_status_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_bond_status_get_t),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
     get->mode = rte_eth_bond_mode_get(port->id);
