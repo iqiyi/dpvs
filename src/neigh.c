@@ -600,8 +600,9 @@ int neigh_output(int af, union inet_addr *nexhop,
     neighbour = neigh_lookup_entry(af, nexhop, port, hashkey);
 
     if (neighbour) {
-        if ((neighbour->state == DPVS_NUD_S_NONE) ||
-           (neighbour->state == DPVS_NUD_S_SEND)) {
+        switch (neighbour->state) {
+        case DPVS_NUD_S_NONE:
+        case DPVS_NUD_S_SEND:
             if (neighbour->que_num > arp_unres_qlen) {
                 neigh_show_entry(__func__, neighbour);
                 /*
@@ -612,12 +613,14 @@ int neigh_output(int af, union inet_addr *nexhop,
                 rte_pktmbuf_free(m);
                 return EDPVS_DROP;
             }
+
             m_buf = rte_zmalloc("neigh_new_mbuf",
-                               sizeof(struct neighbour_mbuf_entry), RTE_CACHE_LINE_SIZE);
+                                sizeof(struct neighbour_mbuf_entry), RTE_CACHE_LINE_SIZE);
             if (!m_buf) {
                 rte_pktmbuf_free(m);
                 return EDPVS_DROP;
             }
+
             m_buf->m = m;
             list_add_tail(&m_buf->neigh_mbuf_list, &neighbour->queue_list);
             neighbour->que_num++;
@@ -626,12 +629,12 @@ int neigh_output(int af, union inet_addr *nexhop,
                 neigh_state_confirm(neighbour);
                 neigh_entry_state_trans(neighbour, 0);
             }
-            return EDPVS_OK;
-        }
-        else if ((neighbour->state == DPVS_NUD_S_REACHABLE) ||
-                 (neighbour->state == DPVS_NUD_S_PROBE) ||
-                 (neighbour->state == DPVS_NUD_S_DELAY)) {
 
+            return EDPVS_OK;
+
+        case DPVS_NUD_S_REACHABLE:
+        case DPVS_NUD_S_PROBE:
+        case DPVS_NUD_S_DELAY:
             neigh_fill_mac(neighbour, m, NULL, port);
             netif_xmit(m, neighbour->port);
 
@@ -641,35 +644,36 @@ int neigh_output(int af, union inet_addr *nexhop,
             }
 
             return EDPVS_OK;
-        }
 
-        return EDPVS_IDLE;
+        default:
+            return EDPVS_IDLE;
+        }
     }
-    else{
-        neighbour = neigh_add_table(af, nexhop, NULL, port, hashkey, 0);
-        if(!neighbour){
-            RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
-            rte_pktmbuf_free(m);
-            return EDPVS_NOMEM;
-        }
 
-        m_buf = rte_zmalloc("neigh_new_mbuf",
-                           sizeof(struct neighbour_mbuf_entry), RTE_CACHE_LINE_SIZE);
-        if(!m_buf){
-            rte_pktmbuf_free(m);
-            return EDPVS_DROP;
-        }
-        m_buf->m = m;
-        list_add_tail(&m_buf->neigh_mbuf_list, &neighbour->queue_list);
-        neighbour->que_num++;
-
-        if (neighbour->state == DPVS_NUD_S_NONE) {
-            neigh_state_confirm(neighbour);
-            neigh_entry_state_trans(neighbour, 0);
-        }
-
-        return EDPVS_OK;
+    /* create the neighbour entry if not found */
+    neighbour = neigh_add_table(af, nexhop, NULL, port, hashkey, 0);
+    if (!neighbour) {
+        RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
+        rte_pktmbuf_free(m);
+        return EDPVS_NOMEM;
     }
+
+    m_buf = rte_zmalloc("neigh_new_mbuf",
+                        sizeof(struct neighbour_mbuf_entry), RTE_CACHE_LINE_SIZE);
+    if (!m_buf) {
+        rte_pktmbuf_free(m);
+        return EDPVS_DROP;
+    }
+    m_buf->m = m;
+    list_add_tail(&m_buf->neigh_mbuf_list, &neighbour->queue_list);
+    neighbour->que_num++;
+
+    if (neighbour->state == DPVS_NUD_S_NONE) {
+        neigh_state_confirm(neighbour);
+        neigh_entry_state_trans(neighbour, 0);
+    }
+
+    return EDPVS_OK;
 }
 
 int neigh_gratuitous_arp(struct in_addr *src_ip, struct netif_port *port)
