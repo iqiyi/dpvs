@@ -438,7 +438,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         if (!msg)
             return EDPVS_NOMEM;
 
-        err = multicast_msg_send(msg, 0, NULL);
+        err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
         /* go on in master core, not return */
         if (err != EDPVS_OK)
             RTE_LOG(ERR, SERVICE, "[%s] fail to send multicast message\n", __func__);
@@ -508,7 +508,7 @@ static int get_msg_cb(struct dpvs_msg *msg)
         return err;
 
     size = sizeof(*laddr_conf) + naddr * sizeof(struct dp_vs_laddr_entry);
-    laddrs = rte_malloc_socket(0, size, RTE_CACHE_LINE_SIZE, rte_socket_id());
+    laddrs = msg_reply_alloc(size);
     if (!laddrs) {
         if (addrs)
             rte_free(addrs);
@@ -605,7 +605,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                     return EDPVS_NOSERV;
                 }
 
-	        err = dp_vs_laddr_getall(svc, &addrs, &naddr);
+                err = dp_vs_laddr_getall(svc, &addrs, &naddr);
                 if (err != EDPVS_OK) {
                     msg_destroy(&msg);
                     return err;
@@ -639,7 +639,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                     err = dp_vs_copy_percore_laddrs_stats(laddrs, get_msg);
                     if (err != EDPVS_OK) {
                         msg_destroy(&msg);
-                        rte_free(out);
+                        rte_free(*out);
                         *out = NULL;
                         return err;
                     }
@@ -741,7 +741,7 @@ int dp_vs_laddr_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_LADDR_GET_ALL;
     msg_type.mode   = DPVS_MSG_MULTICAST;
-    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.prio   = MSG_PRIO_LOW;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = get_msg_cb;
     err = msg_type_mc_register(&msg_type);

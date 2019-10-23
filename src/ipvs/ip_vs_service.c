@@ -219,7 +219,7 @@ __dp_vs_svc_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t cid
         oif = rt->port->id;
     } else if (outwall != NULL && (NULL != ipset_addr_lookup(AF_INET, &daddr))
                                && (rt = route_gfw_net_lookup(&daddr.in))) {
-        char dst[64];	     
+        char dst[64];
         RTE_LOG(DEBUG, IPSET, "%s: IP %s is in the gfwip set, found route in the outwall table.\n", __func__, 
                               inet_ntop(AF_INET, &daddr, dst, sizeof(dst))? dst: "");	    
         oif = rt->port->id;
@@ -663,7 +663,7 @@ static int dp_vs_del_service(struct dp_vs_service *svc)
      * Unhash it from the service table
      */
     dp_vs_svc_unhash(svc);
-    
+
     /*
      * Wait until all the svc users go away.
      */
@@ -929,7 +929,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
         if (!msg)
             return EDPVS_NOMEM;
 
-        ret = multicast_msg_send(msg, 0, NULL);
+        ret = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
         /* go on in master core, not return */
         if (ret != EDPVS_OK)
             RTE_LOG(ERR, SERVICE, "[%s] fail to send multicast message\n", __func__);
@@ -1075,7 +1075,7 @@ static int dp_vs_get_services_uc_cb(struct dpvs_msg *msg)
     }
 
     size = sizeof(*get) + sizeof(struct dp_vs_service_entry) * get->num_services;
-    output = rte_zmalloc("get_services", size, 0);
+    output = msg_reply_alloc(size);
     if (output == NULL)
         return EDPVS_NOMEM;
     ret = dp_vs_get_service_entries(get->num_services, output, cid);
@@ -1131,7 +1131,7 @@ static int dp_vs_get_service_uc_cb(struct dpvs_msg *msg)
         return EDPVS_NOTEXIST;
 
     size = sizeof(struct dp_vs_service_entry);   
-    entry = rte_zmalloc("get_service", size, 0);
+    entry = msg_reply_alloc(size);
     if (entry == NULL)
         return EDPVS_NOMEM;
 
@@ -1175,7 +1175,7 @@ static int dp_vs_get_dests_uc_cb(struct dpvs_msg *msg)
     }
 
     size = sizeof(*get) + sizeof(struct dp_vs_dest_entry) * (svc->num_dests);
-    output = rte_zmalloc("get_dests", size, 0);
+    output = msg_reply_alloc(size);
     if (output == NULL)
         return EDPVS_NOMEM;
     rte_memcpy(output, get, sizeof(*get));
@@ -1283,11 +1283,6 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     msg_destroy(&msg);
                     return EDPVS_OK;
                 } else {
-                    output = rte_zmalloc("get_services", size, 0);
-                    if (unlikely(NULL == output)) {
-                        msg_destroy(&msg);
-                        return EDPVS_NOMEM;
-                    }
                     list_for_each_entry(cur, &reply->mq, mq_node) {
                         get_msg = (struct dp_vs_get_services *)(cur->data);
                         if (get_msg->cid == cid) {
@@ -1305,7 +1300,6 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     }
                     RTE_LOG(ERR, SERVICE, "%s: find no services for cid=%d.\n", __func__, cid);
                     msg_destroy(&msg);
-                    rte_free(output);
                     return EDPVS_NOTEXIST;
                 }
             }
@@ -1329,7 +1323,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     msg_destroy(&msg);
                     RTE_LOG(ERR, SERVICE, "%s: send message fail.\n", __func__);
                     return EDPVS_MSG_FAIL;
-                }    
+                } 
 
                 if (cid == rte_get_master_lcore()) {
                     svc = dp_vs_get_service_lcore(entry, cid);
@@ -1656,7 +1650,7 @@ int dp_vs_service_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_SVC_GET_SERVICES;
     msg_type.mode   = DPVS_MSG_MULTICAST;
-    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.prio   = MSG_PRIO_LOW;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = dp_vs_get_services_uc_cb;
     err = msg_type_mc_register(&msg_type);
@@ -1668,7 +1662,7 @@ int dp_vs_service_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_SVC_GET_SERVICE;
     msg_type.mode   = DPVS_MSG_MULTICAST;
-    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.prio   = MSG_PRIO_LOW;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = dp_vs_get_service_uc_cb;
     err = msg_type_mc_register(&msg_type);
@@ -1680,7 +1674,7 @@ int dp_vs_service_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_SVC_GET_DESTS;
     msg_type.mode   = DPVS_MSG_MULTICAST;
-    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.prio   = MSG_PRIO_LOW;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = dp_vs_get_dests_uc_cb;
     err = msg_type_mc_register(&msg_type);

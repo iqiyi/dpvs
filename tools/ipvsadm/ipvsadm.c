@@ -21,7 +21,7 @@
  *        Wensong Zhang       :   added the long options
  *        Wensong Zhang       :   added the hostname and portname input
  *        Wensong Zhang       :   added the hostname and portname output
- *	  Lars Marowsky-Brée  :   added persistence granularity support
+ *        Lars Marowsky-Brée  :   added persistence granularity support
  *        Julian Anastasov    :   fixed the (null) print for unknown services
  *        Wensong Zhang       :   added the port_to_anyname function
  *        Horms               :   added option to read commands from stdin
@@ -200,7 +200,7 @@ static const char* optnames[] = {
 	"ifname" ,
 	"sockpair" ,
 	"hash-target",
-        "cpu"
+	"cpu"
 };
 
 /*
