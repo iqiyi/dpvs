@@ -1862,10 +1862,10 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 			svc_name[0] = '\0';
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
-				"MATCH %s", proto);
+				"af=%s", af);
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
-				",af=%s", af);
+				",MATCH %s", proto);
 
 			if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
                             strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
