@@ -34,7 +34,7 @@ static int ip6_msg_get_stats(struct dpvs_msg *msg)
     struct inet_stats *stats;
     assert(msg);
 
-    stats = rte_zmalloc(NULL, sizeof(*stats), 0);
+    stats = msg_reply_alloc(sizeof(*stats));
     if (!stats)
         return EDPVS_NOMEM;
 
@@ -107,6 +107,7 @@ static int ip6_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
 static struct dpvs_msg_type ip6_stats_msg = {
     .type           = MSG_TYPE_IPV6_STATS,
+    .prio           = MSG_PRIO_LOW,
     .unicast_msg_cb = ip6_msg_get_stats,
 };
 

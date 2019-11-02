@@ -388,6 +388,7 @@ int dp_vs_blklst_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_BLKLST_ADD;
     msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = blklst_add_msg_cb;
     err = msg_type_mc_register(&msg_type);
@@ -399,6 +400,7 @@ int dp_vs_blklst_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_BLKLST_DEL;
     msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = blklst_del_msg_cb;
     err = msg_type_mc_register(&msg_type);

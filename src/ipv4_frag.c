@@ -198,6 +198,7 @@ int ipv4_reassamble(struct rte_mbuf *mbuf)
         rte_pktmbuf_free(asm_mbuf);
         return EDPVS_NOMEM;
     }
+    seg->userdata = NULL;
     for (prev = asm_mbuf; prev; prev = prev->next)
         if (prev->next == mbuf)
             break;
@@ -293,6 +294,7 @@ int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
             err = EDPVS_NOMEM;
             goto out;
         }
+        frag->userdata = NULL;
 
         /* copy metadata from orig pkt */
         route4_get(rt);

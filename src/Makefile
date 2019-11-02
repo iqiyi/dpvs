@@ -54,6 +54,7 @@ ifeq ($(DEBUG),)
 	CFLAGS += -O3
 else
 	CFLAGS += -g -O0 -D DEBUG
+	CFLAGS += -rdynamic
 endif
 
 LIBS += -lpthread -lnuma

@@ -174,7 +174,7 @@ You could refer to following links to get `TOA` source code and porting to your 
 
 * [Alibaba LVS](https://github.com/alibaba/LVS/blob/master/docs/LVS_user_manual.pdf)
 * [UCloud TOA](https://docs.ucloud.cn/security/uads/faq/game)
-* [Huawai TOA](https://github.com/Huawei/TCP_option_address)
+* [Huawei TOA](https://github.com/Huawei/TCP_option_address)
 * [IPVS CA](https://github.com/yubo/ip_vs_ca)
 
 TOA source code is included into DPVS project(in directory `kmod/toa`) since v1.7 to support IPv6 and NAT64. It is derived from the Alibaba TOA. For IPv6 applications which need client's real IP address, we suggest to use this TOA version.

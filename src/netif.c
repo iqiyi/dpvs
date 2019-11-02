@@ -1322,7 +1322,7 @@ static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)
     lcoreid_t cid;
     cid = rte_lcore_id();
     assert(cid < DPVS_MAX_LCORE);
-    memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
+    rte_memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
 }
 
 static int port_rx_queues_get(portid_t pid)
@@ -2000,8 +2000,8 @@ static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
         //fflush(stdout);
         return netif_xmit(data->mbuf, data->dev);
     }
-    else
-        return EDPVS_INVAL;
+
+    return EDPVS_INVAL;
 }
 
 /* master_xmit_msg should be registered on all slave lcores */
@@ -2016,6 +2016,7 @@ int netif_register_master_xmit_msg(void)
     memset(&mt, 0, sizeof(mt));
     mt.type = MSG_TYPE_MASTER_XMIT;
     mt.mode = DPVS_MSG_UNICAST;
+    mt.prio = MSG_PRIO_HIGH;
     mt.unicast_msg_cb = msg_type_master_xmit_cb;
 
     netif_get_slave_lcores(&slave_lcore_nb, &slave_lcore_mask);
@@ -2028,7 +2029,7 @@ int netif_register_master_xmit_msg(void)
                     " exiting ...\n", __func__);
             return ret;
         }
-        RTE_LOG(DEBUG, NETIF, "[%s] mster_xmit_msg registered on lcore #%d\n",
+        RTE_LOG(DEBUG, NETIF, "[%s] master_xmit_msg registered on lcore #%d\n",
                 __func__, ii);
     }
 
@@ -2464,7 +2465,7 @@ static void lcore_job_timer_manage(void *args)
     uint64_t now = rte_get_timer_cycles();
     portid_t cid = rte_lcore_id();
 
-    if (unlikely((now - tm_manager_time[cid]) * 1E6 / cycles_per_sec
+    if (unlikely((now - tm_manager_time[cid]) * 1000000 / cycles_per_sec
             > timer_sched_interval_us)) {
         rte_timer_manage();
         tm_manager_time[cid] = now;
@@ -4206,8 +4207,8 @@ static int get_lcore_mask(void **out, size_t *out_len)
 
     netif_lcore_mask_get_t *get;
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_lcore_mask_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_lcore_mask_get_t),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely (NULL == get))
         return EDPVS_NOMEM;
 
@@ -4241,8 +4242,8 @@ static int get_lcore_basic(lcoreid_t cid, void **out, size_t *out_len)
         return err;
     assert(len < NETIF_CTRL_BUFFER_LEN);
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_lcore_basic_get_t) + len,
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_lcore_basic_get_t) + len,
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(NULL == get))
         return EDPVS_NOMEM;
 
@@ -4265,7 +4266,7 @@ static int lcore_stats_msg_cb(struct dpvs_msg *msg)
                 msg->mode != DPVS_MSG_UNICAST))
         return EDPVS_INVAL;
 
-    reply_data = rte_malloc(NULL, sizeof(struct netif_lcore_stats), RTE_CACHE_LINE_SIZE);
+    reply_data = msg_reply_alloc(sizeof(struct netif_lcore_stats));
     if (unlikely(!reply_data))
         return EDPVS_NOMEM;
 
@@ -4283,6 +4284,7 @@ static inline int lcore_stats_msg_init(void)
     struct dpvs_msg_type lcore_stats_msg_type = {
         .type = MSG_TYPE_NETIF_LCORE_STATS,
         .mode = DPVS_MSG_UNICAST,
+        .prio = MSG_PRIO_LOW,
         .unicast_msg_cb = lcore_stats_msg_cb,
         .multicast_msg_cb = NULL,
     };
@@ -4308,6 +4310,7 @@ static inline int lcore_stats_msg_term(void)
     struct dpvs_msg_type lcore_stats_msg_type = {
         .type = MSG_TYPE_NETIF_LCORE_STATS,
         .mode = DPVS_MSG_UNICAST,
+        .prio = MSG_PRIO_LOW,
         .unicast_msg_cb = lcore_stats_msg_cb,
         .multicast_msg_cb = NULL,
     };
@@ -4334,8 +4337,8 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
     netif_lcore_stats_get_t *get;
     struct netif_lcore_stats stats;
 
-    get = rte_zmalloc_socket(NULL, sizeof(struct netif_lcore_stats_get),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(struct netif_lcore_stats_get),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
@@ -4363,7 +4366,7 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
 
         assert(reply->len == sizeof(struct netif_lcore_stats));
         assert(reply->data);
-        memcpy(&stats, reply->data, sizeof(stats));
+        rte_memcpy(&stats, reply->data, sizeof(stats));
 
         msg_destroy(&pmsg);
     }
@@ -4435,8 +4438,8 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
     bool promisc;
     int err;
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_nic_basic_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_nic_basic_get_t),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
@@ -4691,8 +4694,8 @@ static int get_port_stats(struct netif_port *port, void **out, size_t *out_len)
     if (err != EDPVS_OK)
         return err;
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_nic_stats_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_nic_stats_get_t),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
@@ -4723,8 +4726,8 @@ static int get_bond_status(struct netif_port *port, void **out, size_t *out_len)
     if (mport->type != PORT_TYPE_BOND_MASTER)
         return EDPVS_INVAL;
 
-    get = rte_zmalloc_socket(NULL, sizeof(netif_bond_status_get_t),
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    get = rte_zmalloc(NULL, sizeof(netif_bond_status_get_t),
+            RTE_CACHE_LINE_SIZE);
     if (unlikely(!get))
         return EDPVS_NOMEM;
     get->mode = rte_eth_bond_mode_get(port->id);

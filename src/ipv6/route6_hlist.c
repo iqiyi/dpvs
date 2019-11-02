@@ -21,7 +21,7 @@
 #include "route6_hlist.h"
 #include "linux_ipv6.h"
 
-#define RT6_HLIST_MAX_BUCKET_BITS   10
+#define RT6_HLIST_MAX_BUCKET_BITS   8
 #define RT6_HLIST_MAX_BUCKETS       (1U<<RT6_HLIST_MAX_BUCKET_BITS)
 
 #define this_rt6_htable     (RTE_PER_LCORE(dpvs_rt6_htable).htable)

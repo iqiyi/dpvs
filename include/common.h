@@ -71,6 +71,8 @@ typedef uint16_t    __u16;
 typedef uint32_t    __u32;
 #endif
 
+#define DPVS_WAIT_WHILE(expr) while(expr){;}
+
 typedef enum {
     DPVS_STATE_STOP = 1,
     DPVS_STATE_INIT,
@@ -134,6 +136,9 @@ ssize_t writen(int fd, const void *vptr, size_t n);
 
 /* send "n" bytes to a descriptor */
 ssize_t sendn(int fd, const void *vptr, size_t n, int flags);
+
+/* get backtrace for the calling program */
+int dpvs_backtrace(char *buf, int len);
 
 static inline char *strupr(char *str) {
     char *s;

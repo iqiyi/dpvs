@@ -171,7 +171,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
         return EDPVS_INVAL;
     if (svc->proto != IPPROTO_TCP && svc->proto != IPPROTO_UDP)
         return EDPVS_NOTSUPP;
-    if (conn->flags & DPVS_CONN_F_TEMPLATE)
+    if (dp_vs_conn_is_template(conn))
         return EDPVS_OK;
 
     /*
@@ -259,7 +259,7 @@ int dp_vs_laddr_unbind(struct dp_vs_conn *conn)
 {
     struct sockaddr_storage dsin, ssin;
 
-    if (conn->flags & DPVS_CONN_F_TEMPLATE)
+    if (dp_vs_conn_is_template(conn))
         return EDPVS_OK;
 
     if (!conn->local)
@@ -465,7 +465,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match);
+                               laddr_conf->fwmark, NULL, &match, NULL);
     if (!svc)
         return EDPVS_NOSERV;
 
@@ -511,7 +511,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match);
+                               laddr_conf->fwmark, NULL, &match, NULL);
     if (!svc)
         return EDPVS_NOSERV;
 
