@@ -68,6 +68,7 @@ struct dp_vs_route_conf {
     uint8_t         metric;
     uint8_t         proto;  /* routing protocol */
     uint32_t        flags;
+    int32_t         outwalltb;
 } __attribute__((__packed__));
 
 struct dp_vs_route_conf_array {

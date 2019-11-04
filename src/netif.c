@@ -1222,11 +1222,13 @@ static void config_lcores(struct list_head *worker_list)
 }
 
 /* fast searching tables */
-lcoreid_t lcore2index[DPVS_MAX_LCORE];
+lcoreid_t lcore2index[DPVS_MAX_LCORE+1];
 portid_t port2index[DPVS_MAX_LCORE][NETIF_MAX_PORTS];
 
 bool netif_lcore_is_idle(lcoreid_t cid)
 {
+    if (cid > DPVS_MAX_LCORE)
+        return true;
     return (lcore_conf[lcore2index[cid]].nports == 0) ? true : false;
 }
 
@@ -1234,7 +1236,7 @@ static void lcore_index_init(void)
 {
     lcoreid_t ii;
     int tk = 0;
-    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
+    for (ii = 0; ii <= DPVS_MAX_LCORE; ii++) {
         if (rte_lcore_is_enabled(ii)) {
             if (likely(tk))
                 lcore2index[ii] = tk - 1;
@@ -1246,7 +1248,7 @@ static void lcore_index_init(void)
     }
 #ifdef CONFIG_DPVS_NETIF_DEBUG
     printf("lcore fast searching table: \n");
-    for (ii = 0; ii < DPVS_MAX_LCORE; ii++)
+    for (ii = 0; ii <= DPVS_MAX_LCORE; ii++)
         printf("lcore2index[%d] = %d\n", ii, lcore2index[ii]);
 #endif
 }
@@ -1320,7 +1322,7 @@ static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)
     lcoreid_t cid;
     cid = rte_lcore_id();
     assert(cid < DPVS_MAX_LCORE);
-    memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
+    rte_memcpy(stats, &lcore_stats[cid], sizeof(struct netif_lcore_stats));
 }
 
 static int port_rx_queues_get(portid_t pid)
@@ -1998,8 +2000,8 @@ static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
         //fflush(stdout);
         return netif_xmit(data->mbuf, data->dev);
     }
-    else
-        return EDPVS_INVAL;
+
+    return EDPVS_INVAL;
 }
 
 /* master_xmit_msg should be registered on all slave lcores */
@@ -2014,6 +2016,7 @@ int netif_register_master_xmit_msg(void)
     memset(&mt, 0, sizeof(mt));
     mt.type = MSG_TYPE_MASTER_XMIT;
     mt.mode = DPVS_MSG_UNICAST;
+    mt.prio = MSG_PRIO_HIGH;
     mt.unicast_msg_cb = msg_type_master_xmit_cb;
 
     netif_get_slave_lcores(&slave_lcore_nb, &slave_lcore_mask);
@@ -2026,7 +2029,7 @@ int netif_register_master_xmit_msg(void)
                     " exiting ...\n", __func__);
             return ret;
         }
-        RTE_LOG(DEBUG, NETIF, "[%s] mster_xmit_msg registered on lcore #%d\n",
+        RTE_LOG(DEBUG, NETIF, "[%s] master_xmit_msg registered on lcore #%d\n",
                 __func__, ii);
     }
 
@@ -2462,7 +2465,7 @@ static void lcore_job_timer_manage(void *args)
     uint64_t now = rte_get_timer_cycles();
     portid_t cid = rte_lcore_id();
 
-    if (unlikely((now - tm_manager_time[cid]) * 1E6 / cycles_per_sec
+    if (unlikely((now - tm_manager_time[cid]) * 1000000 / cycles_per_sec
             > timer_sched_interval_us)) {
         rte_timer_manage();
         tm_manager_time[cid] = now;
@@ -4149,6 +4152,12 @@ int netif_virtual_devices_add(void)
         RTE_LOG(INFO, NETIF, "create bondig device %s: mode=%d, primary=%s, socket=%d\n",
                 bond_cfg->name, bond_cfg->mode, bond_cfg->primary, socket_id);
         bond_cfg->port_id = pid; /* relate port_id with port_name, used by netif_rte_port_alloc */
+        if (bond_cfg->mode == BONDING_MODE_8023AD) {
+            if (!rte_eth_bond_8023ad_dedicated_queues_enable(bond_cfg->port_id))
+            {
+                RTE_LOG(INFO, NETIF, "bonding mode4 dedicated queues enable failed!\n");
+            }
+        }
     }
 
     if (!list_empty(&bond_list)) {
@@ -4257,7 +4266,7 @@ static int lcore_stats_msg_cb(struct dpvs_msg *msg)
                 msg->mode != DPVS_MSG_UNICAST))
         return EDPVS_INVAL;
 
-    reply_data = rte_malloc(NULL, sizeof(struct netif_lcore_stats), RTE_CACHE_LINE_SIZE);
+    reply_data = msg_reply_alloc(sizeof(struct netif_lcore_stats));
     if (unlikely(!reply_data))
         return EDPVS_NOMEM;
 
@@ -4275,6 +4284,7 @@ static inline int lcore_stats_msg_init(void)
     struct dpvs_msg_type lcore_stats_msg_type = {
         .type = MSG_TYPE_NETIF_LCORE_STATS,
         .mode = DPVS_MSG_UNICAST,
+        .prio = MSG_PRIO_LOW,
         .unicast_msg_cb = lcore_stats_msg_cb,
         .multicast_msg_cb = NULL,
     };
@@ -4300,6 +4310,7 @@ static inline int lcore_stats_msg_term(void)
     struct dpvs_msg_type lcore_stats_msg_type = {
         .type = MSG_TYPE_NETIF_LCORE_STATS,
         .mode = DPVS_MSG_UNICAST,
+        .prio = MSG_PRIO_LOW,
         .unicast_msg_cb = lcore_stats_msg_cb,
         .multicast_msg_cb = NULL,
     };
@@ -4355,7 +4366,7 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
 
         assert(reply->len == sizeof(struct netif_lcore_stats));
         assert(reply->data);
-        memcpy(&stats, reply->data, sizeof(stats));
+        rte_memcpy(&stats, reply->data, sizeof(stats));
 
         msg_destroy(&pmsg);
     }

@@ -208,7 +208,7 @@ static int __ifa_add_route6(struct inet_ifaddr *ifa)
 
     err = route6_add(&net, ifa->plen, RTF_FORWARD,
                      &in6addr_any, ifa->idev->dev,
-                     &in6addr_any, ifa->idev->dev->mtu);
+                     &ifa->addr.in6, ifa->idev->dev->mtu);
 
     if (err != EDPVS_OK && err != EDPVS_EXIST)
         goto errout;
@@ -531,7 +531,7 @@ static int ifa_expire(void *arg)
         RTE_LOG(WARNING, IFA, "%s: addr in use, try expire later\n", __func__);
         tv.tv_sec = 5;
         tv.tv_usec = 0;
-        dpvs_timer_update(&ifa->timer, &tv, true);
+        dpvs_timer_update_nolock(&ifa->timer, &tv, true);
         rte_rwlock_write_unlock(&in_addr_lock);
         return DTIMER_OK;
     }
@@ -541,7 +541,7 @@ static int ifa_expire(void *arg)
     INIT_LIST_HEAD(&ifa->d_list);
     INIT_LIST_HEAD(&ifa->h_list);
 
-    dpvs_timer_cancel(&ifa->timer, true);
+    dpvs_timer_cancel_nolock(&ifa->timer, true);
     if (ifa->flags & IFA_F_SAPOOL)
         sa_pool_destroy(ifa);
     ifa_add_del_mcast(ifa, false);

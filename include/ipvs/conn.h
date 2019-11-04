@@ -52,6 +52,7 @@ struct dp_vs_conn_param {
     uint16_t            cport;
     uint16_t            vport;
     uint16_t            ct_dport; /* RS port for template connection */
+    bool                outwall;
 };
 
 struct conn_tuple_hash {
@@ -152,6 +153,10 @@ struct dp_vs_conn {
 
     /* connection redirect in fnat/snat/nat modes */
     struct dp_vs_redirect  *redirect;
+  
+    /* flag for gfwip */
+    bool outwall;
+  
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */

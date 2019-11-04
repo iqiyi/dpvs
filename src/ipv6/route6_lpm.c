@@ -219,9 +219,6 @@ static struct route6 *rt6_lpm_input(const struct rte_mbuf *mbuf, struct flow6 *f
     /* FIXME: search hash list for detailed match ? */
     if (rt6->rt6_dev && fl6->fl6_oif && rt6->rt6_dev->id != fl6->fl6_oif->id)
         goto miss;
-    if (!ipv6_addr_any(&rt6->rt6_src.addr) && !ipv6_addr_any(&fl6->fl6_saddr)
-            && !ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr))
-        goto miss;
 
     rte_atomic32_inc(&rt6->refcnt);
     return rt6;
@@ -242,9 +239,6 @@ static struct route6 *rt6_lpm_output(const struct rte_mbuf *mbuf, struct flow6 *
 
     /* FIXME: search hash list for detailed match ? */
     if (rt6->rt6_dev && fl6->fl6_oif && rt6->rt6_dev->id != fl6->fl6_oif->id)
-        goto miss;
-    if (!ipv6_addr_any(&rt6->rt6_src.addr) && !ipv6_addr_any(&fl6->fl6_saddr)
-                && !ipv6_addr_equal(&rt6->rt6_src.addr, &fl6->fl6_saddr))
         goto miss;
 
     rte_atomic32_inc(&rt6->refcnt);
@@ -293,6 +287,7 @@ static int rt6_add_lcore_default(const struct dp_vs_route6_conf *rt6_cfg)
 
     /* 'rt6_cfg' has been verified by 'rt6_default' */
     rt6_fill_with_cfg(entry, rt6_cfg);
+    INIT_LIST_HEAD(&entry->hnode);
     rte_atomic32_set(&entry->refcnt, 1);
     this_rt6_default = entry;
 

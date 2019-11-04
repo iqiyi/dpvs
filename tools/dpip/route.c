@@ -40,6 +40,7 @@ static void route_help(void)
         "    SCOPE      := [ scope { host | link | global | NUM } ]\n"
         "    PROTOCOL   := [ proto { auto | boot | static | ra | NUM } ]\n"
         "    FLAGS      := [ onlink | local ]\n"
+        "    TABLE      := [ table outwall ]\n"
         "Examples:\n"
         "    dpip route show\n"
         "    dpip route add default via 10.0.0.1\n"
@@ -50,6 +51,9 @@ static void route_help(void)
         "    dpip route del 172.0.0.0/16\n"
         "    dpip route set 172.0.0.0/16 via 172.0.0.1\n"
         "    dpip route flush\n"
+        "    dpip route show table outwall\n"
+        "    dpip route add default via 10.0.0.1 dev dpdk1 table outwall\n"
+        "    dpip route del default via 10.0.0.1 dev dpdk1 table outwall\n"
         );
 }
 
@@ -232,6 +236,11 @@ static int route4_parse_args(struct dpip_conf *conf,
             ;/* on-link is output only */
         } else if (strcmp(conf->argv[0], "local") == 0) {
             route->scope = ROUTE_CF_SCOPE_HOST;
+        } else if (strcmp(conf->argv[0], "table") == 0) {
+            NEXTARG_CHECK(conf, "outwall");
+            if (strcmp(conf->argv[0], "outwall") != 0)
+                return -1;
+            route->outwalltb = 1;
         } else {
             prefix = conf->argv[0];
         }
@@ -528,3 +537,4 @@ static void __exit route_exit(void)
 {
     dpip_unregister_obj(&dpip_route);
 }
+

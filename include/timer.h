@@ -39,6 +39,10 @@ typedef uint32_t dpvs_tick_t;
 struct dpvs_timer {
     struct list_head    list;
 
+#ifdef CONFIG_TIMER_DEBUG
+    struct list_head    dummy;
+#endif
+
     dpvs_timer_cb_t     handler;
     void                *priv;
     bool                is_period;
@@ -50,6 +54,9 @@ struct dpvs_timer {
     dpvs_tick_t         delay;
 };
 
+inline dpvs_tick_t timeval_to_ticks(const struct timeval *tv);
+inline void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv);
+
 int dpvs_timer_init(void);
 int dpvs_timer_term(void);
 
@@ -59,31 +66,44 @@ int dpvs_timer_term(void);
  * set @global to 'true'. a timer is global or not must be consistent
  * all the time, DO NOT mix up.
  *
+ * the 'nolock' api is used in timer handlers to avoid deadlock.
+ *
  * NOTE: any lcore (including master and slaves) can use global timer,
  * but only slaves can use per-lcore timer.
  */
 int dpvs_time_now(struct timeval *now, bool global);
+int dpvs_time_now_nolock(struct timeval *now, bool global);
 
 /* schedule one-shot timer expire at "time_now" + @delay */
 int dpvs_timer_sched(struct dpvs_timer *timer, struct timeval *delay,
+                     dpvs_timer_cb_t handler, void *arg, bool global);
+int dpvs_timer_sched_nolock(struct dpvs_timer *timer, struct timeval *delay,
                      dpvs_timer_cb_t handler, void *arg, bool global);
 
 /* schedule one-shot timer expire at @expire
  * it's abstract time not delta value */
 int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
                          dpvs_timer_cb_t handler, void *arg, bool global);
+int dpvs_timer_sched_abs_nolock(struct dpvs_timer *timer, struct timeval *expire,
+                         dpvs_timer_cb_t handler, void *arg, bool global);
 
 /* schedule periodic timer with interval @intv */
 int dpvs_timer_sched_period(struct dpvs_timer *timer, struct timeval *intv,
                             dpvs_timer_cb_t handler, void *arg, bool global);
+int dpvs_timer_sched_period_nolock(struct dpvs_timer *timer, struct timeval *intv,
+                            dpvs_timer_cb_t handler, void *arg, bool global);
 
 int dpvs_timer_cancel(struct dpvs_timer *timer, bool global);
+int dpvs_timer_cancel_nolock(struct dpvs_timer *timer, bool global);
 
 /* restart the timer, for both one-shot and periodic */
 int dpvs_timer_reset(struct dpvs_timer *timer, bool global);
+int dpvs_timer_reset_nolock(struct dpvs_timer *timer, bool global);
 
 /* set timer with new delay (one-shot) or interval (periodic) */
 int dpvs_timer_update(struct dpvs_timer *timer,
+                      struct timeval *delay, bool global);
+int dpvs_timer_update_nolock(struct dpvs_timer *timer,
                       struct timeval *delay, bool global);
 
 void dpvs_time_rand_delay(struct timeval *tv, long delay_us);

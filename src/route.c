@@ -32,8 +32,10 @@
 
 #define this_local_route_table  (this_route_lcore.local_route_table)
 #define this_net_route_table    (this_route_lcore.net_route_table)
+#define this_gfw_route_table    (this_route_lcore.gfw_route_table)
 
 #define this_num_routes         (RTE_PER_LCORE(num_routes))
+#define this_num_out_routes         (RTE_PER_LCORE(num_out_routes))
 
 /**
  * use per-lcore structure for lockless
@@ -42,10 +44,12 @@
 struct route_lcore {
     struct list_head local_route_table[LOCAL_ROUTE_TAB_SIZE];
     struct list_head net_route_table;
+    struct list_head gfw_route_table;
 };
 
 static RTE_DEFINE_PER_LCORE(struct route_lcore, route_lcore);
 static RTE_DEFINE_PER_LCORE(rte_atomic32_t, num_routes);
+static RTE_DEFINE_PER_LCORE(rte_atomic32_t, num_out_routes);
 
 static inline bool net_cmp(const struct netif_port *port, uint32_t dest,
                            uint8_t mask, const struct route_entry *route_node)
@@ -111,7 +115,13 @@ static int route_net_add(struct in_addr *dest, uint8_t netmask, uint32_t flag,
                          struct in_addr *src, unsigned long mtu,short metric)
 {
     struct route_entry *route_node, *route;
-    list_for_each_entry(route_node, &this_net_route_table, list){
+    struct list_head *route_table = &this_net_route_table;
+
+    if (flag & RTF_OUTWALL) {
+        route_table = &this_gfw_route_table;
+    }
+
+    list_for_each_entry(route_node, route_table, list){
         if (net_cmp(port, dest->s_addr, netmask, route_node)
                 && (netmask == route_node->netmask)){
             return EDPVS_EXIST;
@@ -124,7 +134,10 @@ static int route_net_add(struct in_addr *dest, uint8_t netmask, uint32_t flag,
             }
             __list_add(&route->list, (&route_node->list)->prev,
                        &route_node->list);
-            rte_atomic32_inc(&this_num_routes);
+            if (flag & RTF_OUTWALL)
+                rte_atomic32_inc(&this_num_out_routes);
+            else
+                rte_atomic32_inc(&this_num_routes);
             rte_atomic32_inc(&route->refcnt);
             return EDPVS_OK;
         }
@@ -134,8 +147,11 @@ static int route_net_add(struct in_addr *dest, uint8_t netmask, uint32_t flag,
     if (!route){
         return EDPVS_NOMEM;
     }
-    list_add_tail(&route->list,&this_net_route_table);
-    rte_atomic32_inc(&this_num_routes);
+    list_add_tail(&route->list, route_table);
+    if (flag & RTF_OUTWALL)
+        rte_atomic32_inc(&this_num_out_routes);
+    else
+        rte_atomic32_inc(&this_num_routes);
     rte_atomic32_inc(&route->refcnt);
     return EDPVS_OK;
 }
@@ -207,6 +223,18 @@ static struct route_entry *route_out_net_lookup(const struct in_addr *dest)
     return NULL;
 }
 
+struct route_entry *route_gfw_net_lookup(const struct in_addr *dest)
+{
+    struct route_entry *route_node;
+    list_for_each_entry(route_node, &this_gfw_route_table, list){
+        if (net_cmp(route_node->port, dest->s_addr, route_node->netmask, route_node)){
+            rte_atomic32_inc(&route_node->refcnt);
+            return route_node;
+        }
+    }
+    return NULL;
+}
+
 static int route_local_add(struct in_addr* dest, uint8_t netmask, uint32_t flag,
                            struct in_addr* gw, struct netif_port *port,
                            struct in_addr* src, unsigned long mtu,short metric)
@@ -236,12 +264,15 @@ static int route_add_lcore(struct in_addr* dest,uint8_t netmask, uint32_t flag,
               struct in_addr* gw, struct netif_port *port,
               struct in_addr* src, unsigned long mtu,short metric)
 {
+
     if((flag & RTF_LOCALIN) || (flag & RTF_KNI))
         return route_local_add(dest, netmask, flag, gw,
-                               port, src, mtu, metric);
+			      port, src, mtu, metric);
+
     if((flag & RTF_FORWARD) || (flag & RTF_DEFAULT))
         return route_net_add(dest, netmask, flag, gw,
                              port, src, mtu, metric);
+   
 
     return EDPVS_INVAL;
 }
@@ -271,6 +302,17 @@ static int route_del_lcore(struct in_addr* dest,uint8_t netmask, uint32_t flag,
         return EDPVS_OK;
     }
 
+    if (flag & RTF_OUTWALL) {
+        route = route_gfw_net_lookup(dest);
+        if (!route)
+            return EDPVS_NOTEXIST;
+        list_del(&route->list);
+        rte_atomic32_dec(&route->refcnt);
+        rte_atomic32_dec(&this_num_out_routes);
+        route4_put(route);
+        return EDPVS_OK;
+    }
+  
     if(flag & RTF_FORWARD || (flag & RTF_DEFAULT)){
         route = route_net_lookup(port, dest, netmask);
         if (!route)
@@ -441,7 +483,12 @@ static int route_lcore_flush(void)
         rte_atomic32_dec(&this_num_routes);
         route4_put(route_node);
     }
-
+    
+    list_for_each_entry(route_node, &this_gfw_route_table, list){
+        list_del(&route_node->list);
+        rte_atomic32_dec(&this_num_out_routes);
+        route4_put(route_node);
+    }
     return EDPVS_OK;
 }
 
@@ -483,6 +530,9 @@ static int route_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         if (inet_is_addr_any(cf->af, &cf->dst))
             flags |= RTF_DEFAULT;
     }
+
+    if (cf->outwalltb)
+        flags |= RTF_OUTWALL;
 
     dev = netif_port_get_by_name(cf->ifname);
     if (!dev) /* no dev is OK ? */
@@ -547,6 +597,7 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     struct route_entry *entry;
     struct netif_port *port = NULL;
     int off = 0;
+    bool outwall_table=false;
 
     if (conf && size >= sizeof(*cf))
         cf = conf;
@@ -563,6 +614,11 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     }
 
     nroute = rte_atomic32_read(&this_num_routes);
+    
+    if (cf && cf->outwalltb) {
+	nroute = rte_atomic32_read(&this_num_out_routes);
+	outwall_table = true;
+    }
 
     *outsize = sizeof(struct dp_vs_route_conf_array) + \
                nroute * sizeof(struct dp_vs_route_conf);
@@ -570,6 +626,16 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     if (!(*out))
         return EDPVS_NOMEM;
     array = *out;
+
+    if (outwall_table) {
+        list_for_each_entry(entry, &this_gfw_route_table, list) {
+            if (off >= nroute)
+                break;
+            route_fill_conf(AF_INET, &array->routes[off++], entry);
+        }
+        array->nroute = off;
+        return EDPVS_OK;
+    }  
 
     if (port) {
         for (hash = 0; hash < LOCAL_ROUTE_TAB_SIZE; hash++) {
@@ -665,6 +731,7 @@ static int route_lcore_init(void *arg)
     for (i = 0; i < LOCAL_ROUTE_TAB_SIZE; i++)
         INIT_LIST_HEAD(&this_local_route_table[i]);
     INIT_LIST_HEAD(&this_net_route_table);
+    INIT_LIST_HEAD(&this_gfw_route_table);
 
     return EDPVS_OK;
 }
@@ -684,7 +751,7 @@ int route_init(void)
     struct dpvs_msg_type msg_type;
 
     rte_atomic32_set(&this_num_routes, 0);
-
+    rte_atomic32_set(&this_num_out_routes, 0);
     /* master core also need routes */
     rte_eal_mp_remote_launch(route_lcore_init, NULL, CALL_MASTER);
     RTE_LCORE_FOREACH_SLAVE(cid) {
@@ -698,6 +765,7 @@ int route_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_ROUTE_ADD;
     msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = route_add_msg_cb;
     err = msg_type_mc_register(&msg_type);
@@ -709,6 +777,7 @@ int route_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_ROUTE_DEL;
     msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = route_del_msg_cb;
     err = msg_type_mc_register(&msg_type);

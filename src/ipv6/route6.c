@@ -422,6 +422,7 @@ int route6_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type           = MSG_TYPE_ROUTE6;
     msg_type.mode           = DPVS_MSG_MULTICAST;
+    msg_type.prio           = MSG_PRIO_NORM;
     msg_type.cid            = rte_lcore_id();
     msg_type.unicast_msg_cb = rt6_msg_process_cb;
     err = msg_type_mc_register(&msg_type);
@@ -452,6 +453,7 @@ int route6_term(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type           = MSG_TYPE_ROUTE6;
     msg_type.mode           = DPVS_MSG_MULTICAST;
+    msg_type.prio           = MSG_PRIO_NORM;
     msg_type.cid            = rte_lcore_id();
     msg_type.unicast_msg_cb = rt6_msg_process_cb;
     err = msg_type_mc_unregister(&msg_type);

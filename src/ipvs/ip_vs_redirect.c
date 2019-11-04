@@ -17,9 +17,9 @@
  */
 #include "ipvs/redirect.h"
 
-#define DPVS_REDIRECT_RING_SIZE  4096
+#define DPVS_REDIRECT_RING_SIZE  2048
 
-#define DPVS_CR_TBL_BITS   22
+#define DPVS_CR_TBL_BITS   20
 #define DPVS_CR_TBL_SIZE   (1 << DPVS_CR_TBL_BITS)
 #define DPVS_CR_TBL_MASK   (DPVS_CR_TBL_SIZE - 1)
 
@@ -105,10 +105,8 @@ void dp_vs_redirect_hash(struct dp_vs_conn *conn)
         return;
     }
 
-    hash = dp_vs_conn_hashkey(r->af,
-                    &tuplehash_out(conn).saddr, tuplehash_out(conn).sport,
-                    &tuplehash_out(conn).daddr, tuplehash_out(conn).dport,
-                    DPVS_CR_TBL_MASK);
+    hash = dp_vs_conn_hashkey(r->af, &r->saddr, r->sport,
+            &r->daddr, r->dport, DPVS_CR_TBL_MASK);
 
     rte_spinlock_lock(&dp_vs_cr_lock[hash]);
     list_add(&r->list, &dp_vs_cr_tbl[hash]);
@@ -123,10 +121,8 @@ void dp_vs_redirect_unhash(struct dp_vs_conn *conn)
     struct dp_vs_redirect *r = conn->redirect;
 
     if (r && likely(dp_vs_conn_is_redirect_hashed(conn))) {
-        hash = dp_vs_conn_hashkey(r->af,
-                                  &r->saddr, r->sport,
-                                  &r->daddr, r->dport,
-                                  DPVS_CR_TBL_MASK);
+        hash = dp_vs_conn_hashkey(r->af, &r->saddr, r->sport,
+                &r->daddr, r->dport, DPVS_CR_TBL_MASK);
 
         rte_spinlock_lock(&dp_vs_cr_lock[hash]);
         list_del(&r->list);
@@ -359,12 +355,12 @@ static int dp_vs_redirect_ring_create(void)
     socket_id = rte_socket_id();
 
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
-        if (cid == rte_get_master_lcore() || !rte_lcore_is_enabled(cid)) {
+        if (cid == rte_get_master_lcore() || netif_lcore_is_idle(cid)) {
             continue;
         }
 
         for (peer_cid = 0; peer_cid < DPVS_MAX_LCORE; peer_cid++) {
-            if (!rte_lcore_is_enabled(peer_cid)
+            if (netif_lcore_is_idle(peer_cid)
                 || peer_cid == rte_get_master_lcore()
                 || cid == peer_cid) {
                 continue;

@@ -1,9 +1,13 @@
 #!/bin/sh -
 # program: dpvs
-# Feb 26, 2019
-# Features: NAT64, connection redirect
+# Oct 8, 2019
+# Commit: 3d8f47575bd18ebfda88d83d869b36a18d2f49c1
+#         "route6: fix some problems"
+# Features: 
+#     1. add dummy info and backtrace for dpvs timer crash problem
+#     2. fix some problems in route6
 
 export VERSION=1.7
-export RELEASE=2
+export RELEASE=8
 
 echo $VERSION-$RELEASE

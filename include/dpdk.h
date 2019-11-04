@@ -55,10 +55,21 @@
 #include <rte_kni.h>
 #include <rte_ip_frag.h>
 #include <rte_eth_bond.h>
+#include <rte_eth_bond_8023ad.h>
 #include "mbuf.h"
 
 typedef uint8_t lcoreid_t;
 typedef uint16_t portid_t;
 typedef uint16_t queueid_t;
+
+
+#ifdef RTE_LOG
+extern int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const char *format, ...);
+#undef RTE_LOG
+#define RTE_LOG(l, t, ...)                  \
+    dpvs_log(RTE_LOG_ ## l,                   \
+        RTE_LOGTYPE_ ## t,  __func__, __LINE__, # t ": " __VA_ARGS__) 
+#endif
+
 
 #endif /* __DPVS_DPDK_H__ */

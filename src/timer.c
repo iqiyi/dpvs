@@ -37,6 +37,11 @@
 #define DTIMER
 #define RTE_LOGTYPE_DTIMER      RTE_LOGTYPE_USER1
 
+#ifdef CONFIG_TIMER_DEBUG
+#define TIMER_DUMMY_DATA0       0x3659AC
+#define TIMER_DUMMY_DATA1       0x93C5A6
+#endif
+
 /*
  * the use case of dpvs timer is huge number of connections has concentrated
  * timeouts like 120s/60s, while other timeout values are not that much.
@@ -79,7 +84,22 @@ static RTE_DEFINE_PER_LCORE(struct timer_scheduler, timer_sched);
 /* global timer. */
 static struct timer_scheduler g_timer_sched;
 
-static inline dpvs_tick_t timeval_to_ticks(const struct timeval *tv)
+
+static inline void timer_sched_lock(struct timer_scheduler *sched)
+{
+    if (unlikely(sched == &g_timer_sched))
+        rte_spinlock_lock(&sched->lock);
+    return;
+}
+
+static inline void timer_sched_unlock(struct timer_scheduler *sched)
+{
+    if (unlikely(sched == &g_timer_sched))
+        rte_spinlock_unlock(&sched->lock);
+    return;
+}
+
+dpvs_tick_t timeval_to_ticks(const struct timeval *tv)
 {
     uint64_t ticks;
 
@@ -92,7 +112,7 @@ static inline dpvs_tick_t timeval_to_ticks(const struct timeval *tv)
     return (dpvs_tick_t)ticks;
 }
 
-static inline void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv)
+void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv)
 {
     tv->tv_sec = ticks / DPVS_TIMER_HZ;
     tv->tv_usec = ticks % DPVS_TIMER_HZ * 1000000 / DPVS_TIMER_HZ;
@@ -125,7 +145,27 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
     uint32_t off, hash;
     int level;
 
-    assert(timer && delay && handler);
+    assert(timer);
+
+#ifdef CONFIG_TIMER_DEBUG
+    /* just for debug */
+    if (unlikely((uint64_t)handler > 0x7ffffffffULL)) {
+        char trace[8192];
+        dpvs_backtrace(trace, sizeof(trace));
+        RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p new handler possibly invalid: %p -> %p\n%s",
+                rte_lcore_id(), timer, timer->handler, handler, trace);
+    }
+    if (unlikely(timer->handler && timer->handler != handler)) {
+        char trace[8192];
+        dpvs_backtrace(trace, sizeof(trace));
+        RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p handler possibly changed maliciously: %p ->%p\n%s",
+                rte_lcore_id(), timer, timer->handler, handler, trace);
+    }
+    timer->dummy.next = (void *)TIMER_DUMMY_DATA0;
+    timer->dummy.prev = (void *)TIMER_DUMMY_DATA1;
+#endif
+
+    assert(delay && handler);
 
     if (timer_pending(timer))
         RTE_LOG(WARNING, DTIMER, "schedule a pending timer ?\n");
@@ -155,11 +195,15 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
         if (off > 0) {
             hash = (sched->cursors[level] + off) % LEVEL_SIZE;
             list_add_tail(&timer->list, &sched->hashs[level][hash]);
+#ifdef CONFIG_TIMER_DEBUG
+            assert(timer->handler == handler);
+#endif
             return EDPVS_OK;
         }
     }
 
     /* not adopted by any wheel (never happend) */
+    RTE_LOG(WARNING, DTIMER, "unexpected error\n");
     return EDPVS_INVAL;
 }
 
@@ -189,9 +233,18 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
     if (timer_pending(timer))
         list_del(&timer->list);
 
-    rte_spinlock_unlock(&sched->lock);
+#ifdef CONFIG_TIMER_DEBUG
+    if (unlikely(timer->dummy.next != (void *)TIMER_DUMMY_DATA0 ||
+                timer->dummy.prev != (void *)TIMER_DUMMY_DATA1)) {
+        char trace[8192];
+        dpvs_backtrace(trace, sizeof(trace));
+        RTE_LOG(WARNING, DTIMER, "[%02d]: timer(%p) dummy info invalid -- dummy.next:%p,"
+                "dummy.prev:%p, handler:%p, priv:%p, trace:\n%s", rte_lcore_id(), timer,
+                timer->dummy.next, timer->dummy.prev, timer->handler, timer->priv, trace);
+    }
+#endif
+
     err = handler(priv);
-    rte_spinlock_lock(&sched->lock);
 
     if (err != DTIMER_OK || !timer->is_period)
         return;
@@ -225,7 +278,7 @@ static inline void deviation_measure(void)
 
 /*
  * it takes exactly one tick between invokations,
- * except system (including time handles) takes more then
+ * except system (including timer handles) takes more than
  * one tick to get rte_timer_manage() called.
  * we needn't calculate ticks elapsed by ourself.
  */
@@ -233,25 +286,24 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
 {
     struct timer_scheduler *sched = arg;
     struct dpvs_timer *timer, *next;
-    uint64_t left, hash, off;
+    uint64_t left, hash, off, remainder;
     int level, lower;
     uint32_t *cursor;
     bool carry;
 
     assert(tim && sched);
+
 #ifdef CONFIG_TIMER_MEASURE
     deviation_measure();
-    return;
 #endif
 
-    rte_spinlock_lock(&sched->lock);
-
     /* drive timer to move and handle expired timers. */
+    timer_sched_lock(sched);
     for (level = 0; level < LEVEL_DEPTH; level++) {
         cursor = &sched->cursors[level];
         (*cursor)++;
 
-        if (*cursor < LEVEL_SIZE) {
+        if (likely(*cursor < LEVEL_SIZE)) {
             carry = false;
         } else {
             /* reset the cursor and handle next level later. */
@@ -271,12 +323,13 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
                 list_del(&timer->list);
 
                 lower = level;
+                remainder = timer->delay % get_level_ticks(level);
                 while (--lower >= 0) {
-                    off = timer->delay / get_level_ticks(lower);
+                    off = remainder / get_level_ticks(lower);
                     if (!off)
                         continue; /* next lower level */
 
-                    hash = (*cursor + off) % LEVEL_SIZE;
+                    hash = (sched->cursors[lower] + off) % LEVEL_SIZE;
                     list_add_tail(&timer->list, &sched->hashs[lower][hash]);
                     break;
                 }
@@ -288,8 +341,8 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
         if (!carry)
             break;
     }
+    timer_sched_unlock(sched);
 
-    rte_spinlock_unlock(&sched->lock);
     return;
 }
 
@@ -300,7 +353,7 @@ static int timer_init_schedler(struct timer_scheduler *sched, lcoreid_t cid)
     rte_spinlock_init(&sched->lock);
 
 
-    rte_spinlock_lock(&sched->lock);
+    timer_sched_lock(sched);
     for (l = 0; l < LEVEL_DEPTH; l++) {
         sched->cursors[l] = 0;
 
@@ -308,13 +361,14 @@ static int timer_init_schedler(struct timer_scheduler *sched, lcoreid_t cid)
                                      sizeof(struct list_head) * LEVEL_SIZE, 0);
         if (!sched->hashs[l]) {
             RTE_LOG(ERR, DTIMER, "[%02d] no memory.\n", cid);
+            timer_sched_unlock(sched);
             return EDPVS_NOMEM;
         }
 
         for (i = 0; i < LEVEL_SIZE; i++)
             INIT_LIST_HEAD(&sched->hashs[l][i]);
     }
-    rte_spinlock_unlock(&sched->lock);
+    timer_sched_unlock(sched);
 
     rte_timer_init(&sched->rte_tim);
     /* ticks should be exactly same with precision */
@@ -336,7 +390,7 @@ static int timer_term_schedler(struct timer_scheduler *sched)
     rte_timer_stop_sync(&sched->rte_tim);
 
     /* delete all pending timers */
-    rte_spinlock_lock(&sched->lock);
+    timer_sched_lock(sched);
 
     for (l = 0; l < LEVEL_DEPTH; l++) {
         for (i = 0; i < LEVEL_SIZE; i++) {
@@ -348,7 +402,7 @@ static int timer_term_schedler(struct timer_scheduler *sched)
         sched->cursors[l] = 0;
     }
 
-    rte_spinlock_unlock(&sched->lock);
+    timer_sched_unlock(sched);
 
     return EDPVS_OK;
 }
@@ -419,6 +473,21 @@ static inline struct timer_scheduler *this_lcore_sched(bool global)
     return global ? &g_timer_sched : &RTE_PER_LCORE(timer_sched);
 }
 
+int dpvs_timer_sched_nolock(struct dpvs_timer *timer, struct timeval *delay,
+                     dpvs_timer_cb_t handler, void *arg, bool global)
+{
+    struct timer_scheduler *sched = this_lcore_sched(global);
+    int err;
+
+    if (!sched || !timer || !delay || !handler
+            || delay->tv_sec >= TIMER_MAX_SECS)
+        return EDPVS_INVAL;
+
+    err = __dpvs_timer_sched(sched, timer, delay, handler, arg, false);
+
+    return err;
+}
+
 int dpvs_timer_sched(struct dpvs_timer *timer, struct timeval *delay,
                      dpvs_timer_cb_t handler, void *arg, bool global)
 {
@@ -429,14 +498,14 @@ int dpvs_timer_sched(struct dpvs_timer *timer, struct timeval *delay,
             || delay->tv_sec >= TIMER_MAX_SECS)
         return EDPVS_INVAL;
 
-    rte_spinlock_lock(&sched->lock);
+    timer_sched_lock(sched);
     err = __dpvs_timer_sched(sched, timer, delay, handler, arg, false);
-    rte_spinlock_unlock(&sched->lock);
+    timer_sched_unlock(sched);
 
     return err;
 }
 
-int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
+int dpvs_timer_sched_abs_nolock(struct dpvs_timer *timer, struct timeval *expire,
                          dpvs_timer_cb_t handler, void *arg, bool global)
 {
     struct timer_scheduler *sched = this_lcore_sched(global);
@@ -446,7 +515,6 @@ int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
     if (!sched || !timer || !expire || !handler)
         return EDPVS_INVAL;
 
-    rte_spinlock_lock(&sched->lock);
     __time_now(sched, &now);
     if (!timercmp(expire, &now, >)) {
         /* consider the diff between user call dpvs_time_now() and NOW,
@@ -454,18 +522,42 @@ int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
          * to schedule an 1-tick timer ? no, let's trigger it now.
          * note we cannot call timer_expire() direcly. */
         handler(arg);
-        rte_spinlock_unlock(&sched->lock);
         return EDPVS_OK;
     } else {
         timersub(expire, &now, &delta);
         if (delta.tv_sec >= TIMER_MAX_SECS) {
-            rte_spinlock_unlock(&sched->lock);
             return EDPVS_INVAL;
         }
     }
 
     err = __dpvs_timer_sched(sched, timer, &delta, handler, arg, false);
-    rte_spinlock_unlock(&sched->lock);
+
+    return err;
+}
+
+int dpvs_timer_sched_abs(struct dpvs_timer *timer, struct timeval *expire,
+                         dpvs_timer_cb_t handler, void *arg, bool global)
+{
+    int err;
+    struct timer_scheduler *sched = this_lcore_sched(global);
+
+    timer_sched_lock(sched);
+    err = dpvs_timer_sched_abs_nolock(timer, expire, handler, arg, global);
+    timer_sched_unlock(sched);
+
+    return err;
+}
+
+int dpvs_timer_sched_period_nolock(struct dpvs_timer *timer,
+        struct timeval *intv, dpvs_timer_cb_t handler, void *arg, bool global)
+{
+    struct timer_scheduler *sched = this_lcore_sched(global);
+    int err;
+
+    if (!sched || !timer || !intv || !handler || intv->tv_sec >= TIMER_MAX_SECS)
+        return EDPVS_INVAL;
+
+    err = __dpvs_timer_sched(sched, timer, intv, handler, arg, true);
 
     return err;
 }
@@ -479,10 +571,24 @@ int dpvs_timer_sched_period(struct dpvs_timer *timer, struct timeval *intv,
     if (!sched || !timer || !intv || !handler || intv->tv_sec >= TIMER_MAX_SECS)
         return EDPVS_INVAL;
 
-    rte_spinlock_lock(&sched->lock);
+    timer_sched_lock(sched);
     err = __dpvs_timer_sched(sched, timer, intv, handler, arg, true);
-    rte_spinlock_unlock(&sched->lock);
+    timer_sched_unlock(sched);
+
     return err;
+}
+
+int dpvs_timer_cancel_nolock(struct dpvs_timer *timer, bool global)
+{
+    struct timer_scheduler *sched = this_lcore_sched(global);
+
+    if (!sched || !timer)
+        return EDPVS_INVAL;
+
+    if (timer_pending(timer))
+        list_del(&timer->list);
+
+    return EDPVS_OK;
 }
 
 int dpvs_timer_cancel(struct dpvs_timer *timer, bool global)
@@ -492,11 +598,30 @@ int dpvs_timer_cancel(struct dpvs_timer *timer, bool global)
     if (!sched || !timer)
         return EDPVS_INVAL;
 
-    rte_spinlock_lock(&sched->lock);
+    timer_sched_lock(sched);
     if (timer_pending(timer))
         list_del(&timer->list);
-    rte_spinlock_unlock(&sched->lock);
+    timer_sched_unlock(sched);
+
     return EDPVS_OK;
+}
+
+int dpvs_timer_reset_nolock(struct dpvs_timer *timer, bool global)
+{
+    struct timer_scheduler *sched = this_lcore_sched(global);
+    struct timeval delay;
+    int err;
+
+    if (!sched || !timer)
+        return EDPVS_INVAL;
+
+    if (timer_pending(timer))
+        list_del(&timer->list);
+
+    ticks_to_timeval(timer->delay, &delay);
+    err = __dpvs_timer_sched(sched, timer, &delay, timer->handler,
+                             timer->priv, timer->is_period);
+    return err;
 }
 
 int dpvs_timer_reset(struct dpvs_timer *timer, bool global)
@@ -508,14 +633,31 @@ int dpvs_timer_reset(struct dpvs_timer *timer, bool global)
     if (!sched || !timer)
         return EDPVS_INVAL;
 
-    rte_spinlock_lock(&sched->lock);
+    timer_sched_lock(sched);
     if (timer_pending(timer))
         list_del(&timer->list);
 
     ticks_to_timeval(timer->delay, &delay);
     err = __dpvs_timer_sched(sched, timer, &delay, timer->handler,
                              timer->priv, timer->is_period);
-    rte_spinlock_unlock(&sched->lock);
+    timer_sched_unlock(sched);
+
+    return err;
+}
+
+int dpvs_timer_update_nolock(struct dpvs_timer *timer, struct timeval *delay, bool global)
+{
+    struct timer_scheduler *sched = this_lcore_sched(global);
+    int err;
+
+    if (!sched || !timer || !delay)
+        return EDPVS_INVAL;
+
+    if (timer_pending(timer))
+        list_del(&timer->list);
+    err = __dpvs_timer_sched(sched, timer, delay,
+            timer->handler, timer->priv, timer->is_period);
+
     return err;
 }
 
@@ -527,13 +669,25 @@ int dpvs_timer_update(struct dpvs_timer *timer, struct timeval *delay, bool glob
     if (!sched || !timer || !delay)
         return EDPVS_INVAL;
 
-    rte_spinlock_lock(&sched->lock);
+    timer_sched_lock(sched);
     if (timer_pending(timer))
         list_del(&timer->list);
     err = __dpvs_timer_sched(sched, timer, delay,
             timer->handler, timer->priv, timer->is_period);
-    rte_spinlock_unlock(&sched->lock);
+    timer_sched_unlock(sched);
+
     return err;
+}
+
+int dpvs_time_now_nolock(struct timeval *now, bool global)
+{
+    struct timer_scheduler *sched = this_lcore_sched(global);
+    if (!sched || !now)
+        return EDPVS_INVAL;
+
+    __time_now(sched, now);
+
+    return EDPVS_OK;
 }
 
 int dpvs_time_now(struct timeval *now, bool global)
@@ -542,9 +696,10 @@ int dpvs_time_now(struct timeval *now, bool global)
     if (!sched || !now)
         return EDPVS_INVAL;
 
-    rte_spinlock_lock(&sched->lock);
+    timer_sched_lock(sched);
     __time_now(sched, now);
-    rte_spinlock_unlock(&sched->lock);
+    timer_sched_unlock(sched);
+
     return EDPVS_OK;
 }
 

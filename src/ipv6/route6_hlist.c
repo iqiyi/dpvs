@@ -21,7 +21,7 @@
 #include "route6_hlist.h"
 #include "linux_ipv6.h"
 
-#define RT6_HLIST_MAX_BUCKET_BITS   10
+#define RT6_HLIST_MAX_BUCKET_BITS   8
 #define RT6_HLIST_MAX_BUCKETS       (1U<<RT6_HLIST_MAX_BUCKET_BITS)
 
 #define this_rt6_htable     (RTE_PER_LCORE(dpvs_rt6_htable).htable)
@@ -278,10 +278,6 @@ rt6_hlist_flow_match(const struct route6 *rt6, const struct flow6 *fl6)
     }
 
     if (fl6->fl6_oif && rt6->rt6_dev && (fl6->fl6_oif->id != rt6->rt6_dev->id))
-        return false;
-
-    if ((!ipv6_addr_any(&rt6->rt6_src.addr)) && (ipv6_addr_equal(&rt6->rt6_src.addr,
-                    &fl6->fl6_saddr)) != true)
         return false;
 
     /* anything else to check ? */
