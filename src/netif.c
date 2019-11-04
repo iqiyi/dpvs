@@ -555,11 +555,6 @@ static void bonding_slave_handler(vector_t tokens)
     assert(str);
     if (get_port_conf_stream(str)) {
         for (ii = 0; ii < NETIF_MAX_BOND_SLAVES; ii++) {
-            if (ii >= NETIF_MAX_BOND_SLAVES) {
-                RTE_LOG(ERR, NETIF, "bonding %s's slaves exceed maximum supported: %d",
-                        current_bond->name, NETIF_MAX_BOND_SLAVES);
-                break;
-            }
             if (!current_bond->slaves[ii][0]) {
                 strncpy(current_bond->slaves[ii], str, sizeof(current_bond->slaves[ii]));
                 RTE_LOG(INFO, NETIF, "bonding %s:slave%d=%s\n", current_bond->name, ii, str);
