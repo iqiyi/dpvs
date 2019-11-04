@@ -325,7 +325,7 @@ static int ip4_rcv_options(struct rte_mbuf *mbuf)
 
 static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
 {
-    int err;
+    int err=0;
     struct route_entry *rt = NULL;
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
@@ -337,6 +337,7 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
     if (unlikely(!rt))
         return EDPVS_KNICONTINUE; /* KNI may like it, don't drop */
 
+    //sleep(1);  //sleep sometime to test imissed change
     /* input IPv4 options */
     if ((iph->version_ihl & 0xf) > 5) {
         if (ip4_rcv_options(mbuf) != EDPVS_OK) {
@@ -347,6 +348,19 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
 
     /* use extended mbuf if have more data then @rt */
     mbuf->userdata = (void *)rt;
+    //Edit site
+    int flag_loop_tmp = floor_loop_cmp(); //lcore loops velocity cmp
+    int flag_inc_tmp = inc_tend_cmp();//imissed nums cmp
+    if(flag_loop_tmp == EDPVS_KNICONTINUE && 
+		flag_inc_tmp == EDPVS_KNICONTINUE){
+    //cpu_valid_loop set & low loop && continuing increase imissed
+	if(rt->flag & RTF_KNI){ //only KNI to pass
+		route4_put(rt);
+		return EDPVS_KNICONTINUE;
+        }else{
+		goto drop;
+	}
+    }
 
     if (rt->flag & RTF_LOCALIN) {
         return ipv4_local_in(mbuf);

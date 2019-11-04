@@ -268,6 +268,14 @@ struct netif_port {
     struct netif_ops        *netif_ops;
 } __rte_cache_aligned;
 
+/****************************cpu status API *******************************/
+int lcore_loop_update(void* priv);//Edit site
+int floor_loop_cmp(void);
+inline int dump_cpu_loop_velocity(lcoreid_t cid,int *per_loops);
+inline int loop_period_event(void* intervals);
+inline int increase_tend_get(void** array,const int cnt);
+inline int dump_port_imissed_stats(void *priv);
+int inc_tend_cmp(void);
 /**************************** lcore API *******************************/
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);

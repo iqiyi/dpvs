@@ -42,6 +42,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ipvs/redirect.h>
+//DEBUG print current time
+#include <time.h>
 
 #define NETIF_PKTPOOL_NB_MBUF_DEF   65535
 #define NETIF_PKTPOOL_NB_MBUF_MIN   1023
@@ -125,6 +127,7 @@ struct worker_conf_stream {
     int cpu_id;
     char name[32];
     char type[32];
+    int cpu_valid_loop; //Edit site
     struct list_head port_list;
     struct list_head worker_list_node;
 };
@@ -709,6 +712,27 @@ static void worker_port_handler(vector_t tokens)
     list_add(&queue_cfg->queue_list_node, &current_worker->port_list);
 }
 
+//Edit site
+static void worker_loop_handler(vector_t tokens)
+{
+	char *str = set_value(tokens);
+        int cpu_valid_loop;
+	struct worker_conf_stream *current_worker = list_entry(worker_list.next,
+				struct worker_conf_stream, worker_list_node); //get in the list 
+	assert(str);
+	if (strspn(str, "0123456789") != strlen(str)) { 
+		RTE_LOG(WARNING, NETIF, "invalid %s:cpu_valid_loop %s, using default -1\n",
+					current_worker->name, str);
+		current_worker->cpu_valid_loop = -1;
+	} else {
+		cpu_valid_loop = atoi(str);
+		RTE_LOG(INFO, NETIF, "%s:cpu_valid_loop = %d\n", current_worker->name, cpu_valid_loop);
+		current_worker->cpu_valid_loop = cpu_valid_loop;
+	}
+
+	FREE_PTR(str);
+}
+
 static void rx_queue_ids_handler(vector_t tokens)
 {
     int ii, qid;
@@ -862,6 +886,7 @@ void install_netif_keywords(void)
     install_sublevel();
     install_keyword("type", worker_type_handler, KW_TYPE_INIT);
     install_keyword("cpu_id", cpu_id_handler, KW_TYPE_INIT);
+    install_keyword("cpu_valid_loop", worker_loop_handler, KW_TYPE_NORMAL);//Edit site
     install_keyword("port", worker_port_handler, KW_TYPE_INIT);
     install_sublevel();
     install_keyword("rx_queue_ids", rx_queue_ids_handler, KW_TYPE_INIT);
@@ -3934,6 +3959,47 @@ void netif_update_master_loop_cnt(void)
     lcore_stats[cid].lcore_loop++;
 }
 
+//Edit site
+/*NIC port imissed num serial struct*/
+#define SERIAL_MAX 4 //8 sequential imissed_num_serial
+const int imissed_FLAG = 0b1111;// num with SERIAL_MAX bits of 1
+const int inc_FLAG = 0b111;//SERIAL_MAX - 1 bits of 1
+typedef struct port_imissed_serial {
+    uint64_t imissed_serial[SERIAL_MAX];
+    int inc_flag;
+} port_imissed_t;
+typedef struct lcore_imissed_stats {
+    port_imissed_t port_imissed_stats[NETIF_PORT_TABLE_BUCKETS];
+    int inc_num;
+    int set_imissed_flag;
+} imissed_t;
+
+static imissed_t lcore_imissed_stats[RTE_MAX_LCORE];
+static void lcore_imissed_init(void){
+    int ii=0;
+    for(ii = 0;ii < RTE_MAX_LCORE;ii++){
+	lcore_imissed_stats[ii].set_imissed_flag = 0;
+	lcore_imissed_stats[ii].inc_num = 0;
+    }
+}
+/*lcore loops & lcore loop velocity struct*/
+#define LOOP_SEC 5 
+#define LOOP_USEC 0   //set loops vel calc period
+typedef struct lcore_loop_vel_arr{
+    uint64_t lcore_loop_vel[3];
+    int set_loop_flag;
+}loop_vel_t;
+static loop_vel_t lcore_loop_vel_stats[RTE_MAX_LCORE];
+double secs;
+static struct dpvs_timer loop_timer[RTE_MAX_LCORE];
+static void loop_init(void){
+    int ii=0;
+    for(ii = 0;ii < RTE_MAX_LCORE;ii++){
+	lcore_loop_vel_stats[ii].set_loop_flag = 0;
+    }
+}
+/** END struct & init support for overload protection  END  **/
+
 #ifdef CONFIG_RECORD_BIG_LOOP
 #define BIG_LOOP_THRESH 2000 // 2000 us
 static uint32_t longest_lcore_loop[DPVS_MAX_LCORE] = { 0 };
@@ -4017,6 +4083,13 @@ static int netif_loop(void *dummy)
     list_for_each_entry(job, &netif_lcore_jobs[NETIF_LCORE_JOB_INIT], list) {
         do_lcore_job(job);
     }
+
+    //Edit site: for lcore loop stats update
+    struct timeval interval;
+    (interval).tv_sec = LOOP_SEC;
+    (interval).tv_usec = LOOP_USEC;
+    loop_period_event((void*)(&interval));
+
     while (1) {
 #ifdef CONFIG_RECORD_BIG_LOOP
         loop_start = rte_get_timer_cycles();
@@ -4048,6 +4121,43 @@ static int netif_loop(void *dummy)
 #endif
     }
     return EDPVS_OK;
+}
+
+//Edit site:loop info update timer handler
+int lcore_loop_update(void* priv){
+
+	lcoreid_t j = rte_lcore_id();
+	if(lcore_loop_vel_stats[j].set_loop_flag == 0){
+ 	    lcore_loop_vel_stats[j].lcore_loop_vel[0] = lcore_stats[j].lcore_loop;
+	    lcore_loop_vel_stats[j].set_loop_flag = 1;
+	    return DTIMER_OK;
+	}else{
+	    if(lcore_loop_vel_stats[j].set_loop_flag == 1){
+	        lcore_loop_vel_stats[j].lcore_loop_vel[1] = lcore_stats[j].lcore_loop;
+		lcore_loop_vel_stats[j].lcore_loop_vel[2] = (lcore_stats[j].lcore_loop 
+							    - lcore_loop_vel_stats[j].lcore_loop_vel[0])/secs;
+		lcore_loop_vel_stats[j].set_loop_flag = 2;
+	    }else{
+		lcore_loop_vel_stats[j].lcore_loop_vel[2] = (lcore_stats[j].lcore_loop 
+							    - lcore_loop_vel_stats[j].lcore_loop_vel[1])/secs;
+		lcore_loop_vel_stats[j].lcore_loop_vel[0] = lcore_loop_vel_stats[j].lcore_loop_vel[1];
+		lcore_loop_vel_stats[j].lcore_loop_vel[1] = lcore_stats[j].lcore_loop;
+	    }
+	}
+        printf("periodical perloops update:%lu  lcore id:%d-\n",
+						lcore_loop_vel_stats[j].lcore_loop_vel[2],j);
+	return DTIMER_OK;
+}
+
+//Edit site timer event set function
+inline int loop_period_event(void* intervals){
+    lcoreid_t cid = rte_lcore_id();
+    long usecs = 1000000 * (((struct timeval*)intervals)->tv_sec) + ((struct timeval*)intervals)->tv_usec;
+    secs = usecs / 1000000;//secs is global
+
+    /*Add timeout task...*/
+    dpvs_timer_sched_period(&loop_timer[cid],intervals,lcore_loop_update,NULL,false);
+    return 0;
 }
 
 int netif_lcore_start(void)
@@ -4178,6 +4288,8 @@ int netif_init(const struct rte_eth_conf *conf)
     netif_arp_ring_init();
     netif_pkt_type_tab_init();
     netif_lcore_jobs_init();
+    loop_init();//Edit site
+    lcore_imissed_init();
     // use default port conf if conf=NULL
     netif_port_init(conf);
     netif_lcore_init();
@@ -5171,3 +5283,124 @@ int netif_ctrl_term(void)
 
     return EDPVS_OK;
 }
+/***********module update for overload protection support************/
+//Edit site:test if there are certain percent with series of increasing element
+inline int increase_tend_get(void **array,const int cnt){
+    int kk = 0,j = 0;
+    size_t len;
+    assert(cnt > 0);
+    netif_nic_stats_get_t *port_list_node = NULL;
+    portid_t id;
+    char *name;
+    struct netif_port *port;
+    lcoreid_t cid = rte_lcore_id();
+    if(lcore_imissed_stats[cid].set_imissed_flag < imissed_FLAG){
+	for(j = 0; j < SERIAL_MAX; j++) //cycle to set imissed num all first
+	    if(((lcore_imissed_stats[cid].set_imissed_flag>>j)&1) == 0)
+		break;
+	printf("the set imissed flag is:%d\n",lcore_imissed_stats[cid].set_imissed_flag);
+	lcore_imissed_stats[cid].set_imissed_flag |= (1 << j);
+ 	
+	for( kk = 0; kk < cnt; kk++){ //cycle for each NIC port
+   	    id = ((netif_nic_list_get_t*)(*array))->idname[kk].id;
+
+	    name = (char*)(((netif_nic_list_get_t*)(*array))->idname[kk].name);
+	    port = netif_port_get_by_name(name);
+	    get_port_stats(port,(void **)&port_list_node,&len);
+	    lcore_imissed_stats[cid].port_imissed_stats[id].imissed_serial[j] =
+								 port_list_node->imissed;
+  	    //printf("imissed num : %lu\n",port_list_node->imissed);//DEBUG	
+	    if(lcore_imissed_stats[cid].set_imissed_flag == imissed_FLAG){
+     	        for(j = 1; j < SERIAL_MAX; j++){
+		    if(lcore_imissed_stats[cid].port_imissed_stats[id].imissed_serial[j]
+			 > lcore_imissed_stats[cid].port_imissed_stats[id].imissed_serial[j-1]){
+		        lcore_imissed_stats[cid].port_imissed_stats[id].inc_flag |= (1 << (j-1));
+		    }else{
+		        break;
+		    }
+	    	}
+	    }
+	if(lcore_imissed_stats[cid].port_imissed_stats[id].inc_flag == inc_FLAG)
+	    lcore_imissed_stats[cid].inc_num++;
+        }
+    }
+    else{
+	for(kk = 0; kk < cnt; kk++){ 
+   	    id = ((netif_nic_list_get_t*)(*array))->idname[kk].id;
+	    name = (char*)(((netif_nic_list_get_t*)(*array))->idname[kk].name);
+	    port = netif_port_get_by_name(name);
+	    get_port_stats(port,(void **)&port_list_node,&len);
+	    lcore_imissed_stats[cid].port_imissed_stats[id].imissed_serial[j]
+								 = port_list_node->imissed;
+	    //start to change the order of element and calculate if it is increase gradually
+	    lcore_imissed_stats[cid].port_imissed_stats[id].inc_flag >>= 1;
+	    if(port_list_node->imissed > 
+			lcore_imissed_stats[cid].port_imissed_stats[id].imissed_serial[SERIAL_MAX-1]){
+		lcore_imissed_stats[cid].port_imissed_stats[id].inc_flag |= (1 << (SERIAL_MAX-2));
+	    }
+	    lcore_imissed_stats[cid].port_imissed_stats[id].imissed_serial[SERIAL_MAX-1] 
+								= port_list_node->imissed;
+	    if(lcore_imissed_stats[cid].port_imissed_stats[id].inc_flag == inc_FLAG)
+		lcore_imissed_stats[cid].inc_num++;
+	}
+    }
+
+    return EDPVS_OK;
+}
+
+inline int dump_port_imissed_stats(void* priv){
+	size_t len;
+	netif_nic_list_get_t *port_list = NULL;
+	int cnt;
+	get_port_list((void **)&port_list,&len);//port id and name info
+	cnt = port_list->nic_num;
+	increase_tend_get((void**)&port_list,cnt);
+	return EDPVS_OK;
+}
+
+int inc_tend_cmp(){
+	lcoreid_t cid;
+    	cid = rte_lcore_id();
+
+    	assert(cid < DPVS_MAX_LCORE);
+	lcore_imissed_stats[cid].inc_num = 0;
+	dump_port_imissed_stats(NULL);
+        printf("imissed incnum update:%d -lcore id:%d\n",lcore_imissed_stats[cid].inc_num,cid);
+	if(lcore_imissed_stats[cid].inc_num > 0){ //determine if inc count >0 
+		return EDPVS_KNICONTINUE;
+	}else{
+		return EDPVS_OK;
+	}
+	return EDPVS_OK;
+}
+
+int floor_loop_cmp(){
+    	lcoreid_t cid;
+    	cid = rte_lcore_id();
+    	assert(cid < DPVS_MAX_LCORE);
+
+	struct list_head *pos_tmp;
+	lcoreid_t cnt_tmp = 0;
+	for(pos_tmp = worker_list.next; 
+		  pos_tmp->next != & worker_list; pos_tmp = pos_tmp->next){
+		if(cnt_tmp == cid)
+			break;
+		cnt_tmp ++;
+	}
+	struct worker_conf_stream *current_worker = list_entry(pos_tmp, 
+						struct worker_conf_stream, worker_list_node);
+	int cpu_valid_loop = current_worker->cpu_valid_loop;
+	if(cpu_valid_loop == -1)
+		return (-1);
+	
+	int lcore_per_loops;
+	lcore_per_loops = lcore_loop_vel_stats[cid].lcore_loop_vel[2];
+
+	if(lcore_per_loops < cpu_valid_loop){
+		return EDPVS_KNICONTINUE; //EDPVS_KNICONTINUE=1
+	}else{
+		return EDPVS_OK; //EDPVS_OK=0
+	}
+	return EDPVS_OK;
+}
+/** END  support for overload protection   END  **/
