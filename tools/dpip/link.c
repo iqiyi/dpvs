@@ -134,6 +134,7 @@ static void link_help(void)
             "    dpip link show\n"
             "    dpip -s -v link show dpdk0\n"
             "    dpip link show cpu\n"
+            "    dpip link zero\n"
             "    dpip -s link show cpu2 -i 3 -c 5\n"
             "    dpip -s -v link show cpu3 -i 2\n"
             "    dpip link show bond0 status\n"
@@ -1097,6 +1098,11 @@ static int link_del(struct link_param *param)
     return EDPVS_OK;
 }
 
+static int link_zero_stats(void)
+{
+    return dpvs_setsockopt(SOCKOPT_NETIF_SET_ZERO, NULL, 0);
+}
+
 static int link_set(struct link_param *param)
 {
     assert(param);
@@ -1166,6 +1172,8 @@ static int link_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         return link_set(&param);
     case DPIP_CMD_SHOW:
         return link_show(&param);
+    case DPIP_CMD_ZERO:
+        return link_zero_stats();
     default:
         return EDPVS_NOTSUPP;
     }

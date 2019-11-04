@@ -31,6 +31,7 @@ enum {
 
     /* get */
     SOCKOPT_GET_IFADDR_SHOW,
+    SOCKOPT_SET_IFADDR_ZERO,
 };
 
 enum {

@@ -35,7 +35,7 @@ static void usage(void)
         "Parameters:\n"
         "    OBJECT  := { link | addr | route | neigh | vlan | tunnel |\n"
         "                 qsch | cls | ipv6 }\n"
-        "    COMMAND := { add | del | change | replace | show | flush }\n"
+        "    COMMAND := { add | del | change | replace | show | flush | zero}\n"
         "Options:\n"
         "    -v, --verbose\n"
         "    -h, --help\n"
@@ -166,6 +166,8 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         conf->cmd = DPIP_CMD_REPLACE;
     else if (strcmp(argv[1], "flush") == 0)
         conf->cmd = DPIP_CMD_FLUSH;
+    else if (strcmp(argv[1], "zero") == 0)
+        conf->cmd = DPIP_CMD_ZERO;
     else if (strcmp(argv[1], "help") == 0)
         conf->cmd = DPIP_CMD_HELP;
     else {
