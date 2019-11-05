@@ -35,6 +35,7 @@
 #include "ip_tunnel.h"
 #include "sys_time.h"
 #include "route6.h"
+#include "iftraf.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
@@ -241,6 +242,9 @@ int main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "Fail to init netif_ctrl: %s\n",
                  dpvs_strerror(err));
 
+    if ((err = iftraf_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init stats: %s\n", dpvs_strerror(err));
+    
     /* config and start all available dpdk ports */
     nports = rte_eth_dev_count();
     for (pid = 0; pid < nports; pid++) {
@@ -296,12 +300,19 @@ int main(int argc, char *argv[])
         /* process mac ring on master */
         neigh_process_ring(NULL);
 
+        /* process iftraf ring */
+        iftraf_process_ring();
+
         /* increase loop counts */
         netif_update_master_loop_cnt();
     }
 
 end:
     dpvs_state_set(DPVS_STATE_FINISH);
+    if ((err = iftraf_term()) !=0 )
+        rte_exit(EXIT_FAILURE, "Fail to term iftraf: %s\n",
+                dpvs_strerror(err));
+
     if ((err = netif_ctrl_term()) !=0 )
         rte_exit(EXIT_FAILURE, "Fail to term netif_ctrl: %s\n",
                  dpvs_strerror(err));
