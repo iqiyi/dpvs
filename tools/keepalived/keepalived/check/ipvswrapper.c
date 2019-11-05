@@ -93,8 +93,7 @@ ipvs_start(void)
 		log_message(LOG_INFO,
 				"IPVS : Can't initialize ipvs: %s",
 				ipvs_strerror(errno));
-			return IPVS_ERROR;
-		}
+		return IPVS_ERROR;
 	}
 
 	/* Allocate global user rules */
