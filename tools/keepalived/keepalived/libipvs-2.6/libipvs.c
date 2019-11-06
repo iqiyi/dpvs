@@ -22,7 +22,6 @@
 
 #include "libipvs.h"
 #include "sockopt.h"
-#include "dp_vs.h"
 
 typedef struct ipvs_servicedest_s {
 	struct ip_vs_service_kern	svc;
@@ -111,7 +110,7 @@ typedef struct dpvs_servicedest_s {
 
 void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t *user);
 
-int ipvs_init(void)
+int ipvs_init(lcoreid_t cid)
 {
 	socklen_t len;
 	struct ip_vs_getinfo *ipvs_info_rcv;
@@ -186,7 +185,7 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 	ipvs_service_entry_t *entry;
 	ipvs_service_t user;
 
-	if (!(entry = ipvs_get_service(svc))) {
+	if (!(entry = ipvs_get_service(svc, 0))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		exit(1);
 	}
@@ -241,7 +240,7 @@ int ipvs_update_service_synproxy(ipvs_service_t *svc , int enable)
 {
 	ipvs_service_entry_t *entry;
 
-	if (!(entry = ipvs_get_service(svc))) {
+	if (!(entry = ipvs_get_service(svc, 0))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		exit(1);
 	}
@@ -478,8 +477,18 @@ int ipvs_stop_daemon(ipvs_daemon_t *dm)
 			  (char *)dm, sizeof(*dm));
 }
 
+static inline sockoptid_t  cpu2opt_svc(lcoreid_t cid, sockoptid_t old_opt)
+{
+	return old_opt + cid * (SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
+}
 
-struct ip_vs_get_services *ipvs_get_services(void)
+/* now support get_all only */
+static inline sockoptid_t cpu2opt_laddr(lcoreid_t cid, sockoptid_t old_opt)
+{
+	return old_opt + cid;
+}
+
+struct ip_vs_get_services *ipvs_get_services(lcoreid_t cid)
 {
 	struct ip_vs_get_services *get;
 	struct dp_vs_get_services *dpvs_get, *dpvs_get_rcv;
@@ -499,8 +508,8 @@ struct ip_vs_get_services *ipvs_get_services(void)
 		return NULL;
 	}
 	dpvs_get->num_services = ipvs_info.num_services;
-	
-	if (dpvs_getsockopt(DPVS_SO_GET_SERVICES, dpvs_get, len, (void **)&dpvs_get_rcv, &len_rcv)) {
+	dpvs_get->cid = cid;
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICES), dpvs_get, len, (void **)&dpvs_get_rcv, &len_rcv)) {
 		free(get);
 		free(dpvs_get);
 		return NULL;
@@ -609,7 +618,7 @@ ipvs_sort_services(struct ip_vs_get_services *s, ipvs_service_cmp_t f)
 	      sizeof(ipvs_service_entry_t), (qsort_cmp_t)f);
 }
 
-struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
+struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t cid)
 {
 	struct ip_vs_get_laddrs *laddrs;
 	struct dp_vs_laddr_conf conf, *result;
@@ -624,13 +633,14 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
 		conf.vaddr.in6 = svc->addr.in6;
 	conf.vport = svc->port;
 	conf.fwmark = svc->fwmark;
+	conf.cid = cid;
 
 	snprintf(conf.srange, sizeof(conf.srange), "%s", svc->srange);
 	snprintf(conf.drange, sizeof(conf.drange), "%s", svc->drange);
 	snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
 	snprintf(conf.iifname, sizeof(conf.oifname), "%s", svc->oifname);
 
-	if (dpvs_getsockopt(SOCKOPT_GET_LADDR_GETALL, &conf, sizeof(conf),
+	if (dpvs_getsockopt(cpu2opt_laddr(cid, SOCKOPT_GET_LADDR_GETALL), &conf, sizeof(conf),
 				(void **)&result, &res_size) != 0)
 		return NULL;
 
@@ -700,7 +710,7 @@ struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
 	return array;
 }
 
-struct ip_vs_get_dests *ipvs_get_dests(ipvs_service_entry_t *svc)
+struct ip_vs_get_dests *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t cid)
 {
 	struct ip_vs_get_dests *d;
 	struct dp_vs_get_dests *dpvs_dests, *dpvs_dests_rcv;
@@ -726,12 +736,14 @@ struct ip_vs_get_dests *ipvs_get_dests(ipvs_service_entry_t *svc)
 	memcpy(&dpvs_dests->addr, &svc->addr, sizeof(svc->addr));
 	dpvs_dests->port = svc->port;
 	dpvs_dests->num_dests = svc->num_dests;
+	dpvs_dests->cid = cid;
 	snprintf(dpvs_dests->srange, sizeof(dpvs_dests->srange), "%s", svc->srange);
 	snprintf(dpvs_dests->drange, sizeof(dpvs_dests->drange), "%s", svc->drange);
 	snprintf(dpvs_dests->iifname, sizeof(dpvs_dests->iifname), "%s", svc->iifname);
 	snprintf(dpvs_dests->oifname, sizeof(dpvs_dests->oifname), "%s", svc->oifname);
 
-	if (dpvs_getsockopt(DPVS_SO_GET_DESTS, dpvs_dests, len, (void **)&dpvs_dests_rcv, &len_rcv)) {
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_DESTS), dpvs_dests, len, 
+                            (void **)&dpvs_dests_rcv, &len_rcv)) {
 		free(d);
 		free(dpvs_dests);
 		return NULL;
@@ -788,7 +800,7 @@ void ipvs_sort_dests(struct ip_vs_get_dests *d, ipvs_dest_cmp_t f)
 
 
 ipvs_service_entry_t *
-ipvs_get_service(struct ip_vs_service_user *hint)
+ipvs_get_service(struct ip_vs_service_user *hint, lcoreid_t cid)
 {
 	ipvs_service_entry_t *svc;
 	struct dp_vs_service_entry dpvs_svc, *dpvs_svc_ptr, *dpvs_svc_rcv;
@@ -805,9 +817,10 @@ ipvs_get_service(struct ip_vs_service_user *hint)
 	len_rcv = sizeof(*dpvs_svc_rcv);
 	memset(&dpvs_svc, 0, len);
 	dpvs_svc_ptr = &dpvs_svc;
+	dpvs_svc.cid = cid;
 	IPVS_2_DPVS(dpvs_svc_ptr, hint);
 
-	if (dpvs_getsockopt(DPVS_SO_GET_SERVICE,
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICE),
 		       &dpvs_svc, len, (void **)&dpvs_svc_rcv, &len_rcv)) {
 		goto out_err;
 	}

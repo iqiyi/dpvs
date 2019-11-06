@@ -99,8 +99,8 @@ static int icmp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_INVPKT;
     }
 
-    svc = dp_vs_service_lookup(iph->af, iph->proto,
-                               &iph->daddr, 0, 0, mbuf, NULL, &outwall);
+    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, 0, 0, 
+                               mbuf, NULL, &outwall, rte_lcore_id());
     if (!svc) {
         *verdict = INET_ACCEPT;
         return EDPVS_NOSERV;
@@ -109,12 +109,10 @@ static int icmp_conn_sched(struct dp_vs_proto *proto,
     /* schedule RS and create new connection */
     *conn = dp_vs_schedule(svc, iph, mbuf, false, outwall);
     if (!*conn) {
-        dp_vs_service_put(svc);
         *verdict = INET_DROP;
         return EDPVS_RESOURCE;
     }
 
-    dp_vs_service_put(svc);
     return EDPVS_OK;
 }
 

@@ -96,7 +96,6 @@
  *    It man not make sence to let #lcore bigger then #laddr.
  */
 
-/* laddr is configured with service instead of lcore */
 struct dp_vs_laddr {
     int                     af;
     struct list_head        list;       /* svc->laddr_list elem */
@@ -155,9 +154,13 @@ static inline struct dp_vs_laddr *__get_laddr(struct dp_vs_service *svc)
 
 static inline void put_laddr(struct dp_vs_laddr *laddr)
 {
-    /* use lock if other field need by changed */
-    rte_atomic32_dec(&laddr->refcnt);
-    return;
+    if (!laddr)
+        return;
+
+    if (rte_atomic32_dec_and_test(&laddr->refcnt)) {
+        rte_free(laddr);
+        RTE_LOG(DEBUG, IPVS, "%s: delete laddr.\n", __func__);
+    }
 }
 
 int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
@@ -177,17 +180,12 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
     /*
      * some time allocate lport fails for one laddr,
      * but there's also some resource on another laddr.
-     * use write lock since
-     * 1. __get_laddr will change svc->laddr_curr;
-     * 2. we uses svc->num_laddrs;
      */
-    rte_rwlock_write_lock(&svc->laddr_lock);
     for (i = 0; i < dp_vs_laddr_max_trails && i < svc->num_laddrs; i++) {
         /* select a local IP from service */
         laddr = __get_laddr(svc);
         if (!laddr) {
             RTE_LOG(ERR, IPVS, "%s: no laddr available.\n", __func__);
-            rte_rwlock_write_unlock(&svc->laddr_lock);
             return EDPVS_RESOURCE;
         }
 
@@ -231,7 +229,6 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
                 : (((struct sockaddr_in6 *)&ssin)->sin6_port));
         break;
     }
-    rte_rwlock_write_unlock(&svc->laddr_lock);
 
     if (!laddr || sport == 0) {
 #ifdef CONFIG_DPVS_IPVS_DEBUG
@@ -315,7 +312,7 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
 
     new->af = af;
     new->addr = *addr;
-    rte_atomic32_init(&new->refcnt);
+    rte_atomic32_set(&new->refcnt, 1);
     rte_atomic32_init(&new->conn_counts);
 
     /* is the laddr bind to local interface ? */
@@ -325,10 +322,8 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
         return EDPVS_NOTEXIST;
     }
 
-    rte_rwlock_write_lock(&svc->laddr_lock);
     list_for_each_entry(curr, &svc->laddr_list, list) {
         if (af == curr->af && inet_addr_equal(af, &curr->addr, &new->addr)) {
-            rte_rwlock_write_unlock(&svc->laddr_lock);
             rte_free(new);
             return EDPVS_EXIST;
         }
@@ -336,7 +331,6 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
 
     list_add_tail(&new->list, &svc->laddr_list);
     svc->num_laddrs++;
-    rte_rwlock_write_unlock(&svc->laddr_lock);
 
     return EDPVS_OK;
 }
@@ -349,31 +343,18 @@ int dp_vs_laddr_del(struct dp_vs_service *svc, int af, const union inet_addr *ad
     if (!svc || !addr)
         return EDPVS_INVAL;
 
-    rte_rwlock_write_lock(&svc->laddr_lock);
     list_for_each_entry_safe(laddr, next, &svc->laddr_list, list) {
         if (!((af == laddr->af) && inet_addr_equal(af, &laddr->addr, addr)))
             continue;
 
         /* found */
-        if (rte_atomic32_read(&laddr->refcnt) == 0) {
-         /* update svc->curr_laddr */
         if (svc->laddr_curr == &laddr->list)
-        svc->laddr_curr = laddr->list.next;
-            list_del(&laddr->list);
-            rte_free(laddr);
-            svc->num_laddrs--;
-            err = EDPVS_OK;
-        } else {
-            /* XXX: move to trash list and implement an garbage collector,
-             * or just try del again ? */
-            err = EDPVS_BUSY;
-        }
-        break;
+                svc->laddr_curr = laddr->list.next;
+        list_del(&laddr->list);
+        svc->num_laddrs--;
+        put_laddr(laddr);
+        err = EDPVS_OK;
     }
-    rte_rwlock_write_unlock(&svc->laddr_lock);
-
-    if (err == EDPVS_BUSY)
-        RTE_LOG(DEBUG, IPVS, "%s: laddr is in use.\n", __func__);
 
     return err;
 }
@@ -388,14 +369,11 @@ static int dp_vs_laddr_getall(struct dp_vs_service *svc,
     if (!svc || !addrs || !naddr)
         return EDPVS_INVAL;
 
-    rte_rwlock_write_lock(&svc->laddr_lock);
-
     if (svc->num_laddrs > 0) {
         *naddr = svc->num_laddrs;
         *addrs = rte_malloc_socket(0, sizeof(struct dp_vs_laddr_entry) * svc->num_laddrs,
                 RTE_CACHE_LINE_SIZE, rte_socket_id());
         if (!(*addrs)) {
-            rte_rwlock_write_unlock(&svc->laddr_lock);
             return EDPVS_NOMEM;
         }
 
@@ -412,7 +390,6 @@ static int dp_vs_laddr_getall(struct dp_vs_service *svc,
         *addrs = NULL;
     }
 
-    rte_rwlock_write_unlock(&svc->laddr_lock);
     return EDPVS_OK;
 }
 
@@ -424,23 +401,14 @@ int dp_vs_laddr_flush(struct dp_vs_service *svc)
     if (!svc)
         return EDPVS_INVAL;
 
-    rte_rwlock_write_lock(&svc->laddr_lock);
     list_for_each_entry_safe(laddr, next, &svc->laddr_list, list) {
-        if (rte_atomic32_read(&laddr->refcnt) == 0) {
-            list_del(&laddr->list);
-            rte_free(laddr);
-            svc->num_laddrs--;
-        } else {
-            char buf[64];
-
-            if (inet_ntop(laddr->af, &laddr->addr, buf, sizeof(buf)) == NULL)
-                snprintf(buf, sizeof(buf), "::");
-
-            RTE_LOG(DEBUG, IPVS, "%s: laddr %s is in use.\n", __func__, buf);
-            err = EDPVS_BUSY;
-        }
+        if (svc->laddr_curr == &laddr->list)
+                svc->laddr_curr = laddr->list.next;
+        list_del(&laddr->list);
+        svc->num_laddrs--;
+        put_laddr(laddr);
+        err = EDPVS_OK;
     }
-    rte_rwlock_write_unlock(&svc->laddr_lock);
 
     return err;
 }
@@ -448,24 +416,47 @@ int dp_vs_laddr_flush(struct dp_vs_service *svc)
 /*
  * for control plane
  */
+
+static inline sockoptid_t set_opt_so2msg(int opt)
+{
+    return opt - SOCKOPT_LADDR_BASE + MSG_TYPE_SET_LADDR_BASE;
+}
+
 static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
     const struct dp_vs_laddr_conf *laddr_conf = conf;
     struct dp_vs_service *svc;
     int err;
     struct dp_vs_match match;
+    lcoreid_t cid = rte_lcore_id();
+
+    // send to slave core
+    if (cid == rte_get_master_lcore()) {
+        struct dpvs_msg *msg;
+
+        msg = msg_make(set_opt_so2msg(opt), 0, DPVS_MSG_MULTICAST, cid, size, conf);
+        if (!msg)
+            return EDPVS_NOMEM;
+
+        err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+        /* go on in master core, not return */
+        if (err != EDPVS_OK)
+            RTE_LOG(ERR, SERVICE, "[%s] fail to send multicast message\n", __func__);
+        msg_destroy(&msg);
+    }
 
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
     if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
                           laddr_conf->iifname, laddr_conf->oifname,
-                          &match) != EDPVS_OK)
+                          laddr_conf->af_s, &match) != EDPVS_OK)
         return EDPVS_INVAL;
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match, NULL);
+                               laddr_conf->fwmark, NULL, &match, 
+                               NULL, rte_lcore_id());
     if (!svc)
         return EDPVS_NOSERV;
 
@@ -485,73 +476,200 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         break;
     }
 
-    dp_vs_service_put(svc);
     return err;
+}
+
+static int get_msg_cb(struct dpvs_msg *msg)
+{
+    lcoreid_t cid = rte_lcore_id();
+    struct dp_vs_laddr_conf *laddr_conf, *laddrs;
+    struct dp_vs_match match;
+    struct dp_vs_laddr_entry *addrs;
+    struct dp_vs_service *svc;
+    size_t naddr;
+    int err, size, i;
+
+    laddr_conf = (struct dp_vs_laddr_conf *)msg->data;
+    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
+                          laddr_conf->iifname, laddr_conf->oifname,
+                          laddr_conf->af_s, &match) != EDPVS_OK) {
+        return EDPVS_NOMEM;
+    }
+
+    svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
+                               &laddr_conf->vaddr, laddr_conf->vport,
+                               laddr_conf->fwmark, NULL, &match, 
+                               NULL, cid);
+    if (!svc) {
+        return EDPVS_NOSERV;
+    } 
+    err = dp_vs_laddr_getall(svc, &addrs, &naddr); 
+    if (err != EDPVS_OK)
+        return err;
+
+    size = sizeof(*laddr_conf) + naddr * sizeof(struct dp_vs_laddr_entry);
+    laddrs = msg_reply_alloc(size);
+    if (!laddrs) {
+        if (addrs)
+            rte_free(addrs);
+        return EDPVS_NOMEM;
+    }
+
+    *laddrs = *laddr_conf;
+    laddrs->nladdrs = naddr;
+    for (i = 0; i < naddr; i++) {
+        laddrs->laddrs[i].af = addrs[i].af;
+        laddrs->laddrs[i].addr = addrs[i].addr;
+        /* TODO: nport_conflict & nconns */
+        laddrs->laddrs[i].nport_conflict = 0;
+        laddrs->laddrs[i].nconns = addrs[i].nconns;
+    }
+    if (addrs)
+        rte_free(addrs);
+
+    msg->reply.len = size;
+    msg->reply.data = (void *)laddrs;
+    return EDPVS_OK;
+}
+
+static int dp_vs_copy_percore_laddrs_stats(struct dp_vs_laddr_conf *master_laddrs,
+                                           struct dp_vs_laddr_conf *slave_laddrs)
+{
+    int i;
+    if (master_laddrs->nladdrs != slave_laddrs->nladdrs)
+        return EDPVS_INVAL;
+    for (i = 0; i < master_laddrs->nladdrs; i++) {
+        master_laddrs->laddrs[i].nport_conflict += slave_laddrs->laddrs[i].nport_conflict;
+        master_laddrs->laddrs[i].nconns += slave_laddrs->laddrs[i].nconns;
+    }
+
+    return EDPVS_OK;
+}
+
+static void opt2cpu(sockoptid_t opt, sockoptid_t *new_opt, lcoreid_t *cid)
+{
+    *cid = opt - SOCKOPT_GET_LADDR_GETALL;
+    *new_opt = SOCKOPT_GET_LADDR_GETALL;
 }
 
 static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                              void **out, size_t *outsize)
 {
     const struct dp_vs_laddr_conf *laddr_conf = conf;
-    struct dp_vs_laddr_conf *laddrs;
+    struct dp_vs_laddr_conf *laddrs, *get_msg;
     struct dp_vs_service *svc;
     struct dp_vs_laddr_entry *addrs;
     size_t naddr, i;
     int err;
     struct dp_vs_match match;
+    struct dpvs_multicast_queue *reply = NULL;
+    struct dpvs_msg *msg, *cur;
+    uint8_t num_lcores = 0;
+    sockoptid_t new_opt;
+    lcoreid_t cid;
+
+    netif_get_slave_lcores(&num_lcores, NULL);
+    opt2cpu(opt, &new_opt, &cid);
+    if (cid > num_lcores || new_opt > SOCKOPT_GET_LADDR_GETALL)
+        return EDPVS_INVAL;
 
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
-    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
-                          laddr_conf->iifname, laddr_conf->oifname,
-                          &match) != EDPVS_OK)
-        return EDPVS_INVAL;
+    switch (new_opt) {
+        case SOCKOPT_GET_LADDR_GETALL:
+            msg = msg_make(MSG_TYPE_LADDR_GET_ALL, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
+                           sizeof(struct dp_vs_laddr_conf), laddr_conf);
+            if (!msg)
+                return EDPVS_NOMEM;
 
+            err = multicast_msg_send(msg, 0, &reply);
+            if (err != EDPVS_OK) {
+                msg_destroy(&msg);
+                RTE_LOG(ERR, SERVICE, "%s: send message fail.\n", __func__);
+                return EDPVS_MSG_FAIL;
+            }
 
-    svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
-                               &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match, NULL);
-    if (!svc)
-        return EDPVS_NOSERV;
+            if (cid == rte_get_master_lcore()) {
+                if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
+                                      laddr_conf->iifname, laddr_conf->oifname,
+                                      laddr_conf->af_s, &match) != EDPVS_OK) {
+                    msg_destroy(&msg);
+                    return EDPVS_INVAL;
+                }
+                svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
+                                           &laddr_conf->vaddr, laddr_conf->vport,
+                                           laddr_conf->fwmark, NULL, &match, NULL, cid);
+                if (!svc) {
+                    msg_destroy(&msg);
+                    return EDPVS_NOSERV;
+                }
 
-    switch (opt) {
-    case SOCKOPT_GET_LADDR_GETALL:
-        err = dp_vs_laddr_getall(svc, &addrs, &naddr);
-        if (err != EDPVS_OK)
-            break;
+                err = dp_vs_laddr_getall(svc, &addrs, &naddr);
+                if (err != EDPVS_OK) {
+                    msg_destroy(&msg);
+                    return err;
+                }
+                
+                *outsize = sizeof(*laddr_conf) + naddr * sizeof(struct dp_vs_laddr_entry);
+                *out = rte_malloc_socket(0, *outsize, RTE_CACHE_LINE_SIZE, rte_socket_id());
+                if (!*out) {
+                    if (addrs)
+                        rte_free(addrs);
+                    msg_destroy(&msg);
+                    return EDPVS_NOMEM;
+                }
 
-        *outsize = sizeof(*laddr_conf) + naddr * sizeof(struct dp_vs_laddr_entry);
-        *out = rte_malloc_socket(0, *outsize, RTE_CACHE_LINE_SIZE, rte_socket_id());
-        if (!*out) {
-            if (addrs)
-                rte_free(addrs);
-            err = EDPVS_NOMEM;
-            break;
-        }
+                laddrs = *out;
+                *laddrs = *laddr_conf;
 
-        laddrs = *out;
-        *laddrs = *laddr_conf;
+                laddrs->nladdrs = naddr;
+                for (i = 0; i < naddr; i++) {
+                    laddrs->laddrs[i].af = addrs[i].af;
+                    laddrs->laddrs[i].addr = addrs[i].addr;
+                    /* TODO: nport_conflict & nconns */
+                    laddrs->laddrs[i].nport_conflict = 0;
+                    laddrs->laddrs[i].nconns = addrs[i].nconns;
+                }
+                if (addrs)
+                    rte_free(addrs);
 
-        laddrs->nladdrs = naddr;
-        for (i = 0; i < naddr; i++) {
-            laddrs->laddrs[i].af = addrs[i].af;
-            laddrs->laddrs[i].addr = addrs[i].addr;
-            /* TODO: nport_conflict & nconns */
-            laddrs->laddrs[i].nport_conflict = 0;
-            laddrs->laddrs[i].nconns = addrs[i].nconns;
-        }
+                list_for_each_entry(cur, &reply->mq, mq_node) {
+                    get_msg = (struct dp_vs_laddr_conf *)(cur->data);
+                    err = dp_vs_copy_percore_laddrs_stats(laddrs, get_msg);
+                    if (err != EDPVS_OK) {
+                        msg_destroy(&msg);
+                        rte_free(*out);
+                        *out = NULL;
+                        return err;
+                    }
+                }
+                msg_destroy(&msg);
+                return EDPVS_OK;
 
-        if (addrs)
-            rte_free(addrs);
-        break;
-    default:
-        err = EDPVS_NOTSUPP;
-        break;
+            } else {
+                list_for_each_entry(cur, &reply->mq, mq_node) {
+                    get_msg = (struct dp_vs_laddr_conf *)(cur->data);
+                    if (cid == get_msg->cid) {
+                        *outsize = sizeof(*laddr_conf) + \
+                                   get_msg->nladdrs * sizeof(struct dp_vs_laddr_entry);
+                        *out = rte_malloc_socket(0, *outsize, RTE_CACHE_LINE_SIZE, rte_socket_id());
+                        if (!*out) {
+                            msg_destroy(&msg);
+                            return EDPVS_NOMEM;
+                        }
+                        rte_memcpy(*out, get_msg, *outsize);
+                        msg_destroy(&msg);
+                        return EDPVS_OK;
+                    }
+                }
+                RTE_LOG(ERR, SERVICE, "%s: find no laddr for cid=%d.\n", __func__, cid);
+                msg_destroy(&msg);
+                return EDPVS_NOTEXIST;
+            }
+        default:
+            return EDPVS_NOTSUPP;
     }
-
-    dp_vs_service_put(svc);
-    return err;
 }
 
 static struct dpvs_sockopts laddr_sockopts = {
@@ -560,13 +678,77 @@ static struct dpvs_sockopts laddr_sockopts = {
     .set_opt_max        = SOCKOPT_SET_LADDR_FLUSH,
     .set                = laddr_sockopt_set,
     .get_opt_min        = SOCKOPT_GET_LADDR_GETALL,
-    .get_opt_max        = SOCKOPT_GET_LADDR_GETALL,
+    .get_opt_max        = SOCKOPT_GET_LADDR_MAX,
     .get                = laddr_sockopt_get,
 };
+
+static int add_msg_cb(struct dpvs_msg *msg)
+{
+    return laddr_sockopt_set(SOCKOPT_SET_LADDR_ADD, msg->data, msg->len);
+}
+
+static int del_msg_cb(struct dpvs_msg *msg)
+{
+    return laddr_sockopt_set(SOCKOPT_SET_LADDR_DEL, msg->data, msg->len);
+}
+
+static int flush_msg_cb(struct dpvs_msg *msg)
+{
+    return laddr_sockopt_set(SOCKOPT_SET_LADDR_FLUSH, msg->data, msg->len);
+}
 
 int dp_vs_laddr_init(void)
 {
     int err;
+    struct dpvs_msg_type msg_type;
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_LADDR_SET_ADD;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = add_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+        return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_LADDR_SET_DEL;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = del_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+        return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_LADDR_SET_FLUSH;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = flush_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+        return err;
+    }   
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_LADDR_GET_ALL;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_LOW;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = get_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+        return err;
+    }
 
     if ((err = sockopt_register(&laddr_sockopts)) != EDPVS_OK)
         return err;

@@ -393,7 +393,7 @@ static int dp_vs_conn_unbind_dest(struct dp_vs_conn *conn)
         dest->flags &= ~DPVS_DEST_F_OVERLOAD;
     }
 
-    rte_atomic32_dec(&dest->refcnt);
+    dp_vs_dest_put(dest);
 
     conn->dest = NULL;
     return EDPVS_OK;

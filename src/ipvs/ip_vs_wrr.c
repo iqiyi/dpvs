@@ -132,7 +132,6 @@ static struct dp_vs_dest *dp_vs_wrr_schedule(struct dp_vs_service *svc,
      * This loop will always terminate, because mark->cw in (0, max_weight]
      * and at least one server has its weight equal to max_weight.
      */
-    rte_rwlock_write_lock(&svc->sched_lock);
     p = mark->cl;
     while (1) {
         if (mark->cl == &svc->dests) {
@@ -179,7 +178,6 @@ static struct dp_vs_dest *dp_vs_wrr_schedule(struct dp_vs_service *svc,
     }
 
       out:
-    rte_rwlock_write_unlock(&svc->sched_lock);
 
     return dest;
 }

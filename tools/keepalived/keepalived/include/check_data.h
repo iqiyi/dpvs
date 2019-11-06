@@ -183,6 +183,7 @@ typedef struct _virtual_server {
 	char				*vip_bind_dev;		/* the interface name,vip bindto */
 	char				*blklst_addr_gname;	/* black list ip group name */
 
+	uint16_t			af;
 	char				srange[256];
 	char				drange[256];
 	char				iifname[IFNAMSIZ];
@@ -297,7 +298,8 @@ static inline int inaddr_equal(sa_family_t family, void *addr1, void *addr2)
 			 !strcmp((X)->srange, (Y)->srange)				&&\
 			 !strcmp((X)->drange, (Y)->drange)				&&\
 			 !strcmp((X)->iifname, (Y)->iifname)				&&\
-			 !strcmp((X)->oifname, (Y)->oifname))
+			 !strcmp((X)->oifname, (Y)->oifname)				&&\
+			 (X)->af == (Y)->af)
 
 #define VSGE_ISEQ(X,Y)	(sockstorage_equal(&(X)->addr,&(Y)->addr) &&	\
 			 (X)->range     == (Y)->range &&		\

@@ -11,7 +11,15 @@
 #include <arpa/inet.h>
 #include <linux/types.h>	/* For __beXX types in userland */
 #include <stdbool.h>
-#include "dp_vs.h"
+#include "conf/route.h"
+#include "conf/route6.h"
+#include "conf/inetaddr.h"
+#include "conf/laddr.h"
+#include "conf/blklst.h"
+#include "conf/conn.h"
+#include "ip_tunnel.h"
+#include "ipvs/service.h"
+#include "ipvs/dest.h"
 
 #ifdef LIBIPVS_USE_NL
 #include <netlink/netlink.h>
@@ -43,8 +51,9 @@
 #define IP_VS_SVC_F_SCHED2	0x0010		/* scheduler flag 2 */
 #define IP_VS_SVC_F_SCHED3	0x0020		/* scheduler flag 3 */
 
-#define IP_VS_SVC_F_SIP_HASH    0x0100          /* sip hash target */
-#define IP_VS_SVC_F_QID_HASH    0x0200          /* quic cid hash target */
+#define IP_VS_SVC_F_SIP_HASH	0x0100		/* sip hash target */
+#define IP_VS_SVC_F_QID_HASH	0x0200		/* quic cid hash target */
+#define IP_VS_SVC_F_MATCH	0x0400		/* snat match */
 
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK	IP_VS_SVC_F_SCHED1 /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT	IP_VS_SVC_F_SCHED2 /* SH use port */
@@ -272,38 +281,9 @@ struct ip_vs_getinfo {
 
 	/* number of virtual services */
 	unsigned int		num_services;
-};
 
-
-/* The argument to IP_VS_SO_GET_SERVICE */
-struct ip_vs_service_entry_kern {
-	/* which service: user fills in these */
-	u_int16_t		protocol;
-	__be32			addr;	/* virtual address */
-	__be16			port;
-	u_int32_t		fwmark;		/* firwall mark of service */
-
-	/* service options */
-	char			sched_name[IP_VS_SCHEDNAME_MAXLEN];
-	unsigned		flags;          /* virtual service flags */
-	unsigned		timeout;	/* persistent timeout */
-	unsigned		conn_timeout;
-	__be32			netmask;	/* persistent netmask */
-	unsigned		bps;
-	unsigned		limit_proportion;
-
-	/* number of real servers */
-	unsigned int		num_dests;
-	/* number of local address*/
-	unsigned int		num_laddrs;
-
-	/* statistics */
-	struct ip_vs_stats_user stats;
-
-	char			srange[256];
-	char			drange[256];
-	char			iifname[IFNAMSIZ];
-	char			oifname[IFNAMSIZ];
+        /* number of lcores*/
+        unsigned int            num_lcores;
 };
 
 struct ip_vs_service_entry {
@@ -341,23 +321,6 @@ struct ip_vs_service_entry {
 
 };
 
-struct ip_vs_dest_entry_kern {
-	__be32			addr;	/* destination address */
-	__be16			port;
-	unsigned		conn_flags;	/* connection flags */
-	int			weight;		/* destination weight */
-
-	u_int32_t		u_threshold;	/* upper threshold */
-	u_int32_t		l_threshold;	/* lower threshold */
-
-	u_int32_t		activeconns;	/* active connections */
-	u_int32_t		inactconns;	/* inactive connections */
-	u_int32_t		persistconns;	/* persistent connections */
-
-	/* statistics */
-	struct ip_vs_stats_user stats;
-};
-
 struct ip_vs_dest_entry {
 	__be32			__addr_v4;	/* destination address - internal use only */
 	__be16			port;
@@ -391,21 +354,6 @@ struct ip_vs_laddr_entry {
 	union nf_inet_addr	addr;
 };
 
-/* The argument to IP_VS_SO_GET_LADDRS */
-struct ip_vs_get_laddrs_kern {
-	/* which service: user fills in these */
-	u_int16_t		protocol;
-	__be32			addr;	/* virtual address - internal use only */
-	__be16			port;
-	u_int32_t		fwmark;		/* firwall mark of service */
-
-	/* number of local address*/
-	unsigned int		num_laddrs;
-
-	/* the real servers */
-	struct ip_vs_laddr_entry_kern	entrytable[0];
-};
-
 struct ip_vs_get_laddrs {
 	/* which service: user fills in these */
 	u_int16_t		protocol;
@@ -420,26 +368,6 @@ struct ip_vs_get_laddrs {
 
 	/* the real servers */
 	struct ip_vs_laddr_entry	entrytable[0];
-};
-
-/* The argument to IP_VS_SO_GET_DESTS */
-struct ip_vs_get_dests_kern {
-	/* which service: user fills in these */
-	u_int16_t		protocol;
-	__be32			addr;	/* virtual address - internal use only */
-	__be16			port;
-	u_int32_t		fwmark;		/* firwall mark of service */
-
-	/* number of real servers */
-	unsigned int		num_dests;
-
-	char			srange[256];
-	char			drange[256];
-	char			iifname[IFNAMSIZ];
-	char			oifname[IFNAMSIZ];
-
-	/* the real servers */
-	struct ip_vs_dest_entry_kern	entrytable[0];
 };
 
 struct ip_vs_get_dests {
@@ -468,17 +396,9 @@ struct ip_vs_get_dests {
 struct ip_vs_get_services {
 	/* number of virtual services */
 	unsigned int		num_services;
-
+	unsigned int		cid;
 	/* service table */
 	struct ip_vs_service_entry entrytable[0];
-};
-
-struct ip_vs_get_services_kern {
-	/* number of virtual services */
-	unsigned int		num_services;
-
-	/* service table */
-	struct ip_vs_service_entry_kern entrytable[0];
 };
 
 /* The argument to IP_VS_SO_GET_TIMEOUT */

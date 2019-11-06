@@ -374,7 +374,7 @@ ipvs_start(void)
 {
 	log_message(LOG_DEBUG, "Initializing ipvs 2.6");
 	/* Initialize IPVS module */
-	if (ipvs_init()) {
+	if (ipvs_init(0)) {
 		log_message(LOG_INFO, "IPVS: Can't initialize ipvs: %s",
 				ipvs_strerror(errno));
 		return IPVS_ERROR;
@@ -450,8 +450,10 @@ ipvs_talk(int cmd)
 			break;
 		case IP_VS_SO_SET_EDITDEST:
 			if ((result = ipvs_update_dest(srule, drule)) &&
-			    (result == EDPVS_NOTEXIST))
+			    (result == EDPVS_NOTEXIST || result == EDPVS_MSG_FAIL)) {
 				result = ipvs_add_dest(srule, drule);
+				cmd = IP_VS_SO_SET_ADDDEST;
+			}
 			break;
 		case IP_VS_SO_SET_ADDTUNNEL:
 			result = ipvs_add_tunnel(tunnel_rule);
@@ -461,10 +463,12 @@ ipvs_talk(int cmd)
 			break;
 	}
 
-	if (result) {
-		if (result == EDPVS_EXIST && (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_ADDDEST))
+	if (result) {//EDPVS_MSG_FAIL just ignore set failed
+		if ((result == EDPVS_EXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP) 
+			&& (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_ADDDEST))
 			result = 0;
-		else if (result == EDPVS_NOTEXIST && (cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST))
+		else if ((result == EDPVS_NOTEXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
+			&& (cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST))
 			result = 0;
 		log_message(LOG_INFO, "IPVS: %s", ipvs_strerror(errno));
 	}
@@ -608,6 +612,7 @@ ipvs_set_rule(int cmd, virtual_server_t * vs, real_server_t * rs)
 	srule->netmask = (vs->addr.ss_family == AF_INET6) ? 128 : ((u_int32_t) 0xffffffff);
 	srule->protocol = vs->service_type;
 	srule->conn_timeout = vs->conn_timeout;
+	srule->af = vs->af;
 	snprintf(srule->srange, 256, "%s", vs->srange);
 	snprintf(srule->drange, 256, "%s", vs->drange);
 	snprintf(srule->iifname, IFNAMSIZ, "%s", vs->iifname);
@@ -1032,6 +1037,9 @@ ipvs_cmd(int cmd, list vs_group, virtual_server_t * vs, real_server_t * rs)
 			srule->af = vs->addr.ss_family;
 			srule->addr.ip = 0;
 			srule->port = inet_sockaddrport(&vs->addr);
+			srule->flags |= IP_VS_SVC_F_MATCH;
+			if (!srule->af)
+				srule->af = vs->af;
 		} else {
 			srule->af = vs->addr.ss_family;
 			if (vs->addr.ss_family == AF_INET6)

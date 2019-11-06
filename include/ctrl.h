@@ -204,6 +204,32 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_IPV6_STATS                 16
 #define MSG_TYPE_ROUTE6                     17
 #define MSG_TYPE_NEIGH_GET                  18
+#define MSG_TYPE_IPSET_ADD                  19
+#define MSG_TYPE_IPSET_DEL                  20
+#define MSG_TYPE_IPSET_FLUSH                21
+
+/* for svc per_core, refer to service.h*/
+enum {
+    MSG_TYPE_SVC_SET_FLUSH = MSG_TYPE_IPSET_FLUSH + 1,
+    MSG_TYPE_SVC_SET_ZERO,    
+    MSG_TYPE_SVC_SET_ADD,      
+    MSG_TYPE_SVC_SET_EDIT,    
+    MSG_TYPE_SVC_SET_DEL,     
+    MSG_TYPE_SVC_SET_ADDDEST, 
+    MSG_TYPE_SVC_SET_EDITDEST,
+    MSG_TYPE_SVC_SET_DELDEST,
+    MSG_TYPE_LADDR_SET_ADD,
+    MSG_TYPE_LADDR_SET_DEL,
+    MSG_TYPE_LADDR_SET_FLUSH,
+    MSG_TYPE_SVC_GET_INFO,    
+    MSG_TYPE_SVC_GET_SERVICES,
+    MSG_TYPE_SVC_GET_SERVICE, 
+    MSG_TYPE_SVC_GET_DESTS,
+    MSG_TYPE_LADDR_GET_ALL,
+};
+#define MSG_TYPE_SVC_SET_BASE MSG_TYPE_SVC_SET_FLUSH
+#define MSG_TYPE_SVC_GET_BASE MSG_TYPE_SVC_GET_INFO
+#define MSG_TYPE_SET_LADDR_BASE MSG_TYPE_LADDR_SET_ADD
 
 #define SOCKOPT_VERSION_MAJOR               1
 #define SOCKOPT_VERSION_MINOR               0
