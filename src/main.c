@@ -195,6 +195,14 @@ int main(int argc, char *argv[])
 
     rte_timer_subsystem_init();
 
+#ifdef CONFIG_DPVS_PDUMP
+    /* initialize packet capture framework */
+    err = rte_pdump_init(NULL);
+    if (err < 0) {
+        rte_exit(EXIT_FAILURE, "Fail init dpdk pdump framework\n");
+    }
+#endif
+
     if ((err = cfgfile_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail init configuration file: %s\n",
                  dpvs_strerror(err));
@@ -333,6 +341,11 @@ end:
     if ((err = cfgfile_term()) != 0)
         RTE_LOG(ERR, DPVS, "Fail to term configuration file: %s\n",
                 dpvs_strerror(err));
+#ifdef CONFIG_DPVS_PDUMP
+    if ((err = rte_pdump_uninit()) != 0) {
+        RTE_LOG(ERR, DPVS, "Fail to uninitialize dpdk pdump framework.\n");
+    }
+#endif
     pidfile_rm(DPVS_PIDFILE);
 
     exit(0);
