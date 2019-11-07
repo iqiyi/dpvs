@@ -786,7 +786,6 @@ hook_toa_functions(void)
     if(rw_enable == 1)
     {
             set_addr_ro((unsigned long)(&ipv4_specific.syn_recv_sock));
-            rw_enable = 0;
     }
     TOA_INFO("CPU [%u] hooked tcp_v4_syn_recv_sock <%p> --> <%p>\n",
     	smp_processor_id(), tcp_v4_syn_recv_sock,
@@ -842,7 +841,6 @@ unhook_toa_functions(void)
     if(rw_enable == 1)
     {
             set_addr_ro((unsigned long)(&ipv4_specific.syn_recv_sock));
-            rw_enable = 0;
     }
 
     TOA_INFO("CPU [%u] unhooked tcp_v4_syn_recv_sock\n", smp_processor_id());
