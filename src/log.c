@@ -98,7 +98,7 @@ static uint64_t log_get_time(char *time, int time_len)
     y004 = (ad - y400*YEAR400 - y100*YEAR100)/YEAR004;
     y001 = (ad - y400*YEAR400 - y100*YEAR100 - y004*YEAR004)/YEAR001;
     yy = y400*4*100 + y100*100 + y004*4 + y001*1 + YEARFIRST;
-    dd = (ad - y400*YEAR400 - y100*YEAR100 - y004*YEAR004)%YEAR001;
+    dd = (ad - y400*YEAR400 - y100*YEAR100 - y004*YEAR004)%YEAR001 + 1;
 
     if(0 == yy%1000)
     {
@@ -112,9 +112,9 @@ static uint64_t log_get_time(char *time, int time_len)
             m[1] = 29;
         }
     }
-    for(i = 1; i <= 12; i++)
+    for(i = 0; i < 12; i++)
     {
-        if(dd - m[i] < 0)
+        if(dd - m[i] <= 0)
         {
             break;
         } else {
@@ -122,7 +122,7 @@ static uint64_t log_get_time(char *time, int time_len)
         }
     }
 
-    mm = i;
+    mm = i + 1;
     hh = sec/(60*60)%24;
     mi = sec/60 - sec/(60*60)*60;
     ss = sec - sec/60*60;
