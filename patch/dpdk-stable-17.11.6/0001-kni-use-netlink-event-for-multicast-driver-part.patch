@@ -1,7 +1,7 @@
-From dd72a3e2a760131f156f61a37df8826514f1ed4c Mon Sep 17 00:00:00 2001
+From b5dc636f0ccdccb3d4e94f3453b6e95a631bb10a Mon Sep 17 00:00:00 2001
 From: ywc689 <ywc689@163.com>
 Date: Fri, 28 Jun 2019 17:52:13 +0800
-Subject: [PATCH 2/2] kni: use netlink event for multicast (driver part)
+Subject: [PATCH 1/3] kni: use netlink event for multicast (driver part)
 
 kni driver send netlink event every time hw-multicast list updated by
 kernel, the user kni app should capture the event and update multicast
@@ -11,13 +11,13 @@ original way is using rte_kni_request to pass hw-multicast to user kni
 module. that method works but finally memory corruption found, which is
 to kni device.
 ---
- .../lib/librte_eal/linuxapp/kni/kni_net.c          | 68 ++++++++++++++++++++++
+ lib/librte_eal/linuxapp/kni/kni_net.c | 68 +++++++++++++++++++++++++++++++++++
  1 file changed, 68 insertions(+)
 
-diff --git a/dpdk-stable-17.11.6/lib/librte_eal/linuxapp/kni/kni_net.c b/dpdk-stable-17.11.6/lib/librte_eal/linuxapp/kni/kni_net.c
+diff --git a/lib/librte_eal/linuxapp/kni/kni_net.c b/lib/librte_eal/linuxapp/kni/kni_net.c
 index db9f489..fab94d1 100644
---- a/dpdk-stable-17.11.6/lib/librte_eal/linuxapp/kni/kni_net.c
-+++ b/dpdk-stable-17.11.6/lib/librte_eal/linuxapp/kni/kni_net.c
+--- a/lib/librte_eal/linuxapp/kni/kni_net.c
++++ b/lib/librte_eal/linuxapp/kni/kni_net.c
 @@ -35,6 +35,8 @@
  #include <linux/skbuff.h>
  #include <linux/kthread.h>

@@ -1,7 +1,7 @@
-From 3f2c917cc758f3205ea38447dc7a82215c448cc0 Mon Sep 17 00:00:00 2001
+From f15dd5afb3b061ff636b66cb5507f9122e02be55 Mon Sep 17 00:00:00 2001
 From: Daniel Benli Ye <yebenli@bytedance.com>
 Date: Tue, 18 Dec 2018 09:01:52 -0500
-Subject: [PATCH 3/4] enable pdump and change dpdk-pdump tool for DPVS
+Subject: [PATCH 3/3] enable pdump and change dpdk-pdump tool for DPVS
 
 A fix in app/pdump/main.c is x-ported from later release.
 rte.app.pdump.mk is copied from rte.app.mk and do several changes
@@ -27,7 +27,7 @@ index 38ac3e9..28b0d3e 100644
  
  endif
 diff --git a/app/pdump/main.c b/app/pdump/main.c
-index 66272f5..d974583 100644
+index 8e42b36..96d82aa 100644
 --- a/app/pdump/main.c
 +++ b/app/pdump/main.c
 @@ -583,11 +583,10 @@ struct parse_val {
@@ -44,10 +44,10 @@ index 66272f5..d974583 100644
  
  	ret = rte_eth_dev_configure(port_id, rxRings, txRings,
 diff --git a/config/common_base b/config/common_base
-index 214d9a2..3dbc100 100644
+index 7b47922..31f50b4 100644
 --- a/config/common_base
 +++ b/config/common_base
-@@ -397,7 +397,7 @@ CONFIG_RTE_PMD_RING_MAX_TX_RINGS=16
+@@ -399,7 +399,7 @@ CONFIG_RTE_PMD_RING_MAX_TX_RINGS=16
  #
  # Compile software PMD backed by PCAP files
  #

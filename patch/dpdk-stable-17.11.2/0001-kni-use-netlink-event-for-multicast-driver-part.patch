@@ -1,7 +1,7 @@
-From b5843bda351920c27be5e8211ef6fa5d548fa03e Mon Sep 17 00:00:00 2001
+From 52f4389c80b4b41386c53daf16d860305252f325 Mon Sep 17 00:00:00 2001
 From: Lei Chen <raychen@qiyi.com>
 Date: Tue, 23 Jan 2018 12:39:56 +0800
-Subject: [PATCH] kni: use netlink event for multicast (driver part).
+Subject: [PATCH 1/4] kni: use netlink event for multicast (driver part).
 
 kni driver send netlink event every time hw-multicast list updated by
 kernel, the user kni app should capture the event and update multicast
@@ -27,7 +27,7 @@ index db9f489..fab94d1 100644
  
  #include <exec-env/rte_kni_common.h>
  #include <kni_fifo.h>
-@@ -579,9 +581,75 @@ kni_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+@@ -579,9 +581,75 @@
  	return 0;
  }
  
@@ -104,5 +104,5 @@ index db9f489..fab94d1 100644
  
  static int
 -- 
-2.7.4
+1.8.3.1
 
