@@ -18,6 +18,7 @@
 #ifndef __DPVS_DPDK_H__
 #define __DPVS_DPDK_H__
 #include <rte_common.h>
+#include <rte_version.h>
 #include <rte_vect.h>
 #include <rte_byteorder.h>
 #include <rte_log.h>

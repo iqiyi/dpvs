@@ -21,6 +21,8 @@
 # TODO: use standard way to define compile flags.
 #
 
+CONFIG_MLX5=n
+
 CFLAGS += -D DPVS_MAX_SOCKET=2
 CFLAGS += -D DPVS_MAX_LCORE=64
 

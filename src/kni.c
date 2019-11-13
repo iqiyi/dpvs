@@ -57,8 +57,21 @@ static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
 
     if (dev->type == PORT_TYPE_GENERAL) { /* dpdk phy device */
         rte_eth_dev_info_get(dev->id, &info);
+#if RTE_VERSION < RTE_VERSION_NUM(18, 11, 0, 0)
         conf->addr = info.pci_dev->addr;
         conf->id = info.pci_dev->id;
+#else
+        if (info.device) {
+            const struct rte_bus *bus = NULL;
+            const struct rte_pci_device *pci_dev;
+            bus = rte_bus_find_by_device(info.device);
+            if (bus && !strcmp(bus->name, "pci")) {
+                pci_dev = RTE_DEV_TO_PCI(info.device);
+                conf->addr = pci_dev->addr;
+                conf->id = pci_dev->id;
+            }
+        }
+#endif
     }
 
     if (ifname && strlen(ifname))
