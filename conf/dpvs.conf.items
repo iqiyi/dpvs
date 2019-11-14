@@ -21,6 +21,7 @@ global_defs {
 netif_defs {
     <init> pktpool_size     2097151 <65535, 1023-134217728>
     <init> pktpool_cache    256     <256, 32-8192>
+    ! loop_schedule_interval  4000000 <5000000, 1-10000000> 
 
     <init> device dpdk0 {
         rx {
@@ -76,6 +77,8 @@ worker_defs {
     <init> worker cpu1 {
         type    slave               <salve, master|slave>
         cpu_id  1                   which cpu the worker thread runs on
+        ! cpu_valid_loop  2400000   <0, lowest loop velocity to mantain normal function>
+        ! imissed_serial_len  3     <4, 2-32>
         port    dpdk0 {
             rx_queue_ids     0 4        <0, 0-16, space separated list>
             tx_queue_ids     0          <0, 0-16, space separated list>
@@ -91,6 +94,8 @@ worker_defs {
     <init> worker cpu2 {
         type    slave
         cpu_id  2
+        ! cpu_valid_loop  2400000   <0, lowest loop velocity to mantain normal function>
+        ! imissed_serial_len  3     <4, 2-32>
         port    dpdk0 {
             rx_queue_ids     1 5
             tx_queue_ids     1
@@ -104,6 +109,8 @@ worker_defs {
     <init> worker cpu3 {
         type        slave
         cpu_id      3
+        ! cpu_valid_loop  2400000   <0, lowest loop velocity to mantain normal function>
+        ! imissed_serial_len  3     <4, 2-32>
         port        dpdk0 {
             rx_queue_ids     2
             tx_queue_ids     2 4 5
@@ -118,6 +125,8 @@ worker_defs {
     <init> worker   cpu4 {
         type        slave
         cpu_id      4
+        ! cpu_valid_loop  2400000   <0, lowest loop velocity to mantain normal function>
+        ! imissed_serial_len  3     <4, 2-32>
         port        dpdk0 {
             rx_queue_ids     3
             tx_queue_ids     3

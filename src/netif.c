@@ -125,6 +125,8 @@ struct worker_conf_stream {
     int cpu_id;
     char name[32];
     char type[32];
+    int cpu_valid_loop;/*Edit-overload protection related*/ 
+    int imissed_len;   /*imissed_serial len*/
     struct list_head port_list;
     struct list_head worker_list_node;
 };
@@ -149,6 +151,77 @@ static uint8_t g_slave_lcore_num;
 static uint8_t g_isol_rx_lcore_num;
 static uint64_t g_slave_lcore_mask;
 static uint64_t g_isol_rx_lcore_mask;
+
+/*Edit:NIC port imissed num serial struct*/
+#define serial_max_LEN 32 /*max len of imissed_serial, equal bits of int */
+typedef struct port_imissed_serial {
+    uint64_t imissed_priv; /*privious imissed data*/
+    int inc_flag;          /*flag if serial has gradual increasing tend*/
+} port_imissed_serial_t;
+
+struct lcore_imissed_stats {
+    port_imissed_serial_t port_imissed_stats[NETIF_PORT_TABLE_BUCKETS];
+    int inc_num;    /*cnt of nics with gradual increasing imissed serial*/
+    int index;      /*lowest index of serial not set*/
+};
+
+static struct lcore_imissed_stats lcore_imissed_stats[RTE_MAX_LCORE];
+static int worker_imissed_len[RTE_MAX_LCORE] = { -1 };
+static int worker_imissed_flag[RTE_MAX_LCORE] = { 0 };
+/*cpu lcore loop velocity struct*/
+struct lcore_loop_vel_arr {
+    /*lcore_loop_vel[0]:privious lcore loops;lcore_loop_vel[1]:lcore loop velocity*/
+    uint64_t lcore_loop_vel[2];
+    int set_loop_flag;/*flag if privious lcore loops set once*/
+};
+
+static struct lcore_loop_vel_arr lcore_loop_vel_stats[RTE_MAX_LCORE];
+
+static struct dpvs_timer loop_timer[RTE_MAX_LCORE];
+#define LOOP_SCHED_INTERVAL_DEF    5000000
+#define LOOP_SCHED_INTERVAL_MIN    1
+#define LOOP_SCHED_INTERVAL_MAX    10000000
+#define IMISSED_LEN_DEF   4 
+int usecs = LOOP_SCHED_INTERVAL_DEF;
+
+static void imissed_stats_init(void)
+{
+    int ii = 0;
+
+    for(ii = 0; ii < RTE_MAX_LCORE; ii++) {
+        lcore_imissed_stats[ii].index = 0;
+        lcore_imissed_stats[ii].inc_num = 0;
+    }
+}
+
+static void loop_stats_init(void)
+{
+    int ii = 0;
+
+    for(ii = 0; ii < RTE_MAX_LCORE; ii++) {
+        lcore_loop_vel_stats[ii].set_loop_flag = 0;
+    }
+}
+
+static void imissed_len_init(void)
+{
+    lcoreid_t cpu_id = 0;
+    struct worker_conf_stream *current_worker, *next_worker; 
+
+    list_for_each_entry_safe(current_worker, next_worker, &worker_list,
+            worker_list_node) {
+        cpu_id = current_worker->cpu_id;
+
+        worker_imissed_len[cpu_id] = current_worker->imissed_len;
+        if(cpu_id == 0) {
+            worker_imissed_flag[cpu_id] = 0; 
+            continue;
+        }
+        /*set worker_imissed_flag based on the len of imissed serial define in DPVS.conf*/
+        worker_imissed_flag[cpu_id] = (1 << (worker_imissed_len[cpu_id] - 1)) - 1;
+        /*RTE_LOG(INFO, NETIF, "flag if imisses serial has gradual increasing tend: %d\n", worker_imissed_flag[cpu_id]);*/
+    }
+}
 
 bool is_lcore_id_valid(lcoreid_t cid)
 {
@@ -704,6 +777,70 @@ static void worker_port_handler(vector_t tokens)
     list_add(&queue_cfg->queue_list_node, &current_worker->port_list);
 }
 
+static void worker_least_loop_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    int cpu_valid_loop;
+    struct worker_conf_stream *current_worker = list_entry(worker_list.next,
+                struct worker_conf_stream, worker_list_node); //get in the list 
+
+    assert(str);
+    if (strspn(str, "0123456789") != strlen(str)) { 
+        RTE_LOG(WARNING, NETIF, "invalid %s:cpu_valid_loop %s, using default 0\n",
+                current_worker->name, str);
+        current_worker->cpu_valid_loop = 0;
+    } else {
+        cpu_valid_loop = atoi(str);
+        RTE_LOG(INFO, NETIF, "%s:cpu_valid_loop = %d\n", current_worker->name, cpu_valid_loop);
+        current_worker->cpu_valid_loop = cpu_valid_loop;
+    }
+
+    FREE_PTR(str);
+}
+
+static void loop_sched_interv_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    int sched_interval = 0;
+
+    if (!str)
+        return;
+
+    sched_interval = atoi(str);
+    FREE_PTR(str);
+
+    if (sched_interval < LOOP_SCHED_INTERVAL_MIN ||
+            sched_interval > LOOP_SCHED_INTERVAL_MAX) {
+        RTE_LOG(WARNING, NETIF, "invalid loop_sched_interval config %d, "
+                "using default %d\n", sched_interval, LOOP_SCHED_INTERVAL_DEF);
+        return;
+    }
+
+    usecs = sched_interval;
+    RTE_LOG(INFO, NETIF, "loop scheduled interval= %d\n", usecs);
+}
+
+static void worker_imissed_len_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    int imissed_len;
+    struct worker_conf_stream *current_worker = list_entry(worker_list.next,
+                struct worker_conf_stream, worker_list_node); //get in the list 
+
+    assert(str);
+    if (strspn(str, "0123456789") != strlen(str)) { 
+        RTE_LOG(WARNING, NETIF, "invalid %s:imissed_len %s, using default configuration\n",
+                current_worker->name, str);
+        current_worker->imissed_len = IMISSED_LEN_DEF;
+    } else {
+        imissed_len = atoi(str);
+        RTE_LOG(INFO, NETIF, "%s:imissed_serial_len = %d\n", current_worker->name, imissed_len);
+        current_worker->imissed_len = imissed_len;
+    }
+
+    FREE_PTR(str);
+}
+
 static void rx_queue_ids_handler(vector_t tokens)
 {
     int ii, qid;
@@ -822,6 +959,7 @@ void install_netif_keywords(void)
     install_keyword_root("netif_defs", netif_defs_handler);
     install_keyword("pktpool_size", pktpool_size_handler, KW_TYPE_INIT);
     install_keyword("pktpool_cache", pktpool_cache_handler, KW_TYPE_INIT);
+    install_keyword("loop_schedule_interval", loop_sched_interv_handler, KW_TYPE_NORMAL);
     install_keyword("device", device_handler, KW_TYPE_INIT);
     install_sublevel();
     install_keyword("rx", NULL, KW_TYPE_INIT);
@@ -857,6 +995,8 @@ void install_netif_keywords(void)
     install_sublevel();
     install_keyword("type", worker_type_handler, KW_TYPE_INIT);
     install_keyword("cpu_id", cpu_id_handler, KW_TYPE_INIT);
+    install_keyword("cpu_valid_loop", worker_least_loop_handler, KW_TYPE_NORMAL);
+    install_keyword("imissed_serial_len", worker_imissed_len_handler, KW_TYPE_NORMAL);
     install_keyword("port", worker_port_handler, KW_TYPE_INIT);
     install_sublevel();
     install_keyword("rx_queue_ids", rx_queue_ids_handler, KW_TYPE_INIT);
@@ -4075,6 +4215,10 @@ static int netif_loop(void *dummy)
     list_for_each_entry(job, &netif_lcore_jobs[NETIF_LCORE_JOB_INIT], list) {
         do_lcore_job(job);
     }
+
+    //Edit:timeout event calling for lcore loop stats update
+    loop_period_event(NULL);
+
     while (1) {
 #ifdef CONFIG_RECORD_BIG_LOOP
         loop_start = rte_get_timer_cycles();
@@ -4106,6 +4250,40 @@ static int netif_loop(void *dummy)
 #endif
     }
     return EDPVS_OK;
+}
+
+/*Edit:loop info update timer handler*/
+int lcore_loop_status_update(void *priv)
+{
+    lcoreid_t j = rte_lcore_id();
+
+    if(lcore_loop_vel_stats[j].set_loop_flag == 0) {
+        lcore_loop_vel_stats[j].lcore_loop_vel[0] = lcore_stats[j].lcore_loop;
+        lcore_loop_vel_stats[j].set_loop_flag = 1;
+        return DTIMER_OK;
+    } else {
+        lcore_loop_vel_stats[j].lcore_loop_vel[1] = 1000000 * (lcore_stats[j].lcore_loop 
+                         - lcore_loop_vel_stats[j].lcore_loop_vel[0]) / usecs;
+        lcore_loop_vel_stats[j].lcore_loop_vel[0] = lcore_stats[j].lcore_loop;
+    }
+
+    RTE_LOG(DEBUG, NETIF, "periodical perloops update:%lu  lcore id:%d-\n",
+                         lcore_loop_vel_stats[j].lcore_loop_vel[1], j);
+    return DTIMER_OK;
+}
+
+/* loop info update timer event register */
+inline int loop_period_event(void *interval)
+{
+    lcoreid_t cid = rte_lcore_id();
+
+    struct timeval intervals;
+    intervals.tv_sec = usecs / 1000000;
+    intervals.tv_usec = usecs % 1000000;
+    /*Add timeout task...*/
+    dpvs_timer_sched_period(&loop_timer[cid], &intervals, lcore_loop_status_update, NULL, false);
+
+    return 0;
 }
 
 int netif_lcore_start(void)
@@ -4239,6 +4417,11 @@ int netif_init(const struct rte_eth_conf *conf)
     // use default port conf if conf=NULL
     netif_port_init(conf);
     netif_lcore_init();
+    /*Edit:overload protect init process*/
+    loop_stats_init();
+    imissed_stats_init();
+    imissed_len_init();
+
     return EDPVS_OK;
 }
 
@@ -5239,3 +5422,146 @@ int netif_ctrl_term(void)
 
     return EDPVS_OK;
 }
+/***********module update for overload protection support************/
+//Edit:detect tendency of whole nics imissed data serial to roughly test if there are continuous pkts imissing on current lcore
+/*we use worker_imissed_flag to tell if the imissed serial is all set in the early stage after DPVS start
+ *step 1: when the imissed serial is not all set, cmpare the current element with privious data,
+ *     i.e. imissed_priv (if no privious data skip),
+ *     if bigger set (index - 1) bit of inc_flag to 1, otherwise 0(if no privious data skip);
+ *     then set current data to imissed_priv; index ++
+ *step 2: when the imissed serial is all set, cmpare the current element with imissed_priv 
+ *     to set (index - 1) bit of inc_flag, compare inc_flag to flag to tell if gradual
+ *     increasing tend found on imissed_serial
+ *     then right shift 1 bit on inc_flag to remove the oldest comparasion result
+ *step 3: loop job of step 2, to update the highest bit which is set 0 by the right shift operation
+ * Example:
+ * imissed_serial_len 3; flag 0b(11); inc_flag init 0; index init 0;
+ * 1,first imissed data 0, as index == 0, privious data not found, imissed_priv = 0;
+ *    index = 1 < imissed_serial_len i.e. not fully set
+ * 2,second imissed data 2, 2 > imissed_priv, inc_flag |= (1 << (index - 1)) i.e. inc_flag = 0b(01);
+ *    imissed_priv = 2
+ *    index =2 < imissed_serial_len i.e. not fully set
+ * 3,third imissed data 4, 4 > imissed_priv, inc_flag |= (1 << (index - 1)) i.e. inc_flag = 0b(11);
+ *    imissed_priv = 4
+ *    index =3 == imissed_serial_len i.e. fully set
+ *    as inc_flag == flag, gradual increasing tend found on imissed_serial
+ *    inc_flag >>= 1 i.e. 0b(01);
+ * 4,fourth imissed data 4, 4 == imissed_priv,  inc_flag = 0b(01);
+ *    imissed_priv = 4
+ *    as inc_flag != flag, gradual increasing tend not found on imissed_serial
+ *    inc_flag >>=1 i.e. 0b(00)
+ * among which:
+ *     flag = worker_imissed_flag[cid] has (imissed_serial_len-1) bits of 1 
+ * */
+inline int dump_port_imissed_stats(void *priv)
+{
+    int kk = 0, j = 0;
+    size_t len;
+
+    int nports;
+    nports = rte_eth_dev_count();
+    assert(nports > 0);
+
+    lcoreid_t cid = rte_lcore_id();
+
+    int serial_max = worker_imissed_len[cid]; 
+    int flag = worker_imissed_flag[cid];
+
+    struct netif_port *port;
+    netif_nic_stats_get_t *port_list_node = NULL;
+    
+    if(lcore_imissed_stats[cid].index < serial_max) {  //initial state:imissed serial not fully set
+        j = lcore_imissed_stats[cid].index;
+        lcore_imissed_stats[cid].index++;
+        /*RTE_LOG(DEBUG, NETIF, "the index of imissed serial to set:%d\n", j);*/
+    } else {
+        j = serial_max - 1;
+    }
+    for( kk = 0; kk < nports; kk++) { //update imissed data & increasing flag(inc_flag) each NIC port
+        port = netif_port_get(kk);
+        if (!port) {
+            RTE_LOG(WARNING, NETIF, "port %d not found\n", kk);
+            continue;
+        }
+        get_port_stats(port, (void **)&port_list_node, &len);
+
+        if(j == 0) { /*obtain imissed data for the first time,no privious data*/
+            lcore_imissed_stats[cid].port_imissed_stats[kk].imissed_priv =
+                                                         port_list_node->imissed;
+            continue;
+        }         
+        /*Logic 1: update the (j-1) bit of imissed_serial inc_flag according to
+         *the comparasion to current imissed data:if current imissed data is higher
+         *set 1,otherwise default 0 */
+        if(port_list_node->imissed
+                            > lcore_imissed_stats[cid].port_imissed_stats[kk].imissed_priv) {
+            lcore_imissed_stats[cid].port_imissed_stats[kk].inc_flag |= (1 << (j-1));
+        }
+        lcore_imissed_stats[cid].port_imissed_stats[kk].imissed_priv = port_list_node->imissed;
+
+        if(lcore_imissed_stats[cid].port_imissed_stats[kk].inc_flag == flag) /*gradual increasing serial found on nic kk*/
+            lcore_imissed_stats[cid].inc_num++;/*increase num of nic with gradual increase serial*/
+        /*Logic 2: if imissed_serial is fully set, remove the lowest/oldest bit 
+		 * to reserve highest bit for next imissed data*/
+        if(j == (serial_max - 1))
+            lcore_imissed_stats[cid].port_imissed_stats[kk].inc_flag >>= 1;
+    }
+
+    return EDPVS_OK;
+}
+
+int imissed_status()
+{
+    lcoreid_t cid;
+    cid = rte_lcore_id();
+    assert(cid < DPVS_MAX_LCORE);
+
+    lcore_imissed_stats[cid].inc_num = 0;
+    dump_port_imissed_stats(NULL);
+    /*RTE_LOG(DEBUG, NETIF, "imissed incnum update:%d -lcore id:%d\n", lcore_imissed_stats[cid].inc_num, cid);*/
+
+    if(lcore_imissed_stats[cid].inc_num > 0){ //if there are inc with gradual increasing serial 
+        RTE_LOG(DEBUG, NETIF, "NIC pkts imissed gradually increase found on lcore %d\n", cid);
+        return EDPVS_OVERLOAD;
+    } else {
+        return EDPVS_OK;
+    }
+    return EDPVS_OK;
+}
+
+int loop_status()
+{
+    lcoreid_t cid;
+    cid = rte_lcore_id();
+    assert(cid < DPVS_MAX_LCORE);
+
+    struct list_head *pos_tmp;
+    struct worker_conf_stream *current_worker;
+    int lcore_per_loops;
+    int cpu_valid_loop; 
+
+    lcoreid_t cpu_id = 0;
+    for(pos_tmp = worker_list.next; 
+                pos_tmp->next != &worker_list; pos_tmp = pos_tmp->next) {
+        if(cpu_id == cid)  //current worker found
+            break;
+        cpu_id++;
+    }
+
+    current_worker = list_entry(pos_tmp, 
+                             struct worker_conf_stream, worker_list_node);
+    cpu_valid_loop = current_worker->cpu_valid_loop;
+    if(cpu_valid_loop == 0)
+        return EDPVS_OK;
+	
+    lcore_per_loops = lcore_loop_vel_stats[cid].lcore_loop_vel[1];
+
+    if(lcore_per_loops < cpu_valid_loop) {
+        return EDPVS_OVERLOAD; 
+    } else {
+        return EDPVS_OK; 
+    }
+
+    return EDPVS_OK;
+}
+/** END  support for overload protection   END  **/

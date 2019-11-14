@@ -268,6 +268,12 @@ struct netif_port {
     struct netif_ops        *netif_ops;
 } __rte_cache_aligned;
 
+/****************************cpu status API *******************************/
+int lcore_loop_status_update(void *priv);//Edit:cpu stats for overload protection
+int loop_status(void);
+inline int loop_period_event(void *intervals);
+inline int dump_port_imissed_stats(void *priv);
+int imissed_status(void);
 /**************************** lcore API *******************************/
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);

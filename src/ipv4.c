@@ -328,7 +328,7 @@ static int ip4_rcv_options(struct rte_mbuf *mbuf)
 
 static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
 {
-    int err;
+    int err = 0;
     struct route_entry *rt = NULL;
     struct ipv4_hdr *iph = ip4_hdr(mbuf);
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
@@ -339,7 +339,6 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
             iph->type_of_service, netif_port_get(mbuf->port));
     if (unlikely(!rt))
         return EDPVS_KNICONTINUE; /* KNI may like it, don't drop */
-
     /* input IPv4 options */
     if ((iph->version_ihl & 0xf) > 5) {
         if (ip4_rcv_options(mbuf) != EDPVS_OK) {
@@ -350,6 +349,17 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
 
     /* use extended mbuf if have more data then @rt */
     mbuf->userdata = (void *)rt;
+    /*support overload protection*/
+    if(loop_status() == EDPVS_OVERLOAD && 
+            imissed_status() == EDPVS_OVERLOAD) {
+        //cpu_valid_loop is low && continuing increase imissed
+        if(rt->flag & RTF_KNI) { //only KNI to pass
+            route4_put(rt);
+            return EDPVS_KNICONTINUE;
+        } else {
+            goto drop;
+        }
+    }
 
     if (rt->flag & RTF_LOCALIN) {
         return ipv4_local_in(mbuf);

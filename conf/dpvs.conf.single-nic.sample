@@ -21,6 +21,7 @@ global_defs {
 netif_defs {
     <init> pktpool_size     524287
     <init> pktpool_cache    256
+    ! loop_schedule_interval  4000000 
 
     <init> device dpdk0 {
         rx {
@@ -52,6 +53,8 @@ worker_defs {
     <init> worker cpu1 {
         type    slave
         cpu_id  1
+        ! cpu_valid_loop  2400000 
+        ! imissed_serial_len  3  
         port    dpdk0 {
             rx_queue_ids     0
             tx_queue_ids     0
@@ -63,6 +66,8 @@ worker_defs {
     <init> worker cpu2 {
         type    slave
         cpu_id  2
+        ! cpu_valid_loop  2400000 
+        ! imissed_serial_len  3  
         port    dpdk0 {
             rx_queue_ids     1
             tx_queue_ids     1
@@ -74,6 +79,8 @@ worker_defs {
     <init> worker cpu3 {
         type        slave
         cpu_id      3
+        ! cpu_valid_loop  2400000 
+        ! imissed_serial_len  3  
         port        dpdk0 {
             rx_queue_ids     2
             tx_queue_ids     2
@@ -85,6 +92,8 @@ worker_defs {
     <init> worker   cpu4 {
         type        slave
         cpu_id      4
+        ! cpu_valid_loop  2400000 
+        ! imissed_serial_len  3  
         port        dpdk0 {
             rx_queue_ids     3
             tx_queue_ids     3
@@ -96,6 +105,8 @@ worker_defs {
     <init> worker   cpu5 {
         type        slave
         cpu_id      5
+        ! cpu_valid_loop  2400000 
+        ! imissed_serial_len  3  
         port        dpdk0 {
             rx_queue_ids     4
             tx_queue_ids     4
@@ -107,6 +118,8 @@ worker_defs {
     <init> worker   cpu6 {
         type        slave
         cpu_id      6
+        ! cpu_valid_loop  2400000 
+        ! imissed_serial_len  3  
         port        dpdk0 {
             rx_queue_ids     5
             tx_queue_ids     5
@@ -118,6 +131,8 @@ worker_defs {
     <init> worker   cpu7 {
         type        slave
         cpu_id      7
+        ! cpu_valid_loop  2400000 
+        ! imissed_serial_len  3  
         port        dpdk0 {
             rx_queue_ids     6
             tx_queue_ids     6
