@@ -26,6 +26,7 @@
 #include "netif.h"
 #include "mempool.h"
 #include "parser/parser.h"
+#include "scheduler.h"
 
 /////////////////////////////////// lcore  msg ///////////////////////////////////////////
 
@@ -35,8 +36,6 @@ uint64_t slave_lcore_mask;     /* bit-wise enabled lcores */
 uint8_t slave_lcore_nb;        /* slave lcore number */
 lcoreid_t master_lcore;        /* master lcore id */
 struct dpvs_mempool *msg_pool; /* memory pool for msg */
-
-struct netif_lcore_loop_job ctrl_lcore_job;
 
 #define MSG_TIMEOUT_US 2000
 static int g_msg_timeout = MSG_TIMEOUT_US;
@@ -441,6 +440,7 @@ int msg_destroy(struct dpvs_msg **pmsg)
     return EDPVS_OK;
 }
 
+static int msg_master_process(int step);
 /* "msg" must be produced by "msg_make" */
 int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_msg_reply **reply)
 {
@@ -500,7 +500,7 @@ int msg_send(struct dpvs_msg *msg, lcoreid_t cid, uint32_t flags, struct dpvs_ms
     /* blockable msg, wait here until done or timeout */
     add_msg_flags(msg, DPVS_MSG_F_STATE_SEND);
     start = rte_get_timer_cycles();
-    delay = (uint64_t)g_msg_timeout * rte_get_timer_hz() / 1000000;
+    delay = (uint64_t)g_msg_timeout * g_cycles_per_sec / 1000000;
     while(!(test_msg_flags(msg, (DPVS_MSG_F_STATE_FIN | DPVS_MSG_F_STATE_DROP)))) {
         if (start + delay < rte_get_timer_cycles()) {
             RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, uc_msg(type:%d, cid:%d->%d, flags=%d) timeout"
@@ -607,7 +607,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
     /* blockable msg wait here until done or timeout */
     add_msg_flags(msg, DPVS_MSG_F_STATE_SEND);
     start = rte_get_timer_cycles();
-    delay = (uint64_t)g_msg_timeout * rte_get_timer_hz() / 1000000;
+    delay = (uint64_t)g_msg_timeout * g_cycles_per_sec / 1000000;
     while(!(test_msg_flags(msg, (DPVS_MSG_F_STATE_FIN | DPVS_MSG_F_STATE_DROP)))) {
         if (start + delay < rte_get_timer_cycles()) {
             RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, mcq(type:%d, cid:%d->slaves) timeout"
@@ -634,7 +634,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
 }
 
 /* both unicast msg and multicast msg can be recieved on master lcore */
-int msg_master_process(int step)
+static int msg_master_process(int step)
 {
     int n = 0;
     struct dpvs_msg *msg;
@@ -790,11 +790,6 @@ cont:
     }
 
     return ret;
-}
-
-static inline void slave_lcore_loop_func(__rte_unused void *dumpy)
-{
-    msg_slave_process(0);
 }
 
 /* for debug */
@@ -995,6 +990,53 @@ static int unregister_built_in_msg(void)
     return ret;
 }
 
+static inline void master_lcore_loop_func(__rte_unused void *dummy)
+{
+    msg_master_process(0);
+}
+
+static inline void slave_lcore_loop_func(__rte_unused void *dummy)
+{
+    msg_slave_process(0);
+}
+
+static struct dpvs_lcore_job msg_master_job = {
+    .func = master_lcore_loop_func,
+    .data = NULL,
+    .type = LCORE_JOB_LOOP,
+};
+
+static struct dpvs_lcore_job msg_slave_job = {
+    .func = slave_lcore_loop_func,
+    .data = NULL,
+    .type = LCORE_JOB_LOOP,
+};
+
+static inline int msg_lcore_job_register(void)
+{
+    int ret;
+
+    snprintf(msg_master_job.name, sizeof(msg_master_job.name), "%s", "msg_master_job");
+    ret = dpvs_lcore_job_register(&msg_master_job, LCORE_ROLE_MASTER);
+    if (ret < 0)
+        return ret;
+
+    snprintf(msg_slave_job.name, sizeof(msg_slave_job.name), "%s", "msg_slave_job");
+    ret = dpvs_lcore_job_register(&msg_slave_job, LCORE_ROLE_FWD_WORKER);
+    if (ret < 0) {
+        dpvs_lcore_job_unregister(&msg_master_job, LCORE_ROLE_MASTER);
+        return ret;
+    }
+
+    return EDPVS_OK;
+}
+
+static inline void msg_lcore_job_unregister(void)
+{
+    dpvs_lcore_job_unregister(&msg_master_job, LCORE_ROLE_MASTER);
+    dpvs_lcore_job_unregister(&msg_slave_job, LCORE_ROLE_FWD_WORKER);
+}
+
 static inline int msg_init(void)
 {
     int ii, jj;
@@ -1044,18 +1086,19 @@ static inline int msg_init(void)
         if (unlikely(NULL == msg_ring[ii])) {
             RTE_LOG(ERR, MSGMGR, "%s: fail to create msg ring\n", __func__);
             dpvs_mempool_destroy(msg_pool);
+            for (--ii; ii >= 0; ii--)
+                rte_ring_free(msg_ring[ii]);
             return EDPVS_DPDKAPIFAIL;
         }
     }
 
     /* register netif-lcore-loop-job for Slaves */
-    snprintf(ctrl_lcore_job.name, sizeof(ctrl_lcore_job.name) - 1, "%s", "slave_ctrl_plane");
-    ctrl_lcore_job.func = slave_lcore_loop_func;
-    ctrl_lcore_job.data = NULL;
-    ctrl_lcore_job.type = NETIF_LCORE_JOB_LOOP;
-    if ((ret = netif_lcore_loop_job_register(&ctrl_lcore_job)) < 0) {
-        RTE_LOG(ERR, MSGMGR, "%s: fail to register ctrl func on slave lcores\n", __func__);
+    ret = msg_lcore_job_register();
+    if (ret != EDPVS_OK) {
+        RTE_LOG(ERR, MSGMGR, "%s: fail to register msg jobs\n", __func__);
         dpvs_mempool_destroy(msg_pool);
+        for (ii = 0; ii < DPVS_MAX_LCORE; ii++)
+            rte_ring_free(msg_ring[ii]);
         return ret;
     }
 
@@ -1069,16 +1112,13 @@ static inline int msg_init(void)
 
 static inline int msg_term(void)
 {
-    int ii, ret;
+    int ii;
 
     /* unregister built-in msg type */
     unregister_built_in_msg();
 
     /* unregister netif-lcore-loop-job for Slaves */
-    if ((ret = netif_lcore_loop_job_unregister(&ctrl_lcore_job)) < 0) {
-        RTE_LOG(ERR, MSGMGR, "%s: fail to unregister ctrl func on slave lcores\n", __func__);
-        return ret;
-    }
+    msg_lcore_job_unregister();
 
     /* per-lcore msg queue */
     for (ii= 0; ii < DPVS_MAX_LCORE; ii++)
@@ -1286,7 +1326,7 @@ static int sockopt_msg_send(int clt_fd,
     return EDPVS_OK;
 }
 
-int sockopt_ctl(__rte_unused void *arg)
+static int sockopt_ctl(__rte_unused void *arg)
 {
     int clt_fd;
     int ret;
@@ -1358,10 +1398,22 @@ int sockopt_ctl(__rte_unused void *arg)
     return EDPVS_OK;
 }
 
+static inline void sockopt_job_func(void *dummy)
+{
+    sockopt_ctl(NULL);
+}
+
+static struct dpvs_lcore_job sockopt_job = {
+    .func = sockopt_job_func,
+    .data = NULL,
+    .type = LCORE_JOB_LOOP,
+};
+
 static inline int sockopt_init(void)
 {
     struct sockaddr_un srv_addr;
     int srv_fd_flags = 0;
+    int err;
 
     INIT_LIST_HEAD(&sockopt_list);
 
@@ -1400,6 +1452,14 @@ static inline int sockopt_init(void)
         return EDPVS_IO;
     }
 
+    snprintf(sockopt_job.name, sizeof(sockopt_job.name), "%s", "sockopt_job");
+    if ((err = dpvs_lcore_job_register(&sockopt_job, LCORE_ROLE_MASTER)) != EDPVS_OK) {
+        RTE_LOG(ERR, MSGMGR, "%s: Fail to register sockopt_job into master\n", __func__);
+        close(srv_fd);
+        unlink(ipc_unix_domain);
+        return err;
+    }
+
     return EDPVS_OK;
 }
 
@@ -1407,6 +1467,8 @@ static inline int sockopt_term(void)
 {
     close(srv_fd);
     unlink(ipc_unix_domain);
+    dpvs_lcore_job_unregister(&sockopt_job, LCORE_ROLE_MASTER);
+
     return EDPVS_OK;
 }
 

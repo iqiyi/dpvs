@@ -15,10 +15,24 @@
  * GNU General Public License for more details.
  *
  */
-#ifndef __CONFIG_H__
-#define __CONFIG_H__
 
-int cfgfile_init(void);
-int cfgfile_term(void);
+#ifndef __GLOBAL_DATA_H__
+#define __GLOBAL_DATA_H__
+
+#include "common.h"
+
+typedef enum dpvs_lcore_role_type {
+    LCORE_ROLE_IDLE,
+    LCORE_ROLE_MASTER,
+    LCORE_ROLE_FWD_WORKER,
+    LCORE_ROLE_ISOLRX_WORKER,
+    LCORE_ROLE_MAX
+} dpvs_lcore_role_t;
+
+extern uint64_t g_cycles_per_sec;
+extern dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
+
+int global_data_init(void);
+int global_data_term(void);
 
 #endif

@@ -25,6 +25,7 @@
 #include "ipv4_frag.h"
 #include "icmp.h"
 #include "parser/parser.h"
+#include "scheduler.h"
 
 #define IP4FRAG
 #define RTE_LOGTYPE_IP4FRAG RTE_LOGTYPE_USER1
@@ -364,7 +365,7 @@ static void ipv4_frag_job(void *arg)
     return;
 }
 
-static struct netif_lcore_loop_job frag_job;
+static struct dpvs_lcore_job frag_job;
 
 int ipv4_frag_init(void)
 {
@@ -412,9 +413,9 @@ int ipv4_frag_init(void)
     snprintf(frag_job.name, sizeof(frag_job.name) - 1, "%s", "ipv4_frag");
     frag_job.func = ipv4_frag_job;
     frag_job.data = NULL;
-    frag_job.type = NETIF_LCORE_JOB_SLOW;
+    frag_job.type = LCORE_JOB_SLOW;
     frag_job.skip_loops = IP4_FRAG_FREE_DEATH_ROW_INTERVAL;
-    err = netif_lcore_loop_job_register(&frag_job);
+    err = dpvs_lcore_job_register(&frag_job, LCORE_ROLE_FWD_WORKER);
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IP4FRAG, "fail to register loop job.\n");
         return err;
@@ -427,7 +428,7 @@ int ipv4_frag_term(void)
 {
     int err;
 
-    err = netif_lcore_loop_job_unregister(&frag_job);
+    err = dpvs_lcore_job_unregister(&frag_job, LCORE_ROLE_FWD_WORKER);
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IP4FRAG, "fail to unregister loop job.\n");
         return err;

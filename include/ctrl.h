@@ -18,6 +18,7 @@
 #ifndef __DPVS_MSGMGR_H__
 #define __DPVS_MSGMGR_H__
 
+#include "global_data.h"
 #include "common.h"
 #include "list.h"
 #include "dpdk.h"
@@ -171,9 +172,6 @@ int multicast_msg_send(struct dpvs_msg *msg,
         uint32_t flags, /* only DPVS_MSG_F_ASYNC supported now */
         struct dpvs_multicast_queue **reply); /* response, use it before msg_destroy */
 
-/* Master lcore msg process loop */
-int msg_master_process(int step); /* Master lcore msg loop */
-
 /* Slave lcore msg process loop */
 int msg_slave_process(int step);  /* Slave lcore msg loop */
 
@@ -277,7 +275,6 @@ struct dpvs_sockopts {
     int (*get)(sockoptid_t opt, const void *in, size_t inlen, void **out, size_t *outlen);
 };
 
-int sockopt_ctl(void *arg);
 int sockopt_register(struct dpvs_sockopts *sockopts);
 int sockopt_unregister(struct dpvs_sockopts *sockopts);
 

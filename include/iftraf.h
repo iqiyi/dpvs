@@ -12,7 +12,6 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,  void **o
 
 int iftraf_pkt_in(int af, struct rte_mbuf *mbuf, struct netif_port *dev);
 int iftraf_pkt_out(int af, struct rte_mbuf *mbuf, struct netif_port *dev);
-void iftraf_process_ring(void);
 
 int iftraf_init(void);
 int iftraf_term(void); /* cleanup */

@@ -31,6 +31,7 @@
 #include "ctrl.h"
 #include "ndisc.h"
 #include "conf/neigh.h"
+#include "scheduler.h"
 
 #define NEIGH_ENTRY_BUFF_SIZE_DEF 128
 #define NEIGH_ENTRY_BUFF_SIZE_MIN 16
@@ -747,7 +748,7 @@ static struct raw_neigh* neigh_ring_clone_param(const struct dp_vs_neigh_conf *p
  *1, master core static neighbour sync slave core;
  *2, ipv6 slave core sync slave core when recieve ns/na
  */
-void neigh_process_ring(void *arg)
+static void neigh_process_ring(void *arg)
 {
     struct raw_neigh *params[NETIF_MAX_PKT_BURST];
     uint16_t nb_rb;
@@ -1041,7 +1042,8 @@ static struct dpvs_sockopts neigh_sockopts = {
     .set         = neigh_sockopt_set,
 };
 
-static struct netif_lcore_loop_job neigh_sync_job;
+#define NEIGH_LCORE_JOB_MAX     2
+static struct dpvs_lcore_job neigh_jobs[NEIGH_LCORE_JOB_MAX];
 
 static int arp_init(void)
 {
@@ -1066,13 +1068,19 @@ static int arp_init(void)
     neigh_ring_init();
 
     /*get static arp entry from master*/
-    snprintf(neigh_sync_job.name, sizeof(neigh_sync_job.name) - 1, "%s", "neigh_sync");
-    neigh_sync_job.func = neigh_process_ring;
-    neigh_sync_job.data = NULL;
-    neigh_sync_job.type = NETIF_LCORE_JOB_SLOW;
-    neigh_sync_job.skip_loops = NEIGH_PROCESS_MAC_RING_INTERVAL;
-    err = netif_lcore_loop_job_register(&neigh_sync_job);
-    if (err != EDPVS_OK)
+    snprintf(neigh_jobs[0].name, sizeof(neigh_jobs[0].name) - 1, "%s", "neigh_sync");
+    neigh_jobs[0].func = neigh_process_ring;
+    neigh_jobs[0].data = NULL;
+    neigh_jobs[0].type = LCORE_JOB_SLOW;
+    neigh_jobs[0].skip_loops = NEIGH_PROCESS_MAC_RING_INTERVAL;
+    if ((err = dpvs_lcore_job_register(&neigh_jobs[0], LCORE_ROLE_FWD_WORKER)) != EDPVS_OK)
+        return err;
+
+    snprintf(neigh_jobs[1].name, sizeof(neigh_jobs[1].name) - 1, "%s", "neigh_sync");
+    neigh_jobs[1].func = neigh_process_ring;
+    neigh_jobs[1].data = NULL;
+    neigh_jobs[1].type = LCORE_JOB_LOOP;
+    if ((err = dpvs_lcore_job_register(&neigh_jobs[1], LCORE_ROLE_MASTER)) != EDPVS_OK)
         return err;
 
     return EDPVS_OK;
@@ -1116,6 +1124,9 @@ int neigh_init(void)
 int neigh_term(void)
 {
     unregister_stats_cb();
+
+    dpvs_lcore_job_unregister(&neigh_jobs[0], LCORE_ROLE_FWD_WORKER);
+    dpvs_lcore_job_unregister(&neigh_jobs[1], LCORE_ROLE_MASTER);
 
     return EDPVS_OK;
 }

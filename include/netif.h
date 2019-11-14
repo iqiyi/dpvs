@@ -26,6 +26,10 @@
 
 #define RTE_LOGTYPE_NETIF RTE_LOGTYPE_USER1
 
+#ifndef DPVS_MAX_LCORE
+#define DPVS_MAX_LCORE RTE_MAX_LCORE
+#endif
+
 enum {
     NETIF_PORT_FLAG_ENABLED                 = (0x1<<0),
     NETIF_PORT_FLAG_RUNNING                 = (0x1<<1),
@@ -119,38 +123,17 @@ struct rx_partner {
 /**************************** lcore statistics ***************************/
 struct netif_lcore_stats
 {
-    uint64_t lcore_loop; /* Total number of loops since start */
-    uint64_t pktburst;  /* Total number of receive bursts */
-    uint64_t zpktburst; /* Total number of receive bursts with ZERO packets */
-    uint64_t fpktburst; /* Total number of receive bursts with MAX packets */
-    uint64_t z2hpktburst; /* Total number of receive bursts with [0, 0.5*MAX] packets */
-    uint64_t h2fpktburst; /* Total number of receive bursts with (0.5*MAX, MAX] packets */
-    uint64_t ipackets; /* Total number of successfully received packets. */
-    uint64_t ibytes; /* Total number of successfully received bytes. */
-    uint64_t opackets; /* Total number of successfully transmitted packets. */
-    uint64_t obytes;/* Total number of successfully transmitted bytes. */
-    uint64_t dropped; /* Total number of dropped packets by software. */
-} __rte_cache_aligned;
-
-/**************************** lcore loop job ****************************/
-enum netif_lcore_job_type {
-    NETIF_LCORE_JOB_INIT      = 0,
-    NETIF_LCORE_JOB_LOOP      = 1,
-    NETIF_LCORE_JOB_SLOW      = 2,
-    NETIF_LCORE_JOB_TYPE_MAX  = 3,
-};
-
-struct netif_lcore_loop_job
-{
-    char name[32];
-    void (*func)(void *arg);
-    void *data;
-    enum netif_lcore_job_type type;
-    uint32_t skip_loops; /* for NETIF_LCORE_JOB_SLOW type only */
-#ifdef CONFIG_RECORD_BIG_LOOP
-    uint32_t job_time[DPVS_MAX_LCORE];
-#endif
-    struct list_head list;
+    uint64_t lcore_loop;        /* Total number of loops since start */
+    uint64_t pktburst;          /* Total number of receive bursts */
+    uint64_t zpktburst;         /* Total number of receive bursts with ZERO packets */
+    uint64_t fpktburst;         /* Total number of receive bursts with MAX packets */
+    uint64_t z2hpktburst;       /* Total number of receive bursts with [0, 0.5*MAX] packets */
+    uint64_t h2fpktburst;       /* Total number of receive bursts with (0.5*MAX, MAX] packets */
+    uint64_t ipackets;          /* Total number of successfully received packets. */
+    uint64_t ibytes;            /* Total number of successfully received bytes. */
+    uint64_t opackets;          /* Total number of successfully transmitted packets. */
+    uint64_t obytes;            /* Total number of successfully transmitted bytes. */
+    uint64_t dropped;           /* Total number of dropped packets by software. */
 } __rte_cache_aligned;
 
 /******************* packet type for upper protocol *********************/
@@ -276,12 +259,10 @@ int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
 void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask);
 void netif_update_master_loop_cnt(void);
+void netif_update_worker_loop_cnt(void);
 // function only for init or termination //
 int netif_register_master_xmit_msg(void);
 int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);
-int netif_lcore_loop_job_register(struct netif_lcore_loop_job *lcore_job);
-int netif_lcore_loop_job_unregister(struct netif_lcore_loop_job *lcore_job);
-int netif_lcore_start(void);
 bool is_lcore_id_valid(lcoreid_t cid);
 bool netif_lcore_is_idle(lcoreid_t cid);
 void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
@@ -332,9 +313,6 @@ void netif_cfgfile_init(void);
 void netif_keyword_value_init(void);
 void install_netif_keywords(void);
 
-/*************************** kni api *******************************/
-void kni_process_on_master(void);
-
 
 static inline void *netif_priv(struct netif_port *dev)
 {
@@ -344,25 +322,6 @@ static inline void *netif_priv(struct netif_port *dev)
 static inline struct netif_tc *netif_tc(struct netif_port *dev)
 {
     return &dev->tc;
-}
-
-static inline int eth_addr_equal(const struct ether_addr *addr1,
-                                 const struct ether_addr *addr2)
-{
-    const uint16_t *a = (const uint16_t *)addr1;
-    const uint16_t *b = (const uint16_t *)addr2;
-
-    return ((a[0]^b[0]) | (a[1]^b[1]) | (a[2]^b[2])) == 0;
-}
-
-static inline char *eth_addr_dump(const struct ether_addr *ea,
-                                  char *buf, size_t size)
-{
-    snprintf(buf, size, "%02x:%02x:%02x:%02x:%02x:%02x",
-             ea->addr_bytes[0], ea->addr_bytes[1],
-             ea->addr_bytes[2], ea->addr_bytes[3],
-             ea->addr_bytes[4], ea->addr_bytes[5]);
-    return buf;
 }
 
 static inline uint16_t dpvs_rte_eth_dev_count(void)

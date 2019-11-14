@@ -2,6 +2,7 @@
 #include <string.h>
 #include "sys_time.h"
 #include "dpdk.h"
+#include "global_data.h"
 
 /*Notice:
  * the time zone is the value compared with the server's;
@@ -28,7 +29,7 @@ char* cycles_to_stime(uint64_t cycles, char* stime, int len)
         return NULL;
 
     memset(stime, 0, len);
-    ts = (cycles - g_start_cycles) / rte_get_timer_hz();
+    ts = (cycles - g_start_cycles) / g_cycles_per_sec;
     ts += g_dpvs_timer;
     sys_time_to_str(&ts, stime, len);
 
@@ -53,7 +54,7 @@ time_t sys_current_time(void)
 {
     time_t now;
 
-    now = (rte_rdtsc() - g_start_cycles) / rte_get_timer_hz();
+    now = (rte_rdtsc() - g_start_cycles) / g_cycles_per_sec;
     return now + g_dpvs_timer;
 }
 

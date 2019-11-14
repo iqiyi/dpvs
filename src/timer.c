@@ -33,6 +33,7 @@
 #include "rte_timer.h"
 #include "rte_spinlock.h"
 #include "parser/parser.h"
+#include "global_data.h"
 
 #define DTIMER
 #define RTE_LOGTYPE_DTIMER      RTE_LOGTYPE_USER1
@@ -372,7 +373,7 @@ static int timer_init_schedler(struct timer_scheduler *sched, lcoreid_t cid)
 
     rte_timer_init(&sched->rte_tim);
     /* ticks should be exactly same with precision */
-    if (rte_timer_reset(&sched->rte_tim, rte_get_timer_hz() / DPVS_TIMER_HZ,
+    if (rte_timer_reset(&sched->rte_tim, g_cycles_per_sec / DPVS_TIMER_HZ,
                         PERIODICAL, cid, rte_timer_tick_cb, sched) != 0) {
         RTE_LOG(ERR, DTIMER, "[%02d] fail to reset rte timer.\n", cid);
         return EDPVS_INVAL;

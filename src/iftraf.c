@@ -6,6 +6,7 @@
 #include "iftraf.h"
 #include "conf/iftraf.h"
 #include "vlan.h"
+#include "scheduler.h"
 
 #ifndef IFTRAF
 #define IFTRAF
@@ -15,7 +16,7 @@
 #define IFTRAF_TOPN 20
 
 #define IFTRAF_RING_SIZE  1024
-#define IFTRAF_INTERVAL   1024 
+#define IFTRAF_INTERVAL   1024
 
 #define IFTRAF_PKT_DIR_IN 0
 #define IFTRAF_PKT_DIR_OUT 1
@@ -76,9 +77,9 @@ struct iftraf_pkt {
     union inet_addr saddr;
     union inet_addr daddr;
     uint16_t src_port;
-    uint16_t dst_port; 
+    uint16_t dst_port;
     portid_t  devid;
-    char ifname[IFNAMSIZ]; 
+    char ifname[IFNAMSIZ];
 } __rte_cache_aligned;
 
 struct iftraf_entry {
@@ -96,8 +97,8 @@ struct iftraf_entry {
     uint16_t dport;
 
     uint32_t recv[IFTRAF_HISTORY_LENGTH];
-    uint32_t sent[IFTRAF_HISTORY_LENGTH];	
-	
+    uint32_t sent[IFTRAF_HISTORY_LENGTH];
+
     uint32_t total_recv;
     uint32_t total_sent;
     int last_write;
@@ -136,7 +137,7 @@ static inline uint32_t iftraf_tlb_hashkey(int af,
 static hash_status_enum iftraf_entry_get(uint32_t hash, struct iftraf_pkt *param, struct iftraf_entry **out_entry)
 {
     struct iftraf_entry *entry;
-	
+
     list_for_each_entry(entry, &iftraf_tbl[hash], list) {
         if (entry->sport == param->src_port && entry->dport == param->dst_port
             && inet_addr_equal(param->af, &entry->saddr, &param->saddr)
@@ -146,18 +147,18 @@ static hash_status_enum iftraf_entry_get(uint32_t hash, struct iftraf_pkt *param
             /* hit */
             *out_entry = entry;
             RTE_LOG(DEBUG, IFTRAF,
-                "%s: [hit]\n", __func__);	
+                "%s: [hit]\n", __func__);
             return HASH_STATUS_OK;
         }
     }
     RTE_LOG(DEBUG, IFTRAF,
-        "%s: [not found]\n", __func__);	
+        "%s: [not found]\n", __func__);
 
     return HASH_STATUS_KEY_NOT_FOUND;
 }
 
 
-static void history_rotate(void) 
+static void history_rotate(void)
 {
     uint32_t hash = 0;
     struct iftraf_entry *entry, *nxt;
@@ -208,7 +209,7 @@ static void history_rotate(void)
     }
 }
 
-static int iftraf_entry_compare(void* aa, void* bb) 
+static int iftraf_entry_compare(void* aa, void* bb)
 {
     struct iftraf_entry * a = (struct iftraf_entry *)aa;
     struct iftraf_entry * b = (struct iftraf_entry *)bb;
@@ -216,7 +217,7 @@ static int iftraf_entry_compare(void* aa, void* bb)
     return (a->total_recv + a->total_sent) > (b->total_recv + b->total_sent);
 }
 
-static void sorted_list_initialise(sorted_list_type* list) 
+static void sorted_list_initialise(sorted_list_type* list)
 {
     list->root.next = NULL;
     list->sorted_list_num = 0;
@@ -230,10 +231,10 @@ static void insert_top_list(struct iftraf_entry *entry, sorted_list_type *p_iftr
 
     p = &(p_iftraf_sorted_list->root);
 
-    if (p_iftraf_sorted_list->sorted_list_num == IFTRAF_TOPN && p_iftraf_sorted_list->compare(p->next->data, entry)) {   
+    if (p_iftraf_sorted_list->sorted_list_num == IFTRAF_TOPN && p_iftraf_sorted_list->compare(p->next->data, entry)) {
         struct iftraf_entry *firstentry = (struct iftraf_entry *)p->next->data;
         RTE_LOG(DEBUG, IFTRAF,
-            "%s: no need to insert[%u: %u, %u: %u]\n", 
+            "%s: no need to insert[%u: %u, %u: %u]\n",
              __func__, firstentry->total_recv, firstentry->total_sent, entry->total_recv, entry->total_sent);
 
         return;
@@ -241,7 +242,7 @@ static void insert_top_list(struct iftraf_entry *entry, sorted_list_type *p_iftr
 
     while (p->next != NULL && p_iftraf_sorted_list->compare(entry, p->next->data) > 0) {
         p = p->next;
-    } 
+    }
 
     node = rte_zmalloc(NULL, sizeof(*node), RTE_CACHE_LINE_SIZE);
     if (node == NULL) {
@@ -254,7 +255,7 @@ static void insert_top_list(struct iftraf_entry *entry, sorted_list_type *p_iftr
     node->data = entry;
     p->next = node;
     RTE_LOG(DEBUG, IFTRAF,
-        "%s: [insert list]cid : %d, sp : %u, dp : %u, recv : %u, sent : %u\n", 
+        "%s: [insert list]cid : %d, sp : %u, dp : %u, recv : %u, sent : %u\n",
         __func__, entry->cid, ntohs(entry->sport), ntohs(entry->dport), entry->total_recv, entry->total_sent);
     if(p_iftraf_sorted_list->sorted_list_num < IFTRAF_TOPN)
         p_iftraf_sorted_list->sorted_list_num++;
@@ -262,10 +263,10 @@ static void insert_top_list(struct iftraf_entry *entry, sorted_list_type *p_iftr
         /* free the first node */
         p = &(p_iftraf_sorted_list->root);
         first = p->next;
-	
+
         data = (struct iftraf_entry *)first->data;
         RTE_LOG(DEBUG, IFTRAF,
-            "%s: [free first entry]cid : %d, sp : %u, dp : %u, recv : %u, sent : %u\n", 
+            "%s: [free first entry]cid : %d, sp : %u, dp : %u, recv : %u, sent : %u\n",
              __func__, data->cid, ntohs(data->sport), ntohs(data->dport), data->total_recv, data->total_sent);
         p->next = first->next;
 
@@ -277,7 +278,7 @@ static void list_merge(void)
 {
     sorted_list_type *list;
     portid_t devid = 0;
-    sorted_list_node *node, *p, *pp;	
+    sorted_list_node *node, *p, *pp;
     uint32_t num = 0;
 
     pp = &(iftraf_sorted_list.root);
@@ -287,15 +288,15 @@ static void list_merge(void)
         p = &(list->root);
         while (p->next != NULL && num < list->sorted_list_num) {
             node = p->next;
-            p->next = node->next;	
+            p->next = node->next;
 
             /*insert*/
             node->next = pp->next;
             pp->next = node;
             iftraf_sorted_list.sorted_list_num++;
-			
+
             num++;
-        }		
+        }
         num = 0;
         list->sorted_list_num = 0;
     }
@@ -309,28 +310,28 @@ static void iftraf_sort_top(portid_t port_id)
 
     if (port_id == NETIF_MAX_PORTS) {
         for (hash = 0; hash < IFTRAF_IFTBL_SIZE; hash++) {
-            list_for_each_entry_safe(ifentry, ifnxt, &iftraf_iftbl[hash], list) {	                
+            list_for_each_entry_safe(ifentry, ifnxt, &iftraf_iftbl[hash], list) {
                 insert_top_list(ifentry, &sorted_list[ifentry->devid]);
             }
         }
 
         list_merge();
-		
+
     } else if (port_id < NETIF_MAX_PORTS) {
         for (hash = 0; hash < IFTRAF_IFTBL_SIZE; hash++) {
-            list_for_each_entry_safe(ifentry, ifnxt, &iftraf_iftbl[hash], list) {	
+            list_for_each_entry_safe(ifentry, ifnxt, &iftraf_iftbl[hash], list) {
                 if (ifentry->devid == port_id) {
                     RTE_LOG(DEBUG, IFTRAF,
-                        "%s: [devid : %u\n", 
+                        "%s: [devid : %u\n",
                          __func__, port_id);
                     insert_top_list(ifentry, &iftraf_sorted_list);
                 }
             }
         }
-		
+
     } else {
         for(hash = 0; hash < IFTRAF_TBL_SIZE; hash++) {
-            list_for_each_entry_safe(entry, nxt, &iftraf_tbl[hash], list) {		    				
+            list_for_each_entry_safe(entry, nxt, &iftraf_tbl[hash], list) {
                 insert_top_list(entry, &iftraf_sorted_list);
             }
         }
@@ -346,7 +347,7 @@ static void iftraf_addr_cpy(int af, union inet_addr *daddr, union inet_addr *sad
     } else {
         RTE_LOG(DEBUG, IFTRAF,
             "%s: unsupported\n", __func__);
-    }    
+    }
 }
 
 int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
@@ -362,9 +363,9 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     if (iftraf_disable) {
         RTE_LOG(DEBUG, IFTRAF,
-            "%s: iftraf disable\n",  __func__);      
+            "%s: iftraf disable\n",  __func__);
         return EDPVS_OK;
-    }   
+    }
 
     if (!conf || size < sizeof(struct dp_vs_iftraf_conf) || !out || !outsize)
         return EDPVS_INVAL;
@@ -398,7 +399,7 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     p = &(iftraf_sorted_list.root);
     while (p->next != NULL && off < iftraf_sorted_list.sorted_list_num) {
         node = p->next;
-        p->next = node->next;	
+        p->next = node->next;
 
         entry = (struct iftraf_entry *)node->data;
         array->iftraf[off].af = entry->af;
@@ -411,9 +412,9 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         array->iftraf[off].total_recv = entry->total_recv;
         array->iftraf[off].total_sent = entry->total_sent;
         strcpy(array->iftraf[off].ifname, entry->ifname);
-       
+
         if (AF_INET == entry->af) {
-            RTE_LOG(DEBUG, IFTRAF,"%s: sip = %s, sport = %u, dip = %s, dport = %u\n", 
+            RTE_LOG(DEBUG, IFTRAF,"%s: sip = %s, sport = %u, dip = %s, dport = %u\n",
                 __func__, inet_ntoa(array->iftraf[off].saddr.in), ntohs(entry->sport), inet_ntoa(array->iftraf[off].daddr.in), ntohs(entry->dport));
         } else if (AF_INET6 == entry->af) {
             char src_addr[INET6_ADDRSTRLEN];
@@ -427,11 +428,11 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         } else {
             RTE_LOG(DEBUG, IFTRAF, "%s: unsupported\n", __func__);
         }
-        
+
         RTE_LOG(DEBUG, IFTRAF,
-            "%s: off : %u, cid : %d, proto: %u, total_recv: %u,  total_sent : %u\n", 
+            "%s: off : %u, cid : %d, proto: %u, total_recv: %u,  total_sent : %u\n",
             __func__, off, entry->cid, entry->proto, array->iftraf[off].total_recv, array->iftraf[off].total_sent);
-        
+
         rte_free(node);
 
         off++;
@@ -445,10 +446,10 @@ static void inline iftraf_tlb_add(struct iftraf_pkt *param)
 {
     uint32_t hash;
     struct iftraf_entry *entry = NULL;
-	
-    hash = iftraf_tlb_hashkey(param->af, &param->saddr, param->src_port, &param->daddr, 
+
+    hash = iftraf_tlb_hashkey(param->af, &param->saddr, param->src_port, &param->daddr,
                param->dst_port);
-	
+
     if (iftraf_entry_get(hash, param, &entry) == HASH_STATUS_KEY_NOT_FOUND) {
 
         entry = rte_zmalloc(NULL, sizeof(struct iftraf_entry), RTE_CACHE_LINE_SIZE);
@@ -457,7 +458,7 @@ static void inline iftraf_tlb_add(struct iftraf_pkt *param)
                 "%s: no memory\n", __func__);
             return;
         }
-		
+
         memset(entry, 0, sizeof(struct iftraf_entry));
         entry->af = param->af;
         entry->cid = param->cid;
@@ -469,18 +470,18 @@ static void inline iftraf_tlb_add(struct iftraf_pkt *param)
         entry->dport = param->dst_port;
         strcpy(entry->ifname, param->ifname);
 
-        list_add(&entry->list, &iftraf_tbl[hash]);				  
+        list_add(&entry->list, &iftraf_tbl[hash]);
     }
-	
+
     if (param->af == AF_INET) {
         RTE_LOG(DEBUG, IFTRAF,
             "%s:[v4] dequeue iftraf_ring[cid:%d, proto:%u, src:%08X, dst:%08X, sp:%u, dp:%u, len:%u]\n",
-            __func__, entry->cid, entry->proto, entry->saddr.in.s_addr, 
+            __func__, entry->cid, entry->proto, entry->saddr.in.s_addr,
             entry->daddr.in.s_addr, ntohs(entry->sport), ntohs(entry->dport), param->pkt_len);
     } else {
         RTE_LOG(DEBUG, IFTRAF,
             "%s:[v6] dequeue iftraf_ring[cid:%d, dir:%d, proto:%u, src:%08X %08X %08X %08X, dst:%08X %08X %08X %08X, sp:%u, dp:%u, len:%u]\n",
-            __func__, entry->cid, param->dir, entry->proto, 
+            __func__, entry->cid, param->dir, entry->proto,
             entry->saddr.in6.s6_addr32[0], entry->saddr.in6.s6_addr32[1],
             entry->saddr.in6.s6_addr32[2], entry->saddr.in6.s6_addr32[3],
             entry->daddr.in6.s6_addr32[0],entry->daddr.in6.s6_addr32[1],
@@ -525,7 +526,7 @@ static inline unsigned iftraf_byif_hashkey(int af,
 static hash_status_enum iftraf_ifentry_get(uint32_t hash, struct iftraf_pkt *param, struct iftraf_entry **out_entry)
 {
     struct iftraf_entry *entry;
-	
+
     list_for_each_entry(entry, &iftraf_iftbl[hash], list) {
         if (inet_addr_equal(param->af, &entry->saddr, &param->saddr)
             && entry->devid == param->devid
@@ -533,12 +534,12 @@ static hash_status_enum iftraf_ifentry_get(uint32_t hash, struct iftraf_pkt *par
             /* hit */
             *out_entry = entry;
             RTE_LOG(DEBUG, IFTRAF,
-                "%s: [hit]\n", __func__);	
+                "%s: [hit]\n", __func__);
             return HASH_STATUS_OK;
         }
     }
     RTE_LOG(DEBUG, IFTRAF,
-        "%s: [not found]\n", __func__);	
+        "%s: [not found]\n", __func__);
 
     return HASH_STATUS_KEY_NOT_FOUND;
 }
@@ -547,9 +548,9 @@ static void inline iftraf_iftlb_add(struct iftraf_pkt *param)
 {
     uint32_t hash;
     struct iftraf_entry *entry = NULL;
-	
+
     hash = iftraf_byif_hashkey(param->af, &param->saddr, param->devid);
-	
+
     if (iftraf_ifentry_get(hash, param, &entry) == HASH_STATUS_KEY_NOT_FOUND) {
 
         entry = rte_zmalloc(NULL, sizeof(struct iftraf_entry), RTE_CACHE_LINE_SIZE);
@@ -558,7 +559,7 @@ static void inline iftraf_iftlb_add(struct iftraf_pkt *param)
                 "%s: no memory\n", __func__);
             return;
         }
-		
+
         memset(entry, 0, sizeof(struct iftraf_entry));
         entry->af = param->af;
         entry->cid = param->cid;
@@ -570,18 +571,18 @@ static void inline iftraf_iftlb_add(struct iftraf_pkt *param)
         entry->dport = 0;//param->dst_port;
         strcpy(entry->ifname, param->ifname);
 
-        list_add(&entry->list, &iftraf_iftbl[hash]);				  
+        list_add(&entry->list, &iftraf_iftbl[hash]);
     }
-	
+
     if (param->af == AF_INET) {
         RTE_LOG(DEBUG, IFTRAF,
             "%s:[v4] dequeue iftraf_ring[cid:%d, proto:%u, devid:%u, ifname:%s,src:%08X, dst:%08X, sp:%u, dp:%u, len:%u]\n",
-            __func__, entry->cid, entry->proto, entry->devid, entry->ifname, entry->saddr.in.s_addr, 
+            __func__, entry->cid, entry->proto, entry->devid, entry->ifname, entry->saddr.in.s_addr,
             entry->daddr.in.s_addr, ntohs(entry->sport), ntohs(entry->dport), param->pkt_len);
     } else {
         RTE_LOG(DEBUG, IFTRAF,
             "%s:[v6] dequeue iftraf_ring[cid:%d, dir:%d, proto:%u, devid:%u,  src:%08X %08X %08X %08X, dst:%08X %08X %08X %08X, sp:%u, dp:%u, len:%u]\n",
-            __func__, entry->cid, param->dir, entry->proto, entry->devid, 
+            __func__, entry->cid, param->dir, entry->proto, entry->devid,
             entry->saddr.in6.s6_addr32[0], entry->saddr.in6.s6_addr32[1],
             entry->saddr.in6.s6_addr32[2], entry->saddr.in6.s6_addr32[3],
             entry->daddr.in6.s6_addr32[0],entry->daddr.in6.s6_addr32[1],
@@ -607,24 +608,24 @@ static void inline iftraf_iftlb_add(struct iftraf_pkt *param)
 }
 
 
-void iftraf_process_ring(void)
-{    
+static void iftraf_process_ring(void *dummy)
+{
     int i;
     uint16_t nb_rb;
     lcoreid_t cid;
     struct iftraf_pkt *param;
-    struct iftraf_pkt *params[NETIF_MAX_PKT_BURST];	
+    struct iftraf_pkt *params[NETIF_MAX_PKT_BURST];
 
-    if (likely(iftraf_disable)) {		
+    if (likely(iftraf_disable)) {
         return;
-    }	
+    }
 
     iftraf_ticket++;
     if(iftraf_ticket % IFTRAF_TIME_INTERVAL == 0) {
         history_rotate();
         iftraf_ticket = 0;
     }
-	
+
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (!rte_lcore_is_enabled(cid)) {
             continue;
@@ -633,7 +634,7 @@ void iftraf_process_ring(void)
         nb_rb = rte_ring_dequeue_burst(iftraf_ring[cid], (void **)params,
                     NETIF_MAX_PKT_BURST, NULL);
 
-        if (nb_rb > 0) {			
+        if (nb_rb > 0) {
             for (i = 0; i < nb_rb; i++) {
                 param = params[i];
 
@@ -672,8 +673,8 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
                 "%s: invalid pkt[%d, %d]\n",
                 __func__, cid, dir);
             return EDPVS_INVPKT;
-        }	
-		
+        }
+
         pkt = rte_zmalloc("iftraf_inpkt", sizeof(struct iftraf_pkt), RTE_CACHE_LINE_SIZE);
         if (pkt == NULL) {
             RTE_LOG(ERR, IFTRAF,
@@ -685,11 +686,11 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
         if (dev->type == PORT_TYPE_VLAN) {
             struct vlan_dev_priv *vlan = netif_priv(dev);
             struct netif_port *real_dev = vlan->real_dev;
-            RTE_LOG(DEBUG, IFTRAF, "%s: id = %u, ifname = %s, type=%d\n", 
+            RTE_LOG(DEBUG, IFTRAF, "%s: id = %u, ifname = %s, type=%d\n",
                 __func__, real_dev->id,real_dev->name,real_dev->type);
             devid = real_dev->id;
             strcpy(pkt->ifname, real_dev->name);
-        } else {		
+        } else {
             devid = mbuf->port;
             strcpy(pkt->ifname, dev->name);
         }
@@ -727,15 +728,15 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
                 __func__, cid, ip6nxt);
             return EDPVS_NOPROT;
         }
-        
+
         ports = mbuf_header_pointer(mbuf, ip6_hdrlen(mbuf), sizeof(_ports), _ports);
         if (!ports) {
             RTE_LOG(ERR, IFTRAF,
                 "%s: invalid pkt[%d, %d]\n",
                 __func__, cid, dir);
             return EDPVS_INVPKT;
-        }	 
-		
+        }
+
         pkt = rte_zmalloc("iftraf_inpkt", sizeof(struct iftraf_pkt), RTE_CACHE_LINE_SIZE);
         if (pkt == NULL) {
             RTE_LOG(ERR, IFTRAF,
@@ -747,15 +748,15 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
         if (dev->type == PORT_TYPE_VLAN) {
             struct vlan_dev_priv *vlan = netif_priv(dev);
             struct netif_port *real_dev = vlan->real_dev;
-            RTE_LOG(DEBUG, IFTRAF, "%s: id = %u, ifname = %s, type=%d\n", 
+            RTE_LOG(DEBUG, IFTRAF, "%s: id = %u, ifname = %s, type=%d\n",
                 __func__, real_dev->id,real_dev->name,real_dev->type);
             devid = real_dev->id;
             strcpy(pkt->ifname, real_dev->name);
-        } else {		
+        } else {
             devid = mbuf->port;
             strcpy(pkt->ifname, dev->name);
         }
-        		 
+
         pkt->af = AF_INET6;
         pkt->devid = devid;
         pkt->cid = cid;
@@ -776,7 +777,7 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
 
         RTE_LOG(DEBUG, IFTRAF,
             "%s:[v6] enqueued to iftraf_ring[cid:%d, dir:%d, devid:%u,  proto:%u, src:%08X %08X %08X %08X, dst:%08X %08X %08X %08X, sp:%u, dp:%u, len:%u]\n",
-            __func__, cid, dir, pkt->devid, pkt->proto, 
+            __func__, cid, dir, pkt->devid, pkt->proto,
             pkt->saddr.in6.s6_addr32[0], pkt->saddr.in6.s6_addr32[1],
             pkt->saddr.in6.s6_addr32[2], pkt->saddr.in6.s6_addr32[3],
             pkt->daddr.in6.s6_addr32[0],pkt->daddr.in6.s6_addr32[1],
@@ -784,7 +785,7 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
             ntohs(pkt->src_port), ntohs(pkt->dst_port), pkt->pkt_len);
     } else {
         return EDPVS_INVPKT;
-    }	
+    }
 
     ret = rte_ring_enqueue(iftraf_ring[cid], pkt);
     if (ret < 0) {
@@ -802,7 +803,7 @@ int iftraf_pkt_in(int af, struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     if (likely(iftraf_disable)) {
         return EDPVS_OK;
-    }		
+    }
 
     this_inpkts_count++;
     if (this_inpkts_count % IFTRAF_INTERVAL == 0) {
@@ -816,14 +817,14 @@ int iftraf_pkt_out(int af, struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     if (likely(iftraf_disable)) {
         return EDPVS_OK;
-    }		
+    }
 
     this_outpkts_count++;
     if (this_outpkts_count % IFTRAF_INTERVAL == 0) {
         iftraf_pkt_deliver(af, mbuf, dev, IFTRAF_PKT_DIR_OUT);
     }
 
-    return EDPVS_OK; 
+    return EDPVS_OK;
 }
 
 
@@ -908,16 +909,16 @@ static int iftraf_enable_func(void)
     }
 
     for (i = 0; i < IFTRAF_IFTBL_SIZE; i++)
-        INIT_LIST_HEAD(&iftraf_iftbl[i]);	
-	
+        INIT_LIST_HEAD(&iftraf_iftbl[i]);
+
     iftraf_disable = false;
     RTE_LOG(INFO, IFTRAF,
         "%s: %s\n", __func__, "iftraf enabled");
 
     return EDPVS_OK;
- 
+
 iftbl_fail:
-    if (iftraf_tbl) 
+    if (iftraf_tbl)
         rte_free(iftraf_tbl);
 
 tbl_fail:
@@ -934,7 +935,7 @@ tbl_fail:
 
 static void iftraf_variable_reset(void)
 {
-    history_pos = 0;	
+    history_pos = 0;
     this_inpkts_count = 0;
     this_outpkts_count = 0;
 }
@@ -950,7 +951,7 @@ static void iftraf_ring_free(void)
         if (iftraf_ring[cid]) {
             rte_ring_free(iftraf_ring[cid]);
         }
-        
+
         RTE_LOG(DEBUG, IFTRAF,
             "%s: iftraf_ring free[%d]\n",
             __func__, cid);
@@ -984,24 +985,24 @@ static int iftraf_disable_func(void)
         nb_rb = rte_ring_dequeue_burst(iftraf_ring[cid], (void **)params,
                     NETIF_MAX_PKT_BURST, NULL);
 
-        while (nb_rb > 0) {		
+        while (nb_rb > 0) {
             count += nb_rb;
             for (i = 0; i < nb_rb; i++) {
                 param = params[i];
                 rte_free(param);
             }
-			
+
             nb_rb = rte_ring_dequeue_burst(iftraf_ring[cid], (void **)params,
                         NETIF_MAX_PKT_BURST, NULL);
         }
-		
+
         RTE_LOG(DEBUG, IFTRAF,
             "%s: iftraf ring[%d] free [%d] pkts\n",
             __func__, cid, count);
 
         count = 0;
-		
-    }	
+
+    }
 
     /* free iftraf ring */
     iftraf_ring_free();
@@ -1036,14 +1037,14 @@ static int iftraf_disable_func(void)
                 count++;
             }
         }
-		
+
         RTE_LOG(DEBUG, IFTRAF,
             "%s: iftraf_iftbl free [%d]\n",
             __func__, count);
 
         rte_free(iftraf_iftbl);
     }
-    
+
     iftraf_variable_reset();
     RTE_LOG(INFO, IFTRAF,
         "%s: %s\n", __func__, "iftraf disabled");
@@ -1051,7 +1052,7 @@ static int iftraf_disable_func(void)
     return EDPVS_OK;
 }
 
-static void iftraf_sorted_list_init(void) {  
+static void iftraf_sorted_list_init(void) {
     portid_t devid = 0;
     sorted_list_initialise(&iftraf_sorted_list);
 
@@ -1064,9 +1065,9 @@ static int iftraf_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
      switch (opt) {
      case SOCKOPT_SET_IFTRAF_ADD:
-          return iftraf_enable_func(); 
+          return iftraf_enable_func();
      case SOCKOPT_SET_IFTRAF_DEL:
-          return iftraf_disable_func(); 
+          return iftraf_disable_func();
 
      default:
           return EDPVS_NOTSUPP;
@@ -1084,18 +1085,30 @@ static struct dpvs_sockopts iftraf_sockopts = {
     .get            = iftraf_sockopt_get,
 };
 
+static struct dpvs_lcore_job iftraf_job = {
+    .func = iftraf_process_ring,
+    .data = NULL,
+    .type = LCORE_JOB_LOOP,
+};
+
 int iftraf_init(void)
 {
     int err;
-	
+
     iftraf_disable = true;
 
     iftraf_tlb_rnd = (uint32_t)random();
 
     iftraf_sorted_list_init();
 
-    if ((err = sockopt_register(&iftraf_sockopts)) != EDPVS_OK)
+    snprintf(iftraf_job.name, sizeof(iftraf_job.name), "%s", "iftraf_ring_proc");
+    if ((err = dpvs_lcore_job_register(&iftraf_job, LCORE_ROLE_MASTER)) != EDPVS_OK)
         return err;
+
+    if ((err = sockopt_register(&iftraf_sockopts)) != EDPVS_OK) {
+        dpvs_lcore_job_unregister(&iftraf_job, LCORE_ROLE_MASTER);
+        return err;
+    }
 
     return EDPVS_OK;
 }
@@ -1111,6 +1124,8 @@ int iftraf_term(void)
     err = iftraf_disable_func();
     if (err != EDPVS_OK)
         return err;
+
+    dpvs_lcore_job_unregister(&iftraf_job, LCORE_ROLE_MASTER);
 
     return EDPVS_OK;
 }
