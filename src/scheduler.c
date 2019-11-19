@@ -154,7 +154,7 @@ static inline void do_lcore_job(struct dpvs_lcore_job *job)
 
 #ifdef CONFIG_RECORD_BIG_LOOP
     job_end = rte_get_timer_cycles();
-    job->job_time[rte_lcore_id()] = (job_end - job_start) * 1E6 / g_cycles_per_sec;
+    job->job_time[rte_lcore_id()] = (job_end - job_start) * 1000000 / g_cycles_per_sec;
 #endif
 }
 
