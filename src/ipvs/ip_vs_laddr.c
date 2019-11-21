@@ -548,7 +548,9 @@ static int dp_vs_copy_percore_laddrs_stats(struct dp_vs_laddr_conf *master_laddr
 
 static void opt2cpu(sockoptid_t opt, sockoptid_t *new_opt, lcoreid_t *cid)
 {
-    *cid = opt - SOCKOPT_GET_LADDR_GETALL;
+    *cid = g_lcore_index[opt - SOCKOPT_GET_LADDR_GETALL];
+    assert(*cid >=0 && *cid < DPVS_MAX_LCORE);
+
     *new_opt = SOCKOPT_GET_LADDR_GETALL;
 }
 
@@ -570,7 +572,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     netif_get_slave_lcores(&num_lcores, NULL);
     opt2cpu(opt, &new_opt, &cid);
-    if (cid > num_lcores || new_opt > SOCKOPT_GET_LADDR_GETALL)
+    if (new_opt > SOCKOPT_GET_LADDR_GETALL)
         return EDPVS_INVAL;
 
     if (!conf && size < sizeof(*laddr_conf))

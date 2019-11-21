@@ -865,7 +865,7 @@ int sa_pool_init(void)
 
     port_base = 0;
     for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
-        if (cid > 64 || !(sa_lcore_mask & (1L << cid)))
+        if (cid >= 64 || !(sa_lcore_mask & (1L << cid)))
             continue;
         assert(rte_lcore_is_enabled(cid) && cid != rte_get_master_lcore());
 

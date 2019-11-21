@@ -1146,7 +1146,7 @@ static void config_lcores(struct list_head *worker_list)
                                 worker_min->cpu_id, port->name, queue->rx_queues[ii]);
                     } else {
                         RTE_LOG(INFO, NETIF, "[%s]: isol_rxq on cpu%d with ring size %d is "
-                                "added for cpu%d:%s:rx%d, ", __func__,
+                                "added for cpu%d:%s:rx%d\n", __func__,
                                 queue->isol_rxq_lcore_ids[ii], queue->isol_rxq_ring_sz,
                                 worker_min->cpu_id, port->name, queue->rx_queues[ii]);
                     }
@@ -1263,6 +1263,21 @@ static void netif_get_isol_rx_lcores(uint8_t *nb, uint64_t *mask)
         *mask = isol_lcore_mask;
 }
 
+static void build_lcore_index(int lcore_max)
+{
+    int idx = 0, ii;
+
+    g_lcore_index[idx++] = rte_get_master_lcore();
+
+    for (ii = 0; ii < lcore_max; ii++)
+        if (g_lcore_role[ii] == LCORE_ROLE_FWD_WORKER)
+            g_lcore_index[idx++] = ii;
+
+    for (ii = 0; ii < lcore_max; ii++)
+        if (g_lcore_role[ii] == LCORE_ROLE_ISOLRX_WORKER)
+            g_lcore_index[idx++] = ii;
+}
+
 static void lcore_role_init(void)
 {
     int i, cid, lcore_max_count;
@@ -1295,6 +1310,8 @@ static void lcore_role_init(void)
             g_lcore_role[cid] =  LCORE_ROLE_ISOLRX_WORKER;
         }
     }
+
+    build_lcore_index(lcore_max_count);
 
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++)
         printf("[%02d]\t\t\t%s\n", cid, dpvs_lcore_role_str(g_lcore_role[cid]));
@@ -1365,7 +1382,6 @@ static uint8_t get_configured_port_nb(int lcores, const struct netif_lcore_conf 
 
 #define LCONFCHK_MARK                       255
 #define LCONFCHK_OK                         0
-#define LCONFCHK_LCORE_NOT_INDEXED          -1
 #define LCONFCHK_REPEATED_RX_QUEUE_ID       -2
 #define LCONFCHK_REPEATED_TX_QUEUE_ID       -3
 #define LCONFCHK_DISCONTINUOUS_QUEUE_ID     -4
@@ -1385,9 +1401,6 @@ static int check_lcore_conf(int lcores, const struct netif_lcore_conf *lcore_con
     nports = dpvs_rte_eth_dev_count();
     while (lcore_conf[i].nports > 0)
     {
-        if (lcore2index[lcore_conf[i].id] != i) {
-            return LCONFCHK_LCORE_NOT_INDEXED;
-        }
         if (lcore_conf[i].nports > nports)
             return LCONFCHK_PORT_NOT_ENOUGH;
         for (j = 0; j < lcore_conf[i].nports; j++) {

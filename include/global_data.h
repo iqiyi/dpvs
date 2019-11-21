@@ -32,6 +32,25 @@ typedef enum dpvs_lcore_role_type {
 extern uint64_t g_cycles_per_sec;
 extern dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
 
+/*
+ *  Lcore fast search table:  g_lcore_index[index]-->cid
+ *
+ *  cid                 index
+ *  ---------------------------
+ *  master              0
+ *  fwd_worker1         1
+ *  fwd_worker2         2
+ *  ...                 ...
+ *  fwd_worker_n        n
+ *  ioslrx_worker1      n+1
+ *  isolrx_worker2      n+2
+ *  ...                 ...
+ *  isolrx_worker_m     n+m
+ *
+ *  anything else       -1
+ * */
+extern int g_lcore_index[DPVS_MAX_LCORE];
+
 int global_data_init(void);
 int global_data_term(void);
 

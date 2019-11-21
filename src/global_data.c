@@ -22,6 +22,7 @@
 
 uint64_t g_cycles_per_sec;
 dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
+int g_lcore_index[DPVS_MAX_LCORE];
 
 int global_data_init(void)
 {
@@ -29,8 +30,10 @@ int global_data_init(void)
 
     g_cycles_per_sec = rte_get_timer_hz();
 
-    for (i = 0; i < DPVS_MAX_LCORE; i++)
+    for (i = 0; i < DPVS_MAX_LCORE; i++) {
         g_lcore_role[i] = LCORE_ROLE_IDLE;
+        g_lcore_index[i] = -1;
+    }
 
     return EDPVS_OK;
 }

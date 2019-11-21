@@ -1026,7 +1026,8 @@ static inline void opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t 
 
     *new_opt = (old_opt - SOCKOPT_SVC_BASE)%(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1)
                + SOCKOPT_SVC_BASE;
-    *cid     = (old_opt - SOCKOPT_SVC_BASE)/(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
+    *cid     = g_lcore_index[(old_opt - SOCKOPT_SVC_BASE)/(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1)];
+    assert(*cid >= 0 && *cid < DPVS_MAX_LCORE);
 }
 
 /* copy service/dest/stats */
@@ -1199,7 +1200,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
 
     netif_get_slave_lcores(&num_lcores, NULL);
     opt2cpu(opt, &new_opt, &cid);
-    if (cid > num_lcores || new_opt > SOCKOPT_SVC_MAX)
+    if (new_opt > SOCKOPT_SVC_MAX)
         return EDPVS_INVAL; 
 
     switch (new_opt){
