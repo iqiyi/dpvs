@@ -290,10 +290,6 @@ void rbtree_delete_fixup(util_rbtree_t *rbtree, util_rbtree_node_t *node)
         else /* node is right child */
         {
             w = node->parent->left;
-            if(w == 0)
-            {
-                //int t = 4;
-            }
             if(util_rbt_isred(w))
             {
                 util_rbt_black(w);
