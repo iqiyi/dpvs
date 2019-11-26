@@ -333,4 +333,6 @@ static inline uint16_t dpvs_rte_eth_dev_count(void)
 #endif
 }
 
+extern bool dp_vs_fdir_filter_enable;
+
 #endif /* __DPVS_NETIF_H__ */

@@ -34,6 +34,7 @@ netif_defs {
             descriptor_number   512         <512, 16-8192>
         }
         fdir {
+            <init> filter       on          <on, on/off>
             mode                perfect     <perfect, none|signature|perfect|perfect_mac_vlan|perfect_tunnel>
             pballoc             64k         <64k, 64k|128k|256k>
             status              matched     <matched, close|matched|always>
