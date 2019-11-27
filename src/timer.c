@@ -37,11 +37,6 @@
 #define DTIMER
 #define RTE_LOGTYPE_DTIMER      RTE_LOGTYPE_USER1
 
-#ifdef CONFIG_TIMER_DEBUG
-#define TIMER_DUMMY_DATA0       0x3659AC
-#define TIMER_DUMMY_DATA1       0x93C5A6
-#endif
-
 /*
  * the use case of dpvs timer is huge number of connections has concentrated
  * timeouts like 120s/60s, while other timeout values are not that much.
@@ -161,8 +156,6 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
         RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p handler possibly changed maliciously: %p ->%p\n%s",
                 rte_lcore_id(), timer, timer->handler, handler, trace);
     }
-    timer->dummy.next = (void *)TIMER_DUMMY_DATA0;
-    timer->dummy.prev = (void *)TIMER_DUMMY_DATA1;
 #endif
 
     assert(delay && handler);
@@ -234,13 +227,12 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
         list_del(&timer->list);
 
 #ifdef CONFIG_TIMER_DEBUG
-    if (unlikely(timer->dummy.next != (void *)TIMER_DUMMY_DATA0 ||
-                timer->dummy.prev != (void *)TIMER_DUMMY_DATA1)) {
+    if (unlikely(!handler || (uint64_t)handler > 0x7ffffffffULL)) {
         char trace[8192];
         dpvs_backtrace(trace, sizeof(trace));
-        RTE_LOG(WARNING, DTIMER, "[%02d]: timer(%p) dummy info invalid -- dummy.next:%p,"
-                "dummy.prev:%p, handler:%p, priv:%p, trace:\n%s", rte_lcore_id(), timer,
-                timer->dummy.next, timer->dummy.prev, timer->handler, timer->priv, trace);
+        RTE_LOG(WARNING, DTIMER, "[%02d]: invalid timer(%p) handler "
+                "-- handler:%p, priv:%p, trace:\n%s", rte_lcore_id(),
+                timer, timer->handler, timer->priv, trace);
     }
 #endif
 
