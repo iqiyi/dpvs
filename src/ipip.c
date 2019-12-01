@@ -133,9 +133,5 @@ int ipip_term(void)
         return err;
     }
 
-    err = ip_tunnel_term_tab(&ipip_tunnel_tab);
-    if (err != EDPVS_OK)
-        RTE_LOG(ERR, IPIP, "%s: fail to term tab\n", __func__);
-
-    return err;
+    return ip_tunnel_term_tab(&ipip_tunnel_tab);
 }

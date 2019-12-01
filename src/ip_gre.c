@@ -327,9 +327,5 @@ int gre_term(void)
     if (err != EDPVS_OK)
         return err;
 
-    err = ip_tunnel_term_tab(&gre_tunnel_tab);
-    if (err != EDPVS_OK)
-        return err;
-
-    return err;
+    return ip_tunnel_term_tab(&gre_tunnel_tab);
 }
