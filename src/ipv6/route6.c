@@ -230,23 +230,18 @@ static int rt6_add_del(const struct dp_vs_route6_conf *cf)
     msg = msg_make(MSG_TYPE_ROUTE6, 0, DPVS_MSG_MULTICAST, cid,
             sizeof(struct dp_vs_route6_conf), cf);
     if (unlikely(msg == NULL)) {
-        err = EDPVS_NOMEM;
-        goto slave_fail;
+        RTE_LOG(ERR, RT6, "%s: fail to add/del route on slaves -- %s\n",
+                __func__, dpvs_strerror(err));
+        return EDPVS_NOMEM;
     }
 
     err = multicast_msg_send(msg, 0, NULL);
-    if (err != EDPVS_OK) {
-        msg_destroy(&msg);
-        goto slave_fail;
-    }
+    if (err != EDPVS_OK)
+        RTE_LOG(WARNING, RT6, "%s: multicast_msg_send failed -- %s\n",
+                __func__, dpvs_strerror(err));
     msg_destroy(&msg);
 
     return EDPVS_OK;
-
-slave_fail:
-    RTE_LOG(ERR, RT6, "%s: fail to add/del route on slaves -- %s\n",
-            __func__, dpvs_strerror(err));
-    return err;
 }
 
 static int __route6_add_del(const struct in6_addr *dest, int plen, uint32_t flags,

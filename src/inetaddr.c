@@ -366,29 +366,29 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add)
 
     if (add) {
         err = idev_mc_add(ifa->af, ifa->idev, &iaddr);
-        if (err)
+        if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST)
             return err;
 
         err = netif_mc_add(ifa->idev->dev, &eaddr);
-        if (err) {
+        if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST) {
             /* rollback */
             idev_mc_del(ifa->af, ifa->idev, &iaddr);
             return err;
         }
     } else {
         err = idev_mc_del(ifa->af, ifa->idev, &iaddr);
-        if (err)
+        if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST)
             return err;
 
         err = netif_mc_del(ifa->idev->dev, &eaddr);
-        if (err) {
+        if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST) {
             /* rollback */
             idev_mc_add(ifa->af, ifa->idev, &iaddr);
             return err;
         }
     }
 
-    return err;
+    return EDPVS_OK;
 }
 
 static int inet_ifaddr_dad_completed(void *arg)
@@ -683,7 +683,7 @@ free_ifa:
 errout:
     rte_rwlock_write_unlock(&in_addr_lock);
     idev_put(idev);
-    RTE_LOG(WARNING, IFA, "add %s in %s failed\n", addr_str, __func__);
+    RTE_LOG(WARNING, IFA, "%s %s failed -- %s\n", __func__, addr_str, dpvs_strerror(err));
     return err;
 }
 
