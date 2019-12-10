@@ -261,8 +261,8 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
 #ifdef CONFIG_TIMER_MEASURE
 static inline void deviation_measure(void)
 {
-    static struct timeval tv_prev[RTE_MAX_LCORE];
-    static uint32_t count[RTE_MAX_LCORE];
+    static struct timeval tv_prev[DPVS_MAX_LCORE];
+    static uint32_t count[DPVS_MAX_LCORE];
     struct timeval tv_now, tv_elapse;
 
     if (count[rte_lcore_id()]++ % DPVS_TIMER_HZ == 0) {

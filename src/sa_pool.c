@@ -133,7 +133,7 @@ struct sa_fdir {
                                            increase after use. */
 };
 
-static struct sa_fdir       sa_fdirs[RTE_MAX_LCORE];
+static struct sa_fdir       sa_fdirs[DPVS_MAX_LCORE];
 
 static uint8_t              sa_nlcore;
 static uint64_t             sa_lcore_mask;
@@ -306,7 +306,7 @@ int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
         return EDPVS_INVAL;
     }
 
-    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         uint32_t filtids[MAX_FDIR_PROTO];
         struct sa_fdir *fdir = &sa_fdirs[cid];
 
@@ -366,7 +366,7 @@ int sa_pool_destroy(struct inet_ifaddr *ifa)
     if (!ifa || !ifa->sa_pools)
         return EDPVS_INVAL;
 
-    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         struct sa_pool *ap = ifa->sa_pools[cid];
         struct sa_fdir *fdir = &sa_fdirs[cid];
 
@@ -864,7 +864,7 @@ int sa_pool_init(void)
         return EDPVS_INVAL; /* bad config */
 
     port_base = 0;
-    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (cid >= 64 || !(sa_lcore_mask & (1L << cid)))
             continue;
         assert(rte_lcore_is_enabled(cid) && cid != rte_get_master_lcore());

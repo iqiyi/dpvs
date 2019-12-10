@@ -161,7 +161,7 @@ void install_ip4_frag_keywords(void)
  * it need to use rte_eal_mp_remote_launch with additional func.
  * that's not straightforward, so let's use array.
  */
-static struct ipv4_frag ip4_frags[RTE_MAX_LCORE];
+static struct ipv4_frag ip4_frags[DPVS_MAX_LCORE];
 #define this_ip4_frag    (ip4_frags[rte_lcore_id()])
 
 /*
@@ -389,7 +389,7 @@ int ipv4_frag_init(void)
     max_cycles = (rte_get_tsc_hz() + MS_PER_S - 1) / MS_PER_S *
              (ip4_frag_ttl * MS_PER_S);
 
-    for (cid = 0; cid < RTE_MAX_LCORE; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (!rte_lcore_is_enabled(cid))
             continue;
 

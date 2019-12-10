@@ -75,7 +75,7 @@ struct inet_ifaddr {
     struct dpvs_timer       dad_timer;
 
     /* per-lcore socket address pool */
-    struct sa_pool          *sa_pools[RTE_MAX_LCORE];
+    struct sa_pool          *sa_pools[DPVS_MAX_LCORE];
 
 #define this_sa_pool sa_pools[rte_lcore_id()]
 };
