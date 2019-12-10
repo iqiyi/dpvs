@@ -159,7 +159,9 @@ static inline void put_laddr(struct dp_vs_laddr *laddr)
 
     if (rte_atomic32_dec_and_test(&laddr->refcnt)) {
         rte_free(laddr);
-        RTE_LOG(DEBUG, IPVS, "%s: delete laddr.\n", __func__);
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+        RTE_LOG(DEBUG, IPVS, "%s: [%02d] delete laddr.\n", rte_lcore_id(), __func__);
+#endif
     }
 }
 
@@ -169,6 +171,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
     int i;
     uint16_t sport = 0;
     struct sockaddr_storage dsin, ssin;
+    bool found = false;
 
     if (!conn || !conn->dest || !svc)
         return EDPVS_INVAL;
@@ -218,7 +221,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
                 snprintf(buf, sizeof(buf), "::");
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-            RTE_LOG(ERR, IPVS, "%s: [%d] no lport available on %s, "
+            RTE_LOG(DEBUG, IPVS, "%s: [%02d] no lport available on %s, "
                     "try next laddr.\n", __func__, rte_lcore_id(), buf);
 #endif
             put_laddr(laddr);
@@ -227,16 +230,15 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 
         sport = (laddr->af == AF_INET ? (((struct sockaddr_in *)&ssin)->sin_port)
                 : (((struct sockaddr_in6 *)&ssin)->sin6_port));
+        found = true;
         break;
     }
 
-    if (!laddr || sport == 0) {
+    if (!found) {
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-        RTE_LOG(ERR, IPVS, "%s: [%d] no lport available !!\n",
+        RTE_LOG(ERR, IPVS, "%s: [%02d] no lip/lport available !!\n",
                 __func__, rte_lcore_id());
 #endif
-        if (laddr)
-            put_laddr(laddr);
         return EDPVS_RESOURCE;
     }
 
