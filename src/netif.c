@@ -2750,6 +2750,11 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
     }
 
     dev = rte_zmalloc("netif", alloc_size, RTE_CACHE_LINE_SIZE);
+    if (!dev) {
+        RTE_LOG(ERR, NETIF, "%s: no memory\n", __func__);
+        return NULL;
+    }
+
     dev->id = netif_port_id_alloc();
 
     if (strstr(namefmt, "%d"))
