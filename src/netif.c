@@ -37,6 +37,7 @@
 #include "timer.h"
 #include "parser/parser.h"
 #include "neigh.h"
+#include "sa_pool.h"
 
 #include <rte_arp.h>
 #include <netinet/in.h>
@@ -138,6 +139,8 @@ static struct list_head worker_list;    /* lcore configurations from cfgfile */
 #define NETIF_PORT_TABLE_MASK (NETIF_PORT_TABLE_BUCKETS - 1)
 static struct list_head port_tab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by id */
 static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name */
+uint32_t lcore_ids[RTE_MAX_LCORE];
+
 /* Note: Lockless, NIC can only be registered on initialization stage and
  *       unregistered on cleanup stage
  */
@@ -1289,6 +1292,7 @@ void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask)
     while (lcore_conf[i].nports > 0) {
         slave_lcore_nb++;
         slave_lcore_mask |= (1L << lcore_conf[i].id);
+        lcore_ids[i] = lcore_conf[i].id;
         i++;
     }
 
@@ -3476,7 +3480,8 @@ int netif_port_start(struct netif_port *port)
     }
 
     // device configure
-    if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
+    if (SA_POOL_MODE == LPORT_LCORE_MAPPING_POOL_MODE &&
+        (ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
     ret = rte_eth_dev_configure(port->id, port->nrxq, port->ntxq, &port->dev_conf);
     if (ret < 0 ) {
@@ -3768,9 +3773,10 @@ static struct rte_eth_conf default_port_conf = {
                 .dst_ip         = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF },
             },
             .src_port_mask      = 0x0000,
+            .dst_port_mask      = 0x0000,
 
             /* to be changed according to slave lcore number in use */
-            .dst_port_mask      = 0x00F8,
+           // .dst_port_mask      = 0x00F8,
 
             .mac_addr_byte_mask = 0x00,
             .tunnel_type_mask   = 0,

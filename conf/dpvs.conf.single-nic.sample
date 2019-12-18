@@ -248,4 +248,5 @@ ipvs_defs {
 ! sa_pool config
 sa_pool {
     pool_hash_size   16
+    pool_mode        laddr_lcore_mapping
 }
