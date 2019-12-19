@@ -583,6 +583,7 @@ static inline int ipv6_addr_select(struct inet_device *idev,
     int dst_type;
     struct inet_ifaddr *ifa;
     int i;
+    lcoreid_t cid = rte_lcore_id();
 
     dst_type  = __ipv6_addr_type(&daddr->in6);
     dst.addr  = &daddr->in6;
@@ -592,7 +593,9 @@ static inline int ipv6_addr_select(struct inet_device *idev,
     hiscore->rule = -1;
     hiscore->ifa  = NULL;
 
-    list_for_each_entry(ifa, &idev->ifa_list, d_list) {
+    list_for_each_entry(ifa, &idev->ifa_list[cid], d_list) {
+        if (ifa->af != AF_INET6)
+            continue;
 
         if (ifa->flags & IFA_F_TENTATIVE)
             continue;

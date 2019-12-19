@@ -2757,6 +2757,7 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
                                unsigned int nrxq, unsigned int ntxq,
                                void (*setup)(struct netif_port *))
 {
+    int ii;
     struct netif_port *dev;
     static const uint8_t mac_zero[6] = {0};
 
@@ -2815,8 +2816,10 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
         return NULL;
     }
     dev->in_ptr->dev = dev;
-    INIT_LIST_HEAD(&dev->in_ptr->ifa_list);
-    INIT_LIST_HEAD(&dev->in_ptr->ifm_list);
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
+        INIT_LIST_HEAD(&dev->in_ptr->ifa_list[ii]);
+        INIT_LIST_HEAD(&dev->in_ptr->ifm_list[ii]);
+    }
 
     if (tc_init_dev(dev) != EDPVS_OK) {
         RTE_LOG(ERR, NETIF, "%s: fail to init TC\n", __func__);
@@ -2947,7 +2950,7 @@ void netif_mask_fdir_filter(int af, const struct netif_port *port,
 
     if (rte_eth_dev_filter_ctrl(port->id, RTE_ETH_FILTER_FDIR,
                 RTE_ETH_FILTER_INFO, &fdir_info) < 0) {
-        RTE_LOG(WARNING, NETIF, "%s: Fail to fetch fdir info of %s !\n",
+        RTE_LOG(DEBUG, NETIF, "%s: Fail to fetch fdir info of %s !\n",
                 __func__, port->name);
         return;
     }
@@ -2989,8 +2992,10 @@ static int dpdk_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
 {
     int ret;
 
+    rte_rwlock_write_lock(&dev->dev_lock);
     ret = rte_eth_dev_filter_ctrl(dev->id,
             RTE_ETH_FILTER_FDIR, op, (void *)filt);
+    rte_rwlock_write_unlock(&dev->dev_lock);
     if (ret < 0) {
         RTE_LOG(WARNING, NETIF, "%s: fdir filt set failed for %s -- %s(%d)\n!",
                 __func__, dev->name, rte_strerror(-ret), ret);
@@ -3062,6 +3067,7 @@ static inline void setup_dev_of_flags(struct netif_port *port)
 static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
         int ntxq, const struct rte_eth_conf *conf)
 {
+    int ii;
     struct netif_port *port;
 
     port = rte_zmalloc("port", sizeof(struct netif_port) +
@@ -3115,8 +3121,10 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
         return NULL;
     }
     port->in_ptr->dev = port;
-    INIT_LIST_HEAD(&port->in_ptr->ifa_list);
-    INIT_LIST_HEAD(&port->in_ptr->ifm_list);
+    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
+        INIT_LIST_HEAD(&port->in_ptr->ifa_list[ii]);
+        INIT_LIST_HEAD(&port->in_ptr->ifm_list[ii]);
+    }
 
     if (tc_init_dev(port) != EDPVS_OK) {
         RTE_LOG(ERR, NETIF, "%s: fail to init TC\n", __func__);
@@ -3162,7 +3170,7 @@ struct netif_port* netif_port_get_by_name(const char *name)
 
 int netif_get_queue(struct netif_port *port, lcoreid_t cid, queueid_t *qid)
 {
-    static unsigned idx = 0;
+    static unsigned idx[DPVS_MAX_LCORE] = { 0 };
     struct netif_port_conf *qconf;
     static const unsigned IDX_MAX = (1 << sizeof(unsigned)) - 2;
 
@@ -3180,10 +3188,10 @@ int netif_get_queue(struct netif_port *port, lcoreid_t cid, queueid_t *qid)
     if (unlikely(!qconf->nrxq))
         return EDPVS_INVAL;
 
-    if (++idx > IDX_MAX)
-        idx = 0;
+    if (++idx[cid] > IDX_MAX)
+        idx[cid] = 0;
 
-    *qid = qconf->rxqs[idx % qconf->nrxq].id;
+    *qid = qconf->rxqs[idx[cid] % qconf->nrxq].id;
     return EDPVS_OK;
 }
 

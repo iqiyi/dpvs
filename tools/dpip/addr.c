@@ -80,30 +80,32 @@ static const char *scope_itoa(uint8_t scope, char *buf, size_t size)
     return buf;
 }
 
-static void addr_dump(const struct inet_addr_param *param)
+static void addr_dump(const struct inet_addr_data *data, uint32_t flags)
 {
     char addr[64], bcast[64 + sizeof("broadcast ")];
     char scope[64], vld_lft[64], prf_lft[64];
 
     bcast[0] = '\0';
-    if (!inet_is_addr_any(param->af, &param->bcast)) {
+    if (!inet_is_addr_any(data->ifa_entry.af, &data->ifa_entry.bcast)) {
         snprintf(bcast, sizeof(bcast), "broadcast ");
-        if (inet_ntop(param->af, &param->bcast, bcast + strlen(bcast),
+        if (inet_ntop(data->ifa_entry.af, &data->ifa_entry.bcast, bcast + strlen(bcast),
                       sizeof(bcast) - strlen(bcast)) == NULL)
             bcast[0] = '\0';
     }
 
+    if (flags & IFA_F_OPS_VERBOSE)
+        printf("[%02d] ", data->ifa_entry.cid);
     printf("%s %s/%d scope %s %s\n    %s valid_lft %s preferred_lft %s",
-           af_itoa(param->af),
-           inet_ntop(param->af, &param->addr, addr, sizeof(addr)) ? addr : "::",
-           param->plen, scope_itoa(param->scope, scope, sizeof(scope)),
-           param->ifname, bcast,
-           lft_itoa(param->valid_lft, vld_lft, sizeof(vld_lft)),
-           lft_itoa(param->prefered_lft, prf_lft, sizeof(prf_lft)));
+           af_itoa(data->ifa_entry.af),
+           inet_ntop(data->ifa_entry.af, &data->ifa_entry.addr, addr, sizeof(addr)) ? addr : "::",
+           data->ifa_entry.plen, scope_itoa(data->ifa_entry.scope, scope, sizeof(scope)),
+           data->ifa_entry.ifname, bcast,
+           lft_itoa(data->ifa_entry.valid_lft, vld_lft, sizeof(vld_lft)),
+           lft_itoa(data->ifa_entry.prefered_lft, prf_lft, sizeof(prf_lft)));
 
-    if (param->flags & IFA_F_SAPOOL)
+    if ((flags & (IFA_F_OPS_STATS | IFA_F_OPS_VERBOSE)) && (data->ifa_entry.flags & IFA_F_SAPOOL))
         printf(" sa_used %u sa_free %u sa_miss %u",
-               param->sa_used, param->sa_free, param->sa_miss);
+               data->ifa_stats.sa_used, data->ifa_stats.sa_free, data->ifa_stats.sa_miss);
 
     printf("\n");
 
@@ -117,44 +119,50 @@ static int addr_parse_args(struct dpip_conf *conf,
     char *addr, *plen;
 
     memset(param, 0, sizeof(*param));
-    param->af = conf->af;
-    param->scope = IFA_SCOPE_GLOBAL;
+
+    if (conf->verbose)
+        param->ifa_ops_flags |= IFA_F_OPS_VERBOSE;
+    if (conf->stats)
+        param->ifa_ops_flags |= IFA_F_OPS_STATS;
+
+    param->ifa_entry.af = conf->af;
+    param->ifa_entry.scope = IFA_SCOPE_GLOBAL;
 
     while (conf->argc > 0) {
         if (strcmp(conf->argv[0], "dev") == 0) {
             NEXTARG_CHECK(conf, "dev");
-            snprintf(param->ifname, sizeof(param->ifname), "%s", conf->argv[0]);
+            snprintf(param->ifa_entry.ifname, sizeof(param->ifa_entry.ifname), "%s", conf->argv[0]);
         } else if (strcmp(conf->argv[0], "scope") == 0) {
             NEXTARG_CHECK(conf, "scope");
 
             if (strcmp(conf->argv[0], "host") == 0)
-                param->scope = IFA_SCOPE_HOST;
+                param->ifa_entry.scope = IFA_SCOPE_HOST;
             else if (strcmp(conf->argv[0], "link") == 0)
-                param->scope = IFA_SCOPE_LINK;
+                param->ifa_entry.scope = IFA_SCOPE_LINK;
             else if (strcmp(conf->argv[0], "global") == 0)
-                param->scope = IFA_SCOPE_GLOBAL;
+                param->ifa_entry.scope = IFA_SCOPE_GLOBAL;
             else
-                param->scope = atoi(conf->argv[0]);
+                param->ifa_entry.scope = atoi(conf->argv[0]);
         } else if (strcmp(conf->argv[0], "broadcast") == 0) {
             NEXTARG_CHECK(conf, "broadcast");
-            if (inet_pton_try(&param->af, conf->argv[0], &param->bcast) <= 0)
+            if (inet_pton_try(&param->ifa_entry.af, conf->argv[0], &param->ifa_entry.bcast) <= 0)
                 return -1;
         } else if (strcmp(conf->argv[0], "valid_lft") == 0) {
             NEXTARG_CHECK(conf, "valid_lft");
 
             if (strcmp(conf->argv[0], "forever") == 0)
-                param->valid_lft = 0;
+                param->ifa_entry.valid_lft = 0;
             else
-                param->valid_lft = atoi(conf->argv[0]);
+                param->ifa_entry.valid_lft = atoi(conf->argv[0]);
         } else if (strcmp(conf->argv[0], "prefered_lft") == 0) {
             NEXTARG_CHECK(conf, "prefered_lft");
 
             if (strcmp(conf->argv[0], "forever") == 0)
-                param->prefered_lft = 0;
+                param->ifa_entry.prefered_lft = 0;
             else
-                param->prefered_lft = atoi(conf->argv[0]);
+                param->ifa_entry.prefered_lft = atoi(conf->argv[0]);
         } else if (strcmp(conf->argv[0], "sapool") == 0) {
-            param->flags |= IFA_F_SAPOOL;
+            param->ifa_entry.flags |= IFA_F_SAPOOL;
         } else {
             prefix = conf->argv[0];
         }
@@ -179,31 +187,28 @@ static int addr_parse_args(struct dpip_conf *conf,
         addr = prefix;
         if ((plen = strchr(addr, '/')) != NULL)
             *plen++ = '\0';
-        if (inet_pton_try(&param->af, prefix, &param->addr) <= 0)
+        if (inet_pton_try(&param->ifa_entry.af, prefix, &param->ifa_entry.addr) <= 0)
             return -1;
-        param->plen = plen ? atoi(plen) : 0;
+        param->ifa_entry.plen = plen ? atoi(plen) : 0;
     }
 
-    switch (param->af) {
+    switch (param->ifa_entry.af) {
     case AF_INET:
-        if (!param->plen)
-            param->plen = 32;
+        if (!param->ifa_entry.plen)
+            param->ifa_entry.plen = 32;
         break;
     case AF_INET6:
-        if (!param->plen)
-            param->plen = 128;
+        if (!param->ifa_entry.plen)
+            param->ifa_entry.plen = 128;
         break;
     default:
         break;
     }
 
-    if (conf->cmd != DPIP_CMD_SHOW && !strlen(param->ifname)) {
+    if (conf->cmd != DPIP_CMD_SHOW && !strlen(param->ifa_entry.ifname)) {
         fprintf(stderr, "no device specified.\n");
         return -1;
     }
-
-    if (conf->verbose)
-        addr_dump(param);
 
     return 0;
 }
@@ -212,7 +217,7 @@ static int addr_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
                        struct dpip_conf *conf)
 {
     struct inet_addr_param param;
-    struct inet_addr_param_array *array;
+    struct inet_addr_data_array *array;
     size_t size, i;
     int err;
 
@@ -221,29 +226,34 @@ static int addr_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
 
     switch (conf->cmd) {
     case DPIP_CMD_ADD:
+        param.ifa_ops = INET_ADDR_ADD;
         return dpvs_setsockopt(SOCKOPT_SET_IFADDR_ADD, &param, sizeof(param));
     case DPIP_CMD_DEL:
+        param.ifa_ops = INET_ADDR_DEL;
         return dpvs_setsockopt(SOCKOPT_SET_IFADDR_DEL, &param, sizeof(param));
     case DPIP_CMD_SET:
+        param.ifa_ops = INET_ADDR_MOD;
         return dpvs_setsockopt(SOCKOPT_SET_IFADDR_SET, &param, sizeof(param));
     case DPIP_CMD_FLUSH:
+        param.ifa_ops = INET_ADDR_FLUSH;
         return dpvs_setsockopt(SOCKOPT_SET_IFADDR_FLUSH, &param, sizeof(param));
     case DPIP_CMD_SHOW:
+        param.ifa_ops = INET_ADDR_GET;
         err = dpvs_getsockopt(SOCKOPT_GET_IFADDR_SHOW, &param, sizeof(param),
                               (void **)&array, &size);
         if (err != 0)
             return err;
 
         if (size < sizeof(*array)
-                || size != sizeof(*array) + \
-                           array->naddr * sizeof(struct inet_addr_param)) {
+                || size < sizeof(*array) + \
+                           array->naddr * sizeof(struct inet_addr_data)) {
             fprintf(stderr, "corrupted response.\n");
             dpvs_sockopt_msg_free(array);
             return EDPVS_INVAL;
         }
 
         for (i = 0; i < array->naddr; i++)
-            addr_dump(&array->addrs[i]);
+            addr_dump(&array->addrs[i], array->ops_flags);
 
         dpvs_sockopt_msg_free(array);
         return EDPVS_OK;

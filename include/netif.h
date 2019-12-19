@@ -55,7 +55,7 @@ enum {
 /* maximum bonding slave number */
 #define NETIF_MAX_BOND_SLAVES       32
 /* maximum number of hw addr */
-#define NETIF_MAX_HWADDR            64
+#define NETIF_MAX_HWADDR            1024
 /* maximum number of kni device */
 #define NETIF_MAX_KNI               64
 /* maximum number of DPDK rte device */

@@ -744,7 +744,7 @@ int msg_slave_process(int step)
         if (likely(msg_type->unicast_msg_cb != NULL)) {
             if (msg_type->unicast_msg_cb(msg) < 0) {
                 add_msg_flags(msg, DPVS_MSG_F_CALLBACK_FAIL);
-                RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, msg_type %d callback failed on lcore %d\n",
+                RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, msg_type %d callback failed on lcore %d\n",
                      __func__, msg, msg->type, cid);
             }
         }

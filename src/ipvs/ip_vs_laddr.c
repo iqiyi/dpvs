@@ -419,6 +419,12 @@ int dp_vs_laddr_flush(struct dp_vs_service *svc)
  * for control plane
  */
 
+static uint32_t laddr_msg_seq(void)
+{
+    static uint32_t counter = 0;
+    return counter++;
+}
+
 static inline sockoptid_t set_opt_so2msg(int opt)
 {
     return opt - SOCKOPT_LADDR_BASE + MSG_TYPE_SET_LADDR_BASE;
@@ -436,7 +442,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (cid == rte_get_master_lcore()) {
         struct dpvs_msg *msg;
 
-        msg = msg_make(set_opt_so2msg(opt), 0, DPVS_MSG_MULTICAST, cid, size, conf);
+        msg = msg_make(set_opt_so2msg(opt), laddr_msg_seq(), DPVS_MSG_MULTICAST, cid, size, conf);
         if (!msg)
             return EDPVS_NOMEM;
 
