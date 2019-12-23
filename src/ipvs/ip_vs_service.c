@@ -1080,7 +1080,7 @@ static int dp_vs_get_services_uc_cb(struct dpvs_msg *msg)
         return EDPVS_NOMEM;
     ret = dp_vs_get_service_entries(get->num_services, output, cid);
     if (ret != EDPVS_OK) {
-        rte_free(output);
+        msg_reply_free(output);
         return ret;
     }
     msg->reply.len = size;
@@ -1137,7 +1137,7 @@ static int dp_vs_get_service_uc_cb(struct dpvs_msg *msg)
 
     ret = dp_vs_copy_service(entry, svc);
     if (ret != EDPVS_OK) {
-        rte_free(entry);
+        msg_reply_free(entry);
         return ret;
     }
     msg->reply.len = size;
@@ -1181,7 +1181,7 @@ static int dp_vs_get_dests_uc_cb(struct dpvs_msg *msg)
     rte_memcpy(output, get, sizeof(*get));
     ret = dp_vs_get_dest_entries(svc, output);
     if (ret != EDPVS_OK) {
-        rte_free(output);
+        msg_reply_free(output);
         return ret;
     }
 
