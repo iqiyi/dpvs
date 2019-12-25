@@ -18,22 +18,29 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _CHECK_SSL_H
 #define _CHECK_SSL_H
 
+/* system includes */
+#include <openssl/ssl.h>
+
 /* local includes */
-#include "check_http.h"
+#include "check_data.h"
+#include "scheduler.h"
 
 /* Prototypes */
 extern void install_ssl_check_keyword(void);
-extern int init_ssl_ctx(void);
+extern bool init_ssl_ctx(void);
 extern void clear_ssl(ssl_data_t *);
-extern int ssl_connect(thread_t *, int);
+extern int ssl_connect(thread_ref_t, int);
 extern int ssl_printerr(int);
-extern int ssl_send_request(SSL *, char *, int);
-extern int ssl_read_thread(thread_t *);
+extern bool ssl_send_request(SSL *, const char *, int);
+extern int ssl_read_thread(thread_ref_t);
+#ifdef THREAD_DUMP
+extern void register_check_ssl_addresses(void);
+#endif
 
 #endif

@@ -18,56 +18,43 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _CHECK_SMTP_H
 #define _CHECK_SMTP_H
 
 /* system includes */
-#include <stdlib.h>
+#include <sys/types.h>
 
 /* local includes */
-#include "check_data.h"
 #include "scheduler.h"
 #include "list.h"
 #include "check_api.h"
 
-#define SMTP_BUFF_MAX		512
+#define SMTP_BUFF_MAX		512U
 
-#define SMTP_START		1
-#define SMTP_HAVE_BANNER	2
-#define SMTP_SENT_HELO		3
-#define SMTP_RECV_HELO		4
-#define SMTP_SENT_QUIT		5
-#define SMTP_RECV_QUIT		6
+typedef enum {
+	SMTP_START,
+	SMTP_HAVE_BANNER,
+	SMTP_SENT_HELO,
+	SMTP_RECV_HELO,
+	SMTP_SENT_QUIT,
+	SMTP_RECV_QUIT
+} smtp_state_t;
 
 #define SMTP_DEFAULT_HELO	"smtpchecker.keepalived.org"
-#define SMTP_DEFAULT_PORT	25
-
-/* Per host configuration structure  */
-typedef conn_opts_t smtp_host_t;
 
 /* Checker argument structure  */
 typedef struct _smtp_checker {
 	/* non per host config data goes here */
-	char				*helo_name;
-	long				timeout;
-	long				db_retry;
-	int				retry;
-	int				attempts;
-	int				host_ctr;
-	smtp_host_t			*host_ptr;
+	const char			*helo_name;
 
 	/* data buffer */
 	char				buff[SMTP_BUFF_MAX];
-	int				buff_ctr;
-	int				(*buff_cb) (thread_t *);
+	size_t				buff_ctr;
 
-	int				state;
-
-	/* list holding the host config data */
-	list				host;
+	smtp_state_t			state;
 } smtp_checker_t;
 
 /* macro utility */
@@ -75,5 +62,8 @@ typedef struct _smtp_checker {
 
 /* Prototypes defs */
 extern void install_smtp_check_keyword(void);
+#ifdef THREAD_DUMP
+extern void register_check_smtp_addresses(void);
+#endif
 
 #endif

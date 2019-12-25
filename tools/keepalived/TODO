@@ -1,1 +1,154 @@
 Whatever you want !
+
+Real servers
+Add quorum_weight, defaults to weight. May want to set different between quorum and IPVS weight
+
+Rationalise use of timer_now()/gettimeofday()/set_time_now()
+
+
+virtual route:
+1. How do we handle
+     virtual_routes {
+            192.168.210.0/24 via 10.1.0.1
+     }
+     if there is no route to 10.1.0.1? If we go to fault state if it cannot
+     be installed when attempt to transition to master, how do we know to transiton
+     out of fault state.
+
+
+IPVS
+1. Can we have an IPv4 fwmark and specify tunnel to IPv6, and vice versa etc.
+   What does ipvsadm do?
+2. Sort out IP_VS_SO vs LVS_CMD...
+3. Make sure log/email messages contain relevant info re VS -> RS. See FMT_CHK
+
+The following are still outstanding from the ideas for what became v2.0.0:
+
+	* Sort out termination in vrrp and checker - stop_vrrp/check, and phase2
+	    are inconsistent between vrrp and checker. What about bfd?
+	* A route with multiple nexthops will only be deleted if all interfaces
+	    are down. Each nexthop needs to record the interface, and only remove
+	    once all down
+	* Don't add RTNMGRP_IPV4_ADDR/IPV6_ADDR if not monitoring one of those
+	    families
+	* May want to stop VS down at start for alpha mode RSs (except SNMP)
+	* Rate limit respawning if a child process dies
+	* Have a socket to connect to for receiving notifications. A process
+	    can register for what notifications it wants to receive.
+	* Allow variable parameters to be passed to scripts - see issue #837
+	* Make tarball include git version if not a tag
+	* If an address owner recovers from fault, transition directly to
+	  master
+	* If configuration_state=MASTER && !OWNER, transition to master after
+	  1 * advert_int + skew. Sort out all initialisation around states
+	* Split vrrp_snmp.c into vrrp_snmp_keepalived.c vrrp_snmp_rfcv2.c and
+	  vrrp_snmp_rfcv3.c
+	* Only send correct type of trap, and respond to correct SNMP version,
+	  controlled by config, defaults to type of instance. Flags snmp_v2 and
+	  snmp_v3 to force other, or both.
+	* Ensure unicast peers groups check source address of received advert
+	  so that the same VRID can be used between different peer groups on the
+	  same interface.
+	* Add process checking:
+	    Add track_process for vrrp instances
+	    Add PROCESS_CHECK for checkers
+	    - Find PID and remember it. If PID has gone, try and find new pid
+	    Look at how pidof/killall find processes
+	* Allow dynamic definitions, e.g. $_VI_NAME
+	    Also $*_INSTANCE net_namspace $_INSTANCE
+	    so $* means only do if $_INSTANCE not blank. */
+	* ng-scheduler
+
+
+Other issues awaiting resolution:
+
+ipvs_group_range_cmd() appears nonsense, and inet_stor returning a uint8_t
+doesn't work for IPv6. The virtual_service_entry_t thing needs range to be
+uint32_t. Why would mask be 0xffffffff for IPv6?
+
+ip_vs_daemon_kern vs /usr/include/linux/ip_vs.h ip_vs_daemon_user
+
+vrrp_timer_fd should return 0 if an fd's timer is in the past?
+
+Make vrrp->send_buffer a single buffer for all
+
+Check timers passto to thread_... functions are reasonable, and stacktrace if not.
+
+In function socket_state, should thread_add_write use timer_long() or -timer_long()
+
+vrrp_timer_fd() - see comment
+
+In thread functions with a timer, ensure not > LONG_MAX (or even some lower value);
+
+Change tcp_socket_state etc to socket_state etc
+
+Add noreturn function attribute on stop_vrrp/check
+
+bin/genhash -s 2001:470:69dd:35::188 --port 80 -u /Harriet/     # works, but
+bin/genhash -s 2001:470:69dd:35::188 --port 80 -u /Harriet/     # -S doesn't
+								# but -S is OK with IPv4 address
+
+in ipvswrapper.c, get rid of static srule etc and make them procedure local and pass as parameters
+
+Stop passing base_ifp to netlink3_set_interface_parameters() etc
+
+ipsecah issues
+==============
+1. sync and vmac ignore counter
+
+2. Start up just after master dies, but have lowest priority so become master with counter == 1
+
+3. cycle won't happen
+
+4. In vrrp_backup, don't check auth type matches
+
+5. ? if cycle becomes set, we must become backup. How do we get out of state?
+
+epoll
+=====
+Use timerfd (see timerfd_create(2)) for microsecond timing with epoll, and do not bother with its timeout.
+If not available, then simply use the epoll timer.
+
+Optimise calls to timer_now() and see set_time_now()
+====================================================
+After select completes, get time. Before calculating next
+select expire time, get time again.
+To test time processing, save time after select and log time taken
+before next select. Also initialise timer at startup.
+
+Add api
+=======
+
+Add pipe for updates
+====================
+track_script like for absolute or relative priority
+
+Upstream issues
+===============
+
+1. Kernel. Socket receive buffers growing to fill memory
+   See issue #839. If the following setting are in place:
+net.core.rmem_default = 37748736
+net.core.rmem_max = 37748736
+   and vrrp_tx_bufs_policy NO_SEND_RX is configured, then
+   all system memory can be consumed. Why is it not limited
+   to 37748736 bytes?
+
+2. Kernel. Corruption when netlink sends status of large number
+   of links - see issues #392/#803.
+   When using default socket receive buffer size, and have 500
+   vmac interfaces configured on a physical interface and the
+   physical interface is downed, lots of netlink messages are
+   received, and we get an ENOBUFS. However, after that we then
+   see a repeat of some of the earlier messages, so it looks like
+   a circular buffer corruption. Running ip -ts monitor link addr route
+   we see precisely the same problem at exactly the same message,
+   although which message it is varies each time.
+
+3. net-snmp. Display-hint only works on indices.
+   See issue #866.
+   # snmpwalk -v2c -c public localhost KEEPALIVED-MIB::virtualServerAddress
+   KEEPALIVED-MIB::virtualServerAddress.1 = STRING: "
+0,"
+   The address is attempted to be output as text, rather than using
+   the display hint

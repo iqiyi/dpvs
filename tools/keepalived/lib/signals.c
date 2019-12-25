@@ -1,13 +1,13 @@
-/* 
+/*
  * Soft:        Keepalived is a failover program for the LVS project
  *              <www.linuxvirtualserver.org>. It monitor & manipulate
  *              a loadbalanced server pool using multi-layer checks.
- * 
+ *
  * Part:        Signals framework.
- *  
+ *
  * Author:      Kevin Lindsay, <kevinl@netnation.com>
  *              Alexandre Cassen, <acassen@linux-vs.org>
- *              
+ *
  *              This program is distributed in the hope that it will be useful,
  *              but WITHOUT ANY WARRANTY; without even the implied warranty of
  *              MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
@@ -18,198 +18,577 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@linux-vs.org>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
-#include <signal.h>
+#include "config.h"
+
 #include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
-#include <sys/types.h>
+#include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
-#include <assert.h>
-#include <syslog.h>
+#ifdef HAVE_SIGNALFD
+#include <sys/signalfd.h>
+#endif
+#ifdef _INCLUDE_UNUSED_CODE_
+#include <sys/epoll.h>
+#endif
+#include <inttypes.h>
 
 #include "signals.h"
 #include "utils.h"
+#include "logger.h"
+#include "scheduler.h"
+#include "assert_debug.h"
+
+#ifdef _WITH_JSON_
+#include "../keepalived/include/vrrp_json.h"
+#endif
+
+#ifdef _WITH_JSON_
+  /* We need to include the realtime signals, but
+   * unfortunately SIGRTMIN/SIGRTMAX are not constants.
+   * I'm not clear if _NSIG is always defined, so play safe.
+   * Although we are not meant to use __SIGRTMAX, we are
+   * using it here as an upper bound, which is rather different. */
+  #ifdef _NSIG
+    #define SIG_MAX	_NSIG
+  #elif defined __SIGRTMAX
+    #define SIG_MAX __SIGRTMAX
+  #else
+    #define SIG_MAX 64
+  #endif
+#else
+  /* The signals currently used are HUP, INT, TERM, USR1,
+   * USR2, CHLD and XCPU. */
+  #if SIGCHLD > SIGUSR2
+    /* Architectures except alpha and sparc - see signal(7) */
+    #if HAVE_DECL_RLIMIT_RTTIME == 1
+      #define SIG_MAX SIGXCPU
+    #else
+      #define SIG_MAX SIGCHLD
+    #endif
+  #else
+    /* alpha and sparc */
+    #define SIG_MAX SIGUSR2
+  #endif
+#endif
 
 /* Local Vars */
-void (*signal_SIGHUP_handler) (void *, int sig);
-void *signal_SIGHUP_v;
-void (*signal_SIGINT_handler) (void *, int sig);
-void *signal_SIGINT_v;
-void (*signal_SIGTERM_handler) (void *, int sig);
-void *signal_SIGTERM_v;
-void (*signal_SIGCHLD_handler) (void *, int sig);
-void *signal_SIGCHLD_v;
+#ifndef USE_SIGNAL_THREADS
+static void (*signal_handler_func[SIG_MAX]) (void *, int sig);
+static void *signal_v[SIG_MAX];
+#endif
 
+#ifdef HAVE_SIGNALFD
+static int signal_fd = -1;
+static sigset_t signal_fd_set;
+#else
 static int signal_pipe[2] = { -1, -1 };
+#endif
 
-/* Local signal test */
-int
-signal_pending(void)
+/* Remember signal disposition for not default disposition */
+static sigset_t dfl_sig;
+
+/* Signal handlers set in parent */
+static sigset_t parent_sig;
+
+/* Signal handling thread */
+static thread_ref_t signal_thread;
+
+int __attribute__((pure))
+get_signum(const char *sigfunc)
 {
-	fd_set readset;
-	int rc;
-	struct timeval timeout = { 0, 0 };
+	if (!strcmp(sigfunc, "STOP"))
+		return SIGTERM;
+	else if (!strcmp(sigfunc, "RELOAD"))
+		return SIGHUP;
+	else if (!strcmp(sigfunc, "DATA"))
+		return SIGUSR1;
+	else if (!strcmp(sigfunc, "STATS"))
+		return SIGUSR2;
+#ifdef _WITH_JSON_
+	else if (!strcmp(sigfunc, "JSON"))
+		return SIGJSON;
+#endif
 
-	FD_ZERO(&readset);
-	FD_SET(signal_pipe[0], &readset);
-
-	rc = select(signal_pipe[0] + 1, &readset, NULL, NULL, &timeout);
-
-	return rc>0?1:0;
+	/* Not found */
+	return -1;
 }
 
-/* Signal flag */
-void
-signal_handler(int sig)
+#if HAVE_DECL_RLIMIT_RTTIME == 1
+static void
+log_sigxcpu(__attribute__((unused)) void * ptr, __attribute__((unused)) int signum)
 {
-	if (write(signal_pipe[1], &sig, sizeof(int)) != sizeof(int)) {
+	log_message(LOG_INFO, "%s process has used too much CPU time, %s_rlimit_rtime may need to be increased",
+#ifdef _DEBUG_
+		    "Main debug",
+#else
+#ifdef _WITH_VRRP_
+		    prog_type == PROG_TYPE_VRRP ? "VRRP" :
+#endif
+#ifdef _WITH_LVS_
+		    prog_type == PROG_TYPE_CHECKER ? "Checker" :
+#endif
+#ifdef _WITH_BFD_
+		    prog_type == PROG_TYPE_BFD ? "BFD" :
+#endif
+		    "Unknown",
+#endif
+#ifdef _DEBUG_
+		    "UNDEFINED"
+#else
+#ifdef _WITH_VRRP_
+		    prog_type == PROG_TYPE_VRRP ? "vrrp" :
+#endif
+#ifdef _WITH_LVS_
+		    prog_type == PROG_TYPE_CHECKER ? "checker" :
+#endif
+#ifdef _WITH_BFD_
+		    prog_type == PROG_TYPE_BFD ? "bfd" :
+#endif
+		    "Unknown"
+#endif
+		    );
+}
+#endif
+
+#ifdef _INCLUDE_UNUSED_CODE_
+/* Local signal test */
+bool
+signal_pending(void)
+{
+	int rc;
+	int efd;
+	struct epoll_event ev = { .events = EPOLLIN };
+
+	efd = epoll_create(1);
+#ifdef HAVE_SIGNALFD
+	epoll_ctl(efd, EPOLL_CTL_ADD, signal_fd,  &ev);
+#else
+	epoll_ctl(efd, EPOLL_CTL_ADD, signal_pipe[0],  &ev);
+#endif
+	rc = epoll_wait(efd, &ev, 1, 0);
+	close(efd);
+
+	return rc > 0;
+}
+#endif
+
+/* Signal flag */
+#ifndef HAVE_SIGNALFD
+static void
+signal_handler(uint32_t sig)
+{
+	if (write(signal_pipe[1], &sig, sizeof(uint32_t)) != sizeof(uint32_t)) {
 		DBG("signal_pipe write error %s", strerror(errno));
 		assert(0);
+
+		log_message(LOG_INFO, "BUG - write to signal_pipe[1] error %s - please report", strerror(errno));
 	}
-}	
+}
+#endif
 
 /* Signal wrapper */
-void *
+void
 signal_set(int signo, void (*func) (void *, int), void *v)
 {
 	int ret;
+	sigset_t sset;
 	struct sigaction sig;
+#ifndef HAVE_SIGNALFD
 	struct sigaction osig;
+#endif
+#ifdef _SIGNAL_DEBUG_
+	static int max_signo = SIG_MAX;
+	static int min_signo = 1;
 
-	sig.sa_handler = signal_handler;
-	sigemptyset(&sig.sa_mask);
-	sig.sa_flags = 0;
-#ifdef SA_RESTART
-	sig.sa_flags |= SA_RESTART;
-#endif				/* SA_RESTART */
+	if ((signo < min_signo) || (signo > max_signo)) {
+		log_message(LOG_ERR, "BUG - signal %d out of range (1..%d)", signo, SIG_MAX);
+		if (signo > max_signo)
+			max_signo = signo;
+		else
+			min_signo = signo;
+		return;
+	}
+#endif
 
-	ret = sigaction(signo, &sig, &osig);
+	if (func == (void *)SIG_DFL)
+		sigaddset(&dfl_sig, signo);
+	else
+		sigdelset(&dfl_sig, signo);
 
-	switch(signo) {
-	case SIGHUP:
-		signal_SIGHUP_handler = func;
-		signal_SIGHUP_v = v;
-		break;
-	case SIGINT:
-		signal_SIGINT_handler = func;
-		signal_SIGINT_v = v;
-		break;
-	case SIGTERM:
-		signal_SIGTERM_handler = func;
-		signal_SIGTERM_v = v;
-		break;
-	case SIGCHLD:
-		signal_SIGCHLD_handler = func;
-		signal_SIGCHLD_v = v;
-		break;
+	if (func == (void*)SIG_IGN || func == (void*)SIG_DFL) {
+		/* We are no longer handling the signal, so
+		 * clear our handlers */
+		func = NULL;
+		v = NULL;
 	}
 
-	if (ret < 0)
-		return (SIG_ERR);
+#ifdef HAVE_SIGNALFD
+	sigemptyset(&sset);
+	sigaddset(&sset, signo);
+
+	sigemptyset(&sig.sa_mask);
+	sig.sa_flags = 0;
+
+	if (!func) {
+		sigdelset(&signal_fd_set, signo);
+		sig.sa_handler = SIG_IGN;
+	}
+	else {
+		sigaddset(&signal_fd_set, signo);
+		sigmask_func(SIG_BLOCK, &sset, NULL);
+		sig.sa_handler = SIG_DFL;
+	}
+
+	/* Don't open signal_fd if clearing the handler */
+	if (func || signal_fd != -1) {
+		ret = signalfd(signal_fd, &signal_fd_set, 0);
+		if (ret == -1)
+			log_message(LOG_INFO, "BUG - signal_fd update failed - %d (%s), please report", errno, strerror(errno));
+	}
+
+	if (sigaction(signo, &sig, NULL))
+		log_message(LOG_INFO, "sigaction failed for signalfd");
+
+	if (!func)
+		sigmask_func(SIG_UNBLOCK, &sset, NULL);
+#else
+	if (func)
+		sig.sa_handler = signal_handler;
 	else
-		return (osig.sa_handler);
+		sig.sa_handler = (void*)func;
+
+	sigemptyset(&sig.sa_mask);
+	sig.sa_flags = 0;
+	sig.sa_flags |= SA_RESTART;
+
+	/* Block the signal we are about to configure, to avoid
+	 * any race conditions while setting the handler and
+	 * parameter */
+	if (func) {
+		sigemptyset(&sset);
+		sigaddset(&sset, signo);
+		sigmask_func(SIG_BLOCK, &sset, NULL);
+
+		/* Remember what signals we set, so any child processes can clear them */
+		sigaddset(&parent_sig, signo);
+	}
+	else
+		sigdelset(&parent_sig, signo);
+
+	ret = sigaction(signo, &sig, &osig);
+#endif
+
+	signal_handler_func[signo-1] = func;
+	signal_v[signo-1] = v;
+
+#ifndef HAVE_SIGNALFD
+	if (ret < 0)
+		return;
+
+	/* Release the signal */
+	if (func != NULL)
+		sigmask_func(SIG_UNBLOCK, &sset, NULL);
+#endif
 }
 
 /* Signal Ignore */
-void *
+void
 signal_ignore(int signo)
 {
-	return signal_set(signo, NULL, NULL);
+	signal_set(signo, (void *)SIG_IGN, NULL);
+	sigdelset(&parent_sig, signo);
+}
+
+/* Handlers callback  */
+static int
+signal_run_callback(thread_ref_t thread)
+{
+	uint32_t sig;
+#ifdef HAVE_SIGNALFD
+	struct signalfd_siginfo siginfo;
+
+	while (read(signal_fd, &siginfo, sizeof(struct signalfd_siginfo)) == sizeof(struct signalfd_siginfo)) {
+		sig = siginfo.ssi_signo;
+#else
+	while (read(signal_pipe[0], &sig, sizeof(uint32_t)) == sizeof(uint32_t)) {
+#endif
+
+#ifdef _EPOLL_DEBUG_
+		if (do_epoll_debug) {
+			if (sig >= 1 && sig < sizeof(signal_handler_func) / sizeof(signal_handler_func[0]))
+				log_message(LOG_INFO, "Signal %" PRIu32 ", func %s()", sig, get_signal_function_name(signal_handler_func[sig-1]));
+			else
+				log_message(LOG_INFO, "Signal %" PRIu32 ", unknown function", sig);
+		}
+#endif
+
+#ifdef USE_SIGNAL_THREADS
+		/* This is instead of signal_handler_func[] array if signals are
+		 * handled by threads. The thread handling function would have to
+		 * do a thread_add_signal() to reinstate itself. */
+		list_for_each_entry_safe(t, t_tmp, &m->signal, next) {
+			if (t->u.val == sig) {
+				list_head_del(&t->next);
+				INIT_LIST_HEAD(&t->next);
+				list_add_tail(&t->next, &m->ready);
+				t->type = THREAD_READY;
+			}
+		}
+#else
+		if (sig >= 1 && sig <= SIG_MAX && signal_handler_func[sig-1])
+			signal_handler_func[sig-1](signal_v[sig-1], sig);
+#endif
+	}
+
+	signal_thread = thread_add_read(master, signal_run_callback, NULL, thread->u.f.fd, TIMER_NEVER, false);
+
+	return 0;
+}
+
+static void
+clear_signal_handler_addresses(void)
+{
+	int i;
+
+	for (i = 0; i < SIG_MAX; i++)
+		signal_handler_func[i] = NULL;
 }
 
 /* Handlers intialization */
 void
-signal_handler_init(void)
+add_signal_read_thread(thread_master_t *thread_master)
 {
-	int n = pipe(signal_pipe);
-	assert(!n);
-
-	fcntl(signal_pipe[0], F_SETFL, O_NONBLOCK | fcntl(signal_pipe[0], F_GETFL));
-	fcntl(signal_pipe[1], F_SETFL, O_NONBLOCK | fcntl(signal_pipe[1], F_GETFL));
-
-	signal_SIGHUP_handler = NULL;
-	signal_SIGINT_handler = NULL;
-	signal_SIGTERM_handler = NULL;
-	signal_SIGCHLD_handler = NULL;
+	signal_thread = thread_add_read(thread_master, signal_run_callback, NULL, thread_master->signal_fd, TIMER_NEVER, false);
 }
 
 void
-signal_wait_handlers(void)
+cancel_signal_read_thread(void)
 {
-	struct sigaction sig;
-
-	sig.sa_handler = SIG_DFL;
-	sigemptyset(&sig.sa_mask);
-	sig.sa_flags = 0;
-
-	/* Ensure no more pending signals */
-	sigaction(SIGHUP, &sig, NULL);
-	sigaction(SIGINT, &sig, NULL);
-	sigaction(SIGTERM, &sig, NULL);
-	sigaction(SIGCHLD, &sig, NULL);
-
-	/* reset */
-	signal_SIGHUP_v = NULL;
-	signal_SIGINT_v = NULL;
-	signal_SIGTERM_v = NULL;
-	signal_SIGCHLD_v = NULL;
+	if (signal_thread) {
+		thread_cancel(signal_thread);
+		signal_thread = NULL;
+	}
 }
 
-void signal_reset(void)
+static int
+open_signal_fd(void)
 {
-	signal_wait_handlers();
-	signal_SIGHUP_handler = NULL;
-	signal_SIGINT_handler = NULL;
-	signal_SIGTERM_handler = NULL;
-	signal_SIGCHLD_handler = NULL;
+#ifdef HAVE_SIGNALFD
+	sigemptyset(&signal_fd_set);
+
+#ifdef SFD_NONBLOCK	/* From Linux 2.6.26 */
+	signal_fd = signalfd(signal_fd, &signal_fd_set, SFD_NONBLOCK | SFD_CLOEXEC);
+#else
+	signal_fd = signalfd(signal_fd, &signal_fd_set, 0);
+
+	if (signal_fd != -1) {
+		fcntl(signal_fd, F_SETFL, O_NONBLOCK | fcntl(signal_fd, F_GETFL));
+		fcntl(signal_fd, F_SETFD, FD_CLOEXEC | fcntl(signal_fd, F_GETFD));
+	}
+#endif
+	if (signal_fd == -1)
+		log_message(LOG_INFO, "BUG - signal_fd init failed - %d (%s), please report", errno, strerror(errno));
+
+	return signal_fd;
+#else
+	if (open_pipe(signal_pipe))
+		log_message(LOG_INFO, "BUG - pipe in open_signal_fd() failed - %d (%s), please report", errno, strerror(errno));
+
+	return signal_pipe[0];
+#endif
+}
+
+static void
+signal_handler_parent_init(void)
+{
+	sigset_t sset;
+	int sig;
+	struct sigaction act;
+
+	/* Ignore all signals except essential ones */
+	sigemptyset(&sset);
+	sigaddset(&sset, SIGILL);
+	sigaddset(&sset, SIGFPE);
+	sigaddset(&sset, SIGSEGV);
+	sigaddset(&sset, SIGBUS);
+	sigaddset(&sset, SIGKILL);
+	sigaddset(&sset, SIGSTOP);
+
+	dfl_sig = sset;
+
+	act.sa_handler = SIG_IGN;
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = 0;
+
+	for (sig = 1; sig <= SIGRTMAX; sig++) {
+		if (!sigismember(&sset, sig))
+			sigaction(sig, &act, NULL);
+	}
+
+#ifdef HAVE_SIGNALFD
+	sigemptyset(&sset);
+	sigmask_func(SIG_SETMASK, &sset, NULL);
+#endif
+}
+
+#ifndef _DEBUG_
+static void
+signal_handler_child_init(void)
+{
+	struct sigaction act;
+	int sig;
+
+	act.sa_handler = SIG_IGN;
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = 0;
+
+	for (sig = 1; sig <= SIGRTMAX; sig++) {
+		if (sigismember(&parent_sig, sig))
+			sigaction(sig, &act, NULL);
+	}
+}
+#endif
+
+int
+signal_handler_init(void)
+{
+	int fd;
+
+#ifdef _DEBUG_
+	signal_handler_parent_init();
+#else
+	if (prog_type == PROG_TYPE_PARENT)
+		signal_handler_parent_init();
+	else
+		signal_handler_child_init();
+#endif
+
+	sigemptyset(&parent_sig);
+
+	fd = open_signal_fd();
+
+	clear_signal_handler_addresses();
+
+	return fd;
+}
+
+static void
+signal_handlers_clear(void *state)
+{
+	/* Ensure no more pending signals */
+	signal_set(SIGHUP, state, NULL);
+	signal_set(SIGINT, state, NULL);
+	signal_set(SIGTERM, state, NULL);
+	signal_set(SIGCHLD, state, NULL);
+	signal_set(SIGUSR1, state, NULL);
+	signal_set(SIGUSR2, state, NULL);
+#if HAVE_DECL_RLIMIT_RTTIME == 1
+	signal_set(SIGXCPU, state, NULL);
+#endif
+#ifdef _WITH_JSON_
+	signal_set(SIGJSON, state, NULL);
+#endif
 }
 
 void
 signal_handler_destroy(void)
 {
-	signal_wait_handlers();
-	close(signal_pipe[1]);
-	close(signal_pipe[0]);
-	signal_pipe[1] = -1;
-	signal_pipe[0] = -1;
-}	
-
-int
-signal_rfd(void)
-{
-	return(signal_pipe[0]);
-}
-
-/* Handlers callback  */
-void
-signal_run_callback(void)
-{
-	int sig;
-
-	while(read(signal_pipe[0], &sig, sizeof(int)) == sizeof(int)) {
-		switch(sig) {
-		case SIGHUP:
-			if (signal_SIGHUP_handler)
-				signal_SIGHUP_handler(signal_SIGHUP_v, SIGHUP);
-			break;
-		case SIGINT:
-			if (signal_SIGINT_handler)
-				signal_SIGINT_handler(signal_SIGINT_v, SIGINT);
-			break;
-		case SIGTERM:
-			if (signal_SIGTERM_handler)
-				signal_SIGTERM_handler(signal_SIGTERM_v, SIGTERM);
-			break;	
-		case SIGCHLD:	
-			if (signal_SIGCHLD_handler)
-				signal_SIGCHLD_handler(signal_SIGCHLD_v, SIGCHLD);
-			break;
-		default:
-			break;
-		}	
+	if (signal_thread) {
+		thread_cancel(signal_thread);
+		signal_thread = NULL;
 	}
+
+#ifdef HAVE_SIGNALFD
+	if (signal_fd != -1) {
+		close(signal_fd);
+		signal_fd = -1;
+	}
+	sigemptyset(&signal_fd_set);
+#endif
+
+	signal_handlers_clear(SIG_IGN);
+
+#ifndef HAVE_SIGNALFD
+	if (signal_pipe[1] != -1) {
+		close(signal_pipe[1]);
+		signal_pipe[1] = -1;
+	}
+	if (signal_pipe[0] != -1) {
+		close(signal_pipe[0]);
+		signal_pipe[0] = -1;
+	}
+#endif
 }
+
+/* Called prior to exec'ing a script. The script can reasonably
+ * expect to have the standard signal disposition */
+void
+signal_handler_script(void)
+{
+	struct sigaction dfl;
+	int sig;
+#ifdef HAVE_SIGNALFD
+	sigset_t sset;
+
+	if (signal_fd != -1){
+		close(signal_fd);
+		signal_fd = -1;
+	}
+#endif
+
+	dfl.sa_handler = SIG_DFL;
+	dfl.sa_flags = 0;
+	sigemptyset(&dfl.sa_mask);
+
+	for (sig = 1; sig <= SIGRTMAX; sig++) {
+		if (!sigismember(&dfl_sig, sig))
+			sigaction(sig, &dfl, NULL);
+	}
+
+#ifdef HAVE_SIGNALFD
+	sigemptyset(&sset);
+	sigmask_func(SIG_SETMASK, &sset, NULL);
+#endif
+}
+
+#if HAVE_DECL_RLIMIT_RTTIME == 1
+void
+set_sigxcpu_handler(void)
+{
+	signal_set(SIGXCPU, log_sigxcpu, NULL);
+#ifdef THREAD_DUMP
+	register_signal_handler_address("log_sigxcpu", log_sigxcpu);
+#endif
+}
+#endif
+
+void signal_fd_close(int min_fd)
+{
+#ifdef HAVE_SIGNALFD
+	if (signal_fd >= min_fd) {
+		close(signal_fd);
+		signal_fd = -1;
+	}
+#else
+	if (signal_pipe[0] >= min_fd) {
+		close(signal_pipe[0]);
+		signal_pipe[0] = -1;
+	}
+	if (signal_pipe[1] >= min_fd) {
+		close(signal_pipe[1]);
+		signal_pipe[1] = -1;
+	}
+#endif
+}
+
+#ifdef THREAD_DUMP
+void
+register_signal_thread_addresses(void)
+{
+        register_thread_address("signal_run_callback", signal_run_callback);
+}
+#endif

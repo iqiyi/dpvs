@@ -19,7 +19,7 @@ global_defs {
    notification_email_from Alexandre.Cassen@firewall.loc
    smtp_server 192.168.200.1
    smtp_connect_timeout 30
-   lvs_id LVS_DEVEL
+   router_id LVS_DEVEL
 }
 
 virtual_server 192.168.200.100 25 {
@@ -50,7 +50,7 @@ virtual_server 192.168.200.100 25 {
 ! traffic to some additional subnets. We do not
 ! want to dispatch traffic unless all the interfaces
 ! appear to be up. Note: The main ip of the real
-! server that we are dipatching traffic to must
+! server that we are dispatching traffic to must
 ! explicitly be checked by a host directive.
 
     real_server 172.16.1.11 25 {
@@ -74,7 +74,6 @@ virtual_server 192.168.200.100 25 {
             }
         }
     }
-
 
 ! Final example showing some of the more extended
 ! features.

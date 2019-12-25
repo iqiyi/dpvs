@@ -11,53 +11,49 @@
  *              but WITHOUT ANY WARRANTY; without even the implied warranty of
  *              MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  *              See the GNU General Public License for more details.
- *              
+ *
  *              This program is free software; you can redistribute it and/or
  *              modify it under the terms of the GNU General Public License
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _VRRP_ARP_H
 #define _VRRP_ARP_H
 
 /* system includes */
-#include <net/ethernet.h>
-#include <net/if_arp.h>
+#include <sys/types.h>
+#include <linux/if_infiniband.h>
 
 /* local includes */
+#include "vrrp.h"
+#include "vrrp_if.h"
 #include "vrrp_ipaddress.h"
+#include "libipvs.h"
 
-#include "../libipvs-2.6/libipvs.h"
+typedef struct inf_arphdr {
+	unsigned short int ar_hrd;
+	unsigned short int ar_pro;
+	unsigned char      ar_hln;
+	unsigned char      ar_pln;
+	unsigned short int ar_op;
 
-/* local definitions */
-#define ETHERNET_HW_LEN		6
-#define IPPROTO_ADDR_LEN	4
+	/* Infiniband arp looks like this */
+	unsigned char     __ar_sha[INFINIBAND_ALEN];
+	unsigned char     __ar_sip[4];
+	unsigned char     __ar_tha[INFINIBAND_ALEN];
+	unsigned char     __ar_tip[4];
+} inf_arphdr_t;
 
-/* types definition */
-typedef struct _arphdr {
-	unsigned short int	ar_hrd;	/* Format of hardware address.  */
-	unsigned short int	ar_pro;	/* Format of protocol address.  */
-	unsigned char		ar_hln;	/* Length of hardware address.  */
-	unsigned char		ar_pln;	/* Length of protocol address.  */
-	unsigned short int	ar_op;	/* ARP opcode (command).  */
-
-	/* Ethernet looks like this : This bit is variable sized however...  */
-	unsigned char		__ar_sha[ETH_ALEN];	/* Sender hardware address.  */
-	unsigned char		__ar_sip[4];		/* Sender IP address.  */
-	unsigned char		__ar_tha[ETH_ALEN];	/* Target hardware address.  */
-	unsigned char		__ar_tip[4];		/* Target IP address.  */
-} arphdr_t;
-
-/* Global vars exported */
-extern char *garp_buffer;
-extern int garp_fd;
+typedef struct ipoib_hdr {
+	u_int16_t proto;
+	u_int16_t reserved;
+} ipoib_hdr_t;
 
 /* prototypes */
 extern void gratuitous_arp_init(void);
 extern void gratuitous_arp_close(void);
-extern int send_gratuitous_arp(ip_address_t *);
-
+extern void send_gratuitous_arp(ip_address_t *);
 #endif
