@@ -697,7 +697,7 @@ int msg_master_process(int step)
             /* probably previous msg timeout and new msg of this type sent */
             RTE_LOG(INFO, MSGMGR, "%s:msg@%p, multicast reply msg <type:%d, seq:%d> from"
                     " lcore %d repeated\n", __func__, msg, msg->type, msg->seq, msg->cid);
-            assert(msg->mode = DPVS_MSG_UNICAST);
+            assert(msg->mode == DPVS_MSG_UNICAST);
             add_msg_flags(msg, DPVS_MSG_F_STATE_DROP);
             msg_destroy(&msg); /* sorry, you are late */
         }
