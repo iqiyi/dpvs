@@ -223,7 +223,7 @@ timer_defs {
 ! dpvs neighbor config
 neigh_defs {
     <init> unres_queue_length  128
-    <init> timeout             60
+    timeout                    60
 }
 
 ! dpvs ipv4 config
