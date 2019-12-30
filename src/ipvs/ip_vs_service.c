@@ -904,6 +904,13 @@ static inline int set_opt_so2msg(sockoptid_t opt)
     return opt - SOCKOPT_SVC_BASE + MSG_TYPE_SVC_SET_BASE;
 }
 
+static int svc_msg_seq(void)
+{
+    static uint32_t seq = 0;
+
+    return seq++;
+}
+
 static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
 {
     int ret;
@@ -925,7 +932,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     if (cid == rte_get_master_lcore()) {
         struct dpvs_msg *msg;
 
-        msg = msg_make(set_opt_so2msg(opt), 0, DPVS_MSG_MULTICAST, cid, len, user);
+        msg = msg_make(set_opt_so2msg(opt), svc_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
         if (!msg)
             return EDPVS_NOMEM;
 

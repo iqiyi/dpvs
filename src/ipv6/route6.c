@@ -41,6 +41,13 @@ struct rt6_dustbin {
 static int g_rt6_recycle_time = RT6_RECYCLE_TIME_DEF;
 static RTE_DEFINE_PER_LCORE(struct rt6_dustbin, rt6_dbin);
 
+static int rt6_msg_seq(void)
+{
+    static uint32_t seq = 0;
+
+    return seq++;
+}
+
 static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
 {
     struct in6_addr addr6;
@@ -227,7 +234,7 @@ static int rt6_add_del(const struct dp_vs_route6_conf *cf)
     }
 
     /* for slaves */
-    msg = msg_make(MSG_TYPE_ROUTE6, 0, DPVS_MSG_MULTICAST, cid,
+    msg = msg_make(MSG_TYPE_ROUTE6, rt6_msg_seq(), DPVS_MSG_MULTICAST, cid,
             sizeof(struct dp_vs_route6_conf), cf);
     if (unlikely(msg == NULL)) {
         RTE_LOG(ERR, RT6, "%s: fail to add/del route on slaves -- %s\n",
@@ -235,7 +242,7 @@ static int rt6_add_del(const struct dp_vs_route6_conf *cf)
         return EDPVS_NOMEM;
     }
 
-    err = multicast_msg_send(msg, 0, NULL);
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK)
         RTE_LOG(WARNING, RT6, "%s: multicast_msg_send failed -- %s\n",
                 __func__, dpvs_strerror(err));

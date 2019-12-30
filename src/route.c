@@ -51,6 +51,13 @@ static RTE_DEFINE_PER_LCORE(struct route_lcore, route_lcore);
 static RTE_DEFINE_PER_LCORE(rte_atomic32_t, num_routes);
 static RTE_DEFINE_PER_LCORE(rte_atomic32_t, num_out_routes);
 
+static int route_msg_seq(void)
+{
+    static uint32_t seq = 0;
+
+    return seq++;
+}
+
 static inline bool net_cmp(const struct netif_port *port, uint32_t dest,
                            uint8_t mask, const struct route_entry *route_node)
 {
@@ -370,20 +377,16 @@ static int route_add_del(bool add, struct in_addr* dest,
     cf.metric = metric;
 
     if (add)
-        msg = msg_make(MSG_TYPE_ROUTE_ADD, 0, DPVS_MSG_MULTICAST,
+        msg = msg_make(MSG_TYPE_ROUTE_ADD, route_msg_seq(), DPVS_MSG_MULTICAST,
                        cid, sizeof(struct dp_vs_route_conf), &cf);
     else
-        msg = msg_make(MSG_TYPE_ROUTE_DEL, 0, DPVS_MSG_MULTICAST,
+        msg = msg_make(MSG_TYPE_ROUTE_DEL, route_msg_seq(), DPVS_MSG_MULTICAST,
                        cid, sizeof(struct dp_vs_route_conf), &cf);
 
-    err = multicast_msg_send(msg, 0/*DPVS_MSG_F_ASYNC*/, NULL);
-    if (err != EDPVS_OK) {
-        /* ignore timeout for msg, or keepalived will cause a lot bug.
-         * Timeout error is ok because route can still be set,
-         * no mem is another possible err, but problem will not just be here */
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+    if (err != EDPVS_OK)
         RTE_LOG(INFO, ROUTE, "[%s] fail to send multicast message, error code = %d\n",
                                                                       __func__, err);
-    }
     msg_destroy(&msg);
 
     return EDPVS_OK;
