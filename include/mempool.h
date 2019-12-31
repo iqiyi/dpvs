@@ -25,7 +25,7 @@
 #define MP_OBJ_COOKIE_MARK      0xA55AC33C
 #define MP_SIZE_MIN             16
 #define MP_OBJ_SIZE_MIN         32
-#define MP_OBJ_SIZE_MAX         65536   /* 64KB */
+#define MP_OBJ_SIZE_MAX         1048576 /* 1MB */
 
 #define RTE_LOGTYPE_DPVS_MPOOL     RTE_LOGTYPE_USER1
 
@@ -43,8 +43,8 @@ struct dpvs_mp_obj_cookie {
 struct dpvs_mp_elem {
     char name[MP_NAMSIZ];
     uint32_t obj_size;
-    uint16_t obj_num;
-    uint16_t cache_size;
+    uint32_t obj_num;
+    uint32_t cache_size;
     struct rte_mempool *pool;
 };
 

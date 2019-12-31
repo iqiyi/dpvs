@@ -429,6 +429,7 @@ int msg_destroy(struct dpvs_msg **pmsg)
     }
 
     if (msg->reply.data) {
+        assert(msg->reply.len != 0);
         msg_reply_free(msg->reply.data);
         msg->reply.len = 0;
     }
@@ -1061,8 +1062,8 @@ static inline int msg_init(void)
         return EDPVS_NOTSUPP;
     }
 
-    /* msg_pool uses about 10MB memory */
-    msg_pool = dpvs_mempool_create("mp_msg", 32, 65536, 1024);
+    /* msg_pool uses about 26MB memory */
+    msg_pool = dpvs_mempool_create("mp_msg", 32, 131072, 2048);
     if (!msg_pool)
         return EDPVS_NOMEM;
 
