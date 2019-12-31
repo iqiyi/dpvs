@@ -1082,7 +1082,7 @@ int dp_vs_check_template(struct dp_vs_conn *ct)
 
     /* check the dest server status */
     if ((NULL == dest) ||
-            !(dest->flags & DPVS_DEST_F_AVAILABLE) ||
+            !dp_vs_dest_is_avail(dest) ||
             (conn_expire_quiescent_template &&
              rte_atomic16_read(&dest->weight) == 0)) {
 #ifdef CONFIG_DPVS_IPVS_DEBUG

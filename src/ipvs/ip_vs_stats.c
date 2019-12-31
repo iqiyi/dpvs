@@ -55,7 +55,7 @@ int dp_vs_stats_in(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
     assert(conn && mbuf);
     struct dp_vs_dest *dest = conn->dest;
 
-    if (dest && (dest->flags & DPVS_DEST_F_AVAILABLE)) {
+    if (dest && dp_vs_dest_is_avail(dest)) {
         /*limit rate*/
         if ((dest->limit_proportion < 100) &&
             (dest->limit_proportion > 0)) {
@@ -82,7 +82,7 @@ int dp_vs_stats_out(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
     assert(conn && mbuf);
     struct dp_vs_dest *dest = conn->dest;
 
-    if (dest && (dest->flags & DPVS_DEST_F_AVAILABLE)) {
+    if (dest && dp_vs_dest_is_avail(dest)) {
         /*limit rate*/
         if ((dest->limit_proportion < 100) &&
             (dest->limit_proportion > 0)) {

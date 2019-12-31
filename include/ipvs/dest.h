@@ -156,6 +156,18 @@ dp_vs_dest_is_avail(struct dp_vs_dest *dest)
     return (dest->flags & DPVS_DEST_F_AVAILABLE) ? true : false;
 }
 
+static inline void
+dp_vs_dest_set_avail(struct dp_vs_dest *dest)
+{
+    dest->flags |= DPVS_DEST_F_AVAILABLE;
+}
+
+static inline void
+dp_vs_dest_clear_avail(struct dp_vs_dest *dest)
+{
+    dest->flags &= ~DPVS_DEST_F_AVAILABLE;
+}
+
 static inline bool
 dp_vs_dest_is_overload(struct dp_vs_dest *dest)
 {
