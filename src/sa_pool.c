@@ -819,7 +819,7 @@ static int sa_msg_get_stats(struct dpvs_msg *msg)
     ptr = msg->data;
     ifa = *(struct inet_ifaddr **)ptr;
 
-    stats = rte_zmalloc(NULL, sizeof(*stats), 0);
+    stats = msg_reply_alloc(sizeof(*stats));
     if (!stats)
         return EDPVS_NOMEM;
 
@@ -844,6 +844,7 @@ reply:
 
 static struct dpvs_msg_type sa_stats_msg = {
     .type           = MSG_TYPE_SAPOOL_STATS,
+    .prio           = MSG_PRIO_LOW,
     .unicast_msg_cb = sa_msg_get_stats,
 };
 

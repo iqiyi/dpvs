@@ -284,6 +284,8 @@ int netif_lcore_loop_job_unregister(struct netif_lcore_loop_job *lcore_job);
 int netif_lcore_start(void);
 bool is_lcore_id_valid(lcoreid_t cid);
 bool netif_lcore_is_idle(lcoreid_t cid);
+void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
+                           lcoreid_t cid, uint16_t count, bool pkts_from_ring);
 
 /************************** protocol API *****************************/
 int netif_register_pkt(struct pkt_type *pt);
@@ -311,6 +313,13 @@ int netif_get_queue(struct netif_port *port, lcoreid_t id, queueid_t *qid);
 int netif_get_link(struct netif_port *dev, struct rte_eth_link *link);
 int netif_get_promisc(struct netif_port *dev, bool *promisc);
 int netif_get_stats(struct netif_port *dev, struct rte_eth_stats *stats);
+struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
+                               unsigned int nrxq, unsigned int ntxq,
+                               void (*setup)(struct netif_port *));
+portid_t netif_port_count(void);
+int netif_free(struct netif_port *dev);
+int netif_port_register(struct netif_port *dev);
+int netif_port_unregister(struct netif_port *dev);
 
 /************************** module API *****************************/
 int netif_virtual_devices_add(void);
@@ -326,6 +335,7 @@ void install_netif_keywords(void);
 /*************************** kni api *******************************/
 void kni_process_on_master(void);
 
+
 static inline void *netif_priv(struct netif_port *dev)
 {
     return (char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
@@ -335,14 +345,6 @@ static inline struct netif_tc *netif_tc(struct netif_port *dev)
 {
     return &dev->tc;
 }
-
-struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
-                               unsigned int nrxq, unsigned int ntxq,
-                               void (*setup)(struct netif_port *));
-
-int netif_free(struct netif_port *dev);
-int netif_port_register(struct netif_port *dev);
-int netif_port_unregister(struct netif_port *dev);
 
 static inline int eth_addr_equal(const struct ether_addr *addr1,
                                  const struct ether_addr *addr2)
@@ -363,8 +365,13 @@ static inline char *eth_addr_dump(const struct ether_addr *ea,
     return buf;
 }
 
-portid_t netif_port_count(void);
-void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
-                           lcoreid_t cid, uint16_t count, bool pkts_from_ring);
+static inline uint16_t dpvs_rte_eth_dev_count(void)
+{
+#if RTE_VERSION < RTE_VERSION_NUM(18, 11, 0, 0)
+    return rte_eth_dev_count();
+#else
+    return rte_eth_dev_count_avail();
+#endif
+}
 
 #endif /* __DPVS_NETIF_H__ */

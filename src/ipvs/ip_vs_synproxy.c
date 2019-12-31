@@ -91,7 +91,7 @@ static int minute_timer_expire( void *priv)
 
     tv.tv_sec = 60; /* one minute timer */
     tv.tv_usec = 0;
-    dpvs_timer_update(&g_minute_timer, &tv, true);
+    dpvs_timer_update_nolock(&g_minute_timer, &tv, true);
 
     return DTIMER_OK;
 }
@@ -108,7 +108,7 @@ static int second_timer_expire(void *priv)
 
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    dpvs_timer_sched(&g_second_timer, &tv, second_timer_expire, NULL, true);
+    dpvs_timer_sched_nolock(&g_second_timer, &tv, second_timer_expire, NULL, true);
 
     return DTIMER_OK;
 }
@@ -689,26 +689,21 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         goto syn_rcv_out;
 
     if (th->syn && !th->ack && !th->rst && !th->fin &&
-            (svc = dp_vs_service_lookup(af, iph->proto, 
-                                        &iph->daddr, th->dest, 0, NULL, NULL, NULL)) &&
+            (svc = dp_vs_service_lookup(af, iph->proto, &iph->daddr, th->dest, 0,
+                                        NULL, NULL, NULL, rte_lcore_id())) &&
             (svc->flags & DP_VS_SVC_F_SYNPROXY)) {
         /* if service's weight is zero (non-active realserver),
          * do noting and drop the packet */
         if (svc->weight == 0) {
             dp_vs_estats_inc(SYNPROXY_NO_DEST);
-            dp_vs_service_put(svc);
             goto syn_rcv_out;
         }
-
-        dp_vs_service_put(svc);
 
         /* drop packet from blacklist */
         if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
             goto syn_rcv_out;
         }
     } else {
-        if (svc)
-            dp_vs_service_put(svc);
         return 1;
     }
 
@@ -961,14 +956,13 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
     /* Do not check svc syn-proxy flag, as it may be changed after syn-proxy step 1. */
     if (!th->syn && th->ack && !th->rst && !th->fin &&
             (svc = dp_vs_service_lookup(af, iph->proto, &iph->daddr,
-                                        th->dest, 0, NULL, NULL, NULL))) {
+                           th->dest, 0, NULL, NULL, NULL, rte_lcore_id()))) {
         if (dp_vs_synproxy_ctrl_defer &&
                 !syn_proxy_ack_has_data(mbuf, iph, th)) {
             /* Update statistics */
             dp_vs_estats_inc(SYNPROXY_NULL_ACK);
             /* We get a pure ack when expecting ack packet with payload, so
              * have to drop it */
-            dp_vs_service_put(svc);
             *verdict = INET_DROP;
             return 0;
         }
@@ -985,7 +979,6 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
             /* Cookie check failed, drop the packet */
             RTE_LOG(DEBUG, IPVS, "%s: syn_cookie check failed seq=%u\n", __func__,
                     ntohl(th->ack_seq) - 1);
-            dp_vs_service_put(svc);
             *verdict = INET_DROP;
             return 0;
         }
@@ -1000,13 +993,9 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
             RTE_LOG(WARNING, IPVS, "%s: ip_vs_schedule failed\n", __func__);
             /* FIXME: What to do when virtual service is available but no destination
              * available for a new connetion: send an icmp UNREACHABLE ? */
-            dp_vs_service_put(svc);
             *verdict = INET_DROP;
             return 0;
         }
-
-        /* Release the service, we do not need it any more */
-        dp_vs_service_put(svc);
 
         /* Do nothing but print a error msg when fail, because session will be
          * correctly freed in dp_vs_conn_expire */
@@ -1018,7 +1007,7 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
         /* Count in the ack packet (STOLEN by synproxy) */
         dp_vs_stats_in(*cpp, mbuf);
 
-        /* Active session timer, and dec  refcnt.
+        /* Active session timer, and dec refcnt.
          * Also steal the mbuf, and let caller return immediately */
         dp_vs_conn_put(*cpp);
         *verdict = INET_STOLEN;
@@ -1136,6 +1125,7 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
         RTE_LOG(WARNING, IPVS, "%s: %s\n", __func__, dpvs_strerror(EDPVS_NOMEM));
         return EDPVS_NOMEM;
     }
+    ack_mbuf->userdata = NULL;
 
     ack_th = (struct tcphdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct tcphdr));
     if (!ack_th) {
@@ -1226,7 +1216,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
     if ((th->syn) && (th->ack) && (!th->rst) &&
             (cp->flags & DPVS_CONN_F_SYNPROXY) &&
             (cp->state == DPVS_TCP_S_SYN_SENT)) {
-        cp->syn_proxy_seq.delta = htonl(cp->syn_proxy_seq.isn) - htonl(th->seq);
+        cp->syn_proxy_seq.delta = ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
         cp->state = DPVS_TCP_S_ESTABLISHED;
         conn_timeout = dp_vs_get_conn_timeout(cp);
         if (unlikely((conn_timeout != 0) && (cp->proto == IPPROTO_TCP)))
@@ -1307,8 +1297,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
                 __func__, ntohl(th->seq), ntohl(th->ack_seq));
 
         /* Count the delta of seq */
-        cp->syn_proxy_seq.delta =
-            ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
+        cp->syn_proxy_seq.delta = ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
         cp->state = DPVS_TCP_S_CLOSE;
         cp->timeout.tv_sec = pp->timeout_table[cp->state];
         dpvs_time_rand_delay(&cp->timeout, 1000000);

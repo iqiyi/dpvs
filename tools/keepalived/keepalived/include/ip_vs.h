@@ -19,7 +19,15 @@
 
 #include <linux/types.h>
 #include <stdbool.h>
-#include "dp_vs.h"
+#include "conf/route.h"
+#include "conf/route6.h"
+#include "conf/inetaddr.h"
+#include "conf/laddr.h"
+#include "conf/blklst.h"
+#include "conf/conn.h"
+#include "conf/ip_tunnel.h"
+#include "ipvs/service.h"
+#include "ipvs/dest.h"
 
 #define IP_VS_VERSION_CODE	0x010201
 #define NVERSION(version)			\
@@ -34,11 +42,13 @@
 #define IP_VS_SVC_F_HASHED	0x0002		/* hashed entry */
 #define IP_VS_SVC_F_ONEPACKET	0x0004		/* one-packet scheduling */
 #define IP_VS_CONN_F_SYNPROXY	0x8000		/* synproxy switch flag*/
-#define IP_VS_SVC_F_SCHED1 	0x0008
-#define IP_VS_SVC_F_SCHED2 	0x0010
-#define IP_VS_SVC_F_SCHED3 	0x0020
-#define IP_VS_SVC_F_SIP_HASH 	0x0100
-#define IP_VS_SVC_F_QID_HASH 	0x0200
+#define IP_VS_SVC_F_SCHED1	0x0008		/* scheduler flag 1 */
+#define IP_VS_SVC_F_SCHED2	0x0010		/* scheduler flag 2 */
+#define IP_VS_SVC_F_SCHED3	0x0020		/* scheduler flag 3 */
+
+#define IP_VS_SVC_F_SIP_HASH	0x0100		/* sip hash target */
+#define IP_VS_SVC_F_QID_HASH	0x0200		/* quic cid hash target */
+#define IP_VS_SVC_F_MATCH	0x0400		/* snat match */
 
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK	IP_VS_SVC_F_SCHED1 /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT	IP_VS_SVC_F_SCHED2 /* SH use port */
@@ -267,18 +277,8 @@ struct ip_vs_service_entry_kern {
 	unsigned		bps;
 	unsigned		limit_proportion;
 
-	/* number of real servers */
-	unsigned int		num_dests;
-	/* number of local address*/
-	unsigned int		num_laddrs;
-
-	/* statistics */
-	struct ip_vs_stats_user stats;
-
-	char			srange[256];
-	char			drange[256];
-	char			iifname[IFNAMSIZ];
-	char			oifname[IFNAMSIZ];
+        /* number of lcores*/
+        unsigned int            num_lcores;
 };
 
 /* The argument to IP_VS_SO_GET_SERVICE */
@@ -312,20 +312,20 @@ struct ip_vs_service_entry {
 };
 
 struct ip_vs_dest_entry_kern {
-	__be32			addr;	/* destination address */
-	__be16			port;
-	unsigned		conn_flags;	/* connection flags */
-	int			weight;		/* destination weight */
+        __be32                  addr;   /* destination address */
+        __be16                  port;
+        unsigned                conn_flags;     /* connection flags */
+        int                     weight;         /* destination weight */
 
-	u_int32_t		u_threshold;	/* upper threshold */
-	u_int32_t		l_threshold;	/* lower threshold */
+        u_int32_t               u_threshold;    /* upper threshold */
+        u_int32_t               l_threshold;    /* lower threshold */
 
-	u_int32_t		activeconns;	/* active connections */
-	u_int32_t		inactconns;	/* inactive connections */
-	u_int32_t		persistconns;	/* persistent connections */
+        u_int32_t               activeconns;    /* active connections */
+        u_int32_t               inactconns;     /* inactive connections */
+        u_int32_t               persistconns;   /* persistent connections */
 
-	/* statistics */
-	struct ip_vs_stats_user stats;
+        /* statistics */
+        struct ip_vs_stats_user stats;
 };
 
 struct ip_vs_dest_entry {
@@ -354,21 +354,6 @@ struct ip_vs_laddr_entry {
 	u_int32_t		conn_counts;	/* current connects */
 	u_int16_t		af;
 	union nf_inet_addr	addr;
-};
-
-/* The argument to IP_VS_SO_GET_LADDRS */
-struct ip_vs_get_laddrs_kern {
-	/* which service: user fills in these */
-	u_int16_t		protocol;
-	__be32			addr;	/* virtual address - internal use only */
-	__be16			port;
-	u_int32_t		fwmark;		/* firwall mark of service */
-
-	/* number of local address*/
-	unsigned int		num_laddrs;
-
-	/* the real servers */
-	struct ip_vs_laddr_entry_kern	entrytable[0];
 };
 
 struct ip_vs_get_laddrs {
@@ -422,13 +407,13 @@ struct ip_vs_get_dests {
 	struct ip_vs_dest_entry	entrytable[0];
 };
 
-
-struct ip_vs_get_services_kern {
+/* The argument to IP_VS_SO_GET_SERVICES */
+struct ip_vs_get_services {
 	/* number of virtual services */
 	unsigned int		num_services;
-
+	unsigned int		cid;
 	/* service table */
-	struct ip_vs_service_entry_kern entrytable[0];
+	struct ip_vs_service_entry entrytable[0];
 };
 
 /* The argument to IP_VS_SO_GET_TIMEOUT */
@@ -698,11 +683,6 @@ struct ip_vs_get_dests_app {
 
 	uint16_t		af;
 	union nf_inet_addr	nf_addr;
-};
-
-struct ip_vs_get_services {
-	unsigned int num_services;
-	struct ip_vs_service_entry entrytable[0];
 };
 
 /* The argument to IP_VS_SO_GET_SERVICES */

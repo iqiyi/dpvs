@@ -414,7 +414,7 @@ static int tc_msg_get_stats(struct dpvs_msg *msg)
     ptr = msg->data;
     qsch = *(struct Qsch **)ptr;
 
-    st = rte_zmalloc(NULL, sizeof(*st), 0);
+    st = msg_reply_alloc(sizeof(*st));
     if (!st)
         return EDPVS_NOMEM;
 
@@ -429,6 +429,7 @@ static int tc_msg_get_stats(struct dpvs_msg *msg)
 
 static struct dpvs_msg_type tc_stats_msg = {
     .type           = MSG_TYPE_TC_STATS,
+    .prio           = MSG_PRIO_LOW,
     .unicast_msg_cb = tc_msg_get_stats,
 };
 

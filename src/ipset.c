@@ -34,11 +34,6 @@
 #define this_ipset_table_lcore  (this_ipset_lcore.ipset_table)
 #define this_num_ipset          (RTE_PER_LCORE(num_ipset))
 
-#define MSG_TYPE_IPSET_ADD                  19
-#define MSG_TYPE_IPSET_DEL                  20
-#define MSG_TYPE_IPSET_FLUSH                21
-
-
 struct ipset_lcore{
 	struct list_head ipset_table[IPSET_TAB_SIZE];
 };

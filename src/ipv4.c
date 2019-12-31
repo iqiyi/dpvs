@@ -26,6 +26,7 @@
 #include "neigh.h"
 #include "icmp.h"
 #include "parser/parser.h"
+#include "iftraf.h"
 
 #define IPV4
 #define RTE_LOGTYPE_IPV4    RTE_LOGTYPE_USER1
@@ -101,27 +102,30 @@ struct ip4_stats ip4_statistics;
 rte_spinlock_t ip4_stats_lock;
 #endif
 
-#ifdef CONFIG_DPVS_IPV4_DEBUG
-static void ip4_dump_hdr(const struct ipv4_hdr *iph, portid_t port)
+#ifdef CONFIG_DPVS_IP_HEADER_DEBUG
+static void ip4_show_hdr(const char *func, const struct rte_mbuf *mbuf)
 {
-    char saddr[16], daddr[16];
+    portid_t port;
     lcoreid_t lcore;
+    struct ipv4_hdr *iph;
+    char saddr[16], daddr[16];
 
+    port = mbuf->port;
+    iph = ip4_hdr(mbuf);
     lcore = rte_lcore_id();
 
     if (!inet_ntop(AF_INET, &iph->src_addr, saddr, sizeof(saddr)))
         return;
+
     if (!inet_ntop(AF_INET, &iph->dst_addr, daddr, sizeof(daddr)))
         return;
 
-    fprintf(stderr, "lcore %u port%u ipv4 hl %u tos %u tot %u "
+    RTE_LOG(DEBUG, IPV4, "%s: [%d] port %u ipv4 hl %u tos %u tot %u "
             "id %u ttl %u prot %u src %s dst %s\n",
-            lcore, port, IPV4_HDR_IHL_MASK & iph->version_ihl,
+            func, lcore, port, IPV4_HDR_IHL_MASK & iph->version_ihl,
             iph->type_of_service, ntohs(iph->total_length),
             ntohs(iph->packet_id), iph->time_to_live,
             iph->next_proto_id, saddr, daddr);
-
-    return;
 }
 #endif
 
@@ -259,6 +263,8 @@ int ipv4_output(struct rte_mbuf *mbuf)
     assert(rt);
 
     IP4_UPD_PO_STATS(out, mbuf->pkt_len);
+    mbuf->port = rt->port->id;
+    iftraf_pkt_out(AF_INET, mbuf, rt->port);
 
     return INET_HOOK(AF_INET, INET_HOOK_POST_ROUTING, mbuf,
             NULL, rt->port, ipv4_output_fin);
@@ -383,7 +389,7 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
     }
 
     IP4_UPD_PO_STATS(in, mbuf->pkt_len);
-
+    iftraf_pkt_in(AF_INET, mbuf, port);
     if (mbuf_may_pull(mbuf, sizeof(struct ipv4_hdr)) != 0)
         goto inhdr_error;
 
@@ -418,8 +424,8 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
     mbuf->userdata = NULL;
     mbuf->l3_len = hlen;
 
-#ifdef CONFIG_DPVS_IPV4_DEBUG
-    ip4_dump_hdr(iph, mbuf->port);
+#ifdef CONFIG_DPVS_IP_HEADER_DEBUG
+    ip4_show_hdr(__func__, mbuf);
 #endif
 
     if (unlikely(iph->next_proto_id == IPPROTO_OSPF))

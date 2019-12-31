@@ -35,11 +35,14 @@
 #include "ip_tunnel.h"
 #include "sys_time.h"
 #include "route6.h"
+#include "iftraf.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
 
 #define LCORE_CONF_BUFFER_LEN 4096
+
+extern int log_slave_init(void);
 
 static int set_all_thread_affinity(void)
 {
@@ -143,8 +146,10 @@ int main(int argc, char *argv[])
     struct timeval tv;
     char pql_conf_buf[LCORE_CONF_BUFFER_LEN];
     int pql_conf_buf_len = LCORE_CONF_BUFFER_LEN;
-    uint32_t loop_cnt = 0;
-    int timer_sched_loop_interval;
+
+    int timer_sched_interval_us;
+    uint64_t cycles_per_sec;
+    uint64_t now_cycles, prev_cycles;
 
     /**
      * add application agruments parse before EAL ones.
@@ -185,11 +190,18 @@ int main(int argc, char *argv[])
     err = rte_eal_init(argc, argv);
     if (err < 0)
         rte_exit(EXIT_FAILURE, "Invalid EAL parameters\n");
-    argc -= err, argv += err;
 
     RTE_LOG(INFO, DPVS, "dpvs version: %s, build on %s\n", DPVS_VERSION, DPVS_BUILD_DATE);
 
     rte_timer_subsystem_init();
+
+#ifdef CONFIG_DPVS_PDUMP
+    /* initialize packet capture framework */
+    err = rte_pdump_init(NULL);
+    if (err < 0) {
+        rte_exit(EXIT_FAILURE, "Fail init dpdk pdump framework\n");
+    }
+#endif
 
     if ((err = cfgfile_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail init configuration file: %s\n",
@@ -238,8 +250,11 @@ int main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "Fail to init netif_ctrl: %s\n",
                  dpvs_strerror(err));
 
+    if ((err = iftraf_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init stats: %s\n", dpvs_strerror(err));
+    
     /* config and start all available dpdk ports */
-    nports = rte_eth_dev_count();
+    nports = dpvs_rte_eth_dev_count();
     for (pid = 0; pid < nports; pid++) {
         dev = netif_port_get(pid);
         if (!dev) {
@@ -261,12 +276,15 @@ int main(int argc, char *argv[])
     /* start data plane threads */
     netif_lcore_start();
 
+    log_slave_init();
     /* write pid file */
     if (!pidfile_write(DPVS_PIDFILE, getpid()))
         goto end;
 
-    timer_sched_loop_interval = dpvs_timer_sched_interval_get();
-    assert(timer_sched_loop_interval > 0);
+    timer_sched_interval_us = dpvs_timer_sched_interval_get();
+    cycles_per_sec = rte_get_timer_hz();
+    prev_cycles = 0;
+    assert(timer_sched_interval_us > 0);
 
     dpvs_state_set(DPVS_STATE_NORMAL);
 
@@ -277,17 +295,21 @@ int main(int argc, char *argv[])
         /* IPC loop */
         sockopt_ctl(NULL);
         /* msg loop */
-        msg_master_process();
-
+        msg_master_process(0);
         /* timer */
-        loop_cnt++;
-        if (loop_cnt % timer_sched_loop_interval == 0)
+        now_cycles = rte_get_timer_cycles();
+        if ((now_cycles - prev_cycles) * 1000000 / cycles_per_sec > timer_sched_interval_us) {
             rte_timer_manage();
+            prev_cycles = now_cycles;
+        }
         /* kni */
         kni_process_on_master();
 
         /* process mac ring on master */
         neigh_process_ring(NULL);
+
+        /* process iftraf ring */
+        iftraf_process_ring();
 
         /* increase loop counts */
         netif_update_master_loop_cnt();
@@ -295,6 +317,10 @@ int main(int argc, char *argv[])
 
 end:
     dpvs_state_set(DPVS_STATE_FINISH);
+    if ((err = iftraf_term()) !=0 )
+        rte_exit(EXIT_FAILURE, "Fail to term iftraf: %s\n",
+                dpvs_strerror(err));
+
     if ((err = netif_ctrl_term()) !=0 )
         rte_exit(EXIT_FAILURE, "Fail to term netif_ctrl: %s\n",
                  dpvs_strerror(err));
@@ -315,6 +341,11 @@ end:
     if ((err = cfgfile_term()) != 0)
         RTE_LOG(ERR, DPVS, "Fail to term configuration file: %s\n",
                 dpvs_strerror(err));
+#ifdef CONFIG_DPVS_PDUMP
+    if ((err = rte_pdump_uninit()) != 0) {
+        RTE_LOG(ERR, DPVS, "Fail to uninitialize dpdk pdump framework.\n");
+    }
+#endif
     pidfile_rm(DPVS_PIDFILE);
 
     exit(0);

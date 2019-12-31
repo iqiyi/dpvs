@@ -104,7 +104,7 @@ ipvs_start(void)
 {
 	log_message(LOG_DEBUG, "Initializing ipvs 2.6");
 	/* Initialize IPVS module */
-	if (ipvs_init()) {
+	if (ipvs_init(0)) {
 		log_message(LOG_INFO, "IPVS: Can't initialize ipvs: %s",
 				ipvs_strerror(errno));
 		return IPVS_ERROR;
@@ -196,9 +196,9 @@ ipvs_talk(int cmd,
 			break;
 		case IP_VS_SO_SET_EDITDEST:
 			if ((result = ipvs_update_dest(srule, drule)) &&
-			    (errno == EDPVS_NOTEXIST)) {
-				cmd = IP_VS_SO_SET_ADDDEST;
+			    (result == EDPVS_NOTEXIST || result == EDPVS_MSG_FAIL)) {
 				result = ipvs_add_dest(srule, drule);
+				cmd = IP_VS_SO_SET_ADDDEST;
 			}
 			break;
 		case IP_VS_SO_SET_ADDLADDR:
@@ -220,6 +220,17 @@ ipvs_talk(int cmd,
 			result = ipvs_del_tunnel(tunnel_rule);
 			break;
 	}
+
+	if (result) {//EDPVS_MSG_FAIL just ignore set failed
+                if ((result == EDPVS_EXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
+                        && (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_ADDDEST))
+                        ignore_error = true;
+                else if ((result == EDPVS_NOTEXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
+                        && (cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST))
+                        ignore_error = true;
+                log_message(LOG_INFO, "IPVS: %s", ipvs_strerror(errno));
+        }
+
 
 	if (ignore_error)
 		result = 0;
@@ -407,7 +418,6 @@ ipvs_group_cmd(int cmd, ipvs_service_t *srule, ipvs_dest_t *drule, virtual_serve
 	LIST_FOREACH(vsg->addr_range, vsg_entry, e) {
 		if (ipvs_change_needed(cmd, vsg_entry, vs, rs)) {
 			srule->user.port = inet_sockaddrport(&vsg_entry->addr);
-
 			if (vsg_entry->range) {
 				if (ipvs_group_range_cmd(cmd, srule, drule, vsg_entry))
 					return -1;

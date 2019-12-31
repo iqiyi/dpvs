@@ -40,10 +40,12 @@
 #define OPT_SYNPROXY		0x2000000
 #define OPT_IFNAME		0x4000000
 #define OPT_SOCKPAIR		0x8000000
-#define OPT_SIPHASH		0x10000000
-#define OPT_QIDHASH		0x20000000
-#define OPT_HASHTAG		0x40000000
-#define NUMBER_OF_OPT		31
+#define OPT_HASHTAG		0x10000000
+#define NUMBER_OF_OPT		30 //opt cid is not defined above
+
+#define MINIMUM_IPVS_VERSION_MAJOR      1
+#define MINIMUM_IPVS_VERSION_MINOR      1
+#define MINIMUM_IPVS_VERSION_PATCH      4
 
 
 /*
@@ -74,15 +76,13 @@ typedef struct ip_vs_blklst_entry       ipvs_blklst_entry_t;
 
 
 /* init socket and get ipvs info */
-extern int ipvs_init(void);
+extern int ipvs_init(lcoreid_t cid);
 
 /* Set timeout parameters */
 extern int ipvs_set_timeout(ipvs_timeout_t *to);
 
 /* flush all the rules */
 extern int ipvs_flush(void);
-
-extern struct ip_vs_get_services_app *ipvs_get_services(void);
 
 /* add a virtual service */
 extern int ipvs_add_service(ipvs_service_t *svc);
@@ -115,7 +115,7 @@ extern struct ip_vs_conn_array* ip_vs_get_conns(const struct ip_vs_conn_req *req
 
 extern int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
 extern int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
-extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc);
+extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t cid);
 
 /*for add/delete a blacklist ip*/
 extern int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
@@ -131,11 +131,14 @@ extern int ipvs_start_daemon(ipvs_daemon_t *dm);
 /* stop a connection synchronizaiton daemon (master/backup) */
 extern int ipvs_stop_daemon(ipvs_daemon_t *dm);
 
+/* get all the ipvs services */
+extern struct ip_vs_get_services *ipvs_get_services(lcoreid_t);
+
 /* get the destination array of the specified service */
-extern struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc);
+extern struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t cid);
+
 /* get an ipvs service entry */
-extern ipvs_service_entry_t *
-ipvs_get_service(struct ip_vs_service_app *hint);
+extern ipvs_service_entry_t *ipvs_get_service(struct ip_vs_service_app *hint, lcoreid_t cid);
 
 /* get ipvs timeout */
 extern ipvs_timeout_t *ipvs_get_timeout(void);

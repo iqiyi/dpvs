@@ -287,6 +287,7 @@ static int rt6_add_lcore_default(const struct dp_vs_route6_conf *rt6_cfg)
 
     /* 'rt6_cfg' has been verified by 'rt6_default' */
     rt6_fill_with_cfg(entry, rt6_cfg);
+    INIT_LIST_HEAD(&entry->hnode);
     rte_atomic32_set(&entry->refcnt, 1);
     this_rt6_default = entry;
 

@@ -19,6 +19,8 @@
 #include <sys/stat.h>
 #include "global_conf.h"
 
+extern bool g_dpvs_log_async_mode;
+
 static void log_current_time(void)
 {
     time_t t = time(0);
@@ -101,12 +103,28 @@ static void log_file_handler(vector_t tokens)
     FREE_PTR(log_file);
 }
 
+static void log_async_mode_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    assert(str);
+    if (strcasecmp(str, "on") == 0)
+        g_dpvs_log_async_mode = true;
+    else if (strcasecmp(str, "off") == 0)
+        g_dpvs_log_async_mode = false;
+    else
+        RTE_LOG(WARNING, CFG_FILE, "invalid log async mode %s\n", str);
+
+    RTE_LOG(INFO, CFG_FILE, "log async mode = %s\n", g_dpvs_log_async_mode ? "on" : "off");
+
+    FREE_PTR(str);
+}
+
 void install_global_keywords(void)
 {
     install_keyword_root("global_defs", NULL);
     install_keyword("log_level", log_level_handler, KW_TYPE_NORMAL);
     install_keyword("log_file", log_file_handler, KW_TYPE_NORMAL);
-
+    install_keyword("log_async_mode", log_async_mode_handler, KW_TYPE_INIT);
 }
 
 int global_conf_init(void)

@@ -524,6 +524,7 @@ alloc_vs(const char *param1, const char *param2)
 	new->blklst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;
 	new->hash_target = 0;
+	new->af = 0;
 	new->bps = 0;
 	new->limit_proportion = 100;
 	memset(new->srange, 0, 256);

@@ -59,7 +59,7 @@ struct dp_vs_dest {
     rte_atomic16_t      weight;     /* server weight */
 
     rte_atomic32_t      refcnt;     /* reference counter */
-    struct dp_vs_stats  *stats;     /* Use per-cpu statistics for destination server */
+    struct dp_vs_stats  stats;      /* Use per-cpu statistics for destination server */
 
     enum dpvs_fwd_mode  fwdmode;
 
@@ -126,6 +126,8 @@ struct dp_vs_get_dests {
     /* number of real servers */
     unsigned int num_dests;
 
+    lcoreid_t        cid;
+
     char        srange[256];
     char        drange[256];
     char        iifname[IFNAMSIZ];
@@ -181,24 +183,18 @@ int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
 struct dp_vs_dest *dp_vs_lookup_dest(int af, struct dp_vs_service *svc,
                                      const union inet_addr *daddr, uint16_t dport);
 
-struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
-                                        const union inet_addr *daddr, uint16_t dport);
-
-void dp_vs_trash_cleanup(void);
-
 int dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
 int dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
-void __dp_vs_unlink_dest(struct dp_vs_service *svc,
+void dp_vs_unlink_dest(struct dp_vs_service *svc,
                         struct dp_vs_dest *dest, int svcupd);
 
-void __dp_vs_del_dest(struct dp_vs_dest *dest);
+void dp_vs_dest_put(struct dp_vs_dest *dest);
 
 int dp_vs_del_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
 int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
-                           const struct dp_vs_get_dests *get,
                            struct dp_vs_get_dests *uptr);
 
 int dp_vs_dest_init(void);

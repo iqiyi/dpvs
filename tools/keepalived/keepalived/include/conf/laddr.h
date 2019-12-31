@@ -52,6 +52,7 @@ struct dp_vs_laddr_conf {
     char                drange[256];
     char                iifname[IFNAMSIZ];
     char                oifname[IFNAMSIZ];
+    lcoreid_t           cid;
 
     /* for set */
     int                 af_l;

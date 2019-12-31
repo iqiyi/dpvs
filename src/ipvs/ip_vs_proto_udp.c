@@ -160,8 +160,8 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
     }
 
     /* lookup service <vip:vport> */
-    svc = dp_vs_service_lookup(iph->af, iph->proto,
-                               &iph->daddr, uh->dst_port, 0, mbuf, NULL, &outwall);
+    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, 
+                     uh->dst_port, 0, mbuf, NULL, &outwall, rte_lcore_id());
     if (!svc) {
         *verdict = INET_ACCEPT;
         return EDPVS_NOSERV;
@@ -170,7 +170,6 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
     /* schedule RS and create new connection */
     *conn = dp_vs_schedule(svc, iph, mbuf, false, outwall);
     if (!*conn) {
-        dp_vs_service_put(svc);
         *verdict = INET_DROP;
         return EDPVS_RESOURCE;
     }
@@ -190,7 +189,6 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
         }
     }
 
-    dp_vs_service_put(svc);
     return EDPVS_OK;
 }
 
@@ -282,6 +280,7 @@ static int send_standalone_uoa(const struct dp_vs_conn *conn,
     mbuf = rte_pktmbuf_alloc(ombuf->pool);
     if (unlikely(!mbuf))
         return EDPVS_NOMEM;
+    mbuf->userdata = NULL;
 
     int ipolen_uoa = (AF_INET6 == iaf) ? IPOLEN_UOA_IPV6 : IPOLEN_UOA_IPV4;
 

@@ -152,9 +152,11 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         exit(1);
     }
 
-    if (strcmp(argv[1], "add") == 0)
+    if (strcmp(argv[1], "add") == 0 ||
+            strcmp(argv[1], "enable") == 0)
         conf->cmd = DPIP_CMD_ADD;
-    else if (strcmp(argv[1], "del") == 0)
+    else if (strcmp(argv[1], "del") == 0 ||
+            strcmp(argv[1], "disable") == 0)
         conf->cmd = DPIP_CMD_DEL;
     else if (strcmp(argv[1], "set") == 0 ||
              strcmp(argv[1], "change") == 0)

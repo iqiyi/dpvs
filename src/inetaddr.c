@@ -396,10 +396,11 @@ static int inet_ifaddr_dad_completed(void *arg)
     struct inet_ifaddr *ifa = arg;
 
     rte_rwlock_write_lock(&in_addr_lock);
+    dpvs_timer_cancel_nolock(&ifa->timer, true);
     ifa->flags &= ~(IFA_F_TENTATIVE|IFA_F_OPTIMISTIC|IFA_F_DADFAILED);
     rte_rwlock_write_unlock(&in_addr_lock);
 
-    return DTIMER_STOP;
+    return DTIMER_OK;
 }
 
 /* change timer callback, refer to 'addrconf_mod_timer' */
@@ -531,7 +532,7 @@ static int ifa_expire(void *arg)
         RTE_LOG(WARNING, IFA, "%s: addr in use, try expire later\n", __func__);
         tv.tv_sec = 5;
         tv.tv_usec = 0;
-        dpvs_timer_update(&ifa->timer, &tv, true);
+        dpvs_timer_update_nolock(&ifa->timer, &tv, true);
         rte_rwlock_write_unlock(&in_addr_lock);
         return DTIMER_OK;
     }
@@ -541,7 +542,7 @@ static int ifa_expire(void *arg)
     INIT_LIST_HEAD(&ifa->d_list);
     INIT_LIST_HEAD(&ifa->h_list);
 
-    dpvs_timer_cancel(&ifa->timer, true);
+    dpvs_timer_cancel_nolock(&ifa->timer, true);
     if (ifa->flags & IFA_F_SAPOOL)
         sa_pool_destroy(ifa);
     ifa_add_del_mcast(ifa, false);

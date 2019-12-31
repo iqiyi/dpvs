@@ -20,27 +20,31 @@ static void sys_time_to_str(time_t* ts, char* time_str, int str_len)
             tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
 }
 
-char* cycles_to_stime(uint64_t cycles)
+char* cycles_to_stime(uint64_t cycles, char* stime, int len)
 {
     time_t ts;
-    static char time_str[SYS_TIME_STR_LEN];
 
-    memset(time_str, 0, SYS_TIME_STR_LEN);
+    if (stime == NULL)
+        return NULL;
+
+    memset(stime, 0, len);
     ts = (cycles - g_start_cycles) / rte_get_timer_hz();
     ts += g_dpvs_timer;
-    sys_time_to_str(&ts, time_str, SYS_TIME_STR_LEN);
+    sys_time_to_str(&ts, stime, len);
 
-    return time_str;
+    return stime;
 }
 
-char* sys_localtime_str(void)
+char* sys_localtime_str(char* stime, int len)
 {
-    static char stime[SYS_TIME_STR_LEN];
     time_t now;
 
-    memset(stime, 0, SYS_TIME_STR_LEN);
+    if (stime == NULL)
+        return NULL;
+
+    memset(stime, 0, len);
     now = sys_current_time();
-    sys_time_to_str(&now, stime, SYS_TIME_STR_LEN);
+    sys_time_to_str(&now, stime, len);
 
     return stime;
 }
@@ -60,7 +64,7 @@ void sys_start_time(void)
 
     time(&g_dpvs_timer);
     gettimeofday(&tv, &tz);
-    g_dpvs_timer += tz.tz_minuteswest*60;
+    g_dpvs_timer -= tz.tz_minuteswest*60;
 
     g_start_cycles = rte_rdtsc();
 

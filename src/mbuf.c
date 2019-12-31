@@ -107,6 +107,7 @@ void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m)
     mi->nb_segs = 1;
     mi->ol_flags = m->ol_flags & (~IND_ATTACHED_MBUF);
     mi->packet_type = m->packet_type;
+    mi->userdata = NULL;
 
     __rte_mbuf_sanity_check(mi, 1);
     __rte_mbuf_sanity_check(m, 0);
@@ -150,6 +151,7 @@ struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp)
 #ifdef CONFIG_DPVS_MBUF_DEBUG
 inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf)
 {
+    char stime[SYS_TIME_STR_LEN];
     char sbuf[64], dbuf[64];
     struct ipv4_hdr *iph;
     union inet_addr saddr, daddr;
@@ -166,7 +168,7 @@ inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf
         return;
 
     RTE_LOG(DEBUG, MBUF, "[%s]%s: %s "
-        "%s %s:%u to %s:%u\n", sys_localtime_str(),
+        "%s %s:%u to %s:%u\n", sys_localtime_str(stime, SYS_TIME_STR_LEN),
         __func__, msg ? msg : "", inet_proto_name(iph->next_proto_id),
         inet_ntop(af, &saddr, sbuf, sizeof(sbuf)),
         ntohs(ports[0]),

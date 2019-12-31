@@ -128,6 +128,7 @@ struct dp_vs_service_entry {
 
     unsigned int        num_dests;
     unsigned int        num_laddrs;
+    lcoreid_t           cid;
 
     struct dp_vs_stats  stats;
 
@@ -138,6 +139,7 @@ struct dp_vs_service_entry {
 };
 
 struct dp_vs_get_services {
+    lcoreid_t     cid;
     unsigned int        num_services;
     struct dp_vs_service_entry entrytable[0];
 };
@@ -241,6 +243,7 @@ enum{
     DPVS_SO_GET_DESTS,
 };
 
+#endif
 
 #define SOCKOPT_SVC_BASE         DPVS_SO_SET_FLUSH
 #define SOCKOPT_SVC_SET_CMD_MAX  DPVS_SO_SET_GRATARP
@@ -250,6 +253,5 @@ enum{
                          sizeof(struct dp_vs_dest_user))
 
 #define DPVS_WAIT_WHILE(expr) while(expr){;}
-#endif
 
 #endif /* __DPVS_SVC_H__ */

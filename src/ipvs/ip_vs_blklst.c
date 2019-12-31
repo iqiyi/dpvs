@@ -145,7 +145,7 @@ static int dp_vs_blklst_add(uint8_t proto, const union inet_addr *vaddr,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
     if (!msg)
         return EDPVS_NOMEM;
-    err = multicast_msg_send(msg, 0, NULL);
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK) {
         msg_destroy(&msg);
         RTE_LOG(INFO, SERVICE, "[%s] fail to send multicast message\n", __func__);
@@ -187,7 +187,7 @@ static int dp_vs_blklst_del(uint8_t proto, const union inet_addr *vaddr,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
     if (!msg)
         return EDPVS_NOMEM;
-    err = multicast_msg_send(msg, 0, NULL);
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK) {
         RTE_LOG(INFO, SERVICE, "[%s] fail to send multicast message\n", __func__);
         return err;
@@ -388,6 +388,7 @@ int dp_vs_blklst_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_BLKLST_ADD;
     msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = blklst_add_msg_cb;
     err = msg_type_mc_register(&msg_type);
@@ -399,6 +400,7 @@ int dp_vs_blklst_init(void)
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_BLKLST_DEL;
     msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = blklst_del_msg_cb;
     err = msg_type_mc_register(&msg_type);

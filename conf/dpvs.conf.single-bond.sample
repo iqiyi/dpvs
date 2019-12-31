@@ -14,6 +14,7 @@
 global_defs {
     log_level   WARNING
     ! log_file    /var/log/dpvs.log
+    ! log_async_mode    on
 }
 
 ! netif config
@@ -194,7 +195,7 @@ ipv6_defs {
     disable                     off
     forwarding                  off
     route6 {
-        <init> method           "hlist"
+        <init> method           hlist
         recycle_time            10
     }
 }
@@ -203,8 +204,8 @@ ipv6_defs {
 ctrl_defs {
     lcore_msg {
         <init> ring_size                4096
-        <init> multicast_queue_length   256
         sync_msg_timeout_us             20000
+        priority_level                  low
     }
     ipc_msg {
         <init> unix_domain /var/run/dpvs_ctrl
@@ -224,6 +225,8 @@ ipvs_defs {
 
     udp {
         ! defence_udp_drop
+        uoa_mode        opp
+        uoa_max_trail   3
         timeout {
             normal      300
             last        3

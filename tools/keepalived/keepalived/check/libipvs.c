@@ -53,6 +53,7 @@
 #include "old_socket.h"
 #endif
 #include "logger.h"
+#include "ip_vs.h"
 
 typedef int (*qsort_cmp_t)(const void *, const void *);
 typedef struct ipvs_servicedest_s {
@@ -267,7 +268,7 @@ typedef struct dp_vs_service_entry_app {
 void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t *user);
 struct ip_vs_getinfo g_ipvs_info;
 
-int ipvs_init(void)
+int ipvs_init(lcoreid_t cid)
 {
 	//socklen_t len, len_rcv;
 	size_t len, len_rcv;
@@ -327,7 +328,7 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 	ipvs_service_entry_t *entry;
 	ipvs_service_t app;
 
-	if (!(entry = ipvs_get_service(svc))) {
+	if (!(entry = ipvs_get_service(svc, 0))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		exit(1);
 	}
@@ -365,15 +366,15 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 		app.user.flags |= IP_VS_SVC_F_ONEPACKET;
 	}
 
-	if( options & OPT_SIPHASH ) {
-		app.user.flags |= IP_VS_SVC_F_SIP_HASH;
-		app.user.flags &= ~IP_VS_SVC_F_QID_HASH;
-	}
-
-	if( options & OPT_QIDHASH ) {
-		app.user.flags |= IP_VS_SVC_F_QID_HASH;
-		app.user.flags &= ~IP_VS_SVC_F_SIP_HASH;
-	}
+	if( options & OPT_HASHTAG ) {
+                if ( svc->user.flags & IP_VS_SVC_F_SIP_HASH ) {
+                        app.user.flags |= IP_VS_SVC_F_SIP_HASH;
+                } else if ( svc->user.flags & IP_VS_SVC_F_QID_HASH ) {
+                        app.user.flags |= IP_VS_SVC_F_QID_HASH;
+                } else {
+                        app.user.flags |= IP_VS_SVC_F_SIP_HASH;
+                }
+        }
 
 	return ipvs_update_service(&app);
 }
@@ -382,7 +383,7 @@ int ipvs_update_service_synproxy(ipvs_service_t *svc , int enable)
 {
 	ipvs_service_entry_t *entry;
 
-	if (!(entry = ipvs_get_service(svc))) {
+	if (!(entry = ipvs_get_service(svc, 0))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		exit(1);
 	}
@@ -624,7 +625,18 @@ int ipvs_stop_daemon(ipvs_daemon_t *dm)
 			  (char *)&dm, sizeof(dm));
 }
 
-struct ip_vs_get_services_app *ipvs_get_services(void)
+static inline sockoptid_t  cpu2opt_svc(lcoreid_t cid, sockoptid_t old_opt)
+{
+	return old_opt + cid * (SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
+}
+
+/* now support get_all only */
+static inline sockoptid_t cpu2opt_laddr(lcoreid_t cid, sockoptid_t old_opt)
+{
+	return old_opt + cid;
+}
+
+struct ip_vs_get_services *ipvs_get_services(lcoreid_t cid)
 {
 	struct ip_vs_get_services_app *get;
 	struct ip_vs_service_entry_app *ipvs_entry;
@@ -644,8 +656,8 @@ struct ip_vs_get_services_app *ipvs_get_services(void)
 		return NULL;
 	}
 	dpvs_get->num_services = g_ipvs_info.num_services;
-	
-	if (dpvs_getsockopt(DPVS_SO_GET_SERVICES, dpvs_get, len, (void **)&dpvs_get_rcv, &len_rcv) < 0) {
+	dpvs_get->cid = cid;
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICES), dpvs_get, len, (void **)&dpvs_get_rcv, &len_rcv)) {
 		free(get);
 		free(dpvs_get);
 		return NULL;
@@ -671,7 +683,7 @@ struct ip_vs_get_services_app *ipvs_get_services(void)
 #ifdef _WITH_SNMP_CHECKER_
 #endif	/* _WITH_SNMP_CHECKER_ */
 
-struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc)
+struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t cid)
 {
 	struct ip_vs_get_dests_app *d;
 	struct dp_vs_get_dests *dpvs_dests, *dpvs_dests_rcv;
@@ -697,12 +709,13 @@ struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc)
 	memcpy(&dpvs_dests->addr, &svc->nf_addr, sizeof(svc->nf_addr));
 	dpvs_dests->port = svc->user.port;
 	dpvs_dests->num_dests = svc->user.num_dests;
+	dpvs_dests->cid = cid;
 	snprintf(dpvs_dests->srange, sizeof(dpvs_dests->srange), "%s", svc->user.srange);
 	snprintf(dpvs_dests->drange, sizeof(dpvs_dests->drange), "%s", svc->user.drange);
 	snprintf(dpvs_dests->iifname, sizeof(dpvs_dests->iifname), "%s", svc->user.iifname);
 	snprintf(dpvs_dests->oifname, sizeof(dpvs_dests->oifname), "%s", svc->user.oifname);
 
-	if (dpvs_getsockopt(DPVS_SO_GET_DESTS, dpvs_dests, len, (void **)&dpvs_dests_rcv, &len_rcv) < 0) {
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_DESTS), dpvs_dests, len, (void **)&dpvs_dests_rcv, &len_rcv) < 0) {
 		free(d);
 		free(dpvs_dests);
 		return NULL;
@@ -735,7 +748,7 @@ struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc)
 
 
 ipvs_service_entry_t *
-ipvs_get_service(ipvs_service_t *hint)
+ipvs_get_service(ipvs_service_t *hint, lcoreid_t cid)
 {
 	ipvs_service_entry_t *svc;
 	size_t len, len_rcv;
@@ -758,8 +771,9 @@ ipvs_get_service(ipvs_service_t *hint)
 	memset(dpvs_app_ptr, 0, sizeof(dpvs_app));
 	IPVS_2_DPVS(dpvs_app_ptr, hint);
 	memcpy(&dpvs_svc, dpvs_app_ptr, sizeof(dpvs_app));
+	dpvs_svc.user.cid = cid;
 
-	if (dpvs_getsockopt(DPVS_SO_GET_SERVICE, 
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICE), 
 		&dpvs_svc, 
 		len, 
 		(void **)&dpvs_svc_rcv, 
@@ -972,7 +986,7 @@ struct ip_vs_conn_array* ip_vs_get_conns(const struct ip_vs_conn_req *req)
     return conn_arr;
 }
 
-struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
+struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t cid)
 {
 	struct ip_vs_get_laddrs *laddrs;
 	struct dp_vs_laddr_conf conf, *result;
@@ -988,13 +1002,14 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc)
 		conf.vaddr.in6 = svc->nf_addr.in6;
 	conf.vport = svc->user.port;
 	conf.fwmark = svc->user.fwmark;
+	conf.cid = cid;
 
 	snprintf(conf.srange, sizeof(conf.srange), "%s", svc->user.srange);
 	snprintf(conf.drange, sizeof(conf.drange), "%s", svc->user.drange);
 	snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->user.iifname);
 	snprintf(conf.iifname, sizeof(conf.oifname), "%s", svc->user.oifname);
 
-	if (dpvs_getsockopt(SOCKOPT_GET_LADDR_GETALL, &conf, sizeof(conf),
+	if (dpvs_getsockopt(cpu2opt_laddr(cid, SOCKOPT_GET_LADDR_GETALL), &conf, sizeof(conf),
 				(void **)&result, &res_size) != 0)
 		return NULL;
 
@@ -1056,6 +1071,11 @@ struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
 	}
 	dpvs_sockopt_msg_free(result);
 	return array;
+}
+
+void ipvs_free_service(ipvs_service_entry_t* p)
+{
+	free(p);
 }
 
 const char *ipvs_strerror(int err)

@@ -211,6 +211,7 @@ static struct rte_mbuf *ndisc_build_mbuf(struct netif_port *dev,
         RTE_LOG(ERR, NEIGHBOUR, "mbuf_pool alloc failed\n");
         return NULL;
     }
+    mbuf->userdata = NULL;
 
     icmp6hdr = (struct icmp6_hdr *)rte_pktmbuf_append(mbuf, sizeof(*icmp6h));
     rte_memcpy(icmp6hdr, icmp6h, sizeof(*icmp6h));
@@ -472,6 +473,7 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     uint32_t ndoptlen = mbuf->data_len - offsetof(struct nd_msg, opt);
 
 #ifdef CONFIG_NDISC_DEBUG
+    struct in6_addr *saddr = &((struct ip6_hdr *)mbuf->userdata)->ip6_src;
     ndisc_show_addr(__func__, saddr, daddr);
 #endif
 

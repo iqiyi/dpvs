@@ -127,6 +127,8 @@ struct dp_vs_get_dests {
     /* number of real servers */
     unsigned int num_dests;
 
+    lcoreid_t        cid;
+
     char        srange[256];
     char        drange[256];
     char        iifname[IFNAMSIZ];

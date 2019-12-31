@@ -349,8 +349,10 @@ static int tunnel_xmit(struct rte_mbuf *mbuf, __be32 src, __be32 dst,
     struct iphdr *oiph; /* outter IP header */
 
     oiph = (struct iphdr *)rte_pktmbuf_prepend(mbuf, sizeof(*oiph));
-    if (!oiph)
+    if (!oiph) {
+        rte_pktmbuf_free(mbuf);
         return EDPVS_NOROOM;
+    }
 
     oiph->version   = 4;
     oiph->ihl       = sizeof(struct iphdr) >> 2;

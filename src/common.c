@@ -27,6 +27,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <net/ethernet.h>
+#include <execinfo.h>
 #include "common.h"
 
 struct dpvs_err_tab {
@@ -147,8 +148,14 @@ int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN])
     memcpy(ifr.ifr_hwaddr.sa_data, mac, ETH_ALEN);
 
     if (ioctl(sock_fd, SIOCSIFHWADDR, &ifr)) {
+        /* DPDK 18.11, 'kni_net_process_request' is called when updating
+         * device's mac address, in which 'wait_event_interruptible_timeout'
+         * is used to wait for setting results, which may easily get timeout and
+         * return fail. We ignore the error here and return OK nevertheless.*/
+        fprintf(stderr, "%s: fail to set %s's MAC address: %s\n",
+                __func__, ifname, strerror(errno));
         close(sock_fd);
-        return EDPVS_SYSCALL;
+        return EDPVS_OK;
     }
 
     close(sock_fd);
@@ -173,11 +180,12 @@ static int linux_hw_mc_mod(const char *ifname,
         fprintf(stderr, "%s: fail to set link mcast to %s: %s\n",
                 __func__, ifname, strerror(errno));
         close(fd);
-        return EDPVS_SYSCALL;
+        /* Ignore the error because 'kni_net_process_request' may get timeout. */
+        return EDPVS_OK;
     }
 
     close(fd);
-    return 0;
+    return EDPVS_OK;
 }
 
 int linux_hw_mc_add(const char *ifname, const uint8_t hwma[ETH_ALEN])
@@ -262,4 +270,32 @@ ssize_t sendn(int fd, const void *vptr, size_t n, int flags)
     }
 
     return (n);
+}
+
+/* get backtrace for the calling program */
+#define TRACE_STACK_DEPTH_MAX   128
+int dpvs_backtrace(char *buf, int len)
+{
+    int ii, depth, slen;
+    char **trace;
+    void *btbuf[TRACE_STACK_DEPTH_MAX] = { NULL };
+
+    if (len <= 0)
+        return 0;
+    buf[0] = '\0';
+
+    depth = backtrace(btbuf, TRACE_STACK_DEPTH_MAX);
+    trace = backtrace_symbols(btbuf, depth);
+    if (!trace)
+        return 0;
+
+    for (ii = 0; ii < depth; ++ii) {
+        slen = strlen(buf);
+        if (slen + 1 >= len)
+            break;
+        snprintf(buf+slen, len-slen-1, "[%02d] %s\n", ii, trace[ii]);
+    }
+    free(trace);
+
+    return strlen(buf);
 }
