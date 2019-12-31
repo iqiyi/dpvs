@@ -626,7 +626,7 @@ out:
     return ret;
 }
 
-static void __dp_vs_del_service(struct dp_vs_service *svc)
+static void __dp_vs_service_del(struct dp_vs_service *svc)
 {
     struct dp_vs_dest *dest, *nxt;
 
@@ -644,7 +644,7 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
      *    Unlink the whole destination list
      */
     list_for_each_entry_safe(dest, nxt, &svc->dests, n_list) {
-        dp_vs_unlink_dest(svc, dest, 0);
+        dp_vs_dest_unlink(svc, dest, 0);
         dp_vs_dest_put(dest);
     }
 
@@ -654,7 +654,7 @@ static void __dp_vs_del_service(struct dp_vs_service *svc)
     dp_vs_svc_put(svc);
 }
 
-static int dp_vs_del_service(struct dp_vs_service *svc)
+static int dp_vs_service_del(struct dp_vs_service *svc)
 {
     if (svc == NULL)
         return EDPVS_NOTEXIST;
@@ -667,7 +667,7 @@ static int dp_vs_del_service(struct dp_vs_service *svc)
     /*
      * Wait until all the svc users go away.
      */
-    __dp_vs_del_service(svc);
+    __dp_vs_service_del(svc);
 
     return EDPVS_OK;
 }
@@ -778,7 +778,7 @@ static int dp_vs_flush(lcoreid_t cid)
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         list_for_each_entry_safe(svc, nxt, &dp_vs_svc_table[cid][idx],
                      s_list) {
-            dp_vs_del_service(svc);
+            dp_vs_service_del(svc);
         }
     }
 
@@ -788,13 +788,13 @@ static int dp_vs_flush(lcoreid_t cid)
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         list_for_each_entry_safe(svc, nxt,
                      &dp_vs_svc_fwm_table[cid][idx], f_list) {
-            dp_vs_del_service(svc);
+            dp_vs_service_del(svc);
         }
     }
 
     list_for_each_entry_safe(svc, nxt,
                     &dp_vs_svc_match_list[cid], m_list) {
-            dp_vs_del_service(svc);
+            dp_vs_service_del(svc);
     }
 
     return EDPVS_OK;
@@ -998,22 +998,22 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
             ret = dp_vs_edit_service(svc, &usvc);
             break;
         case DPVS_SO_SET_DEL:
-            ret = dp_vs_del_service(svc);
+            ret = dp_vs_service_del(svc);
             break;
         case DPVS_SO_SET_ZERO:
             ret = dp_vs_zero_service(svc);
             break;
         case DPVS_SO_SET_ADDDEST:
             dp_vs_copy_udest_compat(&udest, udest_compat);
-            ret = dp_vs_add_dest(svc, &udest);
+            ret = dp_vs_dest_add(svc, &udest);
             break;
         case DPVS_SO_SET_EDITDEST:
             dp_vs_copy_udest_compat(&udest, udest_compat);
-            ret = dp_vs_edit_dest(svc, &udest);
+            ret = dp_vs_dest_edit(svc, &udest);
             break;
         case DPVS_SO_SET_DELDEST:
             dp_vs_copy_udest_compat(&udest, udest_compat);
-            ret = dp_vs_del_dest(svc, &udest);
+            ret = dp_vs_dest_del(svc, &udest);
             break;
         default:
             ret = EDPVS_INVAL;
@@ -1153,7 +1153,7 @@ static int dp_vs_get_service_uc_cb(struct dpvs_msg *msg)
     return EDPVS_OK;
 }
 
-static int dp_vs_get_dests_uc_cb(struct dpvs_msg *msg)
+static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
 {
     lcoreid_t cid = rte_lcore_id();
     int ret;
@@ -1187,7 +1187,7 @@ static int dp_vs_get_dests_uc_cb(struct dpvs_msg *msg)
     if (output == NULL)
         return EDPVS_NOMEM;
     rte_memcpy(output, get, sizeof(*get));
-    ret = dp_vs_get_dest_entries(svc, output);
+    ret = dp_vs_dest_get_entries(svc, output);
     if (ret != EDPVS_OK) {
         msg_reply_free(output);
         return ret;
@@ -1445,7 +1445,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                         return EDPVS_NOMEM;
                     }
                     rte_memcpy(output, get, sizeof(get));
-                    ret = dp_vs_get_dest_entries(svc, output);
+                    ret = dp_vs_dest_get_entries(svc, output);
                     if (ret != EDPVS_OK) {
                         msg_destroy(&msg);
                         rte_free(output);
@@ -1684,7 +1684,7 @@ int dp_vs_service_init(void)
     msg_type.mode   = DPVS_MSG_MULTICAST;
     msg_type.prio   = MSG_PRIO_LOW;
     msg_type.cid    = rte_lcore_id();
-    msg_type.unicast_msg_cb = dp_vs_get_dests_uc_cb;
+    msg_type.unicast_msg_cb = dp_vs_dests_get_uc_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
          RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);

@@ -31,7 +31,7 @@
 
 struct list_head dp_vs_dest_trash = LIST_HEAD_INIT(dp_vs_dest_trash);
 
-struct dp_vs_dest *dp_vs_lookup_dest(int af,
+struct dp_vs_dest *dp_vs_dest_lookup(int af,
                                      struct dp_vs_service *svc,
                                      const union inet_addr *daddr,
                                      uint16_t dport)
@@ -47,7 +47,7 @@ struct dp_vs_dest *dp_vs_lookup_dest(int af,
     return NULL;
 }
 
-static void __dp_vs_update_dest(struct dp_vs_service *svc,
+static void __dp_vs_dest_update(struct dp_vs_service *svc,
                                 struct dp_vs_dest *dest,
                                 struct dp_vs_dest_conf *udest)
 {
@@ -67,7 +67,7 @@ static void __dp_vs_update_dest(struct dp_vs_service *svc,
 }
 
 
-int dp_vs_new_dest(struct dp_vs_service *svc,
+int dp_vs_dest_new(struct dp_vs_service *svc,
                    struct dp_vs_dest_conf *udest,
                    struct dp_vs_dest **dest_p)
 {
@@ -97,14 +97,14 @@ int dp_vs_new_dest(struct dp_vs_service *svc,
     rte_atomic32_set(&dest->refcnt, 1);
     dp_vs_bind_svc(dest, svc);
 
-    __dp_vs_update_dest(svc, dest, udest);
+    __dp_vs_dest_update(svc, dest, udest);
 
     *dest_p = dest;
     return EDPVS_OK;
 }
 
 int
-dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
+dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 {
     struct dp_vs_dest *dest;
     union inet_addr daddr;
@@ -127,7 +127,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      * Check if the dest already exists in the list
      */
-    dest = dp_vs_lookup_dest(udest->af, svc, &daddr, dport);
+    dest = dp_vs_dest_lookup(udest->af, svc, &daddr, dport);
 
     if (dest != NULL) {
         RTE_LOG(DEBUG, SERVICE, "%s: dest already exists.\n", __func__);
@@ -137,7 +137,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      * Allocate and initialize the dest structure
      */
-    ret = dp_vs_new_dest(svc, udest, &dest);
+    ret = dp_vs_dest_new(svc, udest, &dest);
     if (ret) {
         return ret;
     }
@@ -154,7 +154,7 @@ dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 }
 
 int
-dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
+dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 {
     struct dp_vs_dest *dest;
     union inet_addr daddr;
@@ -177,7 +177,7 @@ dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      *  Lookup the destination list
      */
-    dest = dp_vs_lookup_dest(udest->af, svc, &daddr, dport);
+    dest = dp_vs_dest_lookup(udest->af, svc, &daddr, dport);
 
     if (dest == NULL) {
         RTE_LOG(DEBUG, SERVICE,"%s(): dest doesn't exist\n", __func__);
@@ -187,7 +187,7 @@ dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /* Save old weight */
     old_weight = rte_atomic16_read(&dest->weight);
 
-    __dp_vs_update_dest(svc, dest, udest);
+    __dp_vs_dest_update(svc, dest, udest);
 
     /* Update service weight */
     svc->weight = svc->weight - old_weight + udest->weight;
@@ -221,7 +221,7 @@ void dp_vs_dest_put(struct dp_vs_dest *dest)
 /*
  *  Unlink a destination from the given service
  */
-void dp_vs_unlink_dest(struct dp_vs_service *svc,
+void dp_vs_dest_unlink(struct dp_vs_service *svc,
                 struct dp_vs_dest *dest, int svcupd)
 {
     dest->flags &= ~DPVS_DEST_F_AVAILABLE;
@@ -250,12 +250,12 @@ void dp_vs_unlink_dest(struct dp_vs_service *svc,
 }
 
 int
-dp_vs_del_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
+dp_vs_dest_del(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 {
     struct dp_vs_dest *dest;
     uint16_t dport = udest->port;
 
-    dest = dp_vs_lookup_dest(udest->af, svc, &udest->addr, dport);
+    dest = dp_vs_dest_lookup(udest->af, svc, &udest->addr, dport);
 
     if (dest == NULL) {
         RTE_LOG(DEBUG, SERVICE,"%s(): destination not found!\n", __func__);
@@ -265,7 +265,7 @@ dp_vs_del_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      *      Unlink dest from the service
      */
-    dp_vs_unlink_dest(svc, dest, 1);
+    dp_vs_dest_unlink(svc, dest, 1);
 
     /*
      *      Delete the destination
@@ -275,7 +275,7 @@ dp_vs_del_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     return EDPVS_OK;
 }
 
-int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
+int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
                            struct dp_vs_get_dests *uptr)
 {
     int ret = 0;
