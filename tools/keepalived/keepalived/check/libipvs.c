@@ -636,7 +636,7 @@ static inline sockoptid_t cpu2opt_laddr(lcoreid_t cid, sockoptid_t old_opt)
 	return old_opt + cid;
 }
 
-struct ip_vs_get_services *ipvs_get_services(lcoreid_t cid)
+struct ip_vs_get_services_app *ipvs_get_services(lcoreid_t cid)
 {
 	struct ip_vs_get_services_app *get;
 	struct ip_vs_service_entry_app *ipvs_entry;

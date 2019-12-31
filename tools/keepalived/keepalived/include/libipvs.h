@@ -132,7 +132,7 @@ extern int ipvs_start_daemon(ipvs_daemon_t *dm);
 extern int ipvs_stop_daemon(ipvs_daemon_t *dm);
 
 /* get all the ipvs services */
-extern struct ip_vs_get_services *ipvs_get_services(lcoreid_t);
+extern struct ip_vs_get_services_app *ipvs_get_services(lcoreid_t);
 
 /* get the destination array of the specified service */
 extern struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t cid);

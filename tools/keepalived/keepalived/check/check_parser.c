@@ -1049,7 +1049,7 @@ iif_handler(const vector_t *strvec)
 }
 
 static void
-af_handler(vector_t *strvec)
+af_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	char *str = vector_slot(strvec, 1);

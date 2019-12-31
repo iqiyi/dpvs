@@ -1833,7 +1833,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 		if (format & FMT_RULE) {
 			snprintf(svc_name, sizeof(svc_name),
 			"-H af=%s, proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
-			proto, se->user.srange, se->user.drange, se->user.iifname, se->user.oifname);
+			af, proto, se->user.srange, se->user.drange, se->user.iifname, se->user.oifname);
 
 		} else {
 			int left = sizeof(svc_name);
