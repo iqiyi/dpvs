@@ -1526,7 +1526,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --exact                             expand numbers (display exact values)\n"
 		"  --thresholds                        output of thresholds information\n"
 		"  --persistent-conn                   output of persistent connection info\n"
-		"  --sockpair                          output connection info of specified socket pair (proto:sip:sport:tip:tport)"
+		"  --sockpair                          output connection info of specified socket pair (proto:sip:sport:tip:tport)\n"
 		"  --nosort                            disable sorting output of service/server entries\n"
 		"  --sort                              does nothing, for backwards compatibility\n"
 		"  --ops          -o                   one-packet scheduling\n"
