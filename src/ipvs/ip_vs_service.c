@@ -1252,7 +1252,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
 
                 /* get slave core svc */
                 msg = msg_make(MSG_TYPE_SVC_GET_SERVICES, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
-                               size, user);
+                               sizeof(*get), user);
                 if (!msg) {
                     return EDPVS_NOMEM;
                 }

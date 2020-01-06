@@ -21,13 +21,17 @@
 #include <rte_mempool.h>
 
 #define MP_NAMSIZ               32
-#define MP_OBJ_COOKIE_OFFSET    8
+#define MP_OBJ_COOKIE_OFFSET    12
 #define MP_OBJ_COOKIE_MARK      0xA55AC33C
+#define MP_OBJ_TAILER_SIZE      4
+#define MP_OBJ_TAILER_MARK      0x5ADB2E5B
 #define MP_SIZE_MIN             16
-#define MP_OBJ_SIZE_MIN         32
+#define MP_OBJ_SIZE_MIN         64
 #define MP_OBJ_SIZE_MAX         1048576 /* 1MB */
 
 #define RTE_LOGTYPE_DPVS_MPOOL     RTE_LOGTYPE_USER1
+
+typedef uint32_t tailer_marker_t;
 
 enum dpvs_mp_obj_flag {
     MEM_OBJ_FROM_POOL = 1,
@@ -36,6 +40,7 @@ enum dpvs_mp_obj_flag {
 
 struct dpvs_mp_obj_cookie {
     uint32_t mark;
+    uint32_t memsize;
     uint16_t flag;
     uint16_t pool_idx;
 };
@@ -71,5 +76,8 @@ void dpvs_mempool_destroy(struct dpvs_mempool *mp);
 void *dpvs_mempool_get(struct dpvs_mempool *mp, int size);
 
 void dpvs_mempool_put(struct dpvs_mempool *mp, void *obj);
+
+/* for debug */
+bool dpvs_mp_elem_ok(void *obj);
 
 #endif /* __DPVS_MEMPOOL_H__ */
