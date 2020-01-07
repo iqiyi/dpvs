@@ -115,11 +115,7 @@
 #define IPVS_OPTION_PROCESSING	"popt"
 
 #include "config_stream.h"
-//#include "../keepalived/keepalived/libipvs-2.6/libipvs.h"
 #include "../keepalived/keepalived/include/libipvs.h"
-//#include "../keepalived/lib/config.h"
-
-//#define _HAVE_PE_NAME_ 1
 
 #define IPVSADM_VERSION_NO	"v" VERSION
 #define IPVSADM_VERSION_DATE	"2008/5/15"
@@ -166,8 +162,8 @@ static const char* cmdnames[] = {
 	"restore",
 	"save",
 	"zero",
-	"add-laddr" , 
-	"del-laddr" , 
+	"add-laddr" ,
+	"del-laddr" ,
 	"get-laddr" ,
 	"add-blklst",
 	"del-blklst",
@@ -199,9 +195,9 @@ static const char* optnames[] = {
 	"ops",
 	"pe" , 
 	"local-address" ,
-	"blklst-address", 
-	"synproxy" , 
-	"ifname" , 
+	"blklst-address",
+	"synproxy" ,
+	"ifname" ,
 	"sockpair" ,
 	"hash-target",
 	"cpu"
@@ -1988,7 +1984,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 
 static void list_laddrs_print_title(void)
 {
-	printf("%-20s %-8s %-20s %-10s %-10s\n" , 
+	printf("%-20s %-8s %-20s %-10s %-10s\n" ,
 		"VIP:VPORT" ,
 		"TOTAL" ,
 		"SNAT_IP",
@@ -2031,7 +2027,6 @@ static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 static void print_service_and_laddrs(struct ip_vs_get_laddrs* d, int with_title)
 {
 	int i = 0;
-	
 	if(with_title)
 		list_laddrs_print_title();
 
@@ -2053,15 +2048,12 @@ static int list_laddrs(ipvs_service_t *svc , int with_title, lcoreid_t cid)
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		return -1;
 	}
-
 	if (!(d = ipvs_get_laddrs(entry, cid))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		free(entry);
 		return -1;
 	}	
-
 	print_service_and_laddrs(d, with_title);
-
 	free(entry);
 	free(d);
 
@@ -2080,7 +2072,6 @@ static int list_all_laddrs(lcoreid_t cid)
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		return -1;
 	}
-
 	for (i = 0; i < get->user.num_services; i++){
 		if(!(d = ipvs_get_laddrs(&(get->user.entrytable[i]), cid))) {
 			free(get);
@@ -2091,10 +2082,8 @@ static int list_all_laddrs(lcoreid_t cid)
 		if(i != 0)
 			title_enable = 0;
 		print_service_and_laddrs(d, title_enable);
-
 		free(d);
 	}
-	
 	free(get);
 	return 0;
 
@@ -2134,8 +2123,8 @@ static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol)
 	}
 
 	for (i = 0; i < get->naddr; i++) {
-		if ( addr_v4== get->blklsts[i].vaddr.in.s_addr && 
-		     port == get->blklsts[i].vport&& 
+		if ( addr_v4== get->blklsts[i].vaddr.in.s_addr &&
+		     port == get->blklsts[i].vport&&
 		     protocol == get->blklsts[i].proto) {
 			print_service_and_blklsts(&get->blklsts[i]);
 		}
@@ -2156,9 +2145,8 @@ static int list_all_blklsts(void)
 
 	list_blklsts_print_title();
 	for (i = 0; i < get->user.num_services; i++)
-		list_blklst(get->user.entrytable[i].user.__addr_v4, get->user.entrytable[i].user.port, 
+		list_blklst(get->user.entrytable[i].user.__addr_v4, get->user.entrytable[i].user.port,
 				get->user.entrytable[i].user.protocol);
-	
 	free(get);
 	return 0;
 }

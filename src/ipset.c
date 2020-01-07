@@ -341,16 +341,13 @@ static int ipset_parse_conf_file(void)
         RTE_LOG(WARNING, IPSET, "no memory for ipset buf\n");
         return -1;
     }
-
-    while(!feof(g_current_stream))
-    {
+    while(!feof(g_current_stream)) {
         if((ch=getc(g_current_stream))=='\n')
             ip_num++;
     }
-
-    if (!ip_num)
-    {
+    if (!ip_num) {
         RTE_LOG(WARNING, IPSET, "no ip in the gfwip \n");
+        FREE(buf);
         return -1;
     }
         
@@ -362,6 +359,7 @@ static int ipset_parse_conf_file(void)
     ips = rte_calloc_socket(NULL, 1, ipset_size, 0, rte_socket_id());
     if (ips == NULL) {
         RTE_LOG(WARNING, IPSET, "no memory for ipset conf\n");
+        FREE(buf);
         return -1;
     }                        
     ips->num = ip_num;
