@@ -28,6 +28,7 @@ config: keepalived_conf
 keepalived_conf:
 	if [ ! -f keepalived/Makefile ]; then \
 		cd keepalived && \
+		./build_setup && \
 		./configure && \
 		cd -; \
 	fi
