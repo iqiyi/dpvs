@@ -17,39 +17,58 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _SMTP_H
 #define _SMTP_H
 
 /* globales includes */
-#include <netdb.h>
+#include <sys/types.h>
+#include <stdbool.h>
 
 /* local includes */
-#include "check_data.h"
-#include "vrrp_data.h"
-#include "scheduler.h"
+#include "global_data.h"
 #include "layer4.h"
+#ifdef _WITH_LVS_
+#include "check_data.h"
+#include "check_api.h"
+#endif
+#ifdef _WITH_VRRP_
 #include "vrrp.h"
+#endif
 
 /* global defs */
 #define SMTP_PORT_STR		"25"
-#define SMTP_PORT		25
-#define SMTP_BUFFER_LENGTH	512
-#define SMTP_BUFFER_MAX		1024
-#define SMTP_MAX_FSM_STATE	10
-#define SMTP_EMAIL_ADDR_MAX_LENGTH	64
+#define SMTP_BUFFER_LENGTH	512U
+#define SMTP_BUFFER_MAX		1024U
 
-/* SMTP command stage */
-#define HELO	4
-#define MAIL	5
-#define RCPT	6
-#define DATA	7
-#define BODY	8
-#define QUIT	9
-#define END	10
-#define ERROR	11
+/* SMTP command stage. This values are used along with the enum connect_result
+ * values in the SMTP FSM, and so need to follow them. */
+enum smtp_cmd_state {
+	HELO = connect_result_next,
+	MAIL,
+	RCPT,
+	DATA,
+	BODY,
+	QUIT,
+	END,
+	ERROR
+};
+#define SMTP_MAX_FSM_STATE	END
+
+/* SMTP mesage type format */
+typedef enum {
+#ifdef _WITH_LVS_
+	SMTP_MSG_RS,
+	SMTP_MSG_VS,
+	SMTP_MSG_RS_SHUT,
+#endif
+#ifdef _WITH_VRRP_
+	SMTP_MSG_VGROUP,
+	SMTP_MSG_VRRP,
+#endif
+} smtp_msg_t;
 
 /* SMTP thread argument structure */
 #define MAX_HEADERS_LENGTH 256
@@ -72,12 +91,12 @@ do {					\
 typedef struct _smtp {
 	int		fd;
 	int		stage;
-	int		email_it;
+	element		next_email_element;
 	char		*subject;
 	char		*body;
 	char		*buffer;
 	char		*email_to;
-	long		buflen;
+	size_t		buflen;
 } smtp_t;
 
 /* SMTP command string processing */
@@ -91,7 +110,29 @@ typedef struct _smtp {
 #define SMTP_SEND_CMD    "\r\n.\r\n"
 #define SMTP_QUIT_CMD    "QUIT\r\n"
 
+#define FMT_SMTP_HOST()	inet_sockaddrtopair(&global_data->smtp_server)
+
+#ifdef _WITH_LVS_
+typedef struct _smtp_rs {
+	real_server_t *rs;
+	virtual_server_t *vs;
+} smtp_rs;
+#else
+typedef void real_server_t;
+#endif
+#ifndef _WITH_VRRP_
+typedef void vrrp_t;
+typedef void vrrp_sgroup_t;
+#endif
+
+#ifdef _SMTP_ALERT_DEBUG_
+extern bool do_smtp_alert_debug;
+#endif
+
 /* Prototypes defs */
-extern void smtp_alert(real_server_t *, vrrp_t *, vrrp_sgroup_t *,
-		       const char *, const char *);
+extern void smtp_alert(smtp_msg_t, void *data, const char *, const char *);
+#ifdef THREAD_DUMP
+extern void register_smtp_addresses(void);
+#endif
+
 #endif

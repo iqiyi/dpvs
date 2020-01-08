@@ -17,40 +17,23 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
+#include "config.h"
+
+#include <stdbool.h>
+
 #include "vrrp_sync.h"
-#include "vrrp_if.h"
+#include "vrrp_track.h"
 #include "vrrp_notify.h"
 #include "vrrp_data.h"
-#ifdef _WITH_SNMP_
-  #include "vrrp_snmp.h"
-#endif
 #include "logger.h"
-#include "smtp.h"
-
-/* Compute the new instance sands */
-void
-vrrp_init_instance_sands(vrrp_t * vrrp)
-{
-	set_time_now();
-
-	if (vrrp->state == VRRP_STATE_MAST	  ||
-	    vrrp->state == VRRP_STATE_GOTO_MASTER ||
-	    vrrp->state == VRRP_STATE_GOTO_FAULT  ||
-	    vrrp->wantstate == VRRP_STATE_GOTO_MASTER) {
-		vrrp->sands.tv_sec = time_now.tv_sec + vrrp->adver_int / TIMER_HZ;
- 		vrrp->sands.tv_usec = time_now.tv_usec;
-		return;
-	}
-
-	if (vrrp->state == VRRP_STATE_BACK || vrrp->state == VRRP_STATE_FAULT)
-		vrrp->sands = timer_add_long(time_now, vrrp->ms_down_timer);
-}
+#include "vrrp_scheduler.h"
+#include "parser.h"
 
 /* Instance name lookup */
-vrrp_t *
+vrrp_t * __attribute__ ((pure))
 vrrp_get_instance(char *iname)
 {
 	vrrp_t *vrrp;
@@ -71,127 +54,85 @@ vrrp_sync_set_group(vrrp_sgroup_t *vgroup)
 {
 	vrrp_t *vrrp;
 	char *str;
-	int i;
+	unsigned int i;
+	bool group_member_down = false;
+
+	/* Can't handle no members of the group */
+	if (!vgroup->iname)
+		return;
+
+	vgroup->vrrp_instances = alloc_list(NULL, NULL);
 
 	for (i = 0; i < vector_size(vgroup->iname); i++) {
 		str = vector_slot(vgroup->iname, i);
 		vrrp = vrrp_get_instance(str);
-		if (vrrp) {
-			if (LIST_ISEMPTY(vgroup->index_list))
-				vgroup->index_list = alloc_list(NULL, NULL);
-			list_add(vgroup->index_list, vrrp);
-			vrrp->sync = vgroup;
+		if (!vrrp) {
+			report_config_error(CONFIG_GENERAL_ERROR, "Virtual router %s specified in sync group %s doesn't exist - ignoring", str, vgroup->gname);
+			continue;
 		}
+
+		if (vrrp->sync) {
+			report_config_error(CONFIG_GENERAL_ERROR, "Virtual router %s cannot exist in more than one sync group; ignoring %s", str, vgroup->gname);
+			continue;
+		}
+
+		list_add(vgroup->vrrp_instances, vrrp);
+		vrrp->sync = vgroup;
+
+		/* set eventual sync group state. Unless all members are master and address owner,
+		 * then we must be backup */
+		if (vgroup->state == VRRP_STATE_MAST && vrrp->wantstate == VRRP_STATE_BACK)
+			report_config_error(CONFIG_GENERAL_ERROR, "Sync group %s has some member(s) as address owner and some not as address owner. This won't work.", vgroup->gname);
+		if (vgroup->state != VRRP_STATE_BACK)
+			vgroup->state = (vrrp->wantstate == VRRP_STATE_MAST && vrrp->base_priority == VRRP_PRIO_OWNER) ? VRRP_STATE_MAST : VRRP_STATE_BACK;
+
+// TODO - what about track scripts down?
+		if (vrrp->state == VRRP_STATE_FAULT)
+			group_member_down = true;
 	}
-}
 
-/* All interface are UP in the same group */
-int
-vrrp_sync_group_up(vrrp_sgroup_t * vgroup)
-{
-	vrrp_t *vrrp;
-	element e;
-	list l = vgroup->index_list;
-	int is_up = 0;
+	if (group_member_down)
+		vgroup->state = VRRP_STATE_FAULT;
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		vrrp = ELEMENT_DATA(e);
-		if (VRRP_ISUP(vrrp))
-			is_up++;
+	if (LIST_SIZE(vgroup->vrrp_instances) <= 1) {
+		/* The sync group will be removed by the calling function if it has no members */
+		report_config_error(CONFIG_GENERAL_ERROR, "Sync group %s has %s virtual router(s) - %s", vgroup->gname, LIST_SIZE(vgroup->vrrp_instances) ? "only 1" : "no",
+				LIST_SIZE(vgroup->vrrp_instances) ? "this probably isn't what you want" : "removing");
+
+		if (!LIST_SIZE(vgroup->vrrp_instances))
+			free_list(&vgroup->vrrp_instances);
 	}
 
-	if (is_up == LIST_SIZE(vgroup->index_list)) {
-		log_message(LOG_INFO, "Kernel is reporting: Group(%s) UP"
-			       , GROUP_NAME(vgroup));
-		return 1;
-	}
-	return 0;
-}
-
-/* SMTP alert group notifier */
-void
-vrrp_sync_smtp_notifier(vrrp_sgroup_t *vgroup)
-{
-	if (vgroup->smtp_alert) {
-		if (GROUP_STATE(vgroup) == VRRP_STATE_MAST)
-			smtp_alert(NULL, NULL, vgroup,
-				   "Entering MASTER state",
-				   "=> All VRRP group instances are now in MASTER state <=");
-		if (GROUP_STATE(vgroup) == VRRP_STATE_BACK)
-			smtp_alert(NULL, NULL, vgroup,
-				   "Entering BACKUP state",
-				   "=> All VRRP group instances are now in BACKUP state <=");
-	}
-}
-
-/* Leaving fault state */
-int
-vrrp_sync_leave_fault(vrrp_t * vrrp)
-{
-	vrrp_sgroup_t *vgroup = vrrp->sync;
-
-	if (vrrp_sync_group_up(vgroup)) {
-		log_message(LOG_INFO, "VRRP_Group(%s) Leaving FAULT state",
-		       GROUP_NAME(vgroup));
-		return 1;
-	}
-	return 0;
+	/* The iname vector is only used for us to set up the sync groups, so delete it */
+	free_strvec(vgroup->iname);
+	vgroup->iname = NULL;
 }
 
 /* Check transition to master state */
-int
-vrrp_sync_goto_master(vrrp_t * vrrp)
+bool
+vrrp_sync_can_goto_master(vrrp_t * vrrp)
 {
 	vrrp_t *isync;
 	vrrp_sgroup_t *vgroup = vrrp->sync;
-	list l = vgroup->index_list;
 	element e;
 
 	if (GROUP_STATE(vgroup) == VRRP_STATE_MAST)
-		return 1;
-	if (GROUP_STATE(vgroup) == VRRP_STATE_GOTO_MASTER)
-		return 1;
+		return true;
 
-        /* Only sync to master if everyone wants to 
+	/* Only sync to master if everyone wants to
 	 * i.e. prefer backup state to avoid thrashing */
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		isync = ELEMENT_DATA(e);
-		if (isync != vrrp && (isync->wantstate != VRRP_STATE_GOTO_MASTER && 
-		                      isync->wantstate != VRRP_STATE_MAST)) {
-			return 0;	
+	LIST_FOREACH(vgroup->vrrp_instances, isync, e) {
+		if (isync != vrrp && isync->wantstate != VRRP_STATE_MAST) {
+			/* Make sure we give time for other instances to be
+			 * ready to become master. The timer here doesn't
+			 * really matter, since we are waiting for other
+			 * instances to be ready. */
+			vrrp->ms_down_timer = 3 * vrrp->master_adver_int + VRRP_TIMER_SKEW(vrrp);
+			vrrp_init_instance_sands(vrrp);
+			return false;
 		}
 	}
-	return 1;
-}
-
-void
-vrrp_sync_master_election(vrrp_t * vrrp)
-{
-	vrrp_t *isync;
-	vrrp_sgroup_t *vgroup = vrrp->sync;
-	list l = vgroup->index_list;
-	element e;
-
-	if (vrrp->wantstate != VRRP_STATE_GOTO_MASTER)
-		return;
-	if (GROUP_STATE(vgroup) == VRRP_STATE_FAULT)
-		return;
-
-	log_message(LOG_INFO, "VRRP_Group(%s) Transition to MASTER state",
-	       GROUP_NAME(vgroup));
-
-	/* Perform sync index */
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		isync = ELEMENT_DATA(e);
-		if (isync != vrrp && isync->wantstate != VRRP_STATE_GOTO_MASTER) {
-			/* Force a new protocol master election */
-			isync->wantstate = VRRP_STATE_GOTO_MASTER;
-			log_message(LOG_INFO,
-			       "VRRP_Instance(%s) forcing a new MASTER election",
-			       isync->iname);
-			vrrp_send_adv(isync, isync->effective_priority);
-		}
-	}
+	return true;
 }
 
 void
@@ -199,7 +140,6 @@ vrrp_sync_backup(vrrp_t * vrrp)
 {
 	vrrp_t *isync;
 	vrrp_sgroup_t *vgroup = vrrp->sync;
-	list l = vgroup->index_list;
 	element e;
 
 	if (GROUP_STATE(vgroup) == VRRP_STATE_BACK)
@@ -209,20 +149,24 @@ vrrp_sync_backup(vrrp_t * vrrp)
 	       GROUP_NAME(vgroup));
 
 	/* Perform sync index */
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		isync = ELEMENT_DATA(e);
-		if (isync != vrrp && isync->state != VRRP_STATE_BACK) {
-			isync->wantstate = VRRP_STATE_BACK;
-			vrrp_state_leave_master(isync);
-			vrrp_init_instance_sands(isync);
+	LIST_FOREACH(vgroup->vrrp_instances, isync, e) {
+		if (isync == vrrp || isync->state == VRRP_STATE_BACK)
+			continue;
+
+		isync->wantstate = VRRP_STATE_BACK;
+// TODO - we may be leaving FAULT, so calling leave_master isn't right. I have
+// had to add vrrp_state_leave_fault() for this
+		if (isync->state == VRRP_STATE_FAULT ||
+		    isync->state == VRRP_STATE_INIT) {
+			vrrp_state_leave_fault(isync);
 		}
+		else
+			vrrp_state_leave_master(isync, false);
+		vrrp_thread_requeue_read(isync);
 	}
+
 	vgroup->state = VRRP_STATE_BACK;
-	vrrp_sync_smtp_notifier(vgroup);
-	notify_group_exec(vgroup, VRRP_STATE_BACK);
-#ifdef _WITH_SNMP_
-	vrrp_snmp_group_trap(vgroup);
-#endif
+	send_group_notifies(vgroup);
 }
 
 void
@@ -230,34 +174,38 @@ vrrp_sync_master(vrrp_t * vrrp)
 {
 	vrrp_t *isync;
 	vrrp_sgroup_t *vgroup = vrrp->sync;
-	list l = vgroup->index_list;
+	list l = vgroup->vrrp_instances;
 	element e;
 
 	if (GROUP_STATE(vgroup) == VRRP_STATE_MAST)
 		return;
-	if (!vrrp_sync_goto_master(vrrp))
+	if (!vrrp_sync_can_goto_master(vrrp))
 		return;
 
-	log_message(LOG_INFO, "VRRP_Group(%s) Syncing instances to MASTER state",
-	       GROUP_NAME(vgroup));
+	log_message(LOG_INFO, "VRRP_Group(%s) Syncing instances to MASTER state", GROUP_NAME(vgroup));
 
 	/* Perform sync index */
 	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
 		isync = ELEMENT_DATA(e);
 
-		/* Send the higher priority advert on all synced instances */
+// TODO		/* Send the higher priority advert on all synced instances */
 		if (isync != vrrp && isync->state != VRRP_STATE_MAST) {
 			isync->wantstate = VRRP_STATE_MAST;
-			vrrp_state_goto_master(isync);
-			vrrp_init_instance_sands(isync);
+// TODO 6 - transition straight to master if PRIO_OWNER
+// TODO 7 - not here, but generally if wantstate == MAST && !owner, ms_down_timer = adver_int + 1 skew and be backup
+//			if (vrrp->wantstate == VRRP_STATE_MAST && vrrp->base_priority == VRRP_PRIO_OWNER) {
+//				/* ??? */
+//			} else {
+#ifdef _WITH_SNMP_RFCV3_
+				isync->stats->next_master_reason = vrrp->stats->master_reason;
+#endif
+				vrrp_state_goto_master(isync);
+				vrrp_thread_requeue_read(isync);
+//			}
 		}
 	}
 	vgroup->state = VRRP_STATE_MAST;
-	vrrp_sync_smtp_notifier(vgroup);
-	notify_group_exec(vgroup, VRRP_STATE_MAST);
-#ifdef _WITH_SNMP_
-	vrrp_snmp_group_trap(vgroup);
-#endif
+	send_group_notifies(vgroup);
 }
 
 void
@@ -265,7 +213,7 @@ vrrp_sync_fault(vrrp_t * vrrp)
 {
 	vrrp_t *isync;
 	vrrp_sgroup_t *vgroup = vrrp->sync;
-	list l = vgroup->index_list;
+	list l = vgroup->vrrp_instances;
 	element e;
 
 	if (GROUP_STATE(vgroup) == VRRP_STATE_FAULT)
@@ -285,15 +233,16 @@ vrrp_sync_fault(vrrp_t * vrrp)
 		 * => Takeover will be less than 3secs !
 		 */
 		if (isync != vrrp && isync->state != VRRP_STATE_FAULT) {
-			if (isync->state == VRRP_STATE_MAST)
-				isync->wantstate = VRRP_STATE_GOTO_FAULT;
-			if (isync->state == VRRP_STATE_BACK)
-				isync->state = VRRP_STATE_FAULT;
+			isync->wantstate = VRRP_STATE_FAULT;
+			if (isync->state == VRRP_STATE_MAST) {
+				vrrp_state_leave_master(isync, false);
+			}
+			else if (isync->state == VRRP_STATE_BACK || isync->state == VRRP_STATE_INIT) {
+				isync->state = VRRP_STATE_FAULT;	/* This is a bit of a bodge */
+				vrrp_state_leave_fault(isync);
+			}
 		}
 	}
 	vgroup->state = VRRP_STATE_FAULT;
-	notify_group_exec(vgroup, VRRP_STATE_FAULT);
-#ifdef _WITH_SNMP_
-	vrrp_snmp_group_trap(vgroup);
-#endif
+	send_group_notifies(vgroup);
 }

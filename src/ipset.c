@@ -332,8 +332,7 @@ static struct dpvs_sockopts ipset_sockopts = {
 
 static int ipset_parse_conf_file(void)
 {
-    char *buf, *pstr;
-    bool found_num = false;
+    char *buf, ch;
     struct dp_vs_multi_ipset_conf *ips = NULL;
     int ip_num = 0, ipset_size = 0, ip_index = 0;
 
@@ -342,24 +341,30 @@ static int ipset_parse_conf_file(void)
         RTE_LOG(WARNING, IPSET, "no memory for ipset buf\n");
         return -1;
     }
+    while(!feof(g_current_stream)) {
+        if((ch=getc(g_current_stream))=='\n')
+            ip_num++;
+    }
+    if (!ip_num) {
+        RTE_LOG(WARNING, IPSET, "no ip in the gfwip \n");
+        FREE(buf);
+        return -1;
+    }
+        
+    RTE_LOG(DEBUG, IPSET, "gfwip list has %u ips\n", ip_num);
+
+    fseek(g_current_stream, 0, SEEK_SET);
+
+    ipset_size = sizeof(struct dp_vs_multi_ipset_conf) + ip_num*sizeof(struct dp_vs_ipset_conf);
+    ips = rte_calloc_socket(NULL, 1, ipset_size, 0, rte_socket_id());
+    if (ips == NULL) {
+        RTE_LOG(WARNING, IPSET, "no memory for ipset conf\n");
+        FREE(buf);
+        return -1;
+    }                        
+    ips->num = ip_num;
+
     while (read_line(buf, CFG_FILE_MAX_BUF_SZ)) {
-        if (false == found_num && NULL != (pstr = strstr(buf, IPSET_CFG_MEMBERS))) {
-            pstr += strlen(IPSET_CFG_MEMBERS);
-            ip_num = atoi(pstr);
-            found_num = true;
-            ipset_size = sizeof(struct dp_vs_multi_ipset_conf) + ip_num*sizeof(struct dp_vs_ipset_conf);
-            ips = rte_calloc_socket(NULL, 1, ipset_size, 0, rte_socket_id());
-            if (ips == NULL) {
-                RTE_LOG(WARNING, IPSET, "no memory for ipset conf\n");
-                break;
-            }                        
-        ips->num = ip_num;
-        continue;
-        }
-        if (ips == NULL) {
-            RTE_LOG(WARNING, IPSET, "cannot get gfwip members\n");
-            break;
-        }                        
         if (inet_pton(AF_INET, buf, &ips->ipset_conf[ip_index].addr) <= 0)
              ips->ipset_conf[ip_index].af = 0;
         else                     
