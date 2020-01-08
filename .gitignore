@@ -26,6 +26,7 @@ tools/keepalived/keepalived/libipvs-2.6/libipvs.a
 tools/keepalived/keepalived/vrrp/Makefile
 tools/keepalived/lib/Makefile
 tools/keepalived/lib/config.h
+tools/keepalived/install-sh
 src/dpvs
 .cache.mk
 .tmp_versions/

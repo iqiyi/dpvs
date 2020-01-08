@@ -341,8 +341,8 @@ static int ipset_parse_conf_file(void)
         RTE_LOG(WARNING, IPSET, "no memory for ipset buf\n");
         return -1;
     }
-    while(!feof(g_current_stream)) {
-        if((ch=getc(g_current_stream))=='\n')
+    while (!feof(g_current_stream)) {
+        if ((ch=getc(g_current_stream)) == '\n')
             ip_num++;
     }
     if (!ip_num) {
