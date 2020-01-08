@@ -42,7 +42,7 @@ enum {
 };
 
 /* leverage IFA_F_XXX in linux/if_addr.h*/
-#define IFA_F_SAPOOL    0x10000 /* if address with sockaddr pool */
+#define IFA_F_SAPOOL        0x10000 /* if address with sockaddr pool */
 
 /* ifa command flags */
 #define IFA_F_OPS_VERBOSE   0x0001
