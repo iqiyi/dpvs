@@ -17,7 +17,7 @@
  */
 #include <assert.h>
 #include <time.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "ipv4.h"
 #include "ipv6.h"

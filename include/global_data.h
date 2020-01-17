@@ -19,7 +19,7 @@
 #ifndef __GLOBAL_DATA_H__
 #define __GLOBAL_DATA_H__
 
-#include "common.h"
+#include "conf/common.h"
 
 typedef enum dpvs_lcore_role_type {
     LCORE_ROLE_IDLE,

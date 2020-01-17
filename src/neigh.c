@@ -26,7 +26,7 @@
 #include "parser/parser.h"
 #include "netif.h"
 #include "neigh.h"
-#include "common.h"
+#include "conf/common.h"
 #include "route.h"
 #include "ctrl.h"
 #include "ndisc.h"

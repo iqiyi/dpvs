@@ -17,7 +17,7 @@
  */
 
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "mempool.h"
 

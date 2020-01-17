@@ -15,14 +15,21 @@
  * GNU General Public License for more details.
  *
  */
-#ifndef __DPVS_RR_H__
-#define __DPVS_RR_H__
+#ifndef __DPVS_STATS_CONF_H__
+#define __DPVS_STATS_CONF_H__
 
-#include "ipvs/service.h"
-#include "ipvs/dest.h"
-#include "ipvs/sched.h"
+struct dp_vs_stats {
+    uint64_t            conns;
+    uint64_t            inpkts;
+    uint64_t            inbytes;
+    uint64_t            outpkts;
+    uint64_t            outbytes;
 
-int dp_vs_rr_init(void);
-int dp_vs_rr_term(void);
+    uint32_t cps;
+    uint32_t inpps;
+    uint32_t inbps;
+    uint32_t outpps;
+    uint32_t outbps;
+};
 
-#endif
+#endif /* __DPVS_STATS_CONF_H__ */

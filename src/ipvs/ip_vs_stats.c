@@ -16,7 +16,7 @@
  *
  */
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #include "netif.h"
 #include "list.h"
 #include "ctrl.h"

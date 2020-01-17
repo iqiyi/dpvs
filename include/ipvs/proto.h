@@ -19,7 +19,7 @@
 #define __DPVS_PROTO_H__
 #include "list.h"
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/conn.h"
 

@@ -28,7 +28,7 @@
 
 #include "conf/neigh.h"
 #include "neigh.h"
-#include "common.h"
+#include "conf/common.h"
 #include "ipv6.h"
 #include "ndisc.h"
 #include "icmp6.h"

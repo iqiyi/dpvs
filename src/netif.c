@@ -25,7 +25,7 @@
 #include <linux/rtnetlink.h>
 #include <net/if.h>
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "netif.h"
 #include "netif_addr.h"
 #include "vlan.h"

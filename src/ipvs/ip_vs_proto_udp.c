@@ -18,7 +18,7 @@
 #include <assert.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "ipv4.h"
 #include "ipv6.h"

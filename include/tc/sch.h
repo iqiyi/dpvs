@@ -25,7 +25,7 @@
 #ifndef __DPVS_TC_SCH_H__
 #define __DPVS_TC_SCH_H__
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #ifdef __DPVS__
 #include "dpdk.h"
 #include "timer.h"

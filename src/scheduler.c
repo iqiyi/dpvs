@@ -17,7 +17,7 @@
  */
 
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #include "scheduler.h"
 
 /* Note: lockless, lcore_job can only be register on initialization stage and

@@ -19,7 +19,7 @@
 #define __DPVS_MSGMGR_H__
 
 #include "global_data.h"
-#include "common.h"
+#include "conf/common.h"
 #include "list.h"
 #include "dpdk.h"
 

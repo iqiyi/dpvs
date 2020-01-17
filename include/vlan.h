@@ -23,7 +23,7 @@
 #ifndef __DPVS_VLAN_H__
 #define __DPVS_VLAN_H__
 #include <linux/if_ether.h>
-#include "common.h"
+#include "conf/common.h"
 #include "list.h"
 #include "netif.h"
 

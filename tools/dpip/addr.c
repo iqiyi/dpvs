@@ -19,7 +19,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "conf/inetaddr.h"
 #include "sockopt.h"

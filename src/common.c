@@ -27,7 +27,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <net/ethernet.h>
-#include "common.h"
+#include "conf/common.h"
 
 struct dpvs_err_tab {
     int errcode;

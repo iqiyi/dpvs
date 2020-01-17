@@ -18,7 +18,7 @@
 
 #include <rte_cycles.h>
 #include "global_data.h"
-#include "common.h"
+#include "conf/common.h"
 
 uint64_t g_cycles_per_sec;
 dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];

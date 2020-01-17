@@ -24,7 +24,7 @@
 #include <linux/icmp.h>
 #include <netinet/icmp6.h>
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "inet.h"
 #include "ipv4.h"
 #include "ipv6.h"

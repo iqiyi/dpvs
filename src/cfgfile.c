@@ -18,7 +18,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "parser/parser.h"
 #include "cfgfile.h"
 #include "global_conf.h"

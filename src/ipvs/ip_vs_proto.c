@@ -16,7 +16,7 @@
  *
  */
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "ipv4.h"
 #include "ipvs/ipvs.h"

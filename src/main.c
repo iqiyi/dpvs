@@ -21,7 +21,7 @@
 #include <getopt.h>
 #include "pidfile.h"
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "netif.h"
 #include "vlan.h"
 #include "inet.h"

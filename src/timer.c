@@ -27,7 +27,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include "list.h"
-#include "common.h"
+#include "conf/common.h"
 #include "timer.h"
 #include "dpdk.h"
 #include "rte_timer.h"

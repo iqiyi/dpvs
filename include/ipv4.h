@@ -18,7 +18,7 @@
 #ifndef __DPVS_IPV4_H__
 #define __DPVS_IPV4_H__
 #include <stdint.h>
-#include "common.h"
+#include "conf/common.h"
 #include "inet.h"
 #include "netif.h"
 #include "route.h"

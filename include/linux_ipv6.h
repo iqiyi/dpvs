@@ -23,7 +23,7 @@
 #include <stdbool.h>
 #include <netinet/in.h>
 #include <linux/if_addr.h>
-#include "common.h"
+#include "conf/common.h"
 #ifdef __DPVS__
 #include "inetaddr.h"
 #endif

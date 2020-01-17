@@ -9,25 +9,17 @@
 /* #include "config.h" */
 
 /* System includes */
+#include <stdint.h>
+#include <stdbool.h>
 #include <net/if.h>	/* Force inclusion of net/if.h before linux/if.h */
 #include <sys/types.h>
 #include <netinet/in.h>
 /* Prior to Linux 4.2 have to include linux/in.h and linux/in6.h
  * or linux/netlink.h to include linux/netfilter.h */
 #include <linux/netfilter.h>	/* For nf_inet_addr */
-#include <stdint.h>
-
 #include <linux/types.h>
-#include <stdbool.h>
-#include "conf/route.h"
-#include "conf/route6.h"
-#include "conf/inetaddr.h"
-#include "conf/laddr.h"
-#include "conf/blklst.h"
-#include "conf/conn.h"
-#include "conf/ip_tunnel.h"
-#include "ipvs/service.h"
-#include "ipvs/dest.h"
+
+#include "dp_vs.h"
 
 #define IP_VS_VERSION_CODE	0x010201
 #define NVERSION(version)			\

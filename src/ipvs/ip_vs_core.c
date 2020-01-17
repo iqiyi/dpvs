@@ -18,7 +18,7 @@
 #include <assert.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/icmp6.h>
-#include "common.h"
+#include "conf/common.h"
 #include "ipv4.h"
 #include "ipv6.h"
 #include "icmp.h"
