@@ -658,8 +658,10 @@ static int msg_master_process(int step)
             if (likely(msg_type->unicast_msg_cb != NULL)) {
                 if (msg_type->unicast_msg_cb(msg) < 0) {
                     add_msg_flags(msg, DPVS_MSG_F_CALLBACK_FAIL);
-                    RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, uc msg_type %d callback failed on master\n",
+#ifdef CONFIG_MSG_DEBUG
+                    RTE_LOG(INFO, MSGMGR, "%s:msg@%p, uc msg_type %d callback failed on master\n",
                             __func__, msg, msg->type);
+#endif
                 }
             }
             add_msg_flags(msg, DPVS_MSG_F_STATE_FIN);
@@ -686,8 +688,10 @@ static int msg_master_process(int step)
                 if (unlikely(0 == mcq->mask)) { /* okay, all slave reply msg arrived */
                     if (msg_type->multicast_msg_cb(mcq) < 0) {
                         add_msg_flags(mcq->org_msg, DPVS_MSG_F_CALLBACK_FAIL);/* callback on master failed */
-                        RTE_LOG(WARNING, MSGMGR, "%s:msg@%p, mc msg_type %d callback failed on master\n",
+#ifdef CONFIG_MSG_DEBUG
+                        RTE_LOG(INFO, MSGMGR, "%s:msg@%p, mc msg_type %d callback failed on master\n",
                                 __func__, mcq->org_msg, msg->type);
+#endif
                     }
                     add_msg_flags(mcq->org_msg, DPVS_MSG_F_STATE_FIN);
                     msg_destroy(&mcq->org_msg);
@@ -745,8 +749,10 @@ int msg_slave_process(int step)
         if (likely(msg_type->unicast_msg_cb != NULL)) {
             if (msg_type->unicast_msg_cb(msg) < 0) {
                 add_msg_flags(msg, DPVS_MSG_F_CALLBACK_FAIL);
-                RTE_LOG(DEBUG, MSGMGR, "%s:msg@%p, msg_type %d callback failed on lcore %d\n",
+#ifdef CONFIG_MSG_DEBUG
+                RTE_LOG(INFO, MSGMGR, "%s:msg@%p, msg_type %d callback failed on lcore %d\n",
                      __func__, msg, msg->type, cid);
+#endif
             }
         }
         /* send reply msg to master for multicast msg */
@@ -1368,8 +1374,10 @@ static int sockopt_ctl(__rte_unused void *arg)
             /* assume that reply_data is freed by user when callback fails */
             reply_data = NULL;
             reply_data_len = 0;
+#ifdef CONFIG_MSG_DEBUG
             RTE_LOG(INFO, MSGMGR, "%s: socket msg<type=%s, id=%d> callback failed\n",
                     __func__, msg->type == SOCKOPT_GET ? "GET" : "SET", msg->id);
+#endif
         }
 
         memset(&reply_hdr, 0, sizeof(reply_hdr));
