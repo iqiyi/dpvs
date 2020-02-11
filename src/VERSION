@@ -1,13 +1,42 @@
 #!/bin/sh -
 # program: dpvs
-# Oct 8, 2019
-# Commit: 3d8f47575bd18ebfda88d83d869b36a18d2f49c1
-#         "route6: fix some problems"
-# Features: 
-#     1. add dummy info and backtrace for dpvs timer crash problem
-#     2. fix some problems in route6
+# Feb 12, 2020
 
-export VERSION=1.7
-export RELEASE=8
+# # Features
+# ----------
+# - **Per-cpu refactor for service/dest/inetaddr/laddr/sapool modules.**
+# - **Keepalived upgrades from v1.2.13 to v2.0.19.**
+# - **Add supports for newer dpdk: dpdk-stable-18.11.2 and dpdk-stable-17.11.6.**
+# - Add dpvs `scheduler module` to manage jobs on master and slaves in the same fasion.
+# - Add support for Mallenox 25G NIC MLX5.
+# - Add `iftraf module` to collect top N traffic clients.
+# - Add dpvs worker performance tuning doc.
+# - Add `debug module` for dpvs.
+# - Use dpvs mempool to allocate memory.
+# - Enable dpdk pdump tool for DPVS.
+# - Show the concrete neighbour entry info when its queue is full.
+# - Adjust header files used both by tools(keepalived/dpip/ipvsadm) and dpvs.
+# 
+# 
+# # Bugfix
+# --------
+# - Use async multicast msg to avoid config setting failures caused by msg timeout.
+# - Alleviate the NIC imiss problem caused by inetaddr lock and heap memory.
+# - Reduce sapool stats lookup failure problem.
+# - Fix memory underflow problem and add more debug info for dpvs mempool.
+# - Fix failure problem when add ipv6 addresses.
+# - Fix crash problem when delete all local addresses.
+# - Fix toa ipv6 crash problem caused by page write protect.
+# - Fix memory leak problem in `tunnel_xmit`.
+# - Fix crash problem when out of memory.
+# - Fix problem when DPDK EAL param '--master-lcore' or '--lcores' is used.
+# - Patch dpdk-stable-17.11.2 to support rh75.
+# - Several optimizations of memory allocation from eal heaps.
+# - Refactor several code episodes to make logic clear.
+# - Adjust some logs.
+
+
+export VERSION=1.8
+export RELEASE=2
 
 echo $VERSION-$RELEASE
