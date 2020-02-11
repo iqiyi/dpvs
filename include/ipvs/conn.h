@@ -18,7 +18,7 @@
 #ifndef __DPVS_CONN_H__
 #define __DPVS_CONN_H__
 #include <arpa/inet.h>
-#include "common.h"
+#include "conf/common.h"
 #include "list.h"
 #include "dpdk.h"
 #include "timer.h"

@@ -17,25 +17,11 @@
  */
 #ifndef __DPVS_STATS_H__
 #define __DPVS_STATS_H__
+
 #include <stdint.h>
-#include "ipvs/service.h"
-
-struct dp_vs_stats {
-    uint64_t            conns;
-    uint64_t            inpkts;
-    uint64_t            inbytes;
-    uint64_t            outpkts;
-    uint64_t            outbytes;
-
-    uint32_t cps;
-    uint32_t inpps;
-    uint32_t inbps;
-    uint32_t outpps;
-    uint32_t outbps;
-};
-
-#ifdef __DPVS__
 #include "dpdk.h"
+#include "conf/stats.h"
+#include "ipvs/service.h"
 
 struct dp_vs_conn;
 
@@ -110,6 +96,5 @@ uint64_t dp_vs_estats_get(enum dp_vs_estats_type field);
 int dp_vs_add_stats(struct dp_vs_stats* dst, struct dp_vs_stats* src);
 
 int dp_vs_copy_stats(struct dp_vs_stats* dst, struct dp_vs_stats* src);
-#endif
 
 #endif /* __DPVS_STATS_H__ */

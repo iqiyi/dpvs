@@ -34,6 +34,9 @@ enum {
     SOCKOPT_GET_LADDR_GETALL,
 };
 
+#define SOCKOPT_LADDR_BASE SOCKOPT_SET_LADDR_ADD
+#define SOCKOPT_GET_LADDR_MAX 199
+
 struct dp_vs_laddr_entry {
     int af;
     union inet_addr addr;

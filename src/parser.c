@@ -19,7 +19,7 @@
 #include <libgen.h>
 #include <errno.h>
 #include <glob.h>
-#include "common.h"
+#include "conf/common.h"
 #include "parser/parser.h"
 
 /* exported global vars */

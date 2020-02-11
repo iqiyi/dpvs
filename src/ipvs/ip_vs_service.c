@@ -904,6 +904,13 @@ static inline int set_opt_so2msg(sockoptid_t opt)
     return opt - SOCKOPT_SVC_BASE + MSG_TYPE_SVC_SET_BASE;
 }
 
+static int svc_msg_seq(void)
+{
+    static uint32_t seq = 0;
+
+    return seq++;
+}
+
 static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
 {
     int ret;
@@ -925,7 +932,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
     if (cid == rte_get_master_lcore()) {
         struct dpvs_msg *msg;
 
-        msg = msg_make(set_opt_so2msg(opt), 0, DPVS_MSG_MULTICAST, cid, len, user);
+        msg = msg_make(set_opt_so2msg(opt), svc_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
         if (!msg)
             return EDPVS_NOMEM;
 
@@ -1026,7 +1033,8 @@ static inline void opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t 
 
     *new_opt = (old_opt - SOCKOPT_SVC_BASE)%(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1)
                + SOCKOPT_SVC_BASE;
-    *cid     = (old_opt - SOCKOPT_SVC_BASE)/(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
+    *cid     = g_lcore_index[(old_opt - SOCKOPT_SVC_BASE)/(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1)];
+    assert(*cid >= 0 && *cid < DPVS_MAX_LCORE);
 }
 
 /* copy service/dest/stats */
@@ -1199,7 +1207,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
 
     netif_get_slave_lcores(&num_lcores, NULL);
     opt2cpu(opt, &new_opt, &cid);
-    if (cid > num_lcores || new_opt > SOCKOPT_SVC_MAX)
+    if (new_opt > SOCKOPT_SVC_MAX)
         return EDPVS_INVAL; 
 
     switch (new_opt){
@@ -1244,7 +1252,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
 
                 /* get slave core svc */
                 msg = msg_make(MSG_TYPE_SVC_GET_SERVICES, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
-                               size, user);
+                               sizeof(*get), user);
                 if (!msg) {
                     return EDPVS_NOMEM;
                 }

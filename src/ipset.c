@@ -24,7 +24,7 @@
 #include "ipset.h"
 #include "conf/ipset.h"
 #include "ctrl.h"
-#include "common.h"
+#include "conf/common.h"
 #include "parser/parser.h"
 
 #define IPSET_TAB_SIZE (1<<8)

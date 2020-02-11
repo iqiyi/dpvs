@@ -15,14 +15,30 @@
  * GNU General Public License for more details.
  *
  */
-#ifndef __DPVS_RR_H__
-#define __DPVS_RR_H__
 
-#include "ipvs/service.h"
-#include "ipvs/dest.h"
-#include "ipvs/sched.h"
+#include <rte_cycles.h>
+#include "global_data.h"
+#include "conf/common.h"
 
-int dp_vs_rr_init(void);
-int dp_vs_rr_term(void);
+uint64_t g_cycles_per_sec;
+dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
+int g_lcore_index[DPVS_MAX_LCORE];
 
-#endif
+int global_data_init(void)
+{
+    int i;
+
+    g_cycles_per_sec = rte_get_timer_hz();
+
+    for (i = 0; i < DPVS_MAX_LCORE; i++) {
+        g_lcore_role[i] = LCORE_ROLE_IDLE;
+        g_lcore_index[i] = -1;
+    }
+
+    return EDPVS_OK;
+}
+
+int global_data_term(void)
+{
+    return EDPVS_OK;
+}

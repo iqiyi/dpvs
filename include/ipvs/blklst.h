@@ -17,7 +17,7 @@
  */
 #ifndef __DPVS_BLKLST_H__
 #define __DPVS_BLKLST_H__
-#include "common.h"
+#include "conf/common.h"
 #include "ipvs/service.h"
 #include "timer.h"
 

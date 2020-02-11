@@ -15,14 +15,36 @@
  * GNU General Public License for more details.
  *
  */
-#ifndef __DPVS_WLC_H__
-#define __DPVS_WLC_H__
+/**
+ * Note: control plane only
+ * based on dpvs_sockopt.
+ */
+#ifndef __DPVS_IPSET_CONF_H__
+#define __DPVS_IPSET_CONF_H__
 
-#include "ipvs/service.h"
-#include "ipvs/dest.h"
-#include "ipvs/sched.h"
+enum {
+    /* set */
+    SOCKOPT_SET_IPSET_ADD   = 3300,
+    SOCKOPT_SET_IPSET_DEL,
+    SOCKOPT_SET_IPSET_FLUSH,
 
-int dp_vs_wlc_init(void);
-int dp_vs_wlc_term(void);
+    /* get */
+    SOCKOPT_GET_IPSET_SHOW,
+};
 
-#endif
+struct dp_vs_ipset_conf {
+	int af;
+	union inet_addr    addr;
+};
+
+struct dp_vs_multi_ipset_conf {
+    int num;
+    struct dp_vs_ipset_conf ipset_conf[0];
+};
+
+struct dp_vs_ipset_conf_array {
+    int                 nipset;
+    struct dp_vs_ipset_conf   ips[0];
+} __attribute__((__packed__));
+
+#endif /* __DPVS_IPSET_CONF_H__ */

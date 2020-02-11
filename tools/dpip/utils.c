@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 
 const char *af_itoa(int af)

@@ -17,7 +17,7 @@
  */
 #ifndef __DPVS_LADDR_H__
 #define __DPVS_LADDR_H__
-#include "common.h"
+#include "conf/common.h"
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
 

@@ -105,7 +105,7 @@ tcp_epilog(thread_ref_t thread, bool is_success)
 		checker->retry_it = 0;
 
 		if (is_success && (!checker->is_up || !checker->has_run)) {
-			log_message(LOG_INFO, "TCP connection to %s success."
+			log_message(LOG_DEBUG, "TCP connection to %s success."
 					, FMT_CHK(checker));
 			checker_was_up = checker->is_up;
 			rs_was_alive = checker->rs->alive;

@@ -24,7 +24,7 @@
 #include <netinet/ip.h>
 #include <linux/if_ether.h>
 #include "list.h"
-#include "common.h"
+#include "conf/common.h"
 #include "netif.h"
 #include "ipv4.h"
 #include "icmp.h"

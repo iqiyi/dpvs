@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <linux/if_ether.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "utils.h"
 #include "conf/vlan.h"

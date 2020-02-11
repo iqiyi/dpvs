@@ -27,20 +27,16 @@
 #include <stdbool.h>
 #include <assert.h>
 #include "list.h"
-#include "common.h"
+#include "conf/common.h"
 #include "timer.h"
 #include "dpdk.h"
 #include "rte_timer.h"
 #include "rte_spinlock.h"
 #include "parser/parser.h"
+#include "global_data.h"
 
 #define DTIMER
 #define RTE_LOGTYPE_DTIMER      RTE_LOGTYPE_USER1
-
-#ifdef CONFIG_TIMER_DEBUG
-#define TIMER_DUMMY_DATA0       0x3659AC
-#define TIMER_DUMMY_DATA1       0x93C5A6
-#endif
 
 /*
  * the use case of dpvs timer is huge number of connections has concentrated
@@ -161,8 +157,6 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
         RTE_LOG(WARNING, DTIMER, "[%02d]: timer %p handler possibly changed maliciously: %p ->%p\n%s",
                 rte_lcore_id(), timer, timer->handler, handler, trace);
     }
-    timer->dummy.next = (void *)TIMER_DUMMY_DATA0;
-    timer->dummy.prev = (void *)TIMER_DUMMY_DATA1;
 #endif
 
     assert(delay && handler);
@@ -234,13 +228,12 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
         list_del(&timer->list);
 
 #ifdef CONFIG_TIMER_DEBUG
-    if (unlikely(timer->dummy.next != (void *)TIMER_DUMMY_DATA0 ||
-                timer->dummy.prev != (void *)TIMER_DUMMY_DATA1)) {
+    if (unlikely(!handler || (uint64_t)handler > 0x7ffffffffULL)) {
         char trace[8192];
         dpvs_backtrace(trace, sizeof(trace));
-        RTE_LOG(WARNING, DTIMER, "[%02d]: timer(%p) dummy info invalid -- dummy.next:%p,"
-                "dummy.prev:%p, handler:%p, priv:%p, trace:\n%s", rte_lcore_id(), timer,
-                timer->dummy.next, timer->dummy.prev, timer->handler, timer->priv, trace);
+        RTE_LOG(WARNING, DTIMER, "[%02d]: invalid timer(%p) handler "
+                "-- handler:%p, priv:%p, trace:\n%s", rte_lcore_id(),
+                timer, timer->handler, timer->priv, trace);
     }
 #endif
 
@@ -260,8 +253,8 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
 #ifdef CONFIG_TIMER_MEASURE
 static inline void deviation_measure(void)
 {
-    static struct timeval tv_prev[RTE_MAX_LCORE];
-    static uint32_t count[RTE_MAX_LCORE];
+    static struct timeval tv_prev[DPVS_MAX_LCORE];
+    static uint32_t count[DPVS_MAX_LCORE];
     struct timeval tv_now, tv_elapse;
 
     if (count[rte_lcore_id()]++ % DPVS_TIMER_HZ == 0) {
@@ -372,7 +365,7 @@ static int timer_init_schedler(struct timer_scheduler *sched, lcoreid_t cid)
 
     rte_timer_init(&sched->rte_tim);
     /* ticks should be exactly same with precision */
-    if (rte_timer_reset(&sched->rte_tim, rte_get_timer_hz() / DPVS_TIMER_HZ,
+    if (rte_timer_reset(&sched->rte_tim, g_cycles_per_sec / DPVS_TIMER_HZ,
                         PERIODICAL, cid, rte_timer_tick_cb, sched) != 0) {
         RTE_LOG(ERR, DTIMER, "[%02d] fail to reset rte timer.\n", cid);
         return EDPVS_INVAL;

@@ -20,19 +20,16 @@
 
 #include <stdint.h>
 #include <net/if.h>
-#include "match.h"
 #include "ipvs/stats.h"
 #include "ipvs/dest.h"
 #include "inet.h"
-
-#define DP_VS_SCHEDNAME_MAXLEN      16
-
-#ifdef __DPVS__
 #include "list.h"
 #include "dpdk.h"
 #include "netif.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/sched.h"
+#include "conf/match.h"
+#include "conf/service.h"
 
 #define RTE_LOGTYPE_SERVICE RTE_LOGTYPE_USER3
 #define DP_VS_SVC_F_PERSISTENT      0x0001      /* peristent port */
@@ -88,89 +85,8 @@ struct dp_vs_service {
 
     /* ... flags, timer ... */
 } __rte_cache_aligned;
-#endif
 
-struct dp_vs_service_conf {
-    /* virtual service addresses */
-    uint16_t            af;
-    uint16_t            protocol;
-    union inet_addr     addr;       /* virtual ip address */
-    uint16_t            port;
-    uint32_t            fwmark;     /* firwall mark of service */
-    struct dp_vs_match  match;
 
-    /* virtual service options */
-    char                *sched_name;
-    unsigned            flags;     /* virtual service flags */
-    unsigned            timeout;   /* persistent timeout in sec */
-    unsigned            conn_timeout;
-    uint32_t            netmask;        /* persistent netmask */
-    unsigned            bps;
-    unsigned            limit_proportion;
-};
-
-struct dp_vs_service_entry {
-    int                 af;
-    uint16_t            proto;
-    union inet_addr     addr;
-    uint16_t            port;
-    uint32_t            fwmark;
-
-    char                sched_name[DP_VS_SCHEDNAME_MAXLEN];
-    unsigned            flags;
-    unsigned            timeout;
-    unsigned            conn_timeout;
-    uint32_t            netmask;
-    unsigned            bps;
-    unsigned            limit_proportion;
-
-    unsigned int        num_dests;
-    unsigned int        num_laddrs;
-    lcoreid_t           cid;
-
-    struct dp_vs_stats  stats;
-
-    char                srange[256];
-    char                drange[256];
-    char                iifname[IFNAMSIZ];
-    char                oifname[IFNAMSIZ];
-};
-
-struct dp_vs_get_services {
-    lcoreid_t     cid;
-    unsigned int        num_services;
-    struct dp_vs_service_entry entrytable[0];
-};
-
-struct dp_vs_service_user{
-    int               af;
-    uint16_t          proto;
-    union inet_addr   addr;
-    uint16_t          port;
-    uint32_t          fwmark;
-
-    char              sched_name[DP_VS_SCHEDNAME_MAXLEN];
-    unsigned          flags;
-    unsigned          timeout;
-    unsigned          conn_timeout;
-    uint32_t          netmask;
-    unsigned          bps;
-    unsigned          limit_proportion;
-
-    char              srange[256];
-    char              drange[256];
-    char              iifname[IFNAMSIZ];
-    char              oifname[IFNAMSIZ];
-};
-
-struct dp_vs_getinfo {
-    unsigned int version;
-    unsigned int size;
-    unsigned int num_services;
-    unsigned int num_lcores;
-};
-
-#ifdef __DPVS__
 int dp_vs_service_init(void);
 int dp_vs_service_term(void);
 
@@ -197,35 +113,5 @@ struct dp_vs_service *dp_vs_lookup_vip(int af, uint16_t protocol,
                                        lcoreid_t cid);
 
 unsigned dp_vs_get_conn_timeout(struct dp_vs_conn *conn);
-
-#define MAX_ARG_LEN    (sizeof(struct dp_vs_service_user) +    \
-                         sizeof(struct dp_vs_dest_user))
-#endif
-
-enum{
-    DPVS_SO_SET_FLUSH = 200,
-    DPVS_SO_SET_ZERO,
-    DPVS_SO_SET_ADD,
-    DPVS_SO_SET_EDIT,
-    DPVS_SO_SET_DEL,
-    DPVS_SO_SET_ADDDEST,
-    DPVS_SO_SET_EDITDEST,
-    DPVS_SO_SET_DELDEST,
-    DPVS_SO_SET_GRATARP,
-};
-
-enum{
-    DPVS_SO_GET_VERSION = 200,
-    DPVS_SO_GET_INFO,
-    DPVS_SO_GET_SERVICES,
-    DPVS_SO_GET_SERVICE,
-    DPVS_SO_GET_DESTS,
-};
-
-
-#define SOCKOPT_SVC_BASE         DPVS_SO_SET_FLUSH
-#define SOCKOPT_SVC_SET_CMD_MAX  DPVS_SO_SET_GRATARP
-#define SOCKOPT_SVC_GET_CMD_MAX  DPVS_SO_GET_DESTS
-#define SOCKOPT_SVC_MAX          299
 
 #endif /* __DPVS_SVC_H__ */

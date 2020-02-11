@@ -24,7 +24,7 @@
 
 #include "list.h"
 #include "netif.h"
-#include "common.h"
+#include "conf/common.h"
 #include "flow.h"
 
 #define RTE_LOGTYPE_IPSET       RTE_LOGTYPE_USER1

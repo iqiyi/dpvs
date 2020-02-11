@@ -31,7 +31,7 @@
 #include <sys/socket.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "netif.h"
 #include "netif_addr.h"

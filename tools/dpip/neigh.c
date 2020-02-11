@@ -20,7 +20,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include "net/ethernet.h"
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "conf/neigh.h"
 #include "sockopt.h"

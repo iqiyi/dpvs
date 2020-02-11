@@ -222,15 +222,15 @@ ipvs_talk(int cmd,
 	}
 
 	if (result) {//EDPVS_MSG_FAIL just ignore set failed
-                if ((result == EDPVS_EXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
-                        && (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_ADDDEST))
-                        ignore_error = true;
-                else if ((result == EDPVS_NOTEXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
-                        && (cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST))
-                        ignore_error = true;
-                log_message(LOG_INFO, "IPVS: %s", ipvs_strerror(errno));
-        }
-
+		if ((result == EDPVS_EXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
+				&& (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_ADDDEST))
+			ignore_error = true;
+		else if ((result == EDPVS_NOTEXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
+				&& (cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST))
+			ignore_error = true;
+		if (errno)
+			log_message(LOG_INFO, "IPVS: %s", ipvs_strerror(errno));
+	}
 
 	if (ignore_error)
 		result = 0;
@@ -241,7 +241,8 @@ ipvs_talk(int cmd,
 		else if (errno == ENOENT &&
 			(cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST))
 			result = 0;
-		log_message(LOG_INFO, "IPVS (cmd %d, errno %d): %s", cmd, errno, ipvs_strerror(errno));
+		if (errno)
+			log_message(LOG_INFO, "IPVS (cmd %d, errno %d): %s", cmd, errno, ipvs_strerror(errno));
 	}
 	return result;
 }

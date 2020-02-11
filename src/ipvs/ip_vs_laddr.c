@@ -21,7 +21,7 @@
 #include <netinet/in.h>
 #include "dpdk.h"
 #include "list.h"
-#include "common.h"
+#include "conf/common.h"
 #include "netif.h"
 #include "route.h"
 #include "inet.h"
@@ -159,7 +159,9 @@ static inline void put_laddr(struct dp_vs_laddr *laddr)
 
     if (rte_atomic32_dec_and_test(&laddr->refcnt)) {
         rte_free(laddr);
-        RTE_LOG(DEBUG, IPVS, "%s: delete laddr.\n", __func__);
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+        RTE_LOG(DEBUG, IPVS, "%s: [%02d] delete laddr.\n", rte_lcore_id(), __func__);
+#endif
     }
 }
 
@@ -169,6 +171,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
     int i;
     uint16_t sport = 0;
     struct sockaddr_storage dsin, ssin;
+    bool found = false;
 
     if (!conn || !conn->dest || !svc)
         return EDPVS_INVAL;
@@ -218,7 +221,7 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
                 snprintf(buf, sizeof(buf), "::");
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-            RTE_LOG(ERR, IPVS, "%s: [%d] no lport available on %s, "
+            RTE_LOG(DEBUG, IPVS, "%s: [%02d] no lport available on %s, "
                     "try next laddr.\n", __func__, rte_lcore_id(), buf);
 #endif
             put_laddr(laddr);
@@ -227,16 +230,15 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 
         sport = (laddr->af == AF_INET ? (((struct sockaddr_in *)&ssin)->sin_port)
                 : (((struct sockaddr_in6 *)&ssin)->sin6_port));
+        found = true;
         break;
     }
 
-    if (!laddr || sport == 0) {
+    if (!found) {
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-        RTE_LOG(ERR, IPVS, "%s: [%d] no lport available !!\n",
+        RTE_LOG(ERR, IPVS, "%s: [%02d] no lip/lport available !!\n",
                 __func__, rte_lcore_id());
 #endif
-        if (laddr)
-            put_laddr(laddr);
         return EDPVS_RESOURCE;
     }
 
@@ -417,6 +419,12 @@ int dp_vs_laddr_flush(struct dp_vs_service *svc)
  * for control plane
  */
 
+static uint32_t laddr_msg_seq(void)
+{
+    static uint32_t counter = 0;
+    return counter++;
+}
+
 static inline sockoptid_t set_opt_so2msg(int opt)
 {
     return opt - SOCKOPT_LADDR_BASE + MSG_TYPE_SET_LADDR_BASE;
@@ -434,7 +442,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (cid == rte_get_master_lcore()) {
         struct dpvs_msg *msg;
 
-        msg = msg_make(set_opt_so2msg(opt), 0, DPVS_MSG_MULTICAST, cid, size, conf);
+        msg = msg_make(set_opt_so2msg(opt), laddr_msg_seq(), DPVS_MSG_MULTICAST, cid, size, conf);
         if (!msg)
             return EDPVS_NOMEM;
 
@@ -548,7 +556,9 @@ static int dp_vs_copy_percore_laddrs_stats(struct dp_vs_laddr_conf *master_laddr
 
 static void opt2cpu(sockoptid_t opt, sockoptid_t *new_opt, lcoreid_t *cid)
 {
-    *cid = opt - SOCKOPT_GET_LADDR_GETALL;
+    *cid = g_lcore_index[opt - SOCKOPT_GET_LADDR_GETALL];
+    assert(*cid >=0 && *cid < DPVS_MAX_LCORE);
+
     *new_opt = SOCKOPT_GET_LADDR_GETALL;
 }
 
@@ -570,7 +580,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     netif_get_slave_lcores(&num_lcores, NULL);
     opt2cpu(opt, &new_opt, &cid);
-    if (cid > num_lcores || new_opt > SOCKOPT_GET_LADDR_GETALL)
+    if (new_opt > SOCKOPT_GET_LADDR_GETALL)
         return EDPVS_INVAL;
 
     if (!conf && size < sizeof(*laddr_conf))

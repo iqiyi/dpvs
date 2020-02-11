@@ -19,7 +19,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <openssl/md5.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/synproxy.h"

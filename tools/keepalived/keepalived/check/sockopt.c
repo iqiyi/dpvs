@@ -4,7 +4,7 @@
 #include <malloc.h>
 #include <pthread.h>
 #include <unistd.h>
-#include "../include/common.h"
+#include "../include/conf/common.h"
 
 #define UNIX_DOMAIN "/var/run/dpvs_ctrl"
 

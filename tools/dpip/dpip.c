@@ -23,7 +23,7 @@
 #include <arpa/inet.h>
 #include "dpip.h"
 #include "list.h"
-#include "common.h"
+#include "conf/common.h"
 
 static struct list_head dpip_objs = LIST_HEAD_INIT(dpip_objs);
 

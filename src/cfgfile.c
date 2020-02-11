@@ -18,7 +18,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "parser/parser.h"
 #include "cfgfile.h"
 #include "global_conf.h"
@@ -33,6 +33,7 @@
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
 #include "ipvs/synproxy.h"
+#include "scheduler.h"
 
 typedef void (*sighandler_t)(int);
 
@@ -103,7 +104,7 @@ static inline void sighup(void)
     SET_RELOAD;
 }
 
-void try_reload(void)
+static void try_reload(void *dump)
 {
     if (unlikely(RELOAD_STATUS)) {
         UNSET_RELOAD;
@@ -134,6 +135,12 @@ static void sig_callback(int sig)
     }
 }
 
+static struct dpvs_lcore_job reload_job = {
+    .func = try_reload,
+    .data = NULL,
+    .type = LCORE_JOB_LOOP,
+};
+
 int cfgfile_init(void)
 {
     int ret;
@@ -162,7 +169,14 @@ int cfgfile_init(void)
 
     /* load configuration file on start */
     SET_RELOAD;
-    try_reload();
+    try_reload(NULL);
+
+    snprintf(reload_job.name, sizeof(reload_job.name), "%s", "cfgfile_reload");
+    ret = dpvs_lcore_job_register(&reload_job, LCORE_ROLE_MASTER);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(ERR, CFG_FILE, "%s: fail to register cfgfile_reload job\n", __func__);
+        return ret;
+    }
 
     return EDPVS_OK;
 }
@@ -174,6 +188,12 @@ int cfgfile_term(void)
     if ((ret = global_conf_term()) != EDPVS_OK) {
         RTE_LOG(ERR, CFG_FILE, "%s: global configuration termination failed\n",
                 __func__);
+        return ret;
+    }
+
+    ret = dpvs_lcore_job_unregister(&reload_job, LCORE_ROLE_MASTER);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(ERR, CFG_FILE, "%s: fail to unregister cfgfile_reload job\n", __func__);
         return ret;
     }
 

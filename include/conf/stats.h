@@ -15,25 +15,21 @@
  * GNU General Public License for more details.
  *
  */
-#ifndef __DPVS_BLKLST_H__
-#define __DPVS_BLKLST_H__
-#include "common.h"
-#include "ipvs/service.h"
-#include "timer.h"
+#ifndef __DPVS_STATS_CONF_H__
+#define __DPVS_STATS_CONF_H__
 
-struct blklst_entry {
-    struct list_head    list;
-    union inet_addr     vaddr;
-    uint16_t            vport;
-    uint8_t             proto; 
-    union inet_addr     blklst;
+struct dp_vs_stats {
+    uint64_t            conns;
+    uint64_t            inpkts;
+    uint64_t            inbytes;
+    uint64_t            outpkts;
+    uint64_t            outbytes;
+
+    uint32_t cps;
+    uint32_t inpps;
+    uint32_t inbps;
+    uint32_t outpps;
+    uint32_t outbps;
 };
 
-struct blklst_entry *dp_vs_blklst_lookup(uint8_t proto, const union inet_addr *vaddr,
-                                         uint16_t vport, const union inet_addr *blklst);
-void dp_vs_blklst_flush(struct dp_vs_service *svc);
-
-int dp_vs_blklst_init(void);
-int dp_vs_blklst_term(void);
-
-#endif /* __DPVS_BLKLST_H__ */
+#endif /* __DPVS_STATS_CONF_H__ */

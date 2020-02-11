@@ -22,10 +22,10 @@
  * raychen@qiyi.com, Jan 2018, initial.
  */
 #include <arpa/inet.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "sockopt.h"
-#include "ip_tunnel.h"
+#include "conf/ip_tunnel.h"
 
 static int addr_atoi(const char *addr, __be32 *ip)
 {

@@ -32,7 +32,7 @@ enum {
 };
 
 enum {
-    DPVS_NUD_S_NONE        = 0, 
+    DPVS_NUD_S_NONE        = 0,
     DPVS_NUD_S_SEND,
     DPVS_NUD_S_REACHABLE,
     DPVS_NUD_S_PROBE,
@@ -83,4 +83,4 @@ static inline const char *nud_state_name(int state)
 #define NEIGHBOUR_HASHED     0x01
 #define NEIGHBOUR_STATIC     0x02
 
-#endif 
+#endif
