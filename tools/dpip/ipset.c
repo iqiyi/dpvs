@@ -17,7 +17,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "conf/ipset.h"
 #include "linux_ipv6.h"

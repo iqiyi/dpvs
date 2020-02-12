@@ -4,31 +4,24 @@
  *              a loadbalanced server pool using multi-layer checks.
  *
  * Part:        vrrp_sync.c include file.
- * 
+ *
  * Author:      Alexandre Cassen, <acassen@linux-vs.org>
- *              
+ *
  *              This program is distributed in the hope that it will be useful,
  *              but WITHOUT ANY WARRANTY; without even the implied warranty of
  *              MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  *              See the GNU General Public License for more details.
- *              
+ *
  *              This program is free software; you can redistribute it and/or
  *              modify it under the terms of the GNU General Public License
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _VRRP_SYNC_H
 #define _VRRP_SYNC_H
-
-/* system include */
-#include <stdlib.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <string.h>
-#include <stdint.h>
 
 /* local include */
 #include "vrrp.h"
@@ -41,15 +34,11 @@
 #define GROUP_NAME(G)  ((G)->gname)
 
 /* extern prototypes */
-extern void vrrp_init_instance_sands(vrrp_t *);
-extern void vrrp_sync_smtp_notifier(vrrp_sgroup_t *);
+extern vrrp_t *vrrp_get_instance(char *) __attribute__ ((pure));
 extern void vrrp_sync_set_group(vrrp_sgroup_t *);
-extern int vrrp_sync_group_up(vrrp_sgroup_t *);
-extern int vrrp_sync_leave_fault(vrrp_t *);
-extern int vrrp_sync_goto_master(vrrp_t *);
+extern bool vrrp_sync_can_goto_master(vrrp_t *);
 extern void vrrp_sync_backup(vrrp_t *);
 extern void vrrp_sync_master(vrrp_t *);
-extern void vrrp_sync_master_election(vrrp_t *);
 extern void vrrp_sync_fault(vrrp_t *);
 
 #endif

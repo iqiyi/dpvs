@@ -18,6 +18,7 @@
 #ifndef __DPVS_DPDK_H__
 #define __DPVS_DPDK_H__
 #include <rte_common.h>
+#include <rte_version.h>
 #include <rte_vect.h>
 #include <rte_byteorder.h>
 #include <rte_log.h>
@@ -57,6 +58,9 @@
 #include <rte_eth_bond.h>
 #include <rte_eth_bond_8023ad.h>
 #include "mbuf.h"
+#ifdef CONFIG_DPVS_PDUMP
+#include <rte_pdump.h>
+#endif
 
 typedef uint8_t lcoreid_t;
 typedef uint16_t portid_t;

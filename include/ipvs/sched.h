@@ -19,7 +19,7 @@
 #define __DPVS_SCHED_H__
 #include "list.h"
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "ctrl.h"
 #include "ipvs/service.h"
 

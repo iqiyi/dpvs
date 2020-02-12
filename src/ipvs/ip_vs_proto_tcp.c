@@ -17,7 +17,7 @@
  */
 #include <assert.h>
 #include <time.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "ipv4.h"
 #include "ipv6.h"
@@ -590,7 +590,8 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 
         /* Drop tcp packet which is send to vip and !vport */
         if (g_defence_tcp_drop &&
-                (svc = dp_vs_lookup_vip(iph->af, iph->proto, &iph->daddr))) {
+                (svc = dp_vs_lookup_vip(iph->af, iph->proto, 
+                                    &iph->daddr, rte_lcore_id()))) {
             dp_vs_estats_inc(DEFENCE_TCP_DROP);
             *verdict = INET_DROP;
             return EDPVS_INVPKT;
@@ -600,12 +601,13 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_INVAL;
     }
 
-    svc = dp_vs_service_lookup(iph->af, iph->proto, 
-                               &iph->daddr, th->dest, 0, mbuf, NULL, &outwall);
+    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, th->dest, 
+                               0, mbuf, NULL, &outwall, rte_lcore_id());
     if (!svc) {
         /* Drop tcp packet which is send to vip and !vport */
         if (g_defence_tcp_drop &&
-                (svc = dp_vs_lookup_vip(iph->af, iph->proto, &iph->daddr))) {
+                (svc = dp_vs_lookup_vip(iph->af, iph->proto, 
+                                   &iph->daddr, rte_lcore_id()))) {
             dp_vs_estats_inc(DEFENCE_TCP_DROP);
             *verdict = INET_DROP;
             return EDPVS_INVPKT;
@@ -616,12 +618,9 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 
     *conn = dp_vs_schedule(svc, iph, mbuf, false, outwall);
     if (!*conn) {
-        dp_vs_service_put(svc);
         *verdict = INET_DROP;
         return EDPVS_RESOURCE;
     }
-
-    dp_vs_service_put(svc);
 
     return EDPVS_OK;
 }

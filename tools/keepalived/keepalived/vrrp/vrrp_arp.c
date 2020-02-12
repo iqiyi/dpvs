@@ -17,28 +17,35 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
+
+#include "config.h"
 
 /* system includes */
 #include <unistd.h>
-#include <netpacket/packet.h>
+#include <net/ethernet.h>
+#include <net/if_arp.h>
+#include <linux/if_packet.h>
+#include <errno.h>
 
 /* local includes */
 #include "logger.h"
 #include "memory.h"
 #include "utils.h"
+#include "bitops.h"
+#include "vrrp_scheduler.h"
 #include "vrrp_arp.h"
+#if !HAVE_DECL_SOCK_CLOEXEC
+#include "old_socket.h"
+#endif
 
-
-/* Build a gratuitous ARP message over a specific interface */
-int send_gratuitous_arp(ip_address_t *ipaddress)
+void send_gratuitous_arp(ip_address_t *ipaddress)
 {
     log_message(LOG_INFO, "send garp for addr %s.\n", 
             inet_ntop2(ipaddress->u.sin.sin_addr.s_addr));
-    return ipvs_send_gratuitous_arp(&(ipaddress->u.sin.sin_addr));
+    ipvs_send_gratuitous_arp(&(ipaddress->u.sin.sin_addr));
 }
-
 
 /*
  *	Gratuitous ARP init/close
@@ -47,6 +54,7 @@ void gratuitous_arp_init(void)
 {
 	log_message(LOG_INFO, "Registering DPVS gratuitous ARP.\n");
 }
+
 void gratuitous_arp_close(void)
 {
 	log_message(LOG_INFO, "Unregistering DPVS gratuitous ARP.\n");

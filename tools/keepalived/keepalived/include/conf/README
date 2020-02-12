@@ -1,0 +1,4 @@
+Header files in "./tools/keepalived/keepalived/include/conf/"
+is a mirror of "./include/conf/".
+
+Always keep the header files of the two paths the same!

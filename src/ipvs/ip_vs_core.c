@@ -18,7 +18,7 @@
 #include <assert.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/icmp6.h>
-#include "common.h"
+#include "conf/common.h"
 #include "ipv4.h"
 #include "ipv6.h"
 #include "icmp.h"
@@ -1083,8 +1083,8 @@ static int __dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
 
     /* Drop udp packet which send to tcp-vip */
     if (g_defence_udp_drop && IPPROTO_UDP == iph.proto) {
-        if ((svc = dp_vs_lookup_vip(af, IPPROTO_UDP, &iph.daddr)) == NULL) {
-            if ((svc = dp_vs_lookup_vip(af, IPPROTO_TCP, &iph.daddr)) != NULL) {
+        if ((svc = dp_vs_lookup_vip(af, IPPROTO_UDP, &iph.daddr, rte_lcore_id())) == NULL) {
+            if ((svc = dp_vs_lookup_vip(af, IPPROTO_TCP, &iph.daddr, rte_lcore_id())) != NULL) {
                 dp_vs_estats_inc(DEFENCE_UDP_DROP);
                 return INET_DROP;
             }

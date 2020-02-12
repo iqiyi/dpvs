@@ -19,7 +19,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <openssl/md5.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/synproxy.h"
@@ -689,26 +689,21 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         goto syn_rcv_out;
 
     if (th->syn && !th->ack && !th->rst && !th->fin &&
-            (svc = dp_vs_service_lookup(af, iph->proto,
-                                        &iph->daddr, th->dest, 0, NULL, NULL, NULL)) &&
+            (svc = dp_vs_service_lookup(af, iph->proto, &iph->daddr, th->dest, 0,
+                                        NULL, NULL, NULL, rte_lcore_id())) &&
             (svc->flags & DP_VS_SVC_F_SYNPROXY)) {
         /* if service's weight is zero (non-active realserver),
          * do noting and drop the packet */
         if (svc->weight == 0) {
             dp_vs_estats_inc(SYNPROXY_NO_DEST);
-            dp_vs_service_put(svc);
             goto syn_rcv_out;
         }
-
-        dp_vs_service_put(svc);
 
         /* drop packet from blacklist */
         if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
             goto syn_rcv_out;
         }
     } else {
-        if (svc)
-            dp_vs_service_put(svc);
         return 1;
     }
 
@@ -961,14 +956,13 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
     /* Do not check svc syn-proxy flag, as it may be changed after syn-proxy step 1. */
     if (!th->syn && th->ack && !th->rst && !th->fin &&
             (svc = dp_vs_service_lookup(af, iph->proto, &iph->daddr,
-                                        th->dest, 0, NULL, NULL, NULL))) {
+                           th->dest, 0, NULL, NULL, NULL, rte_lcore_id()))) {
         if (dp_vs_synproxy_ctrl_defer &&
                 !syn_proxy_ack_has_data(mbuf, iph, th)) {
             /* Update statistics */
             dp_vs_estats_inc(SYNPROXY_NULL_ACK);
             /* We get a pure ack when expecting ack packet with payload, so
              * have to drop it */
-            dp_vs_service_put(svc);
             *verdict = INET_DROP;
             return 0;
         }
@@ -985,7 +979,6 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
             /* Cookie check failed, drop the packet */
             RTE_LOG(DEBUG, IPVS, "%s: syn_cookie check failed seq=%u\n", __func__,
                     ntohl(th->ack_seq) - 1);
-            dp_vs_service_put(svc);
             *verdict = INET_DROP;
             return 0;
         }
@@ -1000,13 +993,9 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
             RTE_LOG(WARNING, IPVS, "%s: ip_vs_schedule failed\n", __func__);
             /* FIXME: What to do when virtual service is available but no destination
              * available for a new connetion: send an icmp UNREACHABLE ? */
-            dp_vs_service_put(svc);
             *verdict = INET_DROP;
             return 0;
         }
-
-        /* Release the service, we do not need it any more */
-        dp_vs_service_put(svc);
 
         /* Do nothing but print a error msg when fail, because session will be
          * correctly freed in dp_vs_conn_expire */

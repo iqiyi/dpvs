@@ -43,7 +43,7 @@ MAN		= $(RPM_BUILD_ROOT)/$(MANDIR)/man8
 INIT		= $(RPM_BUILD_ROOT)/etc/rc.d/init.d
 MKDIR		= mkdir
 INSTALL		= install
-STATIC_LIBS	= ../keepalived/keepalived/libipvs-2.6/libipvs.a
+STATIC_LIBS	= ../keepalived/keepalived/check/libcheck.a
 DPVSDEPS    = ../../src/common.o
 
 ifeq "${ARCH}" "sparc64"

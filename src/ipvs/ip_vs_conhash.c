@@ -145,7 +145,7 @@ static void node_fini(struct node_s *node)
         return;
 
     if (node->data) {
-        rte_atomic32_dec(&(((struct dp_vs_dest *)(node->data))->refcnt));
+        dp_vs_dest_put((struct dp_vs_dest *)node->data);
         node->data = NULL;
     }
 

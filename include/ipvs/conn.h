@@ -18,7 +18,7 @@
 #ifndef __DPVS_CONN_H__
 #define __DPVS_CONN_H__
 #include <arpa/inet.h>
-#include "common.h"
+#include "conf/common.h"
 #include "list.h"
 #include "dpdk.h"
 #include "timer.h"
@@ -39,6 +39,7 @@ enum {
     DPVS_CONN_F_HASHED          = 0x0040,
     DPVS_CONN_F_REDIRECT_HASHED = 0x0080,
     DPVS_CONN_F_INACTIVE        = 0x0100,
+    DPVS_CONN_F_IN_TIMER        = 0x0200,
     DPVS_CONN_F_SYNPROXY        = 0x8000,
     DPVS_CONN_F_TEMPLATE        = 0x1000,
     DPVS_CONN_F_NOFASTXMIT      = 0x2000,
@@ -153,10 +154,10 @@ struct dp_vs_conn {
 
     /* connection redirect in fnat/snat/nat modes */
     struct dp_vs_redirect  *redirect;
-  
+
     /* flag for gfwip */
     bool outwall;
-  
+
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
@@ -278,6 +279,36 @@ static inline void dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn 
 #endif
     conn->control = ctl_conn;
     rte_atomic32_inc(&ctl_conn->n_control);
+}
+
+static inline bool
+dp_vs_conn_is_template(struct dp_vs_conn *conn)
+{
+    return  (conn->flags & DPVS_CONN_F_TEMPLATE) ? true : false;
+}
+
+static inline void
+dp_vs_conn_set_template(struct dp_vs_conn *conn)
+{
+    conn->flags |= DPVS_CONN_F_TEMPLATE;
+}
+
+static inline bool
+dp_vs_conn_is_in_timer(struct dp_vs_conn *conn)
+{
+    return (conn->flags & DPVS_CONN_F_IN_TIMER) ? true : false;
+}
+
+static inline void
+dp_vs_conn_set_in_timer(struct dp_vs_conn *conn)
+{
+    conn->flags |= DPVS_CONN_F_IN_TIMER;
+}
+
+static inline void
+dp_vs_conn_clear_in_timer(struct dp_vs_conn *conn)
+{
+    conn->flags &= ~DPVS_CONN_F_IN_TIMER;
 }
 
 static inline bool

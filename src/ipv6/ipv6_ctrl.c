@@ -21,7 +21,7 @@
  * Lei Chen <raychen@qiyi.com>, initial, Jul 2018.
  */
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "inet.h"
 #include "ipv6.h"
@@ -40,7 +40,7 @@ static int ip6_msg_get_stats(struct dpvs_msg *msg)
 
     err = ipv6_stats_cpu(stats);
     if (err != EDPVS_OK) {
-        rte_free(stats);
+        msg_reply_free(stats);
         return err;
     }
 

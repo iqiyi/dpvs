@@ -60,7 +60,7 @@ static int fill_qsch_param(struct Qsch *sch, struct tc_qsch_param *pr)
     /* handle replies */
     list_for_each_entry(reply, &replies->mq, mq_node) {
         st = (struct tc_qsch_stats *)reply->data;
-        assert(st && reply->cid < RTE_MAX_LCORE);
+        assert(st && reply->cid < DPVS_MAX_LCORE);
 
         pr->qstats_cpus[reply->cid] = st->qstats;
         pr->bstats_cpus[reply->cid] = st->bstats;

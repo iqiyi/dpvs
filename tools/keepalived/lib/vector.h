@@ -1,10 +1,10 @@
-/* 
+/*
  * Soft:        Keepalived is a failover program for the LVS project
  *              <www.linuxvirtualserver.org>. It monitor & manipulate
  *              a loadbalanced server pool using multi-layer checks.
- * 
+ *
  * Part:        vector.c include file.
- *  
+ *
  * Author:      Alexandre Cassen, <acassen@linux-vs.org>
  *
  *              This program is distributed in the hope that it will be useful,
@@ -17,11 +17,14 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@linux-vs.org>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _VECTOR_H
 #define _VECTOR_H
+
+#include <sys/types.h>
+#include <stdio.h>
 
 /* vector definition */
 typedef struct _vector {
@@ -30,37 +33,46 @@ typedef struct _vector {
 	void		**slot;
 } vector_t;
 
+typedef const char *(*null_strvec_handler_t)(const vector_t *, size_t);
+
 /* Some defines */
 #define VECTOR_DEFAULT_SIZE 1
 
-/* Some usefull macros */
-#define vector_slot(V,E) ((V)->slot[(E)])
+/* Some useful macros */
 #define vector_size(V)   ((V)->allocated)
+#define vector_slot(V,E) ((V)->slot[(E)])
+//#define vector_slot(V,E) (vector_lookup(V,E))
+
 #define vector_active(V) ((V)->active)
 #define vector_foreach_slot(v,p,i) \
 	for (i = 0; i < (v)->allocated && ((p) = (v)->slot[i]); i++)
 
+#ifdef _MEM_CHECK_
+#define vector_alloc()		(memcheck_log("vector_alloc", NULL, (__FILE__), (__func__), (__LINE__)), \
+				 vector_alloc_r())
+#define vector_alloc_slot(v)	(memcheck_log("vector_alloc_slot", NULL, (__FILE__), (__func__), (__LINE__)), \
+				 vector_alloc_slot_r(v))
+#define vector_free(v)		(memcheck_log("vector_free", NULL, (__FILE__), (__func__), (__LINE__)), \
+				 vector_free_r(v))
+#else
+#define vector_alloc()		(vector_alloc_r())
+#define vector_alloc_slot(v)	(vector_alloc_slot_r(v))
+#define vector_free(v)		(vector_free_r(v))
+#endif
+
 /* Prototypes */
-extern vector_t *vector_alloc(void);
-extern vector_t *vector_init(unsigned int);
-extern void vector_alloc_slot(vector_t *);
-extern void vector_insert_slot(vector_t *, int, void *);
-extern vector_t *vector_copy(vector_t *);
-extern void vector_ensure(vector_t *, unsigned int);
-extern int vector_empty_slot(vector_t *);
-extern int vector_set(vector_t *, void *);
+extern null_strvec_handler_t register_null_strvec_handler(null_strvec_handler_t);
+extern null_strvec_handler_t unregister_null_strvec_handler(void);
+extern const char *strvec_slot(const vector_t *strvec, size_t index);
+extern vector_t *vector_alloc_r(void) __attribute__ ((malloc));
+extern void vector_alloc_slot_r(vector_t *);
 extern void vector_set_slot(vector_t *, void *);
-extern int vector_set_index(vector_t *, unsigned int, void *);
-extern void *vector_lookup(vector_t *, unsigned int);
-extern void *vector_lookup_ensure(vector_t *, unsigned int);
 extern void vector_unset(vector_t *, unsigned int);
-extern unsigned int vector_count(vector_t *);
-extern void vector_only_wrapper_free(vector_t *);
-extern void vector_only_index_free(void *);
-extern void vector_only_slot_free(void *);
-extern void vector_free(vector_t *);
-extern void vector_dump(vector_t *);
-extern void free_strvec(vector_t *);
-extern void dump_strvec(vector_t *);
+extern unsigned int vector_count(const vector_t *) __attribute__ ((pure));
+extern void vector_free_r(const vector_t *);
+#ifdef _INCLUDE_UNUSED_CODE_
+extern void vector_dump(FILE *fp, const vector_t *);
+#endif
+extern void free_strvec(const vector_t *);
 
 #endif

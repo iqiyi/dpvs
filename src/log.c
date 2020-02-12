@@ -1,3 +1,21 @@
+/*
+ * DPVS is a software load balancer (Virtual Server) based on DPDK.
+ *
+ * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * All Rights Reserved.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+
 #include <string.h>
 #include <syslog.h>
 #include <rte_mempool.h>
@@ -5,8 +23,9 @@
 #include "netif.h"
 #include "sys_time.h"
 #include "log.h"
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
+#include "global_data.h"
 
 int g_dpvs_log_thread_ready = 0;
 int g_dpvs_log_time_off = 0;
@@ -138,7 +157,8 @@ static int dpvs_async_log(uint32_t level, uint32_t logtype, lcoreid_t cid, char 
 
     log_hash_new = log_BKDRHash(log+off, len);
     if (log_hash_new == log_stats_info[cid].log_hash
-            && (rte_get_timer_cycles()-log_stats_info[cid].log_begin) < log_internal*rte_get_timer_hz()){
+            && (rte_get_timer_cycles() - log_stats_info[cid].log_begin)
+            < log_internal * g_cycles_per_sec) {
         log_stats_info[cid].missed++;
         return -1;
     }
@@ -193,10 +213,10 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
         cid = rte_lcore_id();
         if (log_stats_info[cid].slow) {
             /* set log limit rate to 5 sec and keep for 10 mins */
-            if (rte_get_timer_cycles() - log_stats_info[cid].slow_begin > LOG_SLOW_INTERNAL_TIME * rte_get_timer_hz()) {
+            if (rte_get_timer_cycles() - log_stats_info[cid].slow_begin > LOG_SLOW_INTERNAL_TIME * g_cycles_per_sec) {
                 log_stats_info[cid].slow = 0;
             }
-            if ((rte_get_timer_cycles() - log_stats_info[cid].log_begin) < log_internal * rte_get_timer_hz()) {
+            if ((rte_get_timer_cycles() - log_stats_info[cid].log_begin) < log_internal * g_cycles_per_sec) {
                 log_stats_info[cid].missed++;
                 break;
             }
@@ -232,7 +252,7 @@ static int log_buf_timeout_flush(FILE *f, int timeout)
 
     now = rte_get_timer_cycles();
 
-    if (w_buf.pos && ((now - w_buf.time) >= timeout * rte_get_timer_hz())) {
+    if (w_buf.pos && ((now - w_buf.time) >= timeout * g_cycles_per_sec)) {
         log_buf_flush(f);
     }
     return 0;
