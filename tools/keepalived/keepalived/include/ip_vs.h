@@ -80,11 +80,11 @@
 #define IP_VS_SO_SET_ZERO	(IP_VS_BASE_CTL+15)
 #define IP_VS_SO_SET_ADDLADDR	(IP_VS_BASE_CTL+16)
 #define IP_VS_SO_SET_DELLADDR	(IP_VS_BASE_CTL+17)
-#define IP_VS_SO_SET_ADDBLKLST  (IP_VS_BASE_CTL+18)
-#define IP_VS_SO_SET_DELBLKLST  (IP_VS_BASE_CTL+19)
+#define IP_VS_SO_SET_ADDWHTLST  (IP_VS_BASE_CTL+18)
+#define IP_VS_SO_SET_DELWHTLST  (IP_VS_BASE_CTL+19)
 #define IP_VS_SO_SET_ADDTUNNEL	 (IP_VS_BASE_CTL+20)
 #define IP_VS_SO_SET_DELTUNNEL	 (IP_VS_BASE_CTL+21)
-#define IP_VS_SO_SET_MAX	IP_VS_SO_SET_DELBLKLST
+#define IP_VS_SO_SET_MAX	IP_VS_SO_SET_DELWHTLST
 
 #define IP_VS_SO_GET_VERSION	IP_VS_BASE_CTL
 #define IP_VS_SO_GET_INFO	(IP_VS_BASE_CTL+1)
@@ -209,7 +209,7 @@ struct ip_vs_laddr_user {
 	union nf_inet_addr 	addr;
 	char 			ifname[IFNAMSIZ];
 };
-struct ip_vs_blklst_user {
+struct ip_vs_whtlst_user {
 	__be32 			__addr_v4;
 	u_int16_t 		af;
 	union nf_inet_addr 	addr;

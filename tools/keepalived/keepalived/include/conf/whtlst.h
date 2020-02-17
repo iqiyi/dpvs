@@ -19,24 +19,24 @@
  * Note: control plane only
  * based on dpvs_sockopt.
  */
-#ifndef __DPVS_BLKLST_CONF_H__
-#define __DPVS_BLKLST_CONF_H__
+#ifndef __DPVS_WHTLST_CONF_H__
+#define __DPVS_WHTLST_CONF_H__
 #include "inet.h"
 
 enum {
     /* set */
-    SOCKOPT_SET_BLKLST_ADD  = 700,
-    SOCKOPT_SET_BLKLST_DEL,
-    SOCKOPT_SET_BLKLST_FLUSH,
+    SOCKOPT_SET_WHTLST_ADD  = 700,
+    SOCKOPT_SET_WHTLST_DEL,
+    SOCKOPT_SET_WHTLST_FLUSH,
     /* get */
-    SOCKOPT_GET_BLKLST_GETALL,
+    SOCKOPT_GET_WHTLST_GETALL,
 };
 
-struct dp_vs_blklst_entry {
+struct dp_vs_whtlst_entry {
     union inet_addr addr;
 };
 
-struct dp_vs_blklst_conf {
+struct dp_vs_whtlst_conf {
     /* identify service */
     int                 af;
     uint8_t             proto;
@@ -45,12 +45,12 @@ struct dp_vs_blklst_conf {
     uint32_t            fwmark;
 
     /* for set */
-    union inet_addr     blklst;
+    union inet_addr     whtlst;
 };
 
-struct dp_vs_blklst_conf_array {
+struct dp_vs_whtlst_conf_array {
     int                 naddr;
-    struct dp_vs_blklst_conf   blklsts[0];
+    struct dp_vs_whtlst_conf   whtlsts[0];
 } __attribute__((__packed__));
 
-#endif /* __DPVS_BLKLST_CONF_H__ */
+#endif /* __DPVS_WHTLST_CONF_H__ */

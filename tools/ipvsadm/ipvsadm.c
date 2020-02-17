@@ -141,10 +141,10 @@
 #define CMD_ADDLADDR		(CMD_NONE+15)
 #define CMD_DELLADDR		(CMD_NONE+16)
 #define CMD_GETLADDR		(CMD_NONE+17)
-#define CMD_ADDBLKLST		(CMD_NONE+18)
-#define CMD_DELBLKLST		(CMD_NONE+19)
-#define CMD_GETBLKLST		(CMD_NONE+20)
-#define CMD_MAX			CMD_GETBLKLST
+#define CMD_ADDWHTLST		(CMD_NONE+21)
+#define CMD_DELWHTLST		(CMD_NONE+22)
+#define CMD_GETWHTLST		(CMD_NONE+23)
+#define CMD_MAX			CMD_GETWHTLST
 #define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
 
 static const char* cmdnames[] = {
@@ -165,9 +165,9 @@ static const char* cmdnames[] = {
 	"add-laddr" ,
 	"del-laddr" ,
 	"get-laddr" ,
-	"add-blklst",
-	"del-blklst",
-	"get-blklst",
+	"add-whtlst",
+	"del-whtlst",
+	"get-whtlst",
 };
 
 static const char* optnames[] = {
@@ -195,7 +195,7 @@ static const char* optnames[] = {
 	"ops",
 	"pe" ,
 	"local-address" ,
-	"blklst-address",
+	"whtlst-address",
 	"synproxy" ,
 	"ifname" ,
 	"sockpair" ,
@@ -248,11 +248,11 @@ static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x', 'x'},
 /*GETLADDR*/
     {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', ' '},
-/*ADDBLKLST*/
+/*ADDWHTLST*/
     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x', 'x'},
-/*DELBLKLST*/
+/*DELWHTLST*/
     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x', 'x'},
-/*GETBLKLST*/
+/*GETWHTLST*/
     {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
 };
 
@@ -284,7 +284,7 @@ struct ipvs_command_entry {
 	ipvs_timeout_t		timeout;
 	ipvs_daemon_t		daemon;
 	ipvs_laddr_t		laddr;
-	ipvs_blklst_t		blklst;
+	ipvs_whtlst_t		whtlst;
 	ipvs_sockpair_t		sockpair;
 	lcoreid_t		cid;
 };
@@ -349,9 +349,9 @@ static void list_timeout(void);
 static void list_daemon(void);
 static int list_laddrs(ipvs_service_t *svc, int with_title, lcoreid_t cid);
 static int list_all_laddrs(lcoreid_t cid);
-static void list_blklsts_print_title(void);
-static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
-static int list_all_blklsts(void);
+static void list_whtlsts_print_title(void);
+static int list_whtlst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
+static int list_all_whtlsts(void);
 
 #if 0
 static int modprobe_ipvs(void);
@@ -418,9 +418,9 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "add-laddr", 'P', POPT_ARG_NONE, NULL, 'P', NULL, NULL },
 		{ "del-laddr", 'Q', POPT_ARG_NONE, NULL, 'Q', NULL, NULL },
 		{ "get-laddr", 'G', POPT_ARG_NONE, NULL, 'G', NULL, NULL },
-		{ "add-blklst", 'U', POPT_ARG_NONE, NULL, 'U', NULL, NULL },
-		{ "del-blklst", 'V', POPT_ARG_NONE, NULL, 'V', NULL, NULL },
-		{ "get-blklst", 'B', POPT_ARG_NONE, NULL, 'B', NULL, NULL },
+		{ "add-whtlst", 'O', POPT_ARG_NONE, NULL, 'O', NULL, NULL },
+		{ "del-whtlst", 'Y', POPT_ARG_NONE, NULL, 'Y', NULL, NULL },
+		{ "get-whtlst", 'W', POPT_ARG_NONE, NULL, 'W', NULL, NULL },
 		{ "tcp-service", 't', POPT_ARG_STRING, &optarg, 't',
 		  NULL, NULL },
 		{ "udp-service", 'u', POPT_ARG_STRING, &optarg, 'u',
@@ -472,7 +472,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "pe", '\0', POPT_ARG_STRING, &optarg, TAG_PERSISTENCE_ENGINE,
 		  NULL, NULL },
 		{ "laddr", 'z', POPT_ARG_STRING, &optarg, 'z', NULL, NULL },
-		{ "blklst", 'k', POPT_ARG_STRING, &optarg, 'k', NULL, NULL },
+		{ "whtlst", 'k', POPT_ARG_STRING, &optarg, 'k', NULL, NULL },
 		{ "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
 		{ "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
@@ -556,14 +556,14 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 	case 'G':
 		set_command(&ce->cmd, CMD_GETLADDR);
 		break;
-	case 'U':
-		set_command(&ce->cmd, CMD_ADDBLKLST);
+	case 'O':
+		set_command(&ce->cmd, CMD_ADDWHTLST);
 		break;
-	case 'V':
-		set_command(&ce->cmd, CMD_DELBLKLST);
+	case 'Y':
+		set_command(&ce->cmd, CMD_DELWHTLST);
 		break;
-	case 'B':
-		set_command(&ce->cmd, CMD_GETBLKLST);
+	case 'W':
+		set_command(&ce->cmd, CMD_GETWHTLST);
 		break;
 	default:
 		tryhelp_exit(argv[0], -1);
@@ -770,16 +770,16 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			break;
 
 			}
-		case 'k':
+		case 'w':
 			{
 			ipvs_service_t		nsvc;
-			set_option(options,OPT_BLKLST_ADDRESS);
+			set_option(options,OPT_WHTLST_ADDRESS);
 			parse = parse_service(optarg, &nsvc);
 			if (!(parse & SERVICE_ADDR))
-				fail(2, "illegal blacklist address");
-			ce->blklst.af = nsvc.af;
-			ce->blklst.addr = nsvc.nf_addr;
-			ce->blklst.__addr_v4 = nsvc.nf_addr.ip;
+				fail(2, "illegal whitelist address");
+			ce->whtlst.af = nsvc.af;
+			ce->whtlst.addr = nsvc.nf_addr;
+			ce->whtlst.__addr_v4 = nsvc.nf_addr.ip;
 			break;
 
 			}
@@ -1035,21 +1035,21 @@ static int process_options(int argc, char **argv, int reading_stdin)
 			result = list_all_laddrs(ce.cid);
 		break;
 
-	case CMD_ADDBLKLST:
-		result = ipvs_add_blklst(&ce.svc , &ce.blklst);
+	case CMD_ADDWHTLST:
+		result = ipvs_add_whtlst(&ce.svc , &ce.whtlst);
 		break;
 
-	case CMD_DELBLKLST:
-		result = ipvs_del_blklst(&ce.svc , &ce.blklst);
+	case CMD_DELWHTLST:
+		result = ipvs_del_whtlst(&ce.svc , &ce.whtlst);
 		break;
 
-	case CMD_GETBLKLST:
+	case CMD_GETWHTLST:
 		if(options & OPT_SERVICE) {
-			list_blklsts_print_title();
-			result = list_blklst(ce.svc.nf_addr.ip, ce.svc.user.port, ce.svc.user.protocol);
+			list_whtlsts_print_title();
+			result = list_whtlst(ce.svc.nf_addr.ip, ce.svc.user.port, ce.svc.user.protocol);
 		}
 		else
-			result = list_all_blklsts();
+			result = list_all_whtlsts();
 		break;
 	}
 	if (result)
@@ -1453,7 +1453,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  %s -S [-n]\n"
 		"  %s -P|Q -t|u|q|f service-address -z local-address\n"
 		"  %s -G -t|u|q|f service-address \n"
-		"  %s -U|V -t|u|q|f service-address -k blacklist-address\n"
+		"  %s -O|Y -t|u|q|f service-address -w whitelist-address\n"
 		"  %s -a|e -t|u|q|f service-address -r server-address [options]\n"
 		"  %s -d -t|u|q|f service-address -r server-address\n"
 		"  %s -L|l [options]\n"
@@ -1478,9 +1478,9 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --add-laddr       -P        add local address\n"
 		"  --del-laddr       -Q        del local address\n"
 		"  --get-laddr       -G        get local address\n"
-		"  --add-blklst      -U        add blacklist address\n"
-		"  --del-blklst      -V        del blacklist address\n"
-		"  --get-blklst      -B        get blacklist address\n"
+		"  --add-whtlst      -O        add whitelist address\n"
+		"  --del-whtlst      -Y        del whitelist address\n"
+		"  --get-whtlst      -W        get whitelist address\n"
 		"  --save            -S        save rules to stdout\n"
 		"  --add-server      -a        add real server with options\n"
 		"  --edit-server     -e        edit real server with options\n"
@@ -2115,51 +2115,51 @@ static int list_all_laddrs(lcoreid_t cid)
 
 }
 
-static void list_blklsts_print_title(void)
+static void list_whtlsts_print_title(void)
 {
 	printf("%-20s %-8s %-20s\n" ,
 		"VIP:VPORT" ,
 		"PROTO" ,
-		"BLACKLIST");
+		"WHITELIST");
 }
 
-static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
+static void print_service_and_whtlsts(struct dp_vs_whtlst_conf *whtlst)
 {
 	char pbuf_v[32], pbuf_d[32], port[6];
-	sprintf(pbuf_v , "%u.%u.%u.%u" , PRINT_NIP(blklst->vaddr.in.s_addr));
-	sprintf(pbuf_d , "%u.%u.%u.%u" , PRINT_NIP(blklst->blklst.in.s_addr));
-	sprintf(port, "%d", ntohs(blklst->vport));
-	if (blklst->proto ==IPPROTO_TCP)
+	sprintf(pbuf_v , "%u.%u.%u.%u" , PRINT_NIP(whtlst->vaddr.in.s_addr));
+	sprintf(pbuf_d , "%u.%u.%u.%u" , PRINT_NIP(whtlst->whtlst.in.s_addr));
+	sprintf(port, "%d", ntohs(whtlst->vport));
+	if (whtlst->proto ==IPPROTO_TCP)
 		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "TCP", pbuf_d);
-	else if(blklst->proto ==IPPROTO_UDP)
+	else if(whtlst->proto ==IPPROTO_UDP)
 		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "UDP", pbuf_d);
-	else if (blklst->proto == IPPROTO_ICMP)
+	else if (whtlst->proto == IPPROTO_ICMP)
 		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "ICMP", pbuf_d);
 	else
 		printf("proto not support!");
 }
 
-static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol)
+static int list_whtlst(uint32_t addr_v4, uint16_t port, uint16_t protocol)
 {
-	struct dp_vs_blklst_conf_array *get;
+	struct dp_vs_whtlst_conf_array *get;
 	int i;
-	if (!(get = ipvs_get_blklsts())) {
+	if (!(get = ipvs_get_whtlsts())) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		return -1;
 	}
 
 	for (i = 0; i < get->naddr; i++) {
-		if ( addr_v4== get->blklsts[i].vaddr.in.s_addr &&
-		     port == get->blklsts[i].vport&&
-		     protocol == get->blklsts[i].proto) {
-			print_service_and_blklsts(&get->blklsts[i]);
+		if ( addr_v4== get->whtlsts[i].vaddr.in.s_addr &&
+		     port == get->whtlsts[i].vport&&
+		     protocol == get->whtlsts[i].proto) {
+			print_service_and_whtlsts(&get->whtlsts[i]);
 		}
 	}
 	free(get);
 	return 0;
 }
 
-static int list_all_blklsts(void)
+static int list_all_whtlsts(void)
 {
 	struct ip_vs_get_services_app *get;
 	int i;
@@ -2169,9 +2169,9 @@ static int list_all_blklsts(void)
 		exit(1);
 	}
 
-	list_blklsts_print_title();
+	list_whtlsts_print_title();
 	for (i = 0; i < get->user.num_services; i++)
-		list_blklst(get->user.entrytable[i].user.__addr_v4, get->user.entrytable[i].user.port,
+		list_whtlst(get->user.entrytable[i].user.__addr_v4, get->user.entrytable[i].user.port,
 				get->user.entrytable[i].user.protocol);
 	free(get);
 	return 0;

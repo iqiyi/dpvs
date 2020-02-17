@@ -976,19 +976,19 @@ bind_dev_handler(const vector_t *strvec)
 }
 
 static void
-blklst_group_handler(const vector_t *strvec)
+whtlst_group_handler(const vector_t *strvec)
 {
 	if (!strvec)
 		return;
-	alloc_blklst_group(vector_slot(strvec, 1));
-	alloc_value_block(alloc_blklst_entry, strvec_slot(strvec, 0));
+	alloc_whtlst_group(vector_slot(strvec, 1));
+	alloc_value_block(alloc_whtlst_entry, strvec_slot(strvec, 0));
 }
 
 static void
-blklst_gname_handler(const vector_t *strvec)
+whtlst_gname_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
-	vs->blklst_addr_gname = set_value(strvec);
+	vs->whtlst_addr_gname = set_value(strvec);
 }
 
 static void
@@ -1088,8 +1088,8 @@ init_check_keywords(bool active)
 
 	/* local IP address mapping */
 	install_keyword_root("local_address_group", &laddr_group_handler, active);
-	/* blacklist IP */
-	install_keyword_root("deny_address_group", &blklst_group_handler, active);
+	/* whitelist IP */
+	install_keyword_root("deny_address_group", &whtlst_group_handler, active);
 
 	/* Virtual server mapping */
 	install_keyword_root("virtual_server_group", &vsg_handler, active);
@@ -1174,7 +1174,7 @@ init_check_keywords(bool active)
 	install_checkers_keyword();
 	install_sublevel_end();
 	install_keyword("laddr_group_name", &laddr_gname_handler);
-	install_keyword("daddr_group_name", &blklst_gname_handler);
+	install_keyword("daddr_group_name", &whtlst_gname_handler);
 	install_keyword("syn_proxy", &syn_proxy_handler);
 	install_keyword("vip_bind_dev", &bind_dev_handler);
 }

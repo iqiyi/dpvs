@@ -76,16 +76,16 @@ ipvs_get_laddr_group_by_name(char *gname, list l)
 }
 
 
-blklst_addr_group * __attribute__ ((pure))
-ipvs_get_blklst_group_by_name(char *gname, list l)
+whtlst_addr_group * __attribute__ ((pure))
+ipvs_get_whtlst_group_by_name(char *gname, list l)
 {
         element e;
-        blklst_addr_group *blklst_group;
+        whtlst_addr_group *whtlst_group;
 
         for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-                blklst_group = ELEMENT_DATA(e);
-                if (!strcmp(blklst_group->gname, gname))
-                        return blklst_group;
+                whtlst_group = ELEMENT_DATA(e);
+                if (!strcmp(whtlst_group->gname, gname))
+                        return whtlst_group;
         }
         return NULL;
 }
@@ -95,7 +95,7 @@ ipvs_get_blklst_group_by_name(char *gname, list l)
 //static ipvs_dest_t *drule;
 //static ipvs_daemon_t *daemonrule;
 //static ipvs_laddr_t *laddr_rule;
-//static ipvs_blklst_t *blklst_rule;
+//static ipvs_whtlst_t *whtlst_rule;
 //static ipvs_tunnel_t *tunnel_rule;
 
 /* Initialization helpers */
@@ -115,7 +115,7 @@ ipvs_start(void)
 	//drule = (ipvs_dest_t *) MALLOC(sizeof(ipvs_dest_t));
 	//daemonrule = (ipvs_daemon_t *) MALLOC(sizeof(ipvs_daemon_t));
 	//laddr_rule = (ipvs_laddr_t *) MALLOC(sizeof(ipvs_laddr_t));
-	//blklst_rule = (ipvs_blklst_t *) MALLOC(sizeof(ipvs_blklst_t));
+	//whtlst_rule = (ipvs_whtlst_t *) MALLOC(sizeof(ipvs_whtlst_t));
 	//tunnel_rule = (ipvs_tunnel_t *) MALLOC(sizeof(ipvs_tunnel_t));
 
 	return IPVS_SUCCESS;
@@ -129,7 +129,7 @@ ipvs_stop(void)
 	//FREE(drule);
 	//FREE(daemonrule);
 	//FREE(laddr_rule);
-	//FREE(blklst_rule);
+	//FREE(whtlst_rule);
 	//FREE(tunnel_rule);
 
 	ipvs_close();
@@ -157,7 +157,7 @@ ipvs_talk(int cmd,
 	  ipvs_dest_t *drule, 
 	  ipvs_daemon_t *daemonrule, 
 	  ipvs_laddr_t *laddr_rule, 
-	  ipvs_blklst_t *blklst_rule,
+	  ipvs_whtlst_t *whtlst_rule,
 	  ipvs_tunnel_t *tunnel_rule, 
 	  bool ignore_error)
 {
@@ -207,11 +207,11 @@ ipvs_talk(int cmd,
 		case IP_VS_SO_SET_DELLADDR:
 			result = ipvs_del_laddr(srule, laddr_rule);
 			break;
-		case IP_VS_SO_SET_ADDBLKLST:
-			result = ipvs_add_blklst(srule, blklst_rule);
+		case IP_VS_SO_SET_ADDWHTLST:
+			result = ipvs_add_whtlst(srule, whtlst_rule);
 			break;
-		case IP_VS_SO_SET_DELBLKLST:
-			result = ipvs_del_blklst(srule, blklst_rule);
+		case IP_VS_SO_SET_DELWHTLST:
+			result = ipvs_del_whtlst(srule, whtlst_rule);
 			break;
 		case IP_VS_SO_SET_ADDTUNNEL:
 			result = ipvs_add_tunnel(tunnel_rule);
@@ -607,68 +607,68 @@ ipvs_laddr_cmd(int cmd, ipvs_service_t *srule, virtual_server_t *vs)
 }
 
 static void
-ipvs_blklst_range_cmd(int cmd, blklst_addr_entry *blklst_entry, ipvs_service_t *srule)
+ipvs_whtlst_range_cmd(int cmd, whtlst_addr_entry *whtlst_entry, ipvs_service_t *srule)
 {
         uint32_t addr_ip, ip;
-	ipvs_blklst_t blklst_rule;
+	ipvs_whtlst_t whtlst_rule;
 
-        memset(&blklst_rule, 0, sizeof(ipvs_blklst_t));
-        blklst_rule.af = blklst_entry->addr.ss_family;
-        if (blklst_entry->addr.ss_family == AF_INET6) {
-                inet_sockaddrip6(&blklst_entry->addr, &blklst_rule.addr.in6);
-                ip = blklst_rule.addr.in6.s6_addr32[3];
+        memset(&whtlst_rule, 0, sizeof(ipvs_whtlst_t));
+        whtlst_rule.af = whtlst_entry->addr.ss_family;
+        if (whtlst_entry->addr.ss_family == AF_INET6) {
+                inet_sockaddrip6(&whtlst_entry->addr, &whtlst_rule.addr.in6);
+                ip = whtlst_rule.addr.in6.s6_addr32[3];
         } else {
-                ip = inet_sockaddrip4(&blklst_entry->addr);
+                ip = inet_sockaddrip4(&whtlst_entry->addr);
         }
 
 
         for (addr_ip = ip;
-            ((addr_ip >> 24) & 0xFF) <= blklst_entry->range;
+            ((addr_ip >> 24) & 0xFF) <= whtlst_entry->range;
             addr_ip += 0x01000000) {
-                if (blklst_entry->addr.ss_family == AF_INET6)
-                        blklst_rule.addr.in6.s6_addr32[3] = addr_ip;
+                if (whtlst_entry->addr.ss_family == AF_INET6)
+                        whtlst_rule.addr.in6.s6_addr32[3] = addr_ip;
                 else
-                        blklst_rule.addr.ip = addr_ip;
+                        whtlst_rule.addr.ip = addr_ip;
 
-		ipvs_talk(cmd, srule, NULL, NULL, NULL, &blklst_rule, NULL, false);
+		ipvs_talk(cmd, srule, NULL, NULL, NULL, &whtlst_rule, NULL, false);
         }
 }
 
 static void
-ipvs_blklst_group_cmd(int cmd, blklst_addr_group *blklst_group, ipvs_service_t *srule)
+ipvs_whtlst_group_cmd(int cmd, whtlst_addr_group *whtlst_group, ipvs_service_t *srule)
 {
-        blklst_addr_entry *blklst_entry;
-	ipvs_blklst_t blklst_rule;
+        whtlst_addr_entry *whtlst_entry;
+	ipvs_whtlst_t whtlst_rule;
         list l;
         element e;
 
-        if (!blklst_group)
+        if (!whtlst_group)
                 return;
 
-        l = blklst_group->addr_ip;
+        l = whtlst_group->addr_ip;
         for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-                blklst_entry = ELEMENT_DATA(e);
-                memset(&blklst_rule, 0, sizeof(ipvs_blklst_t));
-                blklst_rule.af = blklst_entry->addr.ss_family;
-                if (blklst_entry->addr.ss_family == AF_INET6)
-                        inet_sockaddrip6(&blklst_entry->addr, &blklst_rule.addr.in6);
+                whtlst_entry = ELEMENT_DATA(e);
+                memset(&whtlst_rule, 0, sizeof(ipvs_whtlst_t));
+                whtlst_rule.af = whtlst_entry->addr.ss_family;
+                if (whtlst_entry->addr.ss_family == AF_INET6)
+                        inet_sockaddrip6(&whtlst_entry->addr, &whtlst_rule.addr.in6);
                 else
-                        blklst_rule.addr.ip = inet_sockaddrip4(&blklst_entry->addr);
-		ipvs_talk(cmd, srule, NULL, NULL, NULL, &blklst_rule, NULL, false);
+                        whtlst_rule.addr.ip = inet_sockaddrip4(&whtlst_entry->addr);
+		ipvs_talk(cmd, srule, NULL, NULL, NULL, &whtlst_rule, NULL, false);
         }
 
-        l = blklst_group->range;
+        l = whtlst_group->range;
         for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-                blklst_entry = ELEMENT_DATA(e);
-                ipvs_blklst_range_cmd(cmd, blklst_entry, srule);
+                whtlst_entry = ELEMENT_DATA(e);
+                ipvs_whtlst_range_cmd(cmd, whtlst_entry, srule);
         }
 }
 
 static void
-ipvs_blklst_vsg_cmd(int cmd, 
+ipvs_whtlst_vsg_cmd(int cmd, 
 		list vs_group, 
 		virtual_server_t *vs, 
-		blklst_addr_group *blklst_group, 
+		whtlst_addr_group *whtlst_group, 
 		ipvs_service_t *srule)
 {
         virtual_server_group_t *vsg = ipvs_get_group_by_name(vs->vsgname, vs_group);
@@ -692,8 +692,8 @@ ipvs_blklst_vsg_cmd(int cmd,
                         srule->nf_addr.ip = inet_sockaddrip4(&vsg_entry->addr);
                 srule->user.port = inet_sockaddrport(&vsg_entry->addr);
 
-                /* blacklist address group channel */
-                ipvs_blklst_group_cmd(cmd, blklst_group, srule);
+                /* whitelist address group channel */
+                ipvs_whtlst_group_cmd(cmd, whtlst_group, srule);
         }
 
         /* visit range list */
@@ -723,18 +723,18 @@ ipvs_blklst_vsg_cmd(int cmd,
                         }
                         srule->user.port = inet_sockaddrport(&vsg_entry->addr);
 
-                        ipvs_blklst_group_cmd(cmd, blklst_group, srule);
+                        ipvs_whtlst_group_cmd(cmd, whtlst_group, srule);
                 }
         }
 }
 
 static int
-ipvs_blklst_cmd(int cmd, ipvs_service_t *srule, virtual_server_t * vs)
+ipvs_whtlst_cmd(int cmd, ipvs_service_t *srule, virtual_server_t * vs)
 {
-        blklst_addr_group *blklst_group = ipvs_get_blklst_group_by_name(vs->blklst_addr_gname,
-                                                        check_data->blklst_group);
-        if (!blklst_group) {
-                log_message(LOG_ERR, "No address in group %s", vs->blklst_addr_gname);
+        whtlst_addr_group *whtlst_group = ipvs_get_whtlst_group_by_name(vs->whtlst_addr_gname,
+                                                        check_data->whtlst_group);
+        if (!whtlst_group) {
+                log_message(LOG_ERR, "No address in group %s", vs->whtlst_addr_gname);
                 return IPVS_ERROR;
         }
 
@@ -743,7 +743,7 @@ ipvs_blklst_cmd(int cmd, ipvs_service_t *srule, virtual_server_t * vs)
         srule->user.protocol = vs->service_type;
 
         if(vs->vsgname) {
-                ipvs_blklst_vsg_cmd(cmd, check_data->vs_group, vs, blklst_group, srule);
+                ipvs_whtlst_vsg_cmd(cmd, check_data->vs_group, vs, whtlst_group, srule);
         } else {
                 if (!vs->vfwmark) {
                         srule->af = vs->addr.ss_family;
@@ -752,7 +752,7 @@ ipvs_blklst_cmd(int cmd, ipvs_service_t *srule, virtual_server_t * vs)
                         else
                                 srule->nf_addr.ip = inet_sockaddrip4(&vs->addr);
                         srule->user.port = inet_sockaddrport(&vs->addr);
-                        ipvs_blklst_group_cmd(cmd, blklst_group, srule);
+                        ipvs_whtlst_group_cmd(cmd, whtlst_group, srule);
                 }
         }
         return IPVS_SUCCESS;
@@ -805,8 +805,8 @@ ipvs_set_srule(int cmd, ipvs_service_t *srule, virtual_server_t *vs)
 
 	if (cmd == IP_VS_SO_SET_ADDLADDR || cmd == IP_VS_SO_SET_DELLADDR)
 		ipvs_laddr_cmd(cmd, srule, vs);
-	if (cmd == IP_VS_SO_SET_ADDBLKLST || cmd == IP_VS_SO_SET_DELBLKLST)
-		ipvs_blklst_cmd(cmd, srule, vs);
+	if (cmd == IP_VS_SO_SET_ADDWHTLST || cmd == IP_VS_SO_SET_DELWHTLST)
+		ipvs_whtlst_cmd(cmd, srule, vs);
 
 #ifdef _HAVE_PE_NAME_
 	strcpy(srule->pe_name, vs->pe_name);
@@ -867,8 +867,8 @@ ipvs_cmd(int cmd, virtual_server_t *vs, real_server_t *rs)
 	if (cmd == IP_VS_SO_SET_ADDLADDR || cmd == IP_VS_SO_SET_DELLADDR)	
 		return ipvs_laddr_cmd(cmd, &srule, vs);
         /* Set/Remove deny address */
-	if (cmd == IP_VS_SO_SET_ADDBLKLST || cmd == IP_VS_SO_SET_DELBLKLST)
-		return ipvs_blklst_cmd(cmd, &srule, vs);
+	if (cmd == IP_VS_SO_SET_ADDWHTLST || cmd == IP_VS_SO_SET_DELWHTLST)
+		return ipvs_whtlst_cmd(cmd, &srule, vs);
 
 	if (rs) {
 		ipvs_set_drule(cmd, &drule, rs);
@@ -992,7 +992,7 @@ ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 				NULL/*drule*/, 
 				NULL/*daemonrule*/, 
 				&laddr_rule, 
-				NULL/*blklst_rule*/, 
+				NULL/*whtlst_rule*/, 
 				NULL,
 				false);
 		}
@@ -1037,7 +1037,7 @@ ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 					NULL/*drule*/, 
 					NULL/*daemonrule*/, 
 					&laddr_rule, 
-					NULL/*blklst_rule*/, 
+					NULL/*whtlst_rule*/, 
 					NULL,
 					false);
 			}
@@ -1086,13 +1086,13 @@ ipvs_laddr_remove_entry(virtual_server_t *vs, local_addr_entry *laddr_entry)
 }
 
 static void
-ipvs_rm_bentry_from_vsg(blklst_addr_entry *blklst_entry, const char *vsgname, ipvs_service_t *srule)
+ipvs_rm_bentry_from_vsg(whtlst_addr_entry *whtlst_entry, const char *vsgname, ipvs_service_t *srule)
 {
 	list l;
 	element e;
 	virtual_server_group_t *vsg;
 	virtual_server_group_entry_t *vsg_entry;
-	ipvs_blklst_t blklst_rule;
+	ipvs_whtlst_t whtlst_rule;
 
 	vsg = ipvs_get_group_by_name(vsgname, check_data->vs_group);
 	if (!vsg) return; 
@@ -1110,17 +1110,17 @@ ipvs_rm_bentry_from_vsg(blklst_addr_entry *blklst_entry, const char *vsgname, ip
 		}
 		srule->user.port = inet_sockaddrport(&vsg_entry->addr);
 
-		if (blklst_entry->range)
-			ipvs_blklst_range_cmd(IP_VS_SO_SET_DELBLKLST, blklst_entry, srule);
+		if (whtlst_entry->range)
+			ipvs_whtlst_range_cmd(IP_VS_SO_SET_DELWHTLST, whtlst_entry, srule);
 		else {
-			memset(&blklst_rule, 0, sizeof(ipvs_blklst_t));
-			blklst_rule.af = blklst_entry->addr.ss_family;
-			if (blklst_entry->addr.ss_family == AF_INET6)
-				inet_sockaddrip6(&blklst_entry->addr, &blklst_rule.addr.in6);
+			memset(&whtlst_rule, 0, sizeof(ipvs_whtlst_t));
+			whtlst_rule.af = whtlst_entry->addr.ss_family;
+			if (whtlst_entry->addr.ss_family == AF_INET6)
+				inet_sockaddrip6(&whtlst_entry->addr, &whtlst_rule.addr.in6);
 			else
-				blklst_rule.addr.ip = inet_sockaddrip4(&blklst_entry->addr);
+				whtlst_rule.addr.ip = inet_sockaddrip4(&whtlst_entry->addr);
 
-			ipvs_talk(IP_VS_SO_SET_DELBLKLST, srule, NULL, NULL, NULL, &blklst_rule, NULL, false);
+			ipvs_talk(IP_VS_SO_SET_DELWHTLST, srule, NULL, NULL, NULL, &whtlst_rule, NULL, false);
 		}
 	}
 
@@ -1147,33 +1147,33 @@ ipvs_rm_bentry_from_vsg(blklst_addr_entry *blklst_entry, const char *vsgname, ip
 			else
 				srule->nf_addr.ip = addr_ip;
 
-			if (blklst_entry->range)
-				ipvs_blklst_range_cmd(IP_VS_SO_SET_DELBLKLST, blklst_entry, srule);
+			if (whtlst_entry->range)
+				ipvs_whtlst_range_cmd(IP_VS_SO_SET_DELWHTLST, whtlst_entry, srule);
 			else {
-				memset(&blklst_rule, 0, sizeof(ipvs_blklst_t));
-				blklst_rule.af = blklst_entry->addr.ss_family;
-				if (blklst_entry->addr.ss_family == AF_INET6)
-					inet_sockaddrip6(&blklst_entry->addr, &blklst_rule.addr.in6);
+				memset(&whtlst_rule, 0, sizeof(ipvs_whtlst_t));
+				whtlst_rule.af = whtlst_entry->addr.ss_family;
+				if (whtlst_entry->addr.ss_family == AF_INET6)
+					inet_sockaddrip6(&whtlst_entry->addr, &whtlst_rule.addr.in6);
 			else
-					blklst_rule.addr.ip = inet_sockaddrip4(&blklst_entry->addr);
+					whtlst_rule.addr.ip = inet_sockaddrip4(&whtlst_entry->addr);
 
-				ipvs_talk(IP_VS_SO_SET_DELBLKLST, srule, NULL, NULL, NULL, &blklst_rule, NULL, false);
+				ipvs_talk(IP_VS_SO_SET_DELWHTLST, srule, NULL, NULL, NULL, &whtlst_rule, NULL, false);
 			}
 		}
 	}
 }
 
 int
-ipvs_blklst_remove_entry(virtual_server_t *vs, blklst_addr_entry *blklst_entry)
+ipvs_whtlst_remove_entry(virtual_server_t *vs, whtlst_addr_entry *whtlst_entry)
 {
 	ipvs_service_t srule;
-	ipvs_blklst_t blklst_rule;
+	ipvs_whtlst_t whtlst_rule;
 
 	memset(&srule, 0, sizeof(ipvs_service_t));
 	srule.user.protocol = vs->service_type;
 
 	if (vs->vsgname) {
-		ipvs_rm_bentry_from_vsg(blklst_entry, vs->vsgname, &srule);
+		ipvs_rm_bentry_from_vsg(whtlst_entry, vs->vsgname, &srule);
 	} else if (!vs->vfwmark) {
 		srule.af = vs->addr.ss_family;
 		if (vs->addr.ss_family == AF_INET6) {
@@ -1185,17 +1185,17 @@ ipvs_blklst_remove_entry(virtual_server_t *vs, blklst_addr_entry *blklst_entry)
 		}
 		srule.user.port = inet_sockaddrport(&vs->addr);
 
-		if (blklst_entry->range) {
-			ipvs_blklst_range_cmd(IP_VS_SO_SET_DELBLKLST, blklst_entry, &srule);
+		if (whtlst_entry->range) {
+			ipvs_whtlst_range_cmd(IP_VS_SO_SET_DELWHTLST, whtlst_entry, &srule);
 		} else {
-			memset(&blklst_rule, 0, sizeof(ipvs_blklst_t));
-			blklst_rule.af = blklst_entry->addr.ss_family;
-			if (blklst_entry->addr.ss_family == AF_INET6)
-				inet_sockaddrip6(&blklst_entry->addr, &blklst_rule.addr.in6);
+			memset(&whtlst_rule, 0, sizeof(ipvs_whtlst_t));
+			whtlst_rule.af = whtlst_entry->addr.ss_family;
+			if (whtlst_entry->addr.ss_family == AF_INET6)
+				inet_sockaddrip6(&whtlst_entry->addr, &whtlst_rule.addr.in6);
 			else
-				blklst_rule.addr.ip = inet_sockaddrip4(&blklst_entry->addr);
+				whtlst_rule.addr.ip = inet_sockaddrip4(&whtlst_entry->addr);
 
-			ipvs_talk(IP_VS_SO_SET_DELBLKLST, &srule, NULL, NULL, NULL, &blklst_rule, NULL, false);
+			ipvs_talk(IP_VS_SO_SET_DELWHTLST, &srule, NULL, NULL, NULL, &whtlst_rule, NULL, false);
 		}
 	}
 

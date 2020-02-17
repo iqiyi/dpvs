@@ -30,7 +30,7 @@
 #include "ipvs/service.h"
 #include "ipvs/dest.h"
 #include "ipvs/synproxy.h"
-#include "ipvs/blklst.h"
+#include "ipvs/whtlst.h"
 #include "parser/parser.h"
 /* we need more detailed fields than dpdk tcp_hdr{},
  * like tcphdr.syn, so use standard definition. */
@@ -638,7 +638,7 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     if (unlikely(!th))
         return NULL;
 
-    if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+    if (!dp_vs_whtlst_allow(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
         *drop = true;
         return NULL;
     }

@@ -542,9 +542,9 @@ int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr)
 	return dpvs_setsockopt(SOCKOPT_SET_LADDR_DEL, &conf, sizeof(conf));
 }
 
-/*for black list*/
-static void ipvs_fill_blklst_conf(ipvs_service_t *svc, ipvs_blklst_t *blklst,
-                                 struct dp_vs_blklst_conf *conf)
+/*for white list*/
+static void ipvs_fill_whtlst_conf(ipvs_service_t *svc, ipvs_whtlst_t *whtlst,
+                                 struct dp_vs_whtlst_conf *conf)
 {
 	memset(conf, 0, sizeof(*conf));
 	conf->af        = svc->af;
@@ -553,31 +553,31 @@ static void ipvs_fill_blklst_conf(ipvs_service_t *svc, ipvs_blklst_t *blklst,
 	conf->fwmark    = svc->user.fwmark;
 	if (svc->af == AF_INET) {
 		conf->vaddr.in = svc->nf_addr.in;
-		conf->blklst.in = blklst->addr.in;
+		conf->whtlst.in = whtlst->addr.in;
 	} else {
 		conf->vaddr.in6 = svc->nf_addr.in6;
-		conf->blklst.in6 = blklst->addr.in6;
+		conf->whtlst.in6 = whtlst->addr.in6;
 	}
 
 	return;
 }
 
-int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t *blklst)
+int ipvs_add_whtlst(ipvs_service_t *svc, ipvs_whtlst_t *whtlst)
 {
-	struct dp_vs_blklst_conf conf;
+	struct dp_vs_whtlst_conf conf;
 
-	ipvs_fill_blklst_conf(svc, blklst, &conf);
+	ipvs_fill_whtlst_conf(svc, whtlst, &conf);
 
-	return dpvs_setsockopt(SOCKOPT_SET_BLKLST_ADD, &conf, sizeof(conf));
+	return dpvs_setsockopt(SOCKOPT_SET_WHTLST_ADD, &conf, sizeof(conf));
 }
 
-int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst)
+int ipvs_del_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst)
 {
-	struct dp_vs_blklst_conf conf;
+	struct dp_vs_whtlst_conf conf;
 
-	ipvs_fill_blklst_conf(svc, blklst, &conf);
+	ipvs_fill_whtlst_conf(svc, whtlst, &conf);
 
-	return dpvs_setsockopt(SOCKOPT_SET_BLKLST_DEL, &conf, sizeof(conf));
+	return dpvs_setsockopt(SOCKOPT_SET_WHTLST_DEL, &conf, sizeof(conf));
 }
 
 /* for tunnel entry */
@@ -1056,28 +1056,28 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t ci
 	return laddrs;
 }
 
-struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
+struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void)
 {
-	struct dp_vs_blklst_conf_array *array, *result;
+	struct dp_vs_whtlst_conf_array *array, *result;
 	size_t size;
 	int i, err;
 
-	err = dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL, NULL, 0, 
+	err = dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL, NULL, 0, 
 				(void **)&result, &size);
 	if (err != 0)
 		return NULL;
 	if (size < sizeof(*result)
 		|| size != sizeof(*result) + \
-		result->naddr * sizeof(struct dp_vs_blklst_conf)) {
+		result->naddr * sizeof(struct dp_vs_whtlst_conf)) {
 		dpvs_sockopt_msg_free(result);
 		return NULL;
 	}
 	if (!(array = malloc(size)))
 		return NULL;
-	memcpy(array, result, sizeof(struct dp_vs_blklst_conf_array));
+	memcpy(array, result, sizeof(struct dp_vs_whtlst_conf_array));
 	for (i = 0; i < result->naddr; i++) {
-		memcpy(&array->blklsts[i], &result->blklsts[i],
-			sizeof(struct dp_vs_blklst_conf));
+		memcpy(&array->whtlsts[i], &result->whtlsts[i],
+			sizeof(struct dp_vs_whtlst_conf));
 		
 	}
 	dpvs_sockopt_msg_free(result);
@@ -1116,11 +1116,11 @@ const char *ipvs_strerror(int err)
 		{ ipvs_del_laddr, ESRCH, "Service not defined" },
 		{ ipvs_del_laddr, ENOENT, "No such Local address" },
 		{ ipvs_get_laddrs, ESRCH, "Service not defined" },
-		{ ipvs_add_blklst, ESRCH, "Service not defined" },
-		{ ipvs_add_blklst, EEXIST, "blacklist address already exists" },
-		{ ipvs_del_blklst, ESRCH, "Service not defined" },
-		{ ipvs_del_blklst, ENOENT, "No such deny address" },
-		{ ipvs_get_blklsts, ESRCH, "Service not defined" },
+		{ ipvs_add_whtlst, ESRCH, "Service not defined" },
+		{ ipvs_add_whtlst, EEXIST, "whitelist address already exists" },
+		{ ipvs_del_whtlst, ESRCH, "Service not defined" },
+		{ ipvs_del_whtlst, ENOENT, "No such deny address" },
+		{ ipvs_get_whtlsts, ESRCH, "Service not defined" },
 		{ ipvs_get_dests, ESRCH, "No such service" },
 		{ ipvs_get_service, ESRCH, "No such service" },
 #ifdef _WITH_SNMP_CHECKER_

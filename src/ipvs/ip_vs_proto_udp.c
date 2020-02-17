@@ -28,7 +28,7 @@
 #include "ipvs/proto_udp.h"
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
-#include "ipvs/blklst.h"
+#include "ipvs/whtlst.h"
 #include "ipvs/redirect.h"
 #include "parser/parser.h"
 #include "uoa.h"
@@ -206,7 +206,7 @@ udp_conn_lookup(struct dp_vs_proto *proto,
     if (unlikely(!uh))
         return NULL;
 
-    if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, uh->dst_port,
+    if (!dp_vs_whtlst_allow(iph->proto, &iph->daddr, uh->dst_port,
                             &iph->saddr)) {
         *drop = true;
         return NULL;

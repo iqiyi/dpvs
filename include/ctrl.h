@@ -192,8 +192,8 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_ROUTE_ADD                  6
 #define MSG_TYPE_ROUTE_DEL                  7
 #define MSG_TYPE_NETIF_LCORE_STATS          8
-#define MSG_TYPE_BLKLST_ADD                 9
-#define MSG_TYPE_BLKLST_DEL                 10
+#define MSG_TYPE_WHTLST_ADD                 9
+#define MSG_TYPE_WHTLST_DEL                 10
 #define MSG_TYPE_STATS_GET                  11
 #define MSG_TYPE_TC_STATS                   13
 #define MSG_TYPE_CONN_GET                   14

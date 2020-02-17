@@ -36,7 +36,7 @@
 #define OPT_ONEPACKET		0x200000
 #define OPT_PERSISTENCE_ENGINE	0x400000
 #define OPT_LOCAL_ADDRESS	0x800000
-#define OPT_BLKLST_ADDRESS	0x1000000
+#define OPT_WHTLST_ADDRESS	0x1000000
 #define OPT_SYNPROXY		0x2000000
 #define OPT_IFNAME		0x4000000
 #define OPT_SOCKPAIR		0x8000000
@@ -69,10 +69,10 @@ typedef struct ip_vs_daemon_app		ipvs_daemon_t;
 typedef struct ip_vs_service_entry_app	ipvs_service_entry_t;
 typedef struct ip_vs_dest_entry_app	ipvs_dest_entry_t;
 typedef struct ip_vs_laddr_user 	ipvs_laddr_t;
-typedef struct ip_vs_blklst_user        ipvs_blklst_t;
+typedef struct ip_vs_whtlst_user        ipvs_whtlst_t;
 typedef struct ip_vs_tunnel_user	ipvs_tunnel_t;
 typedef struct ip_vs_laddr_entry	ipvs_laddr_entry_t;
-typedef struct ip_vs_blklst_entry       ipvs_blklst_entry_t;
+typedef struct ip_vs_whtlst_entry       ipvs_whtlst_entry_t;
 
 
 /* init socket and get ipvs info */
@@ -117,9 +117,9 @@ extern int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
 extern int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
 extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t cid);
 
-/*for add/delete a blacklist ip*/
-extern int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
-extern int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
+/*for add/delete a whitelist ip*/
+extern int ipvs_add_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
+extern int ipvs_del_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
 
 /*for add/delete a tunnel*/
 extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
@@ -159,7 +159,7 @@ extern int ipvs_set_route6(struct dp_vs_route6_conf*, int cmd);
 
 extern int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd);
 
-extern struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void);
+extern struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void);
 
 typedef int (*ipvs_service_cmp_t)(ipvs_service_entry_t *,
 				  ipvs_service_entry_t *);

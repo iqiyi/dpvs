@@ -33,7 +33,7 @@
 #include "ipvs/laddr.h"
 #include "ipvs/xmit.h"
 #include "ipvs/synproxy.h"
-#include "ipvs/blklst.h"
+#include "ipvs/whtlst.h"
 #include "ipvs/proto_udp.h"
 #include "route6.h"
 #include "ipvs/redirect.h"
@@ -1186,10 +1186,10 @@ int dp_vs_init(void)
         goto err_serv;
     }
 
-    err = dp_vs_blklst_init();
+    err = dp_vs_whtlst_init();
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, IPVS, "fail to init blklst: %s\n", dpvs_strerror(err));
-        goto err_blklst;
+        RTE_LOG(ERR, IPVS, "fail to init whtlst: %s\n", dpvs_strerror(err));
+        goto err_whtlst;
     }
 
     err = dp_vs_stats_init();
@@ -1210,8 +1210,8 @@ int dp_vs_init(void)
 err_hooks:
     dp_vs_stats_term();
 err_stats:
-    dp_vs_blklst_term();
-err_blklst:
+    dp_vs_whtlst_term();
+err_whtlst:
     dp_vs_service_term();
 err_serv:
     dp_vs_sched_term();
@@ -1241,9 +1241,9 @@ int dp_vs_term(void)
     if (err != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "fail to terminate term: %s\n", dpvs_strerror(err));
 
-    err = dp_vs_blklst_term();
+    err = dp_vs_whtlst_term();
     if (err != EDPVS_OK)
-        RTE_LOG(ERR, IPVS, "fail to terminate blklst: %s\n", dpvs_strerror(err));
+        RTE_LOG(ERR, IPVS, "fail to terminate whtlst: %s\n", dpvs_strerror(err));
 
     err = dp_vs_service_term();
     if (err != EDPVS_OK)
