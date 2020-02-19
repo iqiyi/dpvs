@@ -299,7 +299,7 @@ int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
         entry.actconns = rte_atomic32_read(&dest->actconns);
         entry.inactconns = rte_atomic32_read(&dest->inactconns);
         entry.persistconns = rte_atomic32_read(&dest->persistconns);
-        ret = dp_vs_add_stats(&(entry.stats), &dest->stats);
+        ret = dp_vs_stats_add(&(entry.stats), &dest->stats);
         if (ret != EDPVS_OK)
             break;
 

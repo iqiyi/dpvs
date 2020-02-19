@@ -16,7 +16,7 @@
  *
  */
 /*
- * svc will not be changed during svc get(svc is per core); 
+ * svc will not be changed during svc get(svc is per core);
  * but conn will hold dest and dest will hold svc. so we need refcnt
  */
 #include <arpa/inet.h>
@@ -220,8 +220,8 @@ __dp_vs_svc_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t cid
     } else if (outwall != NULL && (NULL != ipset_addr_lookup(AF_INET, &daddr))
                                && (rt = route_gfw_net_lookup(&daddr.in))) {
         char dst[64];
-        RTE_LOG(DEBUG, IPSET, "%s: IP %s is in the gfwip set, found route in the outwall table.\n", __func__, 
-                              inet_ntop(AF_INET, &daddr, dst, sizeof(dst))? dst: "");	    
+        RTE_LOG(DEBUG, IPSET, "%s: IP %s is in the gfwip set, found route in the outwall table.\n", __func__,
+                              inet_ntop(AF_INET, &daddr, dst, sizeof(dst))? dst: "");
         oif = rt->port->id;
         route4_put(rt);
         *outwall = true;
@@ -469,7 +469,7 @@ void dp_vs_svc_put(struct dp_vs_service *svc)
             rte_free(svc->match);
         rte_free(svc);
         RTE_LOG(DEBUG, SERVICE, "%s: delete svc.\n", __func__);
-    }    
+    }
 }
 
 void dp_vs_unbind_svc(struct dp_vs_dest *dest)
@@ -694,7 +694,7 @@ dp_vs_copy_service(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     dst->num_laddrs = src->num_laddrs;
     dst->cid = rte_lcore_id();
 
-    err = dp_vs_add_stats(&dst->stats, &src->stats);
+    err = dp_vs_stats_add(&dst->stats, &src->stats);
 
     m = src->match;
     if (!m)
@@ -860,7 +860,7 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
 
     if (user->flags & DP_VS_SVC_F_MATCH) {
         err = dp_vs_match_parse(user->srange, user->drange,
-                                user->iifname, user->oifname, 
+                                user->iifname, user->oifname,
                                 user->af, &conf->match);
         if (err != EDPVS_OK)
             return err;
@@ -927,7 +927,7 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
         vip = (struct in_addr *)user;
         return gratuitous_arp_send_vip(vip);
     }
- 
+
     // send to slave core
     if (cid == rte_get_master_lcore()) {
         struct dpvs_msg *msg;
@@ -1023,8 +1023,8 @@ static int dp_vs_set_svc(sockoptid_t opt, const void *user, size_t len)
 }
 
 /*
- * for example : SOCKOPT_SVC_BASE is 200, SOCKOPT_SVC_GET_CMD_MAX is 204, 
- * old_opt 205 means core 1 get opt 200 
+ * for example : SOCKOPT_SVC_BASE is 200, SOCKOPT_SVC_GET_CMD_MAX is 204,
+ * old_opt 205 means core 1 get opt 200
  */
 static inline void opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t *cid)
 {
@@ -1038,14 +1038,14 @@ static inline void opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t 
 }
 
 /* copy service/dest/stats */
-static int dp_vs_copy_percore_svcs_stats(struct dp_vs_get_services *master_svcs, 
+static int dp_vs_copy_percore_svcs_stats(struct dp_vs_get_services *master_svcs,
                                          struct dp_vs_get_services *slave_svcs)
 {
     int i;
     if (master_svcs->num_services != slave_svcs->num_services)
         return EDPVS_INVAL;
-    for (i = 0; i < master_svcs->num_services; i++) 
-        dp_vs_add_stats(&master_svcs->entrytable[i].stats, &slave_svcs->entrytable[i].stats);
+    for (i = 0; i < master_svcs->num_services; i++)
+        dp_vs_stats_add(&master_svcs->entrytable[i].stats, &slave_svcs->entrytable[i].stats);
 
     return EDPVS_OK;
 }
@@ -1061,7 +1061,7 @@ static int dp_vs_copy_percore_dests_stats(struct dp_vs_get_dests *master_dests,
         master_dests->entrytable[i].actconns += slave_dests->entrytable[i].actconns;
         master_dests->entrytable[i].inactconns += slave_dests->entrytable[i].inactconns;
         master_dests->entrytable[i].persistconns += slave_dests->entrytable[i].persistconns;
-        dp_vs_add_stats(&master_dests->entrytable[i].stats, &slave_dests->entrytable[i].stats);
+        dp_vs_stats_add(&master_dests->entrytable[i].stats, &slave_dests->entrytable[i].stats);
     }
 
     return EDPVS_OK;
@@ -1074,7 +1074,7 @@ static int dp_vs_get_services_uc_cb(struct dpvs_msg *msg)
     struct dp_vs_get_services *get, *output;
     int ret;
 
-    /* service may be changed */    
+    /* service may be changed */
     get = (struct dp_vs_get_services *)msg->data;
     if (get->num_services != rte_atomic16_read(&dp_vs_num_services[cid])) {
         RTE_LOG(ERR, SERVICE, "%s: svc number %d not match %d in cid=%d.\n",
@@ -1138,7 +1138,7 @@ static int dp_vs_get_service_uc_cb(struct dpvs_msg *msg)
     if (!svc)
         return EDPVS_NOTEXIST;
 
-    size = sizeof(struct dp_vs_service_entry);   
+    size = sizeof(struct dp_vs_service_entry);
     entry = msg_reply_alloc(size);
     if (entry == NULL)
         return EDPVS_NOMEM;
@@ -1208,7 +1208,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
     netif_get_slave_lcores(&num_lcores, NULL);
     opt2cpu(opt, &new_opt, &cid);
     if (new_opt > SOCKOPT_SVC_MAX)
-        return EDPVS_INVAL; 
+        return EDPVS_INVAL;
 
     switch (new_opt){
         case DPVS_SO_GET_VERSION:
@@ -1283,7 +1283,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                         if (ret != EDPVS_OK) {
                             msg_destroy(&msg);
                             rte_free(output);
-                            return ret; 
+                            return ret;
                         }
                     }
                     *out = output;
@@ -1331,7 +1331,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     msg_destroy(&msg);
                     RTE_LOG(ERR, SERVICE, "%s: send message fail.\n", __func__);
                     return EDPVS_MSG_FAIL;
-                } 
+                }
 
                 if (cid == rte_get_master_lcore()) {
                     svc = dp_vs_get_service_lcore(entry, cid);
@@ -1356,7 +1356,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
 
                     list_for_each_entry(cur, &reply->mq, mq_node) {
                         get_msg = (struct dp_vs_service_entry *)(cur->data);
-                        ret = dp_vs_add_stats(&output->stats, &get_msg->stats);
+                        ret = dp_vs_stats_add(&output->stats, &get_msg->stats);
                         if (ret != EDPVS_OK) {
                             msg_destroy(&msg);
                             rte_free(output);
@@ -1387,7 +1387,7 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                     RTE_LOG(ERR, SERVICE, "%s: find no service for cid=%d.\n", __func__, cid);
                     msg_destroy(&msg);
                     rte_free(output);
-                    return EDPVS_NOTEXIST; 
+                    return EDPVS_NOTEXIST;
                 }
             }
         case DPVS_SO_GET_DESTS:
@@ -1420,14 +1420,14 @@ static int dp_vs_get_svc(sockoptid_t opt, const void *user, size_t len, void **o
                                sizeof(struct dp_vs_get_dests), user);
                 if (!msg)
                     return EDPVS_NOMEM;
-                    
+
                 ret = multicast_msg_send(msg, 0, &reply);
                 if (ret != EDPVS_OK) {
                     msg_destroy(&msg);
                     RTE_LOG(ERR, SERVICE, "%s: send message fail.\n", __func__);
                     return EDPVS_MSG_FAIL;
                 }
- 
+
                 if (cid == rte_get_master_lcore()) {
                     svc = dp_vs_get_service_lcore(&entry, cid);
                     if (!svc) {
@@ -1504,7 +1504,7 @@ struct dpvs_sockopts sockopts_svc = {
 
 static int flush_msg_cb(struct dpvs_msg *msg)
 {
-    
+
     return dp_vs_set_svc(DPVS_SO_SET_FLUSH, msg->data, msg->len);
 }
 
@@ -1604,7 +1604,7 @@ int dp_vs_service_init(void)
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
          RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
-         return err; 
+         return err;
     }
 
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
