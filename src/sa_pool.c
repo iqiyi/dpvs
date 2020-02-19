@@ -624,7 +624,7 @@ static int sa4_fetch(struct netif_port *dev,
     fl.fl4_saddr.s_addr = saddr ? saddr->sin_addr.s_addr : htonl(INADDR_ANY);
     rt = route4_output(&fl);
     if (!rt)
-        return EDPVS_NOROUTE;;
+        return EDPVS_NOROUTE;
 
     /* select source address. */
     if (!rt->src.s_addr) {
@@ -700,7 +700,7 @@ static int sa6_fetch(struct netif_port *dev,
         fl6.fl6_saddr= saddr->sin6_addr;
     rt6 = route6_output(NULL, &fl6);
     if (!rt6)
-        return EDPVS_NOROUTE;;
+        return EDPVS_NOROUTE;
 
     /* select source address. */
     if (ipv6_addr_any(&rt6->rt6_src.addr)) {

@@ -34,4 +34,3 @@ int iftraf_init(void);
 int iftraf_term(void); /* cleanup */
 
 #endif
-
