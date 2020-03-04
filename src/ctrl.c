@@ -305,7 +305,10 @@ int msg_destroy(struct dpvs_msg **pmsg)
         return EDPVS_INVAL;
     msg = *pmsg;
 
-    assert(rte_atomic16_read(&msg->refcnt) != 0);
+    if (rte_atomic16_read(&msg->refcnt) == 0) {
+	*pmsg = NULL;
+        return EDPVS_OK;
+    }
     if (!rte_atomic16_dec_and_test(&msg->refcnt)) {
         *pmsg = NULL;
         return EDPVS_OK;
