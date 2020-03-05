@@ -50,8 +50,8 @@ struct dpvs_timer {
     dpvs_tick_t         delay;
 };
 
-inline dpvs_tick_t timeval_to_ticks(const struct timeval *tv);
-inline void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv);
+dpvs_tick_t timeval_to_ticks(const struct timeval *tv);
+void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv);
 
 int dpvs_timer_init(void);
 int dpvs_timer_term(void);
