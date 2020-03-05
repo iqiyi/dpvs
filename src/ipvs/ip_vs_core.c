@@ -26,6 +26,7 @@
 #include "sa_pool.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/conn.h"
+#include "ipvs/conn_pool.h"
 #include "ipvs/proto.h"
 #include "ipvs/service.h"
 #include "ipvs/dest.h"

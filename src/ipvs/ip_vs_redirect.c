@@ -15,6 +15,7 @@
  * GNU General Public License for more details.
  *
  */
+#include "ipvs/conn_pool.h"
 #include "ipvs/redirect.h"
 
 #define DPVS_REDIRECT_RING_SIZE  2048

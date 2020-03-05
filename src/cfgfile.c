@@ -33,6 +33,7 @@
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
 #include "ipvs/synproxy.h"
+#include "ipvs/conn_pool.h"
 #include "scheduler.h"
 
 typedef void (*sighandler_t)(int);

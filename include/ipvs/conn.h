@@ -171,122 +171,6 @@ struct dp_vs_synproxy_ack_pakcet {
 #define tuplehash_in(c)         ((c)->tuplehash[DPVS_CONN_DIR_INBOUND])
 #define tuplehash_out(c)        ((c)->tuplehash[DPVS_CONN_DIR_OUTBOUND])
 
-int dp_vs_conn_init(void);
-int dp_vs_conn_term(void);
-
-struct dp_vs_conn *
-dp_vs_conn_new(struct rte_mbuf *mbuf,
-               const struct dp_vs_iphdr *iph,
-               struct dp_vs_conn_param *param,
-               struct dp_vs_dest *dest,
-               uint32_t flags);
-int dp_vs_conn_del(struct dp_vs_conn *conn);
-
-struct dp_vs_conn *
-dp_vs_conn_get(int af, uint16_t proto,
-                const union inet_addr *saddr,
-                const union inet_addr *daddr,
-                uint16_t sport, uint16_t dport,
-                int *dir, bool reverse);
-
-struct dp_vs_conn *
-dp_vs_ct_in_get(int af, uint16_t proto,
-                const union inet_addr *saddr,
-                const union inet_addr *daddr,
-                uint16_t sport, uint16_t dport);
-
-void dp_vs_conn_put(struct dp_vs_conn *conn);
-/* put conn without reset the timer */
-void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn);
-
-unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn);
-void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp);
-
-void dp_vs_conn_expire_now(struct dp_vs_conn *conn);
-
-void ipvs_conn_keyword_value_init(void);
-void install_ipvs_conn_keywords(void);
-
-static inline void dp_vs_conn_fill_param(int af, uint8_t proto,
-        const union inet_addr *caddr, const union inet_addr *vaddr,
-        uint16_t cport, uint16_t vport, uint16_t ct_dport,
-        struct dp_vs_conn_param *param)
-{
-    param->af       = af;
-    param->proto    = proto;
-    param->caddr    = caddr;
-    param->vaddr    = vaddr;
-    param->cport    = cport;
-    param->vport    = vport;
-    param->ct_dport = ct_dport; /* only for template connection */
-}
-
-
-int dp_vs_check_template(struct dp_vs_conn *ct);
-
-static inline void dp_vs_control_del(struct dp_vs_conn *conn)
-{
-    struct dp_vs_conn *ctl_conn = conn->control;
-    char cbuf[64], vbuf[64];
-
-    if (!ctl_conn) {
-#ifdef CONFIG_DPVS_IPVS_DEBUG
-        RTE_LOG(DEBUG, IPVS, "%s: request control DEL for uncontrolled: "
-                "%s:%u to %s:%u\n", __func__,
-                inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)),
-                ntohs(conn->cport),
-                inet_ntop(conn->af, &conn->vaddr, vbuf, sizeof(vbuf)),
-                ntohs(conn->vport));
-#endif
-        return;
-    }
-
-#ifdef CONFIG_DPVS_IPVS_DEBUG
-    RTE_LOG(DEBUG, IPVS, "%s: deleting control for: conn.client=%s:%u "
-            "ctrl_conn.client=%s:%u\n", __func__,
-            inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)),
-            ntohs(conn->cport),
-            inet_ntop(conn->af, &ctl_conn->vaddr, cbuf, sizeof(cbuf)),
-            ntohs(conn->vport));
-#endif
-    conn->control = NULL;
-    if (rte_atomic32_read(&ctl_conn->n_control) == 0) {
-        RTE_LOG(ERR, IPVS, "%s: BUG control DEL with zero n_control: "
-                "%s:%u to %s:%u\n", __func__,
-                inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)),
-                ntohs(conn->cport),
-                inet_ntop(conn->af, &conn->vaddr, vbuf, sizeof(vbuf)),
-                ntohs(conn->vport));
-        return;
-    }
-    rte_atomic32_dec(&ctl_conn->n_control);
-}
-
-static inline void dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn *ctl_conn)
-{
-    char cbuf[64], vbuf[64];
-
-    if (unlikely(conn->control != NULL)) {
-        RTE_LOG(ERR, IPVS, "%s: request control ADD for already controlled conn: "
-                "%s:%u to %s:%u\n", __func__,
-                inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::",
-                ntohs(conn->cport),
-                inet_ntop(conn->af, &conn->vaddr, vbuf, sizeof(vbuf)) ? vbuf : "::",
-                ntohs(conn->vport));
-        dp_vs_control_del(conn);
-    }
-#ifdef CONFIG_OPVS_IPVS_DEBUG
-    RTE_LOG(DEBUG, IPVS, "%s: Adding control for: conn.client=%s:%u "
-            "ctrl_conn.client=%s:%u\n", __func__,
-            inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::",
-            ntohs(conn->cport),
-            inet_ntop(conn->af, &ctl_conn->caddr, vbuf, sizeof(cbuf)) ? cbuf : "::",
-            ntohs(ctl_conn->cport));
-#endif
-    conn->control = ctl_conn;
-    rte_atomic32_inc(&ctl_conn->n_control);
-}
-
 static inline bool
 dp_vs_conn_is_template(struct dp_vs_conn *conn)
 {
@@ -335,13 +219,111 @@ dp_vs_conn_clear_redirect_hashed(struct dp_vs_conn *conn)
     conn->flags &= ~DPVS_CONN_F_REDIRECT_HASHED;
 }
 
+static inline
+void dp_vs_conn_fill_param(int af, uint8_t proto,
+        const union inet_addr *caddr, const union inet_addr *vaddr,
+        uint16_t cport, uint16_t vport, uint16_t ct_dport,
+        struct dp_vs_conn_param *param)
+{
+    param->af       = af;
+    param->proto    = proto;
+    param->caddr    = caddr;
+    param->vaddr    = vaddr;
+    param->cport    = cport;
+    param->vport    = vport;
+    param->ct_dport = ct_dport; /* only for template connection */
+}
+
+static inline void
+dp_vs_control_del(struct dp_vs_conn *conn)
+{
+    struct dp_vs_conn *ctl_conn = conn->control;
+    char cbuf[64], vbuf[64];
+
+    if (!ctl_conn) {
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+        RTE_LOG(DEBUG, IPVS, "%s: request control DEL for uncontrolled: "
+                "%s:%u to %s:%u\n", __func__,
+                inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)),
+                ntohs(conn->cport),
+                inet_ntop(conn->af, &conn->vaddr, vbuf, sizeof(vbuf)),
+                ntohs(conn->vport));
+#endif
+        return;
+    }
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+    RTE_LOG(DEBUG, IPVS, "%s: deleting control for: conn.client=%s:%u "
+            "ctrl_conn.client=%s:%u\n", __func__,
+            inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)),
+            ntohs(conn->cport),
+            inet_ntop(conn->af, &ctl_conn->vaddr, cbuf, sizeof(cbuf)),
+            ntohs(conn->vport));
+#endif
+    conn->control = NULL;
+    if (rte_atomic32_read(&ctl_conn->n_control) == 0) {
+        RTE_LOG(ERR, IPVS, "%s: BUG control DEL with zero n_control: "
+                "%s:%u to %s:%u\n", __func__,
+                inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)),
+                ntohs(conn->cport),
+                inet_ntop(conn->af, &conn->vaddr, vbuf, sizeof(vbuf)),
+                ntohs(conn->vport));
+        return;
+    }
+    rte_atomic32_dec(&ctl_conn->n_control);
+}
+
+static inline void
+dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn *ctl_conn)
+{
+    char cbuf[64], vbuf[64];
+
+    if (unlikely(conn->control != NULL)) {
+        RTE_LOG(ERR, IPVS, "%s: request control ADD for already controlled conn: "
+                "%s:%u to %s:%u\n", __func__,
+                inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::",
+                ntohs(conn->cport),
+                inet_ntop(conn->af, &conn->vaddr, vbuf, sizeof(vbuf)) ? vbuf : "::",
+                ntohs(conn->vport));
+        dp_vs_control_del(conn);
+    }
+#ifdef CONFIG_OPVS_IPVS_DEBUG
+    RTE_LOG(DEBUG, IPVS, "%s: Adding control for: conn.client=%s:%u "
+            "ctrl_conn.client=%s:%u\n", __func__,
+            inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::",
+            ntohs(conn->cport),
+            inet_ntop(conn->af, &ctl_conn->caddr, vbuf, sizeof(cbuf)) ? cbuf : "::",
+            ntohs(ctl_conn->cport));
+#endif
+    conn->control = ctl_conn;
+    rte_atomic32_inc(&ctl_conn->n_control);
+}
+
+struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
+    const struct dp_vs_iphdr *iph, struct dp_vs_conn_param *param,
+    struct dp_vs_dest *dest, uint32_t flags);
+struct dp_vs_conn *dp_vs_conn_get(int af, uint16_t proto,
+    const union inet_addr *saddr, const union inet_addr *daddr,
+    uint16_t sport, uint16_t dport, int *dir, bool reverse);
+struct dp_vs_conn *dp_vs_ct_in_get(int af, uint16_t proto,
+    const union inet_addr *saddr, const union inet_addr *daddr,
+    uint16_t sport, uint16_t dport);
 uint32_t dp_vs_conn_hashkey(int af,
     const union inet_addr *saddr, uint16_t sport,
     const union inet_addr *daddr, uint16_t dport,
     uint32_t mask);
-int dp_vs_conn_pool_size(void);
-int dp_vs_conn_pool_cache_size(void);
+int dp_vs_check_template(struct dp_vs_conn *ct);
+void dp_vs_conn_put(struct dp_vs_conn *conn);
+void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn);
+void dp_vs_conn_flush(void);
+unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn);
+void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp);
+void dp_vs_conn_expire_now(struct dp_vs_conn *conn);
+int conn_ctrl_init(void);
+void conn_ctrl_term(void);
 
-extern bool dp_vs_redirect_disable;
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+void dp_vs_conn_dump(const char *msg, struct dp_vs_conn *conn);
+#endif
 
 #endif /* __DPVS_CONN_H__ */
