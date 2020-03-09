@@ -17,7 +17,7 @@
  */
 #include <assert.h>
 #include <netinet/tcp.h>
-#include "common.h"
+#include "conf/common.h"
 #include "inet.h"
 #include "ipv4.h"
 #include "ipv6.h"

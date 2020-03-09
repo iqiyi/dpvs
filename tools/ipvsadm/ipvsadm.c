@@ -193,7 +193,7 @@ static const char* optnames[] = {
 	"syncid",
 	"exact",
 	"ops",
-	"pe" , 
+	"pe" ,
 	"local-address" ,
 	"blklst-address",
 	"synproxy" ,
@@ -214,39 +214,39 @@ static const char* optnames[] = {
 static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 {
 /* -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr blst syn ifname sockpair hashtag cpu*/
-/*ADD*/   
+/*ADD*/
     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' ', 'x'},
-/*EDIT*/  
+/*EDIT*/
     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' ', 'x'},
-/*DEL*/      
+/*DEL*/
     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*FLUSH*/    
+/*FLUSH*/
     {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*LIST*/     
+/*LIST*/
     {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x',  'x', 'x' ,' ' ,'x', ' '},
-/*ADDSRV*/   
+/*ADDSRV*/
     {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*DELSRV*/   
+/*DELSRV*/
     {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*EDITSRV*/  
+/*EDITSRV*/
     {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*TIMEOUT*/  
+/*TIMEOUT*/
     {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*STARTD*/   
+/*STARTD*/
     {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*STOPD*/    
+/*STOPD*/
     {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*RESTORE*/  
+/*RESTORE*/
     {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*SAVE*/     
+/*SAVE*/
     {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*ZERO*/     
+/*ZERO*/
     {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
-/*ADDLADDR*/ 
+/*ADDLADDR*/
     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x', 'x'},
-/*DELLADDR*/ 
+/*DELLADDR*/
     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x', 'x'},
-/*GETLADDR*/ 
+/*GETLADDR*/
     {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', ' '},
 /*ADDBLKLST*/
     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x', 'x'},
@@ -307,7 +307,7 @@ enum {
 	TAG_NO_SORT,
 	TAG_PERSISTENCE_ENGINE,
 	TAG_SOCKPAIR,
-	TAG_CPU, 
+	TAG_CPU,
 };
 
 /* various parsing helpers & parsing functions */
@@ -610,7 +610,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			strncpy(ce->svc.user.sched_name,
 				optarg, IP_VS_SCHEDNAME_MAXLEN);
 			if (!memcmp(ce->svc.user.sched_name, "conhash", strlen("conhash")))
-				ce->svc.user.flags = ce->svc.user.flags | IP_VS_SVC_F_SIP_HASH; 
+				ce->svc.user.flags = ce->svc.user.flags | IP_VS_SVC_F_SIP_HASH;
 			break;
 		case 'p':
 			set_option(options, OPT_PERSISTENT);
@@ -1202,7 +1202,7 @@ parse_service(char *buf, ipvs_service_t *svc)
  * Get sockpair from the arguments.
  * sockpair := PROTO:SIP:SPORT:TIP:TPORT
  * PROTO := [tcp|udp]
- * SIP,TIP := dotted-decimal ip address
+ * SIP,TIP := dotted-decimal ip address or square-blacketed ip6 address
  * SPORT,TPORT := range(0, 65535)
  */
 static int
@@ -1526,7 +1526,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --exact                             expand numbers (display exact values)\n"
 		"  --thresholds                        output of thresholds information\n"
 		"  --persistent-conn                   output of persistent connection info\n"
-		"  --sockpair                          output connection info of specified socket pair (proto:sip:sport:tip:tport)"
+		"  --sockpair                          output connection info of specified socket pair (proto:sip:sport:tip:tport)\n"
 		"  --nosort                            disable sorting output of service/server entries\n"
 		"  --sort                              does nothing, for backwards compatibility\n"
 		"  --ops          -o                   one-packet scheduling\n"
@@ -1739,7 +1739,7 @@ static void print_largenum(unsigned long long i, unsigned int format)
 		printf("%*llu", len <= 8 ? 9 : len + 1, i);
 		return;
 	}
-	
+
 	if (i < 100000000)			/* less than 100 million */
 		printf("%9llu", i);
 	else if (i < 1000000000)		/* less than 1 billion */
@@ -1826,7 +1826,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 				proto = "UDP";
 			else if (se->user.protocol == IPPROTO_ICMP)
 				proto = "ICMP";
-			else 
+			else
 				proto = "ICMPv6";
 
 			sprintf(svc_name, "%s  %s", proto, vname);
@@ -1866,7 +1866,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
 				",MATCH %s", proto);
-            
+
 			if (strcmp(se->user.srange, "[::-::]:0-0") != 0 &&
                             strcmp(se->user.srange, "0.0.0.0-0.0.0.0:0-0") != 0)
 				left -= snprintf(svc_name + strlen(svc_name), left,
@@ -2041,7 +2041,7 @@ static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
 	char	pbuf[INET6_ADDRSTRLEN];
 
 	inet_ntop(entry->af, (char *)&entry->addr, pbuf, sizeof(pbuf));
-	
+
 	printf("%-20s %-8s %-20s %-10lu %-10u\n",
 		"",
 		"",
@@ -2058,7 +2058,7 @@ static void print_service_and_laddrs(struct ip_vs_get_laddrs* d, int with_title)
 
 	list_laddrs_print_service(d);
 	for(i = 0 ; i < d->num_laddrs ; i ++){
-		list_laddrs_print_laddr(d->entrytable + i); 
+		list_laddrs_print_laddr(d->entrytable + i);
 	}
 
 	return;

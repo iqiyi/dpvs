@@ -38,21 +38,7 @@ struct dp_vs_match {
 
 static inline bool is_empty_match(const struct dp_vs_match *match)
 {
-    static const struct dp_vs_match zero_match = {
-        .af = 0,
-        .srange = {
-            .min_addr.in = {0},
-            .max_addr.in = {0},
-            .min_port = 0,
-            .max_port = 0,
-        },
-        .drange = {
-            .min_addr.in = {0},
-            .max_addr.in = {0},
-            .min_port = 0,
-            .max_port = 0,
-        }
-    };
+    const static struct dp_vs_match zero_match = {};
     return !memcmp(match, &zero_match, sizeof(*match));
 }
 
@@ -60,14 +46,14 @@ static inline int parse_match(const char *pattern, uint8_t *proto,
                               struct dp_vs_match *match)
 {
     char _pat[256];
-    char *start, *tok, *sp;
+    char *start, *tok, *sp, *delim = ",";
     int err;
 
     *proto = 0;
     memset(match, 0, sizeof(*match));
     snprintf(_pat, sizeof(_pat), "%s", pattern);
 
-    for (start = _pat; (tok = strtok_r(start, ",", &sp)); start = NULL) {
+    for (start = _pat; (tok = strtok_r(start, delim, &sp)); start = NULL) {
         if (strcmp(tok, "tcp") == 0) {
             *proto = IPPROTO_TCP;
         } else if (strcmp(tok, "udp") == 0) {
@@ -101,13 +87,7 @@ static inline int parse_match(const char *pattern, uint8_t *proto,
 static inline char *dump_match(uint8_t proto, const struct dp_vs_match *match,
                                char *buf, size_t size)
 {
-    //static const struct inet_addr_range zero_range = {{{0}}};
-    static const struct inet_addr_range zero_range = {
-        .min_addr.in = {0},
-        .max_addr.in = {0},
-        .min_port = 0,
-        .max_port = 0
-    };
+    const static struct inet_addr_range zero_range = {{{0}}};
     size_t left = size;
 
     if (!match || !buf || size < 1)

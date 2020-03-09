@@ -17,7 +17,7 @@
  */
 
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "mempool.h"
 
@@ -38,7 +38,7 @@ static inline int log2_lower(int num)
     return lg;
 }
 
-static int mp_elem_create(char *name_pref, struct dpvs_mp_elem *mp_elt, uint32_t obj_sz, uint16_t obj_num)
+static int mp_elem_create(char *name_pref, struct dpvs_mp_elem *mp_elt, uint32_t obj_sz, uint32_t obj_num)
 {
     unsigned cache_size;
     struct rte_mempool *pool;
@@ -54,7 +54,7 @@ static int mp_elem_create(char *name_pref, struct dpvs_mp_elem *mp_elt, uint32_t
 
     snprintf(name, sizeof(name), "%s_s%d_n%d", name_pref, obj_sz, obj_num);
     pool = rte_mempool_create(name, obj_num, obj_sz, cache_size, 0, NULL, NULL,
-            NULL, NULL, rte_socket_id(), 0);
+            NULL, NULL, SOCKET_ID_ANY, 0);
     if (unlikely(!pool))
         return EDPVS_NOMEM;
 
@@ -82,7 +82,7 @@ struct dpvs_mempool *dpvs_mempool_create(char *name,
 {
     int i, idx_start, idx_end, arr_size;
     uint32_t obj_size, pool_mem;
-    uint16_t obj_num;
+    uint32_t obj_num;
     struct dpvs_mempool *mp;
 
     if (rte_lcore_id() != rte_get_master_lcore()) {
@@ -134,7 +134,7 @@ struct dpvs_mempool *dpvs_mempool_create(char *name,
             return NULL;
         }
         obj_size *= 2;
-        RTE_LOG(DEBUG, DPVS_MPOOL, "elem mempool created: %s.\n", mp->pool_array[i].name);
+        RTE_LOG(INFO, DPVS_MPOOL, "elem mempool created: %s.\n", mp->pool_array[i].name);
     }
 
     RTE_LOG(INFO, DPVS_MPOOL, "%s: create mempool %s: obj_size %d->%d, arr_size %d, pool_mem %dKB\n",
@@ -158,7 +158,7 @@ void dpvs_mempool_destroy(struct dpvs_mempool *mp)
             __func__, mp->name, mp->obj_size_min, mp->obj_size_max, mp->pool_arr_size, mp->pool_mem/1024);
 
     for (i = 0; i < mp->pool_arr_size; i++) {
-        RTE_LOG(DEBUG, DPVS_MPOOL, "elem mempool destroyed: %s.\n", mp->pool_array[i].name);
+        RTE_LOG(INFO, DPVS_MPOOL, "elem mempool destroyed: %s.\n", mp->pool_array[i].name);
         mp_elem_destroy(&mp->pool_array[i]);
     }
 
@@ -172,14 +172,14 @@ static int get_pool_array_index(const struct dpvs_mempool *mp, int size)
     lower = 0;
     upper = mp->pool_arr_size - 1;
 
-    if (unlikely(size + MP_OBJ_COOKIE_OFFSET > mp->pool_array[upper].obj_size))
+    if (unlikely(size > mp->pool_array[upper].obj_size))
         return -1;
 
     while (lower < upper) {
-        if (size + MP_OBJ_COOKIE_OFFSET <= mp->pool_array[lower].obj_size)
+        if (size <= mp->pool_array[lower].obj_size)
             return lower;
         mid = (lower + upper) / 2;
-        if (size + MP_OBJ_COOKIE_OFFSET <= mp->pool_array[mid].obj_size)
+        if (size <= mp->pool_array[mid].obj_size)
             upper = mid;
         else
             lower = mid + 1;
@@ -190,17 +190,22 @@ static int get_pool_array_index(const struct dpvs_mempool *mp, int size)
 
 void *dpvs_mempool_get(struct dpvs_mempool *mp, int size)
 {
-    int arr_idx;
+    int arr_idx, alloc_size;
     void *ptr, *data;
     struct dpvs_mp_obj_cookie *cookie;
+    tailer_marker_t *tailer;
 
     if (unlikely(!mp))
         return NULL;
 
-    arr_idx = get_pool_array_index(mp, size);
+    alloc_size = size + MP_OBJ_COOKIE_OFFSET + MP_OBJ_TAILER_SIZE;
+
+    arr_idx = get_pool_array_index(mp, alloc_size);
     if (arr_idx < 0) {
-        RTE_LOG(INFO, DPVS_MPOOL, "%s: %s allocate %d memory from heap!\n",
+#ifdef CONFIG_DPVS_MP_DEBUG
+        RTE_LOG(INFO, DPVS_MPOOL, "%s: %s allocate %d bytes memory from heap!\n",
                 __func__, mp->name, size);
+#endif
         goto alloc_from_heap;
     }
 
@@ -210,41 +215,61 @@ void *dpvs_mempool_get(struct dpvs_mempool *mp, int size)
     }
 
     if (rte_mempool_get(mp->pool_array[arr_idx].pool, &ptr) < 0) {
-        RTE_LOG(WARNING, DPVS_MPOOL, "%s: mempool %s full, allocate memory from heap!\n",
-                __func__,  mp->pool_array[arr_idx].name);
+#ifdef CONFIG_DPVS_MP_DEBUG
+        RTE_LOG(WARNING, DPVS_MPOOL, "%s: mempool %s full, allocate %d bytes memory from heap!\n",
+                __func__,  mp->pool_array[arr_idx].name, size);
+#endif
         goto alloc_from_heap;
     }
-    data = ptr + MP_OBJ_COOKIE_OFFSET;;
+
     cookie = (struct dpvs_mp_obj_cookie *)ptr;
     cookie->mark = MP_OBJ_COOKIE_MARK;
+    cookie->memsize = alloc_size;
     cookie->flag = MEM_OBJ_FROM_POOL;
     cookie->pool_idx = arr_idx;
 
-    //RTE_LOG(DEBUG, DPVS_MPOOL, "allocate %d memory from %s\n", size, mp->pool_array[arr_idx].name);
+    tailer = (tailer_marker_t *)(ptr + size + MP_OBJ_COOKIE_OFFSET);
+    *tailer = MP_OBJ_TAILER_MARK;
+
+    data = ptr + MP_OBJ_COOKIE_OFFSET;;
+#ifdef CONFIG_DPVS_MP_DEBUG
+    RTE_LOG(DEBUG, DPVS_MPOOL, "allocate %d memory from %s\n", size, mp->pool_array[arr_idx].name);
+#endif
     memset(data, 0, size);
     return data;
 
 alloc_from_heap:
-    ptr = rte_zmalloc(NULL, size, RTE_CACHE_LINE_SIZE);
+    ptr = rte_zmalloc(NULL, alloc_size, RTE_CACHE_LINE_SIZE);
     if (!ptr)
         return NULL;
-    data = ptr + MP_OBJ_COOKIE_OFFSET;
+
     cookie = (struct dpvs_mp_obj_cookie *)ptr;
     cookie->mark = MP_OBJ_COOKIE_MARK;
+    cookie->memsize = alloc_size;
     cookie->flag = MEM_OBJ_FROM_HEAP;
     cookie->pool_idx = mp->pool_arr_size; // invalid pool index
+
+    tailer = (tailer_marker_t *)(ptr + size + MP_OBJ_COOKIE_OFFSET);
+    *tailer = (uint32_t)MP_OBJ_TAILER_MARK;
+
+    data = ptr + MP_OBJ_COOKIE_OFFSET;
+    assert(dpvs_mp_elem_ok(data));
     return data;
 }
 
 void dpvs_mempool_put(struct dpvs_mempool *mp, void *obj)
 {
     struct dpvs_mp_obj_cookie *cookie;
+    tailer_marker_t *tailer;
 
     if (!mp || !obj)
         return;
 
     cookie = (struct dpvs_mp_obj_cookie *)(obj - MP_OBJ_COOKIE_OFFSET);
     assert(cookie->mark == MP_OBJ_COOKIE_MARK);
+
+    tailer = (tailer_marker_t *)(obj - MP_OBJ_COOKIE_OFFSET + cookie->memsize - MP_OBJ_TAILER_SIZE);
+    assert(*tailer == MP_OBJ_TAILER_MARK);
 
     if (cookie->flag == MEM_OBJ_FROM_POOL)
         rte_mempool_put(mp->pool_array[cookie->pool_idx].pool, (void *)cookie);
@@ -253,3 +278,39 @@ void dpvs_mempool_put(struct dpvs_mempool *mp, void *obj)
     else
         RTE_LOG(ERR, DPVS_MPOOL, "%s: unkown memory object flag %d\n", __func__, cookie->flag);
 }
+
+#ifdef CONFIG_DPVS_MP_DEBUG
+bool dpvs_mp_elem_ok(void *obj)
+{
+    struct dpvs_mp_obj_cookie *cookie;
+    tailer_marker_t *tailer;
+
+    if (!obj)
+        return true;
+
+    cookie = (struct dpvs_mp_obj_cookie *)(obj - MP_OBJ_COOKIE_OFFSET);
+    tailer = (tailer_marker_t *)(obj - MP_OBJ_COOKIE_OFFSET + cookie->memsize - MP_OBJ_TAILER_SIZE);
+
+    if (cookie->mark != MP_OBJ_COOKIE_MARK) {
+        assert(0);
+        return false;
+    }
+
+    if (*tailer != MP_OBJ_TAILER_MARK) {
+        assert(0);
+        return false;
+    }
+
+    /* apply the patch to get `rte_memmory_ok`:
+     * dpdk-stable-17.11.6/enable-dpdk-eal-memory-debug.patch */
+    if (cookie->flag == MEM_OBJ_FROM_HEAP)
+        assert(rte_memmory_ok((void *)cookie));
+
+    return true;
+}
+#else
+bool dpvs_mp_elem_ok(void *obj)
+{
+    return true;
+}
+#endif

@@ -21,7 +21,7 @@
 #include <netinet/in.h>
 #include "dpdk.h"
 #include "list.h"
-#include "common.h"
+#include "conf/common.h"
 #include "netif.h"
 #include "inet.h"
 #include "ctrl.h"

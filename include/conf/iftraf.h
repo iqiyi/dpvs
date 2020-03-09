@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <linux/if_addr.h>
 #include "inet.h"
-	
+
 enum {
     /* set */
     SOCKOPT_SET_IFTRAF_ADD = 6400,
@@ -57,4 +57,3 @@ struct iftraf_param_array {
 };
 
 #endif /* __DPVS_INETADDR_CONF_H__ */
-

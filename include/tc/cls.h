@@ -22,8 +22,8 @@
  */
 #ifndef __DPVS_TC_CLS_H__
 #define __DPVS_TC_CLS_H__
-#include "common.h"
-#include "match.h"
+#include "conf/common.h"
+#include "conf/match.h"
 #ifdef __DPVS__
 #include "dpdk.h"
 #endif /* __DPVS__ */

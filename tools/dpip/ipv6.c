@@ -24,8 +24,8 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include "common.h"
-#include "inet.h"
+#include "conf/common.h"
+#include "conf/inet.h"
 #include "dpip.h"
 #include "sockopt.h"
 #include "conf/ipv6.h"

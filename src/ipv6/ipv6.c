@@ -27,7 +27,7 @@
 #include <string.h>
 #include <assert.h>
 #include <netinet/ip6.h>
-#include "common.h"
+#include "conf/common.h"
 #include "mbuf.h"
 #include "inet.h"
 #include "ipv6.h"

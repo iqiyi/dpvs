@@ -17,7 +17,7 @@
  */
 #ifndef __DPIP_UTILS_H__
 #define __DPIP_UTILS_H__
-#include "inet.h"
+#include "conf/inet.h"
 
 #define __init __attribute__((constructor))
 #define __exit __attribute__((destructor))

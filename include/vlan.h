@@ -23,7 +23,7 @@
 #ifndef __DPVS_VLAN_H__
 #define __DPVS_VLAN_H__
 #include <linux/if_ether.h>
-#include "common.h"
+#include "conf/common.h"
 #include "list.h"
 #include "netif.h"
 
@@ -74,7 +74,7 @@ struct vlan_dev_priv {
 
     /* per-CPU statistics
      * RTE_DEFINE_PER_LCORE cannot be used inside struct */
-    struct vlan_stats   lcore_stats[RTE_MAX_LCORE];
+    struct vlan_stats   lcore_stats[DPVS_MAX_LCORE];
 };
 
 /**

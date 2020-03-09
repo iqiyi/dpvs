@@ -35,6 +35,10 @@ int __netif_mc_dump(struct netif_port *dev,
                     struct ether_addr *addrs, size_t *naddr);
 int netif_mc_dump(struct netif_port *dev,
                   struct ether_addr *addrs, size_t *naddr);
+int __netif_mc_print(struct netif_port *dev,
+                     char *buf, int *len, int *pnaddr);
+int netif_mc_print(struct netif_port *dev,
+                   char *buf, int *len, int *pnaddr);
 
 int __netif_mc_sync(struct netif_port *to, struct netif_port *from);
 int netif_mc_sync(struct netif_port *to, struct netif_port *from);
@@ -45,5 +49,24 @@ int __netif_mc_sync_multiple(struct netif_port *to, struct netif_port *from);
 int netif_mc_sync_multiple(struct netif_port *to, struct netif_port *from);
 int __netif_mc_unsync_multiple(struct netif_port *to, struct netif_port *from);
 int netif_mc_unsync_multiple(struct netif_port *to, struct netif_port *from);
+
+static inline int eth_addr_equal(const struct ether_addr *addr1,
+                                 const struct ether_addr *addr2)
+{
+    const uint16_t *a = (const uint16_t *)addr1;
+    const uint16_t *b = (const uint16_t *)addr2;
+
+    return ((a[0]^b[0]) | (a[1]^b[1]) | (a[2]^b[2])) == 0;
+}
+
+static inline char *eth_addr_dump(const struct ether_addr *ea,
+                                  char *buf, size_t size)
+{
+    snprintf(buf, size, "%02x:%02x:%02x:%02x:%02x:%02x",
+             ea->addr_bytes[0], ea->addr_bytes[1],
+             ea->addr_bytes[2], ea->addr_bytes[3],
+             ea->addr_bytes[4], ea->addr_bytes[5]);
+    return buf;
+}
 
 #endif /* __DPVS_NETIF_ADDR_H__ */

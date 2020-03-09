@@ -73,13 +73,26 @@ ipaddresstos(char *buf, const ip_address_t *ipaddress)
 
 /* Add/Delete IP address to a specific interface_t */
 static void
-dpvs_fill_addrconf(ip_address_t *ipaddress, char *dpdk_port, struct inet_addr_param *param)
+dpvs_fill_addrconf(int is_add, uint32_t flags, ip_address_t *ipaddress,
+				   char *dpdk_port, struct inet_addr_param *param)
 {
-	param->af = ipaddress->ifa.ifa_family;
-	param->addr.in = ipaddress->u.sin.sin_addr;
-	strcpy(param->ifname, dpdk_port);
-	param->plen = ipaddress->ifa.ifa_prefixlen;
-	param->flags &= ~IFA_F_SAPOOL;
+	if (is_add)
+		param->ifa_ops = INET_ADDR_ADD;
+	else
+		param->ifa_ops = INET_ADDR_DEL;
+	param->ifa_ops_flags = 0;
+	param->ifa_entry.af = ipaddress->ifa.ifa_family;
+	if (dpdk_port) {
+		strcpy(param->ifa_entry.ifname, dpdk_port);
+	} else {
+		strcpy(param->ifa_entry.ifname, IF_NAME(if_get_by_ifindex(ipaddress->ifa.ifa_index)));
+	}
+	if (param->ifa_entry.af == AF_INET)
+		param->ifa_entry.addr.in  = ipaddress->u.sin.sin_addr;
+	else
+		param->ifa_entry.addr.in6 = ipaddress->u.sin6_addr;
+	param->ifa_entry.plen = ipaddress->ifa.ifa_prefixlen;
+	param->ifa_entry.flags &= ~IFA_F_SAPOOL;
 }
 
 int
@@ -89,10 +102,12 @@ netlink_ipaddress(ip_address_t* ipaddress, char *dpdk_port, int cmd)
 
 	if (dpdk_port == NULL)
 		return 1;
-	
+
 	memset(&param, 0, sizeof(param));
-	dpvs_fill_addrconf(ipaddress, dpdk_port, &param);
+	dpvs_fill_addrconf(cmd == IPADDRESS_DEL ? 0 : 1, 0,
+			ipaddress, dpdk_port, &param);
 	ipvs_set_ipaddr(&param, cmd);
+
 	return 1;
 }
 

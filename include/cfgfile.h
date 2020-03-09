@@ -18,7 +18,6 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-void try_reload(void);
 int cfgfile_init(void);
 int cfgfile_term(void);
 

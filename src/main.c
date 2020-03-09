@@ -21,7 +21,7 @@
 #include <getopt.h>
 #include "pidfile.h"
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "netif.h"
 #include "vlan.h"
 #include "inet.h"
@@ -36,6 +36,7 @@
 #include "sys_time.h"
 #include "route6.h"
 #include "iftraf.h"
+#include "scheduler.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
@@ -147,10 +148,6 @@ int main(int argc, char *argv[])
     char pql_conf_buf[LCORE_CONF_BUFFER_LEN];
     int pql_conf_buf_len = LCORE_CONF_BUFFER_LEN;
 
-    int timer_sched_interval_us;
-    uint64_t cycles_per_sec;
-    uint64_t now_cycles, prev_cycles;
-
     /**
      * add application agruments parse before EAL ones.
      * use it like the following:
@@ -199,20 +196,25 @@ int main(int argc, char *argv[])
     /* initialize packet capture framework */
     err = rte_pdump_init(NULL);
     if (err < 0) {
-        rte_exit(EXIT_FAILURE, "Fail init dpdk pdump framework\n");
+        rte_exit(EXIT_FAILURE, "Fail to init dpdk pdump framework\n");
     }
 #endif
+    if ((err = dpvs_scheduler_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init dpvs scheduler\n");
+
+    if ((err = global_data_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init global data\n");
 
     if ((err = cfgfile_init()) != EDPVS_OK)
-        rte_exit(EXIT_FAILURE, "Fail init configuration file: %s\n",
+        rte_exit(EXIT_FAILURE, "Fail to init configuration file: %s\n",
                  dpvs_strerror(err));
 
     if ((err = netif_virtual_devices_add()) != EDPVS_OK)
-        rte_exit(EXIT_FAILURE, "Fail add virtual devices:%s\n",
+        rte_exit(EXIT_FAILURE, "Fail to add virtual devices:%s\n",
                  dpvs_strerror(err));
 
     if ((err = dpvs_timer_init()) != EDPVS_OK)
-        rte_exit(EXIT_FAILURE, "Fail init timer on %s\n", dpvs_strerror(err));
+        rte_exit(EXIT_FAILURE, "Fail to init timer on %s\n", dpvs_strerror(err));
 
     if ((err = tc_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init traffic control: %s\n",
@@ -273,47 +275,19 @@ int main(int argc, char *argv[])
     RTE_LOG(INFO, DPVS, "\nport-queue-lcore relation array: \n%s\n",
             pql_conf_buf);
 
-    /* start data plane threads */
-    netif_lcore_start();
-
     log_slave_init();
+
+    /* start slave worker threads */
+    dpvs_lcore_start(0);
+
     /* write pid file */
     if (!pidfile_write(DPVS_PIDFILE, getpid()))
         goto end;
 
-    timer_sched_interval_us = dpvs_timer_sched_interval_get();
-    cycles_per_sec = rte_get_timer_hz();
-    prev_cycles = 0;
-    assert(timer_sched_interval_us > 0);
-
     dpvs_state_set(DPVS_STATE_NORMAL);
 
-    /* start control plane thread */
-    while (1) {
-        /* reload configuations if reload flag is set */
-        try_reload();
-        /* IPC loop */
-        sockopt_ctl(NULL);
-        /* msg loop */
-        msg_master_process(0);
-        /* timer */
-        now_cycles = rte_get_timer_cycles();
-        if ((now_cycles - prev_cycles) * 1000000 / cycles_per_sec > timer_sched_interval_us) {
-            rte_timer_manage();
-            prev_cycles = now_cycles;
-        }
-        /* kni */
-        kni_process_on_master();
-
-        /* process mac ring on master */
-        neigh_process_ring(NULL);
-
-        /* process iftraf ring */
-        iftraf_process_ring();
-
-        /* increase loop counts */
-        netif_update_master_loop_cnt();
-    }
+    /* start control plane thread loop */
+    dpvs_lcore_start(1);
 
 end:
     dpvs_state_set(DPVS_STATE_FINISH);
@@ -341,6 +315,11 @@ end:
     if ((err = cfgfile_term()) != 0)
         RTE_LOG(ERR, DPVS, "Fail to term configuration file: %s\n",
                 dpvs_strerror(err));
+    if ((err = global_data_term()) != 0)
+        RTE_LOG(ERR, DPVS, "Fail to clean global data\n");
+    if ((err = dpvs_scheduler_term()) != 0)
+        RTE_LOG(ERR, DPVS, "Fail to term dpvs scheduler\n");
+
 #ifdef CONFIG_DPVS_PDUMP
     if ((err = rte_pdump_uninit()) != 0) {
         RTE_LOG(ERR, DPVS, "Fail to uninitialize dpdk pdump framework.\n");

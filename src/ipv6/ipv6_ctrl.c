@@ -21,7 +21,7 @@
  * Lei Chen <raychen@qiyi.com>, initial, Jul 2018.
  */
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "inet.h"
 #include "ipv6.h"

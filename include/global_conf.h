@@ -19,7 +19,7 @@
 #define __GLOBAL_CONF_H__
 
 #include <unistd.h>
-#include "common.h"
+#include "conf/common.h"
 #include "parser/parser.h"
 #include "dpdk.h"
 

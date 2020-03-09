@@ -15,22 +15,19 @@
  * GNU General Public License for more details.
  *
  */
-#ifndef __DP_VS_PROTO_UDP_H__
-#define __DP_VS_PROTO_UDP_H__
 
-#include <netinet/udp.h>
+#ifndef __DPVS_DEBUG_H__
+#define __DPVS_DEBUG_H__
 
-enum {
-    DPVS_UDP_S_NORMAL   = 0,
-    DPVS_UDP_S_LAST
-};
+#define TRACE_STACK_DEPTH_MAX       128
 
-extern int g_defence_udp_drop;
+/* get backtrace for the calling program */
+int dpvs_backtrace(char *buf, int len);
 
-void install_proto_udp_keywords(void);
-void udp_keyword_value_init(void);
-
-void udp4_send_csum(struct ipv4_hdr *iph, struct udp_hdr *uh);
-void udp6_send_csum(struct ipv6_hdr *iph, struct udp_hdr *uh);
+void dpvs_timing_start(void);
+void dpvs_timing_stop(void);
+/*  return elapsed time of the most recent call between
+ * "dpvs_timing_start" and "dpvs_timing_stop" in microsecond */
+int dpvs_timing_get(void);
 
 #endif

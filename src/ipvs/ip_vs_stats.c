@@ -16,7 +16,7 @@
  *
  */
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #include "netif.h"
 #include "list.h"
 #include "ctrl.h"
@@ -40,7 +40,7 @@ void dp_vs_stats_clear(struct dp_vs_stats *stats)
     stats->outbytes = 0;
 }
 
-int dp_vs_add_stats(struct dp_vs_stats* dst, struct dp_vs_stats* src)
+int dp_vs_stats_add(struct dp_vs_stats *dst, struct dp_vs_stats *src)
 {
     dst->conns    += src->conns;
     dst->inpkts   += src->inpkts;

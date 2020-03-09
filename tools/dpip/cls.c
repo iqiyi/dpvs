@@ -23,10 +23,10 @@
  */
 #include <stdlib.h>
 #include <string.h>
-#include "common.h"
-#include "match.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "sockopt.h"
+#include "conf/match.h"
 #include "conf/tc.h"
 
 static void cls_help(void)
