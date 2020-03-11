@@ -90,24 +90,24 @@ dp_vs_dest_is_valid(struct dp_vs_dest *dest)
             && dp_vs_dest_get_weight(dest) > 0) ? true : false;
 }
 
-int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
+int dp_vs_dest_new(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
                                               struct dp_vs_dest **dest_p);
 
-struct dp_vs_dest *dp_vs_lookup_dest(int af, struct dp_vs_service *svc,
+struct dp_vs_dest *dp_vs_dest_lookup(int af, struct dp_vs_service *svc,
                                      const union inet_addr *daddr, uint16_t dport);
 
-int dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
+int dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
-int dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
+int dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
-void dp_vs_unlink_dest(struct dp_vs_service *svc,
+void dp_vs_dest_unlink(struct dp_vs_service *svc,
                         struct dp_vs_dest *dest, int svcupd);
 
 void dp_vs_dest_put(struct dp_vs_dest *dest);
 
-int dp_vs_del_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
+int dp_vs_dest_del(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
-int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
+int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
                            struct dp_vs_get_dests *uptr);
 
 int dp_vs_dest_init(void);

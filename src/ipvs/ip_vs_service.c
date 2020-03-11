@@ -643,7 +643,7 @@ static void __dp_vs_service_del(struct dp_vs_service *svc)
      *    Unlink the whole destination list
      */
     list_for_each_entry_safe(dest, nxt, &svc->dests, n_list) {
-        dp_vs_unlink_dest(svc, dest, 0);
+        dp_vs_dest_unlink(svc, dest, 0);
         dp_vs_dest_put(dest);
     }
 
@@ -1004,15 +1004,15 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
             break;
         case DPVS_SO_SET_ADDDEST:
             dp_vs_copy_udest_compat(&udest, udest_compat);
-            ret = dp_vs_add_dest(svc, &udest);
+            ret = dp_vs_dest_add(svc, &udest);
             break;
         case DPVS_SO_SET_EDITDEST:
             dp_vs_copy_udest_compat(&udest, udest_compat);
-            ret = dp_vs_edit_dest(svc, &udest);
+            ret = dp_vs_dest_edit(svc, &udest);
             break;
         case DPVS_SO_SET_DELDEST:
             dp_vs_copy_udest_compat(&udest, udest_compat);
-            ret = dp_vs_del_dest(svc, &udest);
+            ret = dp_vs_dest_del(svc, &udest);
             break;
         default:
             ret = EDPVS_INVAL;
@@ -1185,7 +1185,7 @@ static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
     if (output == NULL)
         return EDPVS_NOMEM;
     rte_memcpy(output, get, sizeof(*get));
-    ret = dp_vs_get_dest_entries(svc, output);
+    ret = dp_vs_dest_get_entries(svc, output);
     if (ret != EDPVS_OK) {
         msg_reply_free(output);
         return ret;
@@ -1443,7 +1443,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                         return EDPVS_NOMEM;
                     }
                     rte_memcpy(output, get, sizeof(get));
-                    ret = dp_vs_get_dest_entries(svc, output);
+                    ret = dp_vs_dest_get_entries(svc, output);
                     if (ret != EDPVS_OK) {
                         msg_destroy(&msg);
                         rte_free(output);
