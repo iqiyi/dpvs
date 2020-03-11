@@ -58,7 +58,8 @@ static void __dp_vs_dest_update(struct dp_vs_service *svc,
 
     rte_atomic16_set(&dest->conn_flags, conn_flags);
 
-    dest->flags |= DPVS_DEST_F_AVAILABLE;
+
+    dp_vs_dest_set_avail(dest);
 
     if (udest->max_conn == 0 || udest->max_conn > dest->max_conn)
         dest->flags &= ~DPVS_DEST_F_OVERLOAD;
@@ -224,7 +225,7 @@ void dp_vs_dest_put(struct dp_vs_dest *dest)
 void dp_vs_dest_unlink(struct dp_vs_service *svc,
                 struct dp_vs_dest *dest, int svcupd)
 {
-    dest->flags &= ~DPVS_DEST_F_AVAILABLE;
+    dp_vs_dest_clear_avail(dest);
 
     /*
      *  Remove it from the d-linked destination list.
