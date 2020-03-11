@@ -98,7 +98,6 @@ free_vsg(void *data)
 	virtual_server_group_t *vsg = data;
 	FREE_PTR(vsg->gname);
 	free_list(&vsg->addr_range);
-	free_list(&vsg->addr_ip);
 	free_list(&vsg->vfwmark);
 	FREE(vsg);
 }
@@ -110,7 +109,6 @@ dump_vsg(FILE *fp, const void *data)
 	conf_write(fp, " ------< Virtual server group >------");
 	conf_write(fp, " Virtual Server Group = %s", vsg->gname);
 	dump_list(fp, vsg->addr_range);
-	dump_list(fp, vsg->addr_ip); 
 	dump_list(fp, vsg->vfwmark);
 }
 static void
@@ -157,7 +155,6 @@ alloc_vsg(const char *gname)
 	new = (virtual_server_group_t *) MALLOC(sizeof(virtual_server_group_t));
 	new->gname = STRDUP(gname);
 	new->addr_range = alloc_list(free_vsg_entry, dump_vsg_entry);
-	new->addr_ip = alloc_list(free_vsg_entry, dump_vsg_entry);
 	new->vfwmark = alloc_list(free_vsg_entry, dump_vsg_entry);
 
 	list_add(check_data->vs_group, new);
@@ -245,7 +242,6 @@ alloc_vsg_entry(const vector_t *strvec)
 		}
 
 		new->is_fwmark = false;
-		list_add(vsg->addr_ip, new);
 		list_add(vsg->addr_range, new);
 	}
 }

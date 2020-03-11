@@ -282,7 +282,8 @@ int ipvs_init(lcoreid_t cid)
 		return -1;
 	}
 #endif
-	len_rcv = len = sizeof(g_ipvs_info);
+	len = sizeof(g_ipvs_info);
+	len_rcv = len;
 
 	if (dpvs_getsockopt(DPVS_SO_GET_INFO, (const void*)&g_ipvs_info, len, (void **)&ipvs_info_rcv, &len_rcv)) {
 		return -1;
@@ -499,6 +500,7 @@ static void ipvs_fill_ipaddr_conf(int is_add, uint32_t flags,
                                   ipvs_laddr_t *laddr, struct inet_addr_param *param)
 {
 	memset(param, 0, sizeof(*param));
+
 	if (is_add)
 		param->ifa_ops = INET_ADDR_ADD;
 	else
@@ -515,6 +517,7 @@ static void ipvs_fill_ipaddr_conf(int is_add, uint32_t flags,
 		param->ifa_entry.addr.in6 = laddr->addr.in6;
 	}
 	param->ifa_entry.flags |= IFA_F_SAPOOL;
+
 	return;
 }
 
