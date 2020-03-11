@@ -144,7 +144,7 @@ $ make # or "make -j40" to speed up.
 $ make install
 ```
 
-> may need install dependencies, like `openssl`, `popt` and `numactl`, e.g., `yum install popt-devel` (CentOS).
+> may need install dependencies, like `automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`, e.g., `yum install popt-devel` (CentOS).
 
 Output files are installed to `dpvs/bin`.
 
