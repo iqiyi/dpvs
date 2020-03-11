@@ -95,7 +95,7 @@ int dp_vs_new_dest(struct dp_vs_service *svc,
     rte_atomic32_set(&dest->inactconns, 0);
     rte_atomic32_set(&dest->persistconns, 0);
     rte_atomic32_set(&dest->refcnt, 1);
-    dp_vs_bind_svc(dest, svc);
+    dp_vs_service_bind(dest, svc);
 
     __dp_vs_update_dest(svc, dest, udest);
 
@@ -213,7 +213,7 @@ void dp_vs_dest_put(struct dp_vs_dest *dest)
         return;
 
     if (rte_atomic32_dec_and_test(&dest->refcnt)) {
-        dp_vs_unbind_svc(dest);
+        dp_vs_service_unbind(dest);
         rte_free(dest);
     }
 }
