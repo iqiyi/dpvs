@@ -763,6 +763,7 @@ ipvs_set_srule(int cmd, ipvs_service_t *srule, virtual_server_t *vs)
 	srule->user.protocol = vs->service_type;
 	srule->user.bps = vs->bps;
 	srule->user.limit_proportion = vs->limit_proportion;
+        srule->user.conn_timeout = vs->conn_timeout;
 	snprintf(srule->user.srange, 256, "%s", vs->srange);
 	snprintf(srule->user.drange, 256, "%s", vs->drange);
 	snprintf(srule->user.iifname, IFNAMSIZ, "%s", vs->iifname);
