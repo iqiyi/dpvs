@@ -892,6 +892,9 @@ ipvs_cmd(int cmd, virtual_server_t *vs, real_server_t *rs)
 		srule.af = vs->addr.ss_family;
 		srule.nf_addr.ip = 0;
 		srule.user.port = inet_sockaddrport(&vs->addr);
+                srule.user.flags |= IP_VS_SVC_F_MATCH;
+                if (!srule.af)
+			srule.af = vs->af;
 	} else {
 		if (vs->af == AF_INET6)
 			inet_sockaddrip6(&vs->addr, &srule.nf_addr.in6);
