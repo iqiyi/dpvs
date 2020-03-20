@@ -38,32 +38,6 @@
 #include "check_daemon.h"
 
 static bool __attribute((pure))
-vs_iseq(const virtual_server_t *vs_a, const virtual_server_t *vs_b)
-{
-	if (!vs_a->vsgname != !vs_b->vsgname)
-		return false;
-
-	if (vs_a->vsgname) {
-		/* Should we check the vsg entries match? */
-		if (inet_sockaddrport(&vs_a->addr) != inet_sockaddrport(&vs_b->addr))
-			return false;
-
-		return !strcmp(vs_a->vsgname, vs_b->vsgname);
-	} else if (vs_a->af != vs_b->af)
-		return false;
-	else if (vs_a->vfwmark) {
-		if (vs_a->vfwmark != vs_b->vfwmark)
-			return false;
-	} else {
-		if (vs_a->service_type != vs_b->service_type ||
-		    !sockstorage_equal(&vs_a->addr, &vs_b->addr))
-			return false;
-	}
-
-	return true;
-}
-
-static bool __attribute((pure))
 vsge_iseq(const virtual_server_group_entry_t *vsge_a, const virtual_server_group_entry_t *vsge_b)
 {
 	if (vsge_a->is_fwmark != vsge_b->is_fwmark)
@@ -614,15 +588,17 @@ init_service_vs(virtual_server_t * vs)
 	}
 
 	/*Set local ip address in "FNAT" mode of IPVS */
-	if ((vs->forwarding_method == IP_VS_CONN_F_FULLNAT) && vs->local_addr_gname) { 
+	if (vs->local_addr_gname &&
+	    (vs->forwarding_method == IP_VS_CONN_F_FULLNAT ||
+	    vs->forwarding_method == IP_VS_CONN_F_SNAT)) {
 		if (!ipvs_cmd(LVS_CMD_ADD_LADDR, vs, NULL))
-			return 0; 
+			return 0;
 	}
 
-        if ((vs->forwarding_method == IP_VS_CONN_F_FULLNAT) && vs->blklst_addr_gname) {
-                if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, vs, NULL))
-                        return 0;
-        }	    
+	if (vs->blklst_addr_gname) {
+		if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, vs, NULL))
+			return 0;
+	}
 
 	/* Processing real server queue */
 	if (!init_service_rs(vs))
@@ -838,7 +814,7 @@ vs_exist(virtual_server_t * old_vs)
 	virtual_server_t *vs;
 
 	LIST_FOREACH(check_data->vs, vs, e) {
-		if (vs_iseq(old_vs, vs))
+		if (VS_ISEQ(old_vs, vs))
 			return vs;
 	}
 

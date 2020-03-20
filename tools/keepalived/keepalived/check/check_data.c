@@ -459,6 +459,7 @@ alloc_vs(const char *param1, const char *param2)
 	new = (virtual_server_t *) MALLOC(sizeof(virtual_server_t));
 
 	new->af = AF_UNSPEC;
+	new->forwarding_method = IP_VS_CONN_F_FWD_MASK;		/* So we can detect if it has been set */
 
 	if (!strcmp(param1, "group"))
 		new->vsgname = STRDUP(param2);
@@ -506,7 +507,6 @@ alloc_vs(const char *param1, const char *param2)
 	new->hysteresis = 0;
 	new->quorum_state_up = true;
 	new->flags = 0;
-	new->forwarding_method = IP_VS_CONN_F_FWD_MASK;		/* So we can detect if it has been set */
 	new->connection_to = 5 * TIMER_HZ;
 	new->delay_loop = KEEPALIVED_DEFAULT_DELAY;
 	new->warmup = ULONG_MAX;
