@@ -588,17 +588,17 @@ init_service_vs(virtual_server_t * vs)
 	}
 
 	/*Set local ip address in "FNAT" mode of IPVS */
-        if (vs->local_addr_gname &&
-            (vs->forwarding_method == IP_VS_CONN_F_FULLNAT ||
-             vs->forwarding_method == IP_VS_CONN_F_SNAT)) {
-                if (!ipvs_cmd(LVS_CMD_ADD_LADDR, vs, NULL))
-                        return 0;
-        }
+	if (vs->local_addr_gname &&
+	    (vs->forwarding_method == IP_VS_CONN_F_FULLNAT ||
+	    vs->forwarding_method == IP_VS_CONN_F_SNAT)) {
+		if (!ipvs_cmd(LVS_CMD_ADD_LADDR, vs, NULL))
+			return 0;
+	}
 
-        if (vs->blklst_addr_gname) {
-                if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, vs, NULL))
-                        return 0;
-        }
+	if (vs->blklst_addr_gname) {
+		if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, vs, NULL))
+			return 0;
+	}
 
 	/* Processing real server queue */
 	if (!init_service_rs(vs))
