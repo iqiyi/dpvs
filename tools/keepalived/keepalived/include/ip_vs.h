@@ -229,8 +229,8 @@ struct ip_vs_tunnel_user {
 struct ip_vs_stats_user {
 	__u64                   conns;          /* connections scheduled */
 	__u64                   inpkts;         /* incoming packets */
-	__u64                   outpkts;        /* outgoing packets */
 	__u64                   inbytes;        /* incoming bytes */
+	__u64                   outpkts;        /* outgoing packets */
 	__u64                   outbytes;       /* outgoing bytes */
 
 	__u32			cps;		/* current connection rate */
