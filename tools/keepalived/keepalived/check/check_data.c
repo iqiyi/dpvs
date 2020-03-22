@@ -1088,7 +1088,8 @@ bool validate_check_config(void)
 #endif
 
 			/* Check port specified for udp/tcp/sctp unless persistent */
-			if (!vs->persistence_timeout &&
+			if (vs->forwarding_method != IP_VS_CONN_F_SNAT &&
+			    !vs->persistence_timeout &&
 			    !vs->vsg &&
 			    !inet_sockaddrport(&vs->addr)) {
 				report_config_error(CONFIG_GENERAL_ERROR, "Virtual server %s: zero port only valid for persistent services - setting", FMT_VS(vs));
@@ -1099,7 +1100,8 @@ bool validate_check_config(void)
 		/* If a virtual server group with addresses has persistence not set,
 		 * make sure all the address blocks have a port, otherwise set
 		 * persistence. */
-		if (!vs->persistence_timeout && vs->vsg) {
+		if (vs->forwarding_method != IP_VS_CONN_F_SNAT &&
+		    !vs->persistence_timeout && vs->vsg) {
 			LIST_FOREACH(vs->vsg->addr_range, vsge, e1) {
 				if (!inet_sockaddrport(&vsge->addr)) {
 					report_config_error(CONFIG_GENERAL_ERROR, "Virtual server %s: zero port only valid for persistent services - setting", FMT_VS(vs));
