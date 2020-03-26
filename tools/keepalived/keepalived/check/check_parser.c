@@ -664,17 +664,7 @@ rs_end_handler(void)
 #endif
 	{
 		if (vs->af == AF_UNSPEC) {
-			vsg = ipvs_get_group_by_name(vs->vsgname, check_data->vs_group);
-			if (vsg) {
-				vsge = ELEMENT_DATA(LIST_HEAD(vsg->addr_range));
-				vs->af = vsge->addr.ss_family;
-			} else {
-				vs->af = rs->addr.ss_family;
-			}			
-		}
-		else if (vs->af != rs->addr.ss_family) {
-			/*report_config_error(CONFIG_GENERAL_ERROR, "Address family of virtual server and real server %s don't match - skipping real server.", inet_sockaddrtos(&rs->addr));
-			free_list_element(vs->rs, vs->rs->tail);*/
+			vs->af = rs->addr.ss_family;
 		}
 	}
 }
