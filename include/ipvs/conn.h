@@ -335,6 +335,7 @@ uint32_t dp_vs_conn_hashkey(int af,
     uint32_t mask);
 int dp_vs_conn_pool_size(void);
 int dp_vs_conn_pool_cache_size(void);
+unsigned dp_vs_conn_get_persist_timeout(struct dp_vs_conn *conn);
 
 extern bool dp_vs_redirect_disable;
 

@@ -1218,7 +1218,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
             (cp->state == DPVS_TCP_S_SYN_SENT)) {
         cp->syn_proxy_seq.delta = ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
         cp->state = DPVS_TCP_S_ESTABLISHED;
-        conn_timeout = dp_vs_get_conn_timeout(cp);
+        conn_timeout = dp_vs_conn_get_persist_timeout(cp);
         if (unlikely((conn_timeout != 0) && (cp->proto == IPPROTO_TCP)))
             cp->timeout.tv_sec = conn_timeout;
         else

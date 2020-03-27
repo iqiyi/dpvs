@@ -489,6 +489,18 @@ static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
 
 static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn);
 
+unsigned dp_vs_conn_get_persist_timeout(struct dp_vs_conn *conn)
+{
+    unsigned conn_timeout;
+
+    if (conn->dest) {
+        conn_timeout = conn->dest->conn_timeout;
+        return conn_timeout;
+    }
+
+    return 90;
+}
+
 static void dp_vs_conn_set_timeout(struct dp_vs_conn *conn,
                                    struct dp_vs_proto *pp)
 {
@@ -497,7 +509,7 @@ static void dp_vs_conn_set_timeout(struct dp_vs_conn *conn,
     /* set proper timeout */
     if ((conn->proto == IPPROTO_TCP && conn->state == DPVS_TCP_S_ESTABLISHED)
         || (conn->proto == IPPROTO_UDP && conn->state == DPVS_UDP_S_NORMAL)) {
-        conn_timeout = dp_vs_get_conn_timeout(conn);
+        conn_timeout = dp_vs_conn_get_persist_timeout(conn);
 
         if (unlikely(conn_timeout > 0)) {
             conn->timeout.tv_sec = conn_timeout;

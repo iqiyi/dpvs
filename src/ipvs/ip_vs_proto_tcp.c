@@ -899,7 +899,7 @@ tcp_state_out:
     conn->state = new_state;
 
     if (new_state == DPVS_TCP_S_ESTABLISHED) {
-        conn_timeout = dp_vs_get_conn_timeout(conn);
+        conn_timeout = dp_vs_conn_get_persist_timeout(conn);
         if (unlikely(conn_timeout > 0))
             conn->timeout.tv_sec = conn_timeout;
         else
