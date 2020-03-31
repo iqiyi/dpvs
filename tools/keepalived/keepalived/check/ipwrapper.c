@@ -1264,8 +1264,13 @@ link_vsg_to_vs(void)
 				vsg_af = AF_UNSPEC;
 			}
 
+			/* vs configured with virtual_server_group */
+			if (vs->af == AF_UNSPEC)
+				vs->af = vsg_af;
+
 			if (vsg_af != AF_UNSPEC && vsg_af != vs->af) {
-				log_message(LOG_INFO, "Virtual server group %s address family doesn't match virtual server %s - ignoring", vs->vsgname, FMT_VS(vs));
+				log_message(LOG_INFO, "Virtual server group %s address family doesn't match virtual server %s - ignoring, vsg_af=%d, vs->af=%d",
+						vs->vsgname, FMT_VS(vs), vsg_af, vs->af);
 				free_vs_checkers(vs);
 				free_list_element(check_data->vs, e);
 			}
