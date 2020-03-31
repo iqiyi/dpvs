@@ -1045,18 +1045,6 @@ iif_handler(const vector_t *strvec)
 }
 
 static void
-af_handler(const vector_t *strvec)
-{
-	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
-	char *str = vector_slot(strvec, 1);
-
-	if (!strcmp(str, "ipv4") || !strcmp(str, "IPv4"))
-		vs->af = AF_INET;
-	else if (!strcmp(str, "ipv6") || !strcmp(str, "IPv6"))
-		vs->af = AF_INET6;
-}
-
-static void
 hash_target_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -1130,7 +1118,6 @@ init_check_keywords(bool active)
 	install_keyword("dst-range", &dst_range_handler);
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
-	install_keyword("af", &af_handler);
 	install_keyword("hash_target", &hash_target_handler);
 
 	/* Pool regression detection and handling. */
