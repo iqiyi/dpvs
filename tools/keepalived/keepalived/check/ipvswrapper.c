@@ -417,8 +417,8 @@ ipvs_group_cmd(int cmd, ipvs_service_t *srule, ipvs_dest_t *drule, virtual_serve
 		return 0;
 	/* visit addr_ip list */
 	LIST_FOREACH(vsg->addr_range, vsg_entry, e) {
-	if (cmd == IP_VS_SO_SET_ADD && reload && vsg_entry->reloaded)
-		continue;
+		if (cmd == IP_VS_SO_SET_ADD && reload && vsg_entry->reloaded)
+			continue;
 		if (ipvs_change_needed(cmd, vsg_entry, vs, rs)) {
 			srule->user.port = inet_sockaddrport(&vsg_entry->addr);
 			if (vsg_entry->range) {
