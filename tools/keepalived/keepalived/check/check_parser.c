@@ -170,6 +170,7 @@ vs_end_handler(void)
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	real_server_t *rs;
 	element e;
+	uint16_t af = AF_UNSPEC;
 	bool mixed_af;
 
 	/* If the real (sorry) server uses tunnel forwarding, the address family
@@ -190,7 +191,9 @@ vs_end_handler(void)
 	}
 
 	if (vs->af == AF_UNSPEC) {
-		/* This only occurs if the virtual server uses a fwmark, all the
+		/* This only occurs if:
+		 *
+		 * 1. the virtual server uses a fwmark(not supported by DPVS), all the
 		 * real/sorry servers are tunnelled, and the address family has not
 		 * been specified.
 		 *
@@ -199,24 +202,34 @@ vs_end_handler(void)
 		 * real or sorry servers, even if they were tunnelled. However, all the real
 		 * and sorry servers had to be the same address family, even if tunnelled,
 		 * so only set the address family from the tunnelled real/sorry servers
-		 * if all the real/sorry servers are of the same address family. */
+		 * if all the real/sorry servers are of the same address family.
+		 *
+		 * 2. the virtual server is configured with virtual_server_group and no "ip_family"
+		 * is specified explicitly within it.
+		 *
+		 * Keep the vs->af to be AF_UNSPEC unchanged, and vs->af would be assgined with
+		 * vsg->af in link_vsg_to_vs later.
+		 *
+		 * */
 		mixed_af = false;
 
 		if (vs->s_svr)
-			vs->af = vs->s_svr->addr.ss_family;
+			af = vs->s_svr->addr.ss_family;
 
 		LIST_FOREACH(vs->rs, rs, e) {
-			if (vs->af == AF_UNSPEC)
-				vs->af = rs->addr.ss_family;
-			else if (vs->af != rs->addr.ss_family) {
+			if (af == AF_UNSPEC)
+				af = rs->addr.ss_family;
+			else if (af != rs->addr.ss_family) {
 				mixed_af = true;
 				break;
 			}
 		}
 
-		if (mixed_af || vs->af == AF_UNSPEC) {
+		if (mixed_af) {
 			/* We have a mixture of IPv4 and IPv6 tunnelled real/sorry servers.
-			 * Default to IPv4. */
+			 * Default to IPv4.*/
+			report_config_error(CONFIG_GENERAL_ERROR, "Address family of real/sorry servers are"
+					"not the same for vs %s.", FMT_VS(vs));
 			vs->af = AF_INET;
 		}
 	}
@@ -657,16 +670,9 @@ rs_end_handler(void)
 
 	rs = LIST_TAIL_DATA(vs->rs);
 
-	/* For tunnelled forwarding, the address families don't have to be the same, so
-	 * long as the kernel supports IPVS_DEST_ATTR_ADDR_FAMILY */
-#if HAVE_DECL_IPVS_DEST_ATTR_ADDR_FAMILY
-	if (rs->forwarding_method != IP_VS_CONN_F_TUNNEL)
-#endif
-	{
-		if (vs->af == AF_UNSPEC) {
-			vs->af = rs->addr.ss_family;
-		}
-	}
+	/* Do NOT assign vs->af with rs->addr.ss_family, even if vs->af == AF_UNSPEC,
+	 * because vs->af and rs->addr.ss_family are not the same in NAT64.
+	 */
 }
 static void
 rs_weight_handler(const vector_t *strvec)
@@ -1039,18 +1045,6 @@ iif_handler(const vector_t *strvec)
 }
 
 static void
-af_handler(const vector_t *strvec)
-{
-	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
-	char *str = vector_slot(strvec, 1);
-
-	if (!strcmp(str, "ipv4") || !strcmp(str, "IPv4"))
-		vs->af = AF_INET;
-	else if (!strcmp(str, "ipv6") || !strcmp(str, "IPv6"))
-		vs->af = AF_INET6;
-}
-
-static void
 hash_target_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -1124,7 +1118,6 @@ init_check_keywords(bool active)
 	install_keyword("dst-range", &dst_range_handler);
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
-	install_keyword("af", &af_handler);
 	install_keyword("hash_target", &hash_target_handler);
 
 	/* Pool regression detection and handling. */
