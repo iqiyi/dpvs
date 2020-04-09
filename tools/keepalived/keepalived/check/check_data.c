@@ -1205,24 +1205,24 @@ bool validate_check_config(void)
 		if (vs->vsg) {
 			if (!LIST_ISEMPTY(vs->vsg->vfwmark)) {
 				LIST_FOREACH(vs->rs, rs, e1) {
-					if (rs->forwarding_method == IP_VS_CONN_F_MASQ)
+					if (rs->forwarding_method == IP_VS_CONN_F_MASQ || rs->forwarding_method == IP_VS_CONN_F_FULLNAT)
 						continue;
 					if (inet_sockaddrport(&rs->addr))
 						log_message(LOG_INFO, "WARNING - fwmark virtual server %s, real server %s has port specified - port will be ignored", FMT_VS(vs), FMT_RS(rs, vs));
 				}
-				if (vs->s_svr && vs->s_svr->forwarding_method != IP_VS_CONN_F_MASQ &&
+				if (vs->s_svr && vs->s_svr->forwarding_method != IP_VS_CONN_F_MASQ && vs->s_svr->forwarding_method != IP_VS_CONN_F_FULLNAT &&
 				    inet_sockaddrport(&vs->s_svr->addr))
 					log_message(LOG_INFO, "WARNING - fwmark virtual server %s, sorry server has port specified - port will be ignored", FMT_VS(vs));
 			}
 			LIST_FOREACH(vs->vsg->addr_range, vsge, e1) {
 				LIST_FOREACH(vs->rs, rs, e2) {
-					if (rs->forwarding_method == IP_VS_CONN_F_MASQ)
+					if (rs->forwarding_method == IP_VS_CONN_F_MASQ || rs->forwarding_method == IP_VS_CONN_F_FULLNAT)
 						continue;
 					if (inet_sockaddrport(&rs->addr) &&
 					    inet_sockaddrport(&vsge->addr) != inet_sockaddrport(&rs->addr))
 						report_config_error(CONFIG_GENERAL_ERROR, "virtual server %s:[%s] and real server %s ports don't match", FMT_VS(vs), format_vsge(vsge), FMT_RS(rs, vs));
 				}
-				if (vs->s_svr && vs->s_svr->forwarding_method != IP_VS_CONN_F_MASQ &&
+				if (vs->s_svr && vs->s_svr->forwarding_method != IP_VS_CONN_F_MASQ && vs->s_svr->forwarding_method != IP_VS_CONN_F_FULLNAT &&
 				    inet_sockaddrport(&vs->s_svr->addr) &&
 				    inet_sockaddrport(&vsge->addr) != inet_sockaddrport(&vs->s_svr->addr))
 					log_message(LOG_INFO, "WARNING - virtual server %s, sorry server has port specified - port will be ignored", FMT_VS(vs));
@@ -1235,6 +1235,9 @@ bool validate_check_config(void)
 						inet_set_sockaddrport(&rs->addr, inet_sockaddrport(&vs->addr));
 					continue;
 				}
+
+				if (rs->forwarding_method == IP_VS_CONN_F_FULLNAT)
+					continue;
 
 				if (vs->vfwmark) {
 					if (inet_sockaddrport(&rs->addr)) {
@@ -1252,7 +1255,7 @@ bool validate_check_config(void)
 			}
 
 			/* Check any sorry server */
-			if (vs->s_svr && vs->s_svr->forwarding_method != IP_VS_CONN_F_MASQ) {
+			if (vs->s_svr && vs->s_svr->forwarding_method != IP_VS_CONN_F_MASQ && vs->s_svr->forwarding_method != IP_VS_CONN_F_FULLNAT) {
 				if (vs->vfwmark) {
 					if (inet_sockaddrport(&vs->s_svr->addr)) {
 						log_message(LOG_INFO, "WARNING - virtual server %s, sorry server has port specified - clearing", FMT_VS(vs));
