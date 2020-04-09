@@ -435,8 +435,8 @@ ipvs_group_cmd(int cmd, ipvs_service_t *srule, ipvs_dest_t *drule, virtual_serve
 					return -1;
 			}
 		}
-	if (cmd == IP_VS_SO_SET_ADDDEST || cmd == IP_VS_SO_SET_DELDEST)
-		ipvs_set_vsge_alive_state(cmd, vsg_entry, vs);
+		if (cmd == IP_VS_SO_SET_ADDDEST || cmd == IP_VS_SO_SET_DELDEST)
+			ipvs_set_vsge_alive_state(cmd, vsg_entry, vs);
 	}
 
 	/* visit vfwmark list */
