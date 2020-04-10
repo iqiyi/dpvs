@@ -365,8 +365,7 @@ static int init_tunnel_group(tunnel_group* group)
 	tunnel_entry* entry;
 
 	l = group->tunnel_entry;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, entry, e) {
 		if (!init_tunnel_entry(entry)) {
 			log_message(LOG_ERR, "%s create tunnel %s error.", __FUNCTION__, entry->ifname);
 			return IPVS_ERROR;
@@ -385,8 +384,7 @@ int init_tunnel(void)
 	if (LIST_ISEMPTY(l))
 		return IPVS_SUCCESS;
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, entry, e) {
 		if (!init_tunnel_group(entry)) {
 			log_message(LOG_ERR, "%s create tunnel group %s error.", __FUNCTION__, entry->gname);
 			return IPVS_ERROR;
@@ -426,8 +424,6 @@ sync_service_vsg(virtual_server_t * vs)
 		}
 	}
 }
-
-
 
 /* add or remove _alive_ real servers from a virtual server */
 static void
@@ -1015,8 +1011,7 @@ laddr_entry_exist(local_addr_entry *laddr_entry, list l)
 	element e;
 	local_addr_entry *entry;
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, entry, e) {
 		if (sockstorage_equal(&entry->addr, &laddr_entry->addr) && 
 				(entry->range == laddr_entry->range) &&
                          !strcmp(entry->ifname, laddr_entry->ifname))
@@ -1032,8 +1027,7 @@ clear_diff_laddr_entry(list old, list new, virtual_server_t * old_vs)
 	element e;
 	local_addr_entry *laddr_entry;
 
-	for (e = LIST_HEAD(old); e; ELEMENT_NEXT(e)) {
-		laddr_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(old, laddr_entry, e) {
 		if (!laddr_entry_exist(laddr_entry, new)) {
 			log_message(LOG_INFO, "VS [%s-%d] in local address group %s no longer exist\n" 
 					    , inet_sockaddrtos(&laddr_entry->addr)
@@ -1081,67 +1075,65 @@ clear_diff_laddr(virtual_server_t * old_vs)
 static int __attribute((pure))
 blklst_entry_exist(blklst_addr_entry *blklst_entry, list l)
 {
-        element e;
-        blklst_addr_entry *entry;
+	element e;
+	blklst_addr_entry *entry;
 
-        for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-                entry = ELEMENT_DATA(e);
-                if (sockstorage_equal(&entry->addr, &blklst_entry->addr) &&
-                                        entry->range == blklst_entry->range)
-                        return 1;
-        }
-        return 0;
+	LIST_FOREACH(l, entry, e) {
+		if (sockstorage_equal(&entry->addr, &blklst_entry->addr) &&
+					entry->range == blklst_entry->range)
+			return 1;
+	}
+	return 0;
 }
 
 /* Clear the diff blklst address entry of the old vs */
 static int
 clear_diff_blklst_entry(list old, list new, virtual_server_t * old_vs)
 {
-        element e;
-        blklst_addr_entry *blklst_entry;
+	element e;
+	blklst_addr_entry *blklst_entry;
 
-        for (e = LIST_HEAD(old); e; ELEMENT_NEXT(e)) {
-                blklst_entry = ELEMENT_DATA(e);
-                if (!blklst_entry_exist(blklst_entry, new)) {
-                        log_message(LOG_INFO, "VS [%s-%d] in blacklist address group %s no longer exist\n"
-                                            , inet_sockaddrtos(&blklst_entry->addr)
-                                            , blklst_entry->range
-                                            , old_vs->blklst_addr_gname);
+	LIST_FOREACH(old, blklst_entry, e) {
+		if (!blklst_entry_exist(blklst_entry, new)) {
+			log_message(LOG_INFO, "VS [%s-%d] in blacklist address group %s no longer exist\n"
+						, inet_sockaddrtos(&blklst_entry->addr)
+						, blklst_entry->range
+						, old_vs->blklst_addr_gname);
 
-                        if (!ipvs_blklst_remove_entry(old_vs, blklst_entry))
-                                return 0;
-                }
-        }
+			if (!ipvs_blklst_remove_entry(old_vs, blklst_entry))
+				return 0;
+		}
+	}
 
-        return 1;
+	return 1;
 }
 
 /* Clear the diff blacklist address of the old vs */
 static int
 clear_diff_blklst(virtual_server_t * old_vs)
 {
-        blklst_addr_group *old;
-        blklst_addr_group *new;
+	blklst_addr_group *old;
+	blklst_addr_group *new;
 
-        /*
-         *  If old vs  didn't own blacklist address group, 
-         * then do nothing and return 
-         */
-        if (!old_vs->blklst_addr_gname)
-                return 1;
+	/*
+	 *  If old vs  didn't own blacklist address group, 
+	 * then do nothing and return 
+	 */
+	if (!old_vs->blklst_addr_gname)
+		return 1;
 
-        /* Fetch blacklist address group */
-        old = ipvs_get_blklst_group_by_name(old_vs->blklst_addr_gname,
-                                                        old_check_data->blklst_group);
-        new = ipvs_get_blklst_group_by_name(old_vs->blklst_addr_gname,
-                                                        check_data->blklst_group);
+	/* Fetch blacklist address group */
+	old = ipvs_get_blklst_group_by_name(old_vs->blklst_addr_gname,
+							old_check_data->blklst_group);
+	new = ipvs_get_blklst_group_by_name(old_vs->blklst_addr_gname,
+							check_data->blklst_group);
 
-        if (!clear_diff_blklst_entry(old->addr_ip, new->addr_ip, old_vs))
-                return 0;
-        if (!clear_diff_blklst_entry(old->range, new->range, old_vs))
-                return 0;
+	if (!clear_diff_blklst_entry(old->addr_ip, new->addr_ip, old_vs))
+		return 0;
+	if (!clear_diff_blklst_entry(old->range, new->range, old_vs))
+		return 0;
 
-        return 1;
+	return 1;
 }
 
 /* When reloading configuration, remove negative diff entries */
@@ -1197,9 +1189,9 @@ clear_diff_services(list old_checkers_queue)
 			/* perform local address diff */
 			if (!clear_diff_laddr(vs))
 				return;
-                        /* perform blacklist address diff */
-                        if (!clear_diff_blklst(vs))
-                                return;
+			/* perform blacklist address diff */
+			if (!clear_diff_blklst(vs))
+				return;
 		}
 	}
 }
@@ -1303,8 +1295,7 @@ get_tunnel_group_by_name(char *gname, list l)
 	if (LIST_ISEMPTY(l))
 		return NULL;
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		group = ELEMENT_DATA(e);
+	LIST_FOREACH(l, group, e) {
 		if (!strcmp(group->gname, gname))
 			return group;
 	}
@@ -1319,8 +1310,7 @@ tunnel_entry_exist(tunnel_entry* old_entry, tunnel_group* new_group)
 	tunnel_entry* new_entry;
 	list l = new_group->tunnel_entry;
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		new_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, new_entry, e) {
 		if (!strcmp(old_entry->ifname, new_entry->ifname) &&
 			!strcmp(old_entry->link, new_entry->link) &&
 			!strcmp(old_entry->kind, new_entry->kind) &&
@@ -1349,8 +1339,7 @@ clear_tunnel_group(tunnel_group* group)
 	if (LIST_ISEMPTY(l))
 		return IPVS_SUCCESS;
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, entry, e) {
 		if (!clear_tunnel_entry(entry)) {
 			log_message(LOG_ERR, "%s clear tunnel %s error.", __FUNCTION__, entry->ifname);
 			return IPVS_ERROR;
@@ -1373,8 +1362,7 @@ clear_diff_tunnel_group(tunnel_group* old_group, tunnel_group* new_group)
 	if (LIST_ISEMPTY(new_group->tunnel_entry))
 		return clear_tunnel_group(old_group);
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, entry, e) {
 		if (!tunnel_entry_exist(entry, new_group))
 			clear_tunnel_entry(entry);
 	}
@@ -1386,15 +1374,14 @@ int clear_diff_tunnel(void)
 {
 	element e;
 	tunnel_group *group;
-	tunnel_group* new_group;
+	tunnel_group *new_group;
 	list l = old_check_data->tunnel_group;
 
 	/* If old config didn't own tunnel then nothing return */
 	if (LIST_ISEMPTY(l))
 		return IPVS_SUCCESS;
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		group = ELEMENT_DATA(e);
+	LIST_FOREACH(l, group, e) {
 		new_group = get_tunnel_group_by_name(group->gname, check_data->tunnel_group);
 		if (new_group) {
 			clear_diff_tunnel_group(group, new_group);
