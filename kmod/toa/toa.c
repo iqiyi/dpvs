@@ -432,7 +432,11 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
  */
 static int
 inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+        int peer)
+#else
         int *uaddr_len, int peer)
+#endif
 {
     int retval = 0;
     struct sock *sk = sock->sk;
@@ -443,10 +447,18 @@ inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
         sk->sk_user_data);
 
     /* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+    retval = inet_getname(sock, uaddr, peer);
+#else
     retval = inet_getname(sock, uaddr, uaddr_len, peer);
+#endif
 
     /* set our value if need */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+    if (retval > 0 && NULL != sk->sk_user_data && peer) {
+#else
     if (retval == 0 && NULL != sk->sk_user_data && peer) {
+#endif
         if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready &&
             !sock_flag(sk, SOCK_NAT64)) {
             memcpy(&tdata, &sk->sk_user_data, sizeof(tdata));
@@ -587,7 +599,11 @@ out:
 #ifdef TOA_IPV6_ENABLE
 static int
 inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+          int peer)
+#else
           int *uaddr_len, int peer)
+#endif
 {
     int retval = 0;
     struct sock *sk = sock->sk;
@@ -597,12 +613,20 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
         sk->sk_user_data);
 
     /* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+    retval = inet6_getname(sock, uaddr, peer);
+#else
     retval = inet6_getname(sock, uaddr, uaddr_len, peer);
+#endif
 
     /* set our value if need */
     lock_cpu_toa_ip6_sk();
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+    if (retval > 0 && NULL != sk->sk_user_data && peer) {
+#else
     if (retval == 0 && NULL != sk->sk_user_data && peer) {
+#endif
         if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
             struct toa_ip6_entry* ptr_ip6_entry  = sk->sk_user_data;
             struct toa_ip6_data* ptr_ip6_data = &ptr_ip6_entry->toa_data;
