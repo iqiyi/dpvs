@@ -63,11 +63,12 @@ static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
 typedef struct sock *(*syn_recv_sock_func_pt)(
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
         const struct sock *sk, struct sk_buff *skb,
+        struct request_sock *req, struct dst_entry *dst,
+        struct request_sock *req_unhash, bool *own_req);
 #else
         struct sock *sk, struct sk_buff *skb,
+        struct request_sock *req, struct dst_entry *dst);
 #endif
-        struct request_sock *req,
-        struct dst_entry *dst);
 static syn_recv_sock_func_pt tcp_v6_syn_recv_sock_org_pt = NULL;
 #endif
 
@@ -676,10 +677,12 @@ get_kernel_ipv6_symbol(void)
 static struct sock *
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
 tcp_v4_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+        struct request_sock *req, struct dst_entry *dst,
+        struct request_sock *req_unhash, bool *own_req)
 #else
 tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
+        struct request_sock *req, struct dst_entry *dst)
 #endif
-            struct request_sock *req, struct dst_entry *dst)
 {
     struct sock *newsock = NULL;
     int nat64 = 0;
@@ -687,7 +690,11 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
     TOA_DBG("tcp_v4_syn_recv_sock_toa called\n");
 
     /* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+    newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst, req_unhash, own_req);
+#else
     newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst);
+#endif
 
     /* set our value if need */
     if (NULL != newsock && NULL == newsock->sk_user_data) {
@@ -721,10 +728,12 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 static struct sock *
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
 tcp_v6_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+            struct request_sock *req, struct dst_entry *dst,
+            struct request_sock *req_unhash, bool *own_req)
 #else
 tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
+            struct request_sock *req, struct dst_entry *dst)
 #endif
-             struct request_sock *req, struct dst_entry *dst)
 {
     struct sock *newsock = NULL;
     int nat64 = 0;
@@ -732,7 +741,11 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
     TOA_DBG("tcp_v6_syn_recv_sock_toa called\n");
 
     /* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+    newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash, own_req);
+#else
     newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst);
+#endif
 
     /* set our value if need */
     if (NULL != newsock && NULL == newsock->sk_user_data) {
