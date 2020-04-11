@@ -61,7 +61,11 @@ static struct proto_ops *inet6_stream_ops_p = NULL;
 static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
 
 typedef struct sock *(*syn_recv_sock_func_pt)(
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+        const struct sock *sk, struct sk_buff *skb,
+#else
         struct sock *sk, struct sk_buff *skb,
+#endif
         struct request_sock *req,
         struct dst_entry *dst);
 static syn_recv_sock_func_pt tcp_v6_syn_recv_sock_org_pt = NULL;
@@ -670,7 +674,11 @@ get_kernel_ipv6_symbol(void)
  * @return NULL if fail new socket if succeed.
  */
 static struct sock *
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+tcp_v4_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+#else
 tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
+#endif
             struct request_sock *req, struct dst_entry *dst)
 {
     struct sock *newsock = NULL;
@@ -711,7 +719,11 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 
 #ifdef TOA_IPV6_ENABLE
 static struct sock *
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+tcp_v6_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+#else
 tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
+#endif
              struct request_sock *req, struct dst_entry *dst)
 {
     struct sock *newsock = NULL;
