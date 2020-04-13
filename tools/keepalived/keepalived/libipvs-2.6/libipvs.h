@@ -39,10 +39,11 @@
 #define OPT_LOCAL_ADDRESS	0x800000
 #define OPT_BLKLST_ADDRESS	0x1000000
 #define OPT_SYNPROXY		0x2000000
-#define OPT_IFNAME		0x4000000
+#define OPT_IFNAME		    0x4000000
 #define OPT_SOCKPAIR		0x8000000
-#define OPT_HASHTAG		0x10000000
-#define NUMBER_OF_OPT		29
+#define OPT_HASHTAG		    0x10000000
+#define OPT_WHTLST_ADDRESS	0x20000000
+#define NUMBER_OF_OPT		30
 
 #define MINIMUM_IPVS_VERSION_MAJOR      1
 #define MINIMUM_IPVS_VERSION_MINOR      1
@@ -68,14 +69,16 @@
 typedef struct ip_vs_service_user	ipvs_service_t;
 typedef struct ip_vs_dest_user		ipvs_dest_t;
 typedef struct ip_vs_laddr_user 	ipvs_laddr_t;
-typedef struct ip_vs_blklst_user        ipvs_blklst_t;
+typedef struct ip_vs_blklst_user    ipvs_blklst_t;
+typedef struct ip_vs_whtlst_user    ipvs_whtlst_t;
 typedef struct ip_vs_timeout_user	ipvs_timeout_t;
 typedef struct ip_vs_daemon_user	ipvs_daemon_t;
 typedef struct ip_vs_tunnel_user	ipvs_tunnel_t;
 typedef struct ip_vs_service_entry	ipvs_service_entry_t;
 typedef struct ip_vs_dest_entry		ipvs_dest_entry_t;
 typedef struct ip_vs_laddr_entry	ipvs_laddr_entry_t;
-typedef struct ip_vs_blklst_entry       ipvs_blklst_entry_t;
+typedef struct ip_vs_blklst_entry   ipvs_blklst_entry_t;
+typedef struct ip_vs_whtlst_entry   ipvs_whtlst_entry_t;
 
 /* ipvs info variable */
 extern struct ip_vs_getinfo ipvs_info;
@@ -128,6 +131,10 @@ extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc);
 /*for add/delete a blacklist ip*/
 extern int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
 extern int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
+
+/*for add/delete a whitelist ip*/
+extern int ipvs_add_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
+extern int ipvs_del_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
 
 /*for add/delete a tunnel*/
 extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
@@ -188,5 +195,7 @@ extern int ipvs_set_route6(struct dp_vs_route6_conf*, int cmd);
 extern int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd);
 
 extern struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void);
+
+extern struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void);
 
 #endif /* _LIBIPVS_H */

@@ -229,8 +229,14 @@ init_service_vs(virtual_server_t * vs)
         if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, check_data->vs_group, vs, NULL))
             return 0;
     }
-        
-	/* Processing real server queue */
+
+    /*Set whitelist ip address */
+    if (vs->whtlst_addr_gname) {
+        if (!ipvs_cmd(LVS_CMD_ADD_WHTLST, check_data->vs_group, vs, NULL))
+            return 0;
+    }
+
+    /* Processing real server queue */
 	if (!LIST_ISEMPTY(vs->rs)) {
 		if (vs->alpha && ! vs->reloaded)
 			vs->quorum_state = DOWN;
@@ -916,6 +922,73 @@ clear_diff_blklst(virtual_server_t * old_vs)
         return 1;
 }
 
+/* Check if a whitelist address entry is in list */
+static int
+whtlst_entry_exist(whtlst_addr_entry *whtlst_entry, list l)
+{
+    element e;
+    whtlst_addr_entry *entry;
+
+    for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+        entry = ELEMENT_DATA(e);
+        if (sockstorage_equal(&entry->addr, &whtlst_entry->addr) &&
+            entry->range == whtlst_entry->range)
+            return 1;
+    }
+    return 0;
+}
+
+/* Clear the diff whtlst address entry of the old vs */
+static int
+clear_diff_whtlst_entry(list old, list new, virtual_server_t * old_vs)
+{
+    element e;
+    whtlst_addr_entry *whtlst_entry;
+
+    for (e = LIST_HEAD(old); e; ELEMENT_NEXT(e)) {
+        whtlst_entry = ELEMENT_DATA(e);
+        if (!whtlst_entry_exist(whtlst_entry, new)) {
+            log_message(LOG_INFO, "VS [%s-%d] in whitelist address group %s no longer exist\n"
+                    , inet_sockaddrtos(&whtlst_entry->addr)
+                    , whtlst_entry->range
+                    , old_vs->whtlst_addr_gname);
+
+            if (!ipvs_whtlst_remove_entry(old_vs, whtlst_entry))
+                return 0;
+        }
+    }
+
+    return 1;
+}
+
+/* Clear the diff whitelist address of the old vs */
+static int
+clear_diff_whtlst(virtual_server_t * old_vs)
+{
+    whtlst_addr_group *old;
+    whtlst_addr_group *new;
+
+    /*
+     *  If old vs  didn't own whitelist address group,
+     * then do nothing and return
+     */
+    if (!old_vs->whtlst_addr_gname)
+        return 1;
+
+    /* Fetch whitelist address group */
+    old = ipvs_get_whtlst_group_by_name(old_vs->whtlst_addr_gname,
+                                        old_check_data->whtlst_group);
+    new = ipvs_get_whtlst_group_by_name(old_vs->whtlst_addr_gname,
+                                        check_data->whtlst_group);
+
+    if (!clear_diff_whtlst_entry(old->addr_ip, new->addr_ip, old_vs))
+        return 0;
+    if (!clear_diff_whtlst_entry(old->range, new->range, old_vs))
+        return 0;
+
+    return 1;
+}
+
 /* When reloading configuration, remove negative diff entries */
 int
 clear_diff_services(void)
@@ -968,9 +1041,12 @@ clear_diff_services(void)
 			/* perform local address diff */
 			if (!clear_diff_laddr(vs))
 				return 0;
-                        /* perform blacklist address diff */
-                        if (!clear_diff_blklst(vs))
-                                return 0;
+            /* perform blacklist address diff */
+            if (!clear_diff_blklst(vs))
+                return 0;
+            /* perform whitelist address diff */
+            if (!clear_diff_whtlst(vs))
+                return 0;
 		}
 	}
 

@@ -26,7 +26,7 @@ Major features of `DPVS` including:
 * User-space *Lite IP stack* (IPv4, Routing, ARP, ICMP ...).
 * *SNAT* mode for Internet access from internal network.
 * Support *KNI*, *VLAN*, *Bonding* for different IDC environment.
-* Security aspect, support *TCP syn-proxy*, *Conn-Limit*, *black-list*.
+* Security aspect, support *TCP syn-proxy*, *Conn-Limit*, *black-list*, *white-list*.
 * QoS: *Traffic Control*.
 
 `DPVS` feature modules are illustrated as following picture.

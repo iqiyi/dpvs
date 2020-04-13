@@ -162,7 +162,7 @@ dump_blklst_group(void *data)
 {
         blklst_addr_group *blklst_group = data;
 
-        log_message(LOG_INFO, " blacllist IP address group = %s", blklst_group->gname);
+        log_message(LOG_INFO, " blacklist IP address group = %s", blklst_group->gname);
         dump_list(blklst_group->addr_ip);
         dump_list(blklst_group->range);
 }
@@ -215,6 +215,76 @@ alloc_blklst_entry(vector_t *strvec)
                 list_add(blklst_group->range, new);
         else
                 log_message(LOG_INFO, "invalid: blacklist IP address range %d", new->range);
+}
+
+/* whitelist IP address group facility functions */
+static void
+free_whtlst_group(void *data)
+{
+    whtlst_addr_group *whtlst_group = data;
+    FREE_PTR(whtlst_group->gname);
+    free_list(whtlst_group->addr_ip);
+    free_list(whtlst_group->range);
+    FREE(whtlst_group);
+}
+static void
+dump_whtlst_group(void *data)
+{
+    whtlst_addr_group *whtlst_group = data;
+
+    log_message(LOG_INFO, " whitelist IP address group = %s", whtlst_group->gname);
+    dump_list(whtlst_group->addr_ip);
+    dump_list(whtlst_group->range);
+}
+static void
+free_whtlst_entry(void *data)
+{
+    FREE(data);
+}
+static void
+dump_whtlst_entry(void *data)
+{
+    whtlst_addr_entry *whtlst_entry = data;
+
+    if (whtlst_entry->range)
+        log_message(LOG_INFO, "   IP Range = %s-%d"
+                , inet_sockaddrtos(&whtlst_entry->addr)
+                , whtlst_entry->range);
+    else
+        log_message(LOG_INFO, "   IP = %s"
+                , inet_sockaddrtos(&whtlst_entry->addr));
+}
+void
+alloc_whtlst_group(char *gname)
+{
+    int size = strlen(gname);
+    whtlst_addr_group *new;
+
+    new = (whtlst_addr_group *) MALLOC(sizeof (whtlst_addr_group));
+    new->gname = (char *) MALLOC(size + 1);
+    memcpy(new->gname, gname, size);
+    new->addr_ip = alloc_list(free_whtlst_entry, dump_whtlst_entry);
+    new->range = alloc_list(free_whtlst_entry, dump_whtlst_entry);
+
+    list_add(check_data->whtlst_group, new);
+}
+void
+alloc_whtlst_entry(vector_t *strvec)
+{
+    whtlst_addr_group *whtlst_group = LIST_TAIL_DATA(check_data->whtlst_group);
+    whtlst_addr_entry *new;
+
+    new = (whtlst_addr_entry *) MALLOC(sizeof (whtlst_addr_entry));
+
+    new->range = inet_stor(vector_slot(strvec, 0));
+    inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
+
+    if (!new->range)
+        list_add(whtlst_group->addr_ip, new);
+    else if ( (0 < new->range) && (new->range < 255) )
+        list_add(whtlst_group->range, new);
+    else
+        log_message(LOG_INFO, "invalid: whitelist IP address range %d", new->range);
 }
 
 /* Virtual server group facility functions */
@@ -309,6 +379,7 @@ free_vs(void *data)
 	FREE_PTR(vs->quorum_down);
 	FREE_PTR(vs->local_addr_gname);
 	FREE_PTR(vs->blklst_addr_gname);
+    FREE_PTR(vs->whtlst_addr_gname);
 	FREE_PTR(vs->vip_bind_dev);
 	FREE(vs);
 }
@@ -400,7 +471,9 @@ dump_vs(void *data)
 	if (vs->local_addr_gname)
 		log_message(LOG_INFO, " LOCAL_ADDR GROUP = %s", vs->local_addr_gname);
         if (vs->blklst_addr_gname)
-                log_message(LOG_INFO, " BLACK_LIST GROUP = %s", vs->blklst_addr_gname);
+            log_message(LOG_INFO, " BLACK_LIST GROUP = %s", vs->blklst_addr_gname);
+        if (vs->whtlst_addr_gname)
+            log_message(LOG_INFO, " WHITE_LIST GROUP = %s", vs->whtlst_addr_gname);
 	if (vs->vip_bind_dev)
 		log_message(LOG_INFO, " vip_bind_dev = %s", vs->vip_bind_dev);
 }
@@ -440,6 +513,7 @@ alloc_vs(char *ip, char *port)
 	new->quorum_state = UP;
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
+    new->whtlst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;
 	new->hash_target = 0;
 	memset(new->srange, 0, 256);
@@ -598,6 +672,7 @@ alloc_check_data(void)
 	new->vs_group = alloc_list(free_vsg, dump_vsg);
 	new->laddr_group = alloc_list(free_laddr_group, dump_laddr_group);
 	new->blklst_group = alloc_list(free_blklst_group, dump_blklst_group);
+    new->whtlst_group = alloc_list(free_whtlst_group, dump_whtlst_group);
 	new->tunnel_group = alloc_list(free_tunnel_group, dump_tunnel_group);
 
 	return new;
@@ -612,6 +687,7 @@ free_check_data(check_data_t *data)
 	free_list(data->vs_group);
 	free_list(data->laddr_group);
 	free_list(data->blklst_group);
+    free_list(data->whtlst_group);
 	free_list(data->tunnel_group);
 
 	FREE(data);
@@ -632,6 +708,8 @@ dump_check_data(check_data_t *data)
 			dump_list(data->laddr_group);
 		if (!LIST_ISEMPTY(data->blklst_group))
 			dump_list(data->blklst_group);
+        if (!LIST_ISEMPTY(data->whtlst_group))
+            dump_list(data->whtlst_group);
 		if (!LIST_ISEMPTY(data->vs_group))
 			dump_list(data->vs_group);
 		dump_list(data->vs);
