@@ -130,7 +130,7 @@ Stateful模式指的是⽹络设备对每条流保存其五元组，TRex通常�
         dest_mac : 6c:92:bf:13:ee:37
    ```
 
-2.  以http访问测试为例，⾸先抓取访问http⼀次访问的包作为模板，保存为http_test.pcap，内容参考如下：    ![](E:\code\github\dpvs\doc\pics\pcap.png)
+2.  以http访问测试为例，⾸先抓取访问http⼀次访问的包作为模板，保存为http_test.pcap，内容参考如下：    ![pcap](pics\pcap.png)
 
 3.  新增yaml设定，内容参考如下： 
 
@@ -169,7 +169,7 @@ ASTF是⾼级statefull测试模式，可以通过python脚本⾃动化测试L4~L
 
 1. ⽹络拓扑参考如下： 
 
-   ![](E:\code\github\dpvs\doc\pics\topology.png)
+   ![topology](pics\topology.png)
 
 2. 修改python测试脚本： 
 
@@ -221,7 +221,7 @@ ASTF是⾼级statefull测试模式，可以通过python脚本⾃动化测试L4~L
 
 6. 执⾏tui命令在后台监控流量情况，可以看到带宽基本都被打满（tx：10.01Gbps，rx：9.92Gbps）： 
 
-   ![](E:\code\github\dpvs\doc\pics\tui.png)
+   ![tui](pics\tui.png)
 
  **Stateless测试**
 
@@ -237,37 +237,35 @@ Stateless是基于构包和发包两个阶段来完成， 构包完全基于pyth
    # t-rex-64 -i
    ```
 
-3. 打开客户端界⾯，连接trex服务： ![](E:\code\github\dpvs\doc\pics\trex-gui1.png)
+3. 打开客户端界⾯，连接trex服务： ![trex-gui1](pics\trex-gui1.png)
 
-4. 这边port0跟port1分别对应dpdk绑定的⽹卡端⼝，发包在0端⼝发，1端⼝收： ![](E:\code\github\dpvs\doc\pics\trex-gui2.png)
+4. 这边port0跟port1分别对应dpdk绑定的⽹卡端⼝，发包在0端⼝发，1端⼝收： ![trex-gui2](pics\trex-gui2.png)
 
 5. 点进port，开启Service模式，并强制获取配置权限：
 
-   ![](E:\code\github\dpvs\doc\pics\trex-gui3.png)
-
-   
+   ![trex-gui3](pics\trex-gui3.png)
 
 6. 进Configuration菜单，设置端⼝ip及⽹关，点击Apply，如果⽹关地址arp解析成功说明配置正确：
 
-   ![](E:\code\github\dpvs\doc\pics\trex-gui4.png)
+   ![trex-gui4](pics\trex-gui4.png)
 
 7. 新建profile配置，带宽100%，添加udp⼩包（64字节）测试项： 
 
-   ![](E:\code\github\dpvs\doc\pics\trex-gui5.png)
+   ![trex-gui5](pics\trex-gui5.png)
 
-   ![](E:\code\github\dpvs\doc\pics\trex-gui6.png)
+   ![trex-gui6](pics\trex-gui6.png)
 
-   ![](E:\code\github\dpvs\doc\pics\trex-gui7.png)
+   ![trex-gui7](pics\trex-gui7.png)
 
 8. 右击profile，执⾏play动作进⾏发包压测：  
 
-   ![](E:\code\github\dpvs\doc\pics\trex-gui8.png)
+   ![trex-gui8](pics\trex-gui8.png)
 
 9. 查看stat监控，如果TX跟RX的pps基本保持⼀致，说明丢包率较低，以下截图中测试结果是在万兆⽹卡上压测数 据，pps为14Mpps说明已经接近100%线速，这是最理想的数据： 
 
-   ![](E:\code\github\dpvs\doc\pics\trex-gui9.png)
+   ![trex-gui9](pics\trex-gui9.png)
 
-   ![](E:\code\github\dpvs\doc\pics\trex-gui10.png)
+   ![trex-gui10](pics\trex-gui10.png)
 
  **参考链接：**
 
