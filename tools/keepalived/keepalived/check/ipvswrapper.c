@@ -67,27 +67,24 @@ ipvs_get_laddr_group_by_name(char *gname, list l)
 	element e;
 	local_addr_group *laddr_group;
 
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		laddr_group = ELEMENT_DATA(e);
+	LIST_FOREACH(l, laddr_group, e) {
 		if (!strcmp(laddr_group->gname, gname))
 			return laddr_group;
 	}
 	return NULL;
 }
 
-
 blklst_addr_group * __attribute__ ((pure))
 ipvs_get_blklst_group_by_name(char *gname, list l)
 {
-        element e;
-        blklst_addr_group *blklst_group;
+	element e;
+	blklst_addr_group *blklst_group;
 
-        for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-                blklst_group = ELEMENT_DATA(e);
-                if (!strcmp(blklst_group->gname, gname))
-                        return blklst_group;
-        }
-        return NULL;
+	LIST_FOREACH (l, blklst_group, e) {
+		if (!strcmp(blklst_group->gname, gname))
+			return blklst_group;
+	}
+	return NULL;
 }
 
 /* Initialization helpers */
@@ -204,10 +201,10 @@ ipvs_talk(int cmd,
 
 	if (result) {//EDPVS_MSG_FAIL just ignore set failed
 		if ((result == EDPVS_EXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
-				&& (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_ADDDEST))
+				&& (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_ADDDEST || cmd == IP_VS_SO_SET_ADDTUNNEL))
 			ignore_error = true;
 		else if ((result == EDPVS_NOTEXIST || result == EDPVS_MSG_FAIL || result == EDPVS_NOTSUPP)
-				&& (cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST))
+				&& (cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_DELDEST || cmd == IP_VS_SO_SET_DELTUNNEL))
 			ignore_error = true;
 	}
 
@@ -482,8 +479,7 @@ ipvs_laddr_group_cmd(int cmd, local_addr_group *laddr_group, virtual_server_t *v
 		return;
 
 	l = laddr_group->addr_ip;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		laddr_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, laddr_entry, e) {
 		memset(&laddr_rule, 0, sizeof(ipvs_laddr_t));
 		laddr_rule.af = laddr_entry->addr.ss_family;
 		if (laddr_entry->addr.ss_family == AF_INET6)
@@ -496,8 +492,7 @@ ipvs_laddr_group_cmd(int cmd, local_addr_group *laddr_group, virtual_server_t *v
 	}
 
 	l = laddr_group->range;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		laddr_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, laddr_entry, e) {
 		ipvs_laddr_range_cmd(cmd, laddr_entry, vs);
 	}
 }
@@ -515,8 +510,7 @@ ipvs_laddr_vsg_cmd(int cmd, list vs_group, virtual_server_t *vs, local_addr_grou
 
 	/* visit range list */
 	l = vsg->addr_range;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		vsg_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, vsg_entry, e) {
 		uint32_t addr_ip, ip;
 		
 		srule->af = vsg_entry->addr.ss_family;
@@ -565,7 +559,7 @@ ipvs_laddr_cmd(int cmd, ipvs_service_t *srule, virtual_server_t *vs)
 	laddr_group = ipvs_get_laddr_group_by_name(vs->local_addr_gname, check_data->laddr_group);
 	if (!laddr_group) {
 		log_message(LOG_ERR, "No address in group %s", vs->local_addr_gname);
-		return -1;// return IPVS_ERROR;
+		return -1;
 	}
 
 	if (vs->vsgname) {
@@ -624,8 +618,7 @@ ipvs_blklst_group_cmd(int cmd, blklst_addr_group *blklst_group, ipvs_service_t *
 		return;
 
 	l = blklst_group->addr_ip;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		blklst_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, blklst_entry, e) {
 		memset(&blklst_rule, 0, sizeof(ipvs_blklst_t));
 		blklst_rule.af = blklst_entry->addr.ss_family;
 		if (blklst_entry->addr.ss_family == AF_INET6)
@@ -636,8 +629,7 @@ ipvs_blklst_group_cmd(int cmd, blklst_addr_group *blklst_group, ipvs_service_t *
 	}
 
 	l = blklst_group->range;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		blklst_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, blklst_entry, e) {
 		ipvs_blklst_range_cmd(cmd, blklst_entry, srule);
 	}
 }
@@ -658,8 +650,7 @@ ipvs_blklst_vsg_cmd(int cmd,
 
 	/* visit range list */
 	l = vsg->addr_range;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		vsg_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, vsg_entry, e) {
 		uint32_t addr_ip, ip;
 
 		srule->af = vsg_entry->addr.ss_family;
@@ -709,7 +700,7 @@ ipvs_blklst_cmd(int cmd, ipvs_service_t *srule, virtual_server_t * vs)
 							check_data->blklst_group);
 	if (!blklst_group) {
 		log_message(LOG_ERR, "No address in group %s", vs->blklst_addr_gname);
-		return IPVS_ERROR;
+		return -1;
 	}
 
 	memset(srule, 0, sizeof(ipvs_service_t));
@@ -818,16 +809,16 @@ ipvs_set_drule(int cmd, ipvs_dest_t *drule, real_server_t * rs)
 int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry)
 {
 	ipvs_tunnel_t tunnel_rule;
-    	memset(&tunnel_rule, 0, sizeof(ipvs_tunnel_t));
-    	strncpy(tunnel_rule.ifname, entry->ifname, sizeof(tunnel_rule.ifname));
-    	strncpy(tunnel_rule.kind, entry->kind, sizeof(tunnel_rule.kind));
-    	strncpy(tunnel_rule.link, entry->link, sizeof(tunnel_rule.link));
+	memset(&tunnel_rule, 0, sizeof(ipvs_tunnel_t));
+	strncpy(tunnel_rule.ifname, entry->ifname, sizeof(tunnel_rule.ifname));
+	strncpy(tunnel_rule.kind, entry->kind, sizeof(tunnel_rule.kind));
+	strncpy(tunnel_rule.link, entry->link, sizeof(tunnel_rule.link));
 
-		tunnel_rule.laddr.ip = inet_sockaddrip4(&entry->local);
-    	tunnel_rule.laddr.ip = inet_sockaddrip4(&entry->remote);
+	tunnel_rule.laddr.ip = inet_sockaddrip4(&entry->local);
+	tunnel_rule.raddr.ip = inet_sockaddrip4(&entry->remote);
 	ipvs_talk(cmd, NULL, NULL, NULL, NULL, NULL, &tunnel_rule, false);
 
-    return IPVS_SUCCESS;
+	return IPVS_SUCCESS;
 }
 
 /* Set/Remove a RS from a VS */
@@ -879,15 +870,17 @@ ipvs_cmd(int cmd, virtual_server_t *vs, real_server_t *rs)
 		srule.nf_addr.ip = 0;
 		srule.user.port = inet_sockaddrport(&vs->addr);
 		srule.user.flags |= IP_VS_SVC_F_MATCH;
-		if (!srule.af)
-			srule.af = vs->af;
+		/* srule.af should be set in ipvs_set_srule  */
+		//if (!srule.af)
+		//	srule.af = vs->af;
 	} else {
 		if (vs->af == AF_INET6)
 			inet_sockaddrip6(&vs->addr, &srule.nf_addr.in6);
 		else
 			srule.nf_addr.ip = inet_sockaddrip4(&vs->addr);
 		srule.user.port = inet_sockaddrport(&vs->addr);
-		srule.af = vs->af;
+		/* srule.af should be set in ipvs_set_srule  */
+		//srule.af = vs->af;
 	}
 
 	/* Talk to the IPVS channel */
@@ -945,8 +938,7 @@ ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 		return;
 
 	l = vsg->addr_range;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		vsg_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, vsg_entry, e) {
 		uint32_t addr_ip, ip;
 
 		srule.af = vsg_entry->addr.ss_family;
@@ -1073,8 +1065,7 @@ ipvs_rm_bentry_from_vsg(blklst_addr_entry *blklst_entry, const char *vsgname, ip
 	if (!vsg) return; 
 
 	l = vsg->addr_range;
-	for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
-		vsg_entry = ELEMENT_DATA(e);
+	LIST_FOREACH(l, vsg_entry, e) {
 		uint32_t addr_ip, ip;
 
 		srule->af = vsg_entry->addr.ss_family;
