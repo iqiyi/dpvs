@@ -1836,7 +1836,6 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 		free(vname);
 	} else { /* match */
 		char *proto;
-		char af[10];
 
 		if (se->user.protocol == IPPROTO_TCP)
 			proto = "tcp";
@@ -1847,25 +1846,17 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 		else
 			proto = "icmpv6";
 
-		if (se->af == AF_INET)
-			sprintf(af, "ipv4");
-		else if (se->af == AF_INET6)
-			sprintf(af, "ipv6");
-
 		if (format & FMT_RULE) {
 			snprintf(svc_name, sizeof(svc_name),
-			"-H af=%s, proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
-			af, proto, se->user.srange, se->user.drange, se->user.iifname, se->user.oifname);
+			"-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
+			proto, se->user.srange, se->user.drange, se->user.iifname, se->user.oifname);
 
 		} else {
 			int left = sizeof(svc_name);
 			svc_name[0] = '\0';
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
-				"af=%s", af);
-
-			left -= snprintf(svc_name + strlen(svc_name), left,
-				",MATCH %s", proto);
+				"MATCH %s", proto);
 
 			if (strcmp(se->user.srange, "[::-::]:0-0") != 0 &&
                             strcmp(se->user.srange, "0.0.0.0-0.0.0.0:0-0") != 0)
