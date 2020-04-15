@@ -124,28 +124,28 @@ typedef struct _local_addr_group {
 
 /* blacklist ip group*/
 typedef struct _blklst_addr_entry {
-        struct sockaddr_storage addr;
-        uint32_t range;
+	struct sockaddr_storage addr;
+	uint32_t range;
 } blklst_addr_entry;
 
 
 typedef struct _blklst_addr_group {
-        char *gname;
-        list addr_ip;
-        list range;
+	char *gname;
+	list addr_ip;
+	list range;
 } blklst_addr_group;
 
 typedef struct _tunnel_entry {
-        struct sockaddr_storage remote;
-        struct sockaddr_storage local;
-        char   kind[TNLKINDSIZ];
-        char   ifname[IFNAMSIZ];
-        char   link[IFNAMSIZ];
+	struct sockaddr_storage remote;
+	struct sockaddr_storage local;
+	char   kind[TNLKINDSIZ];
+	char   ifname[IFNAMSIZ];
+	char   link[IFNAMSIZ];
 } tunnel_entry;
 
 typedef struct _tunnel_group {
-        char *gname;
-        list tunnel_entry;
+	char *gname;
+	list tunnel_entry;
 } tunnel_group;
 
 
