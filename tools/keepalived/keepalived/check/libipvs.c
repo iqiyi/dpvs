@@ -56,19 +56,9 @@
 #include "ip_vs.h"
 
 typedef int (*qsort_cmp_t)(const void *, const void *);
-typedef struct ipvs_servicedest_s {
-	struct ip_vs_service_app	svc;
-	struct ip_vs_dest_user		dest;
-} ipvs_servicedest_t;
-
-typedef struct ipvs_serviceladdr_s {
-    struct ip_vs_service_kern   svc;
-    struct ip_vs_laddr_kern     laddr;
-} ipvs_serviceladdr_t;
 
 static int sockfd = -1;
 static void* ipvs_func = NULL;
-
 
 #ifdef LIBIPVS_USE_NL
 //static struct nl_sock *sock = NULL;
