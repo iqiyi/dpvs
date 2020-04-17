@@ -41,7 +41,7 @@
 #define OPT_IFNAME		0x4000000
 #define OPT_SOCKPAIR		0x8000000
 #define OPT_HASHTAG		0x10000000
-#define NUMBER_OF_OPT		30 //opt cid is not defined above
+#define NUMBER_OF_OPT		30
 
 #define MINIMUM_IPVS_VERSION_MAJOR      1
 #define MINIMUM_IPVS_VERSION_MINOR      1
@@ -69,10 +69,10 @@ typedef struct ip_vs_daemon_app		ipvs_daemon_t;
 typedef struct ip_vs_service_entry_app	ipvs_service_entry_t;
 typedef struct ip_vs_dest_entry_app	ipvs_dest_entry_t;
 typedef struct ip_vs_laddr_user 	ipvs_laddr_t;
-typedef struct ip_vs_blklst_user        ipvs_blklst_t;
+typedef struct ip_vs_blklst_user	ipvs_blklst_t;
 typedef struct ip_vs_tunnel_user	ipvs_tunnel_t;
 typedef struct ip_vs_laddr_entry	ipvs_laddr_entry_t;
-typedef struct ip_vs_blklst_entry       ipvs_blklst_entry_t;
+typedef struct ip_vs_blklst_entry	ipvs_blklst_entry_t;
 
 
 /* init socket and get ipvs info */
@@ -111,7 +111,7 @@ extern int ipvs_update_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
 /* remove a destination server from a service */
 extern int ipvs_del_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
 
-extern struct ip_vs_conn_array* ip_vs_get_conns(const struct ip_vs_conn_req *req);
+extern struct ip_vs_conn_array *ip_vs_get_conns(const struct ip_vs_conn_req *req);
 
 extern int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
 extern int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);

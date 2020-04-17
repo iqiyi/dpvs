@@ -26,24 +26,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef LIBIPVS_USE_NL
-#include <netlink/netlink.h>
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-
-#ifdef _HAVE_LIBNL1_
-#define nl_sock		nl_handle
-#ifndef _LIBNL_DYNAMIC_
-#define nl_socket_alloc	nl_handle_alloc
-#define nl_socket_free	nl_handle_destroy
-#endif  // _LIBNL_DYNAMIC_
-#endif  // _HAVE_LIBNL1_
-
-#ifdef _LIBNL_DYNAMIC_
-#include "libnl_link.h"
-#endif // _LIBNL_DYNAMIC_
-#endif // LIBIPVS_USE_NL
-
 #include "libipvs.h"
 #include "sockopt.h"
 #include "dp_vs.h"
@@ -60,128 +42,6 @@ typedef int (*qsort_cmp_t)(const void *, const void *);
 static int sockfd = -1;
 static void* ipvs_func = NULL;
 
-#ifdef LIBIPVS_USE_NL
-//static struct nl_sock *sock = NULL;
-//static int family;
-//static bool try_nl = true;
-
-/* Policy definitions */
-#ifdef _WITH_SNMP_CHECKER_
-static struct nla_policy ipvs_cmd_policy[IPVS_CMD_ATTR_MAX + 1] = {
-	[IPVS_CMD_ATTR_SERVICE]		= { .type = NLA_NESTED },
-	[IPVS_CMD_ATTR_DEST]		= { .type = NLA_NESTED },
-	[IPVS_CMD_ATTR_DAEMON]		= { .type = NLA_NESTED },
-	[IPVS_CMD_ATTR_TIMEOUT_TCP]	= { .type = NLA_U32 },
-	[IPVS_CMD_ATTR_TIMEOUT_TCP_FIN]	= { .type = NLA_U32 },
-	[IPVS_CMD_ATTR_TIMEOUT_UDP]	= { .type = NLA_U32 },
-	[IPVS_CMD_ATTR_LADDR]		= { .type = NLA_NESTED },
-};
-
-static struct nla_policy ipvs_service_policy[IPVS_SVC_ATTR_MAX + 1] = {
-	[IPVS_SVC_ATTR_AF]		= { .type = NLA_U16 },
-	[IPVS_SVC_ATTR_PROTOCOL]	= { .type = NLA_U16 },
-	[IPVS_SVC_ATTR_ADDR]		= { .type = NLA_UNSPEC,
-					    .maxlen = sizeof(struct in6_addr) },
-	[IPVS_SVC_ATTR_PORT]		= { .type = NLA_U16 },
-	[IPVS_SVC_ATTR_FWMARK]		= { .type = NLA_U32 },
-	[IPVS_SVC_ATTR_SCHED_NAME]	= { .type = NLA_STRING,
-					    .maxlen = IP_VS_SCHEDNAME_MAXLEN },
-	[IPVS_SVC_ATTR_FLAGS]		= { .type = NLA_UNSPEC,
-					    .minlen = sizeof(struct ip_vs_flags),
-					    .maxlen = sizeof(struct ip_vs_flags) },
-	[IPVS_SVC_ATTR_TIMEOUT]		= { .type = NLA_U32 },
-	[IPVS_SVC_ATTR_NETMASK]		= { .type = NLA_U32 },
-	[IPVS_SVC_ATTR_STATS]		= { .type = NLA_NESTED },
-#ifdef _HAVE_PE_NAME_
-	[IPVS_SVC_ATTR_PE_NAME]		= { .type = NLA_STRING,
-					    .maxlen = IP_VS_PENAME_MAXLEN },
-#endif // _HAVE_PE_NAME
-#ifdef _WITH_LVS_64BIT_STATS_
-	[IPVS_SVC_ATTR_STATS64]		= { .type = NLA_NESTED },
-#endif // _WITH_LVS_64BIT_STATS_
-	[IPVS_SVC_ATTR_BPS] 		= { .type = NLA_U32},
-};
-
-static struct nla_policy ipvs_dest_policy[IPVS_DEST_ATTR_MAX + 1] = {
-	[IPVS_DEST_ATTR_ADDR]		= { .type = NLA_UNSPEC,
-					    .maxlen = sizeof(struct in6_addr) },
-	[IPVS_DEST_ATTR_PORT]		= { .type = NLA_U16 },
-	[IPVS_DEST_ATTR_FWD_METHOD]	= { .type = NLA_U32 },
-	[IPVS_DEST_ATTR_WEIGHT]		= { .type = NLA_U32 },
-	[IPVS_DEST_ATTR_U_THRESH]	= { .type = NLA_U32 },
-	[IPVS_DEST_ATTR_L_THRESH]	= { .type = NLA_U32 },
-	[IPVS_DEST_ATTR_ACTIVE_CONNS]	= { .type = NLA_U32 },
-	[IPVS_DEST_ATTR_INACT_CONNS]	= { .type = NLA_U32 },
-	[IPVS_DEST_ATTR_PERSIST_CONNS]	= { .type = NLA_U32 },
-	[IPVS_DEST_ATTR_STATS]		= { .type = NLA_NESTED },
-#if HAVE_DECL_IPVS_DEST_ATTR_ADDR_FAMILY
-	[IPVS_DEST_ATTR_ADDR_FAMILY]	= { .type = NLA_U16 },
-#endif // HAVE_DECL_IPVS_DEST_ATTR_ADDR_FAMILY
-#ifdef _WITH_LVS_64BIT_STATS_
-	[IPVS_DEST_ATTR_STATS64]	= {.type = NLA_NESTED },
-#endif //_WITH_LVS_64BIT_STATS_
-};
-
-struct nla_policy ipvs_laddr_policy[IPVS_LADDR_ATTR_MAX + 1] = {
-	[IPVS_LADDR_ATTR_ADDR]		= { .type = NLA_UNSPEC,
-					    .maxlen = sizeof(struct in6_addr) },
-	[IPVS_LADDR_ATTR_PORT_CONFLICT]   = { .type = NLA_U64 },
-	[IPVS_LADDR_ATTR_CONN_COUNTS]   = { .type = NLA_U32 },
-};
-
-#ifdef _WITH_LVS_64BIT_STATS_
-static struct nla_policy ipvs_stats64_policy[IPVS_STATS_ATTR_MAX + 1] = {
-	[IPVS_STATS_ATTR_CONNS]		= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_INPKTS]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_OUTPKTS]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_INBYTES]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_OUTBYTES]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_CPS]		= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_INPPS]		= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_OUTPPS]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_INBPS]		= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_OUTBPS]	= { .type = NLA_U64 },
-};
-#endif // _WITH_LVS_64BIT_STATS_
-
-static struct nla_policy ipvs_stats_policy[IPVS_STATS_ATTR_MAX + 1] = {
-	[IPVS_STATS_ATTR_CONNS]		= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_INPKTS]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_OUTPKTS]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_INBYTES]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_OUTBYTES]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_CPS]		= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_INPPS]		= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_OUTPPS]	= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_INBPS]		= { .type = NLA_U64 },
-	[IPVS_STATS_ATTR_OUTBPS]	= { .type = NLA_U64 },
-};
-#endif	/* _WITH_SNMP_CHECKER_ */
-
-#if 0
-static struct nla_policy ipvs_info_policy[IPVS_INFO_ATTR_MAX + 1] = {
-	[IPVS_INFO_ATTR_VERSION]	= { .type = NLA_U32 },
-	[IPVS_INFO_ATTR_CONN_TAB_SIZE]  = { .type = NLA_U32 },
-};
-#endif
-#endif // LIBIPVS_USE_NL
-
-
-#ifdef LIBIPVS_USE_NL
-#ifndef NLA_PUT_S32
-#define NLA_PUT_S32(msg, attrtype, value) \
-	NLA_PUT_TYPE(msg, int32_t, attrtype, value)
-
-static inline int32_t
-nla_get_s32(struct nlattr *attr)
-{
-	return (int32_t)nla_get_u32(attr);
-}
-#endif // NLA_PUT_S32
-#endif // LIBIPVS_USE_NL
-
-
-/* ipv6 support */
 typedef struct dpvs_servicedest_s {
 	struct dp_vs_service_user	svc;
 	struct dp_vs_dest_user		dest; 
@@ -189,7 +49,7 @@ typedef struct dpvs_servicedest_s {
 
 typedef struct dp_vs_service_entry_app {
     struct dp_vs_service_entry user;
-}dpvs_service_entry_t;
+} dpvs_service_entry_t;
 
 // IPVS_2_DPVS(dp_vs_service_user, ip_vs_service_app/ipvs_service_t)
 #define IPVS_2_DPVS(X, Y) {					\
@@ -255,7 +115,26 @@ typedef struct dp_vs_service_entry_app {
 	X->user.persistconns     = Y->persistconns;			\
 	memcpy(&X->stats, &Y->stats, sizeof(X->stats));}
 
-void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t *user);
+static void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t *rule)
+{
+	rule->user.protocol  = entry->user.protocol;
+	rule->user.__addr_v4 = entry->user.__addr_v4;
+	rule->user.port      = entry->user.port;
+	rule->user.fwmark    = entry->user.fwmark;
+	strcpy(rule->user.sched_name, entry->user.sched_name);
+	rule->user.flags     = entry->user.flags;
+	rule->user.timeout   = entry->user.timeout;
+	rule->user.conn_timeout = entry->user.conn_timeout;
+	rule->user.netmask   = entry->user.netmask;
+	rule->af        = entry->af;
+	rule->nf_addr      = entry->nf_addr;
+	strcpy(rule->pe_name, entry->pe_name);
+	strcpy(rule->user.srange, entry->user.srange);
+	strcpy(rule->user.drange, entry->user.drange);
+	strcpy(rule->user.iifname, entry->user.iifname);
+	strcpy(rule->user.iifname, entry->user.iifname);
+}
+
 struct ip_vs_getinfo g_ipvs_info;
 
 int ipvs_init(lcoreid_t cid)
@@ -302,7 +181,6 @@ int ipvs_add_service(ipvs_service_t *svc)
 	return dpvs_setsockopt(DPVS_SO_SET_ADD, &dpvs_svc, sizeof(dpvs_svc));
 }
 
-
 int ipvs_update_service(ipvs_service_t *svc)
 {
 	struct dp_vs_service_user dpvs_svc;
@@ -311,7 +189,7 @@ int ipvs_update_service(ipvs_service_t *svc)
 
 	IPVS_2_DPVS((&dpvs_svc), svc);
 
-	return dpvs_setsockopt(DPVS_SO_SET_ADD, &dpvs_svc, sizeof(dpvs_svc));
+	return dpvs_setsockopt(DPVS_SO_SET_EDIT, &dpvs_svc, sizeof(dpvs_svc));
 }
 
 int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
@@ -321,77 +199,66 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 
 	if (!(entry = ipvs_get_service(svc, 0))) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
-		exit(1);
+		return ESOCKOPT_INVAL;
 	}
 	ipvs_service_entry_2_user(entry, &app);
 
-	if( options & OPT_SCHEDULER ) {
+	if (options & OPT_SCHEDULER) {
 		strcpy(app.user.sched_name, svc->user.sched_name);
 		if (strcmp(svc->user.sched_name, "conhash")) {
 			app.user.flags &= ~IP_VS_SVC_F_QID_HASH;
 			app.user.flags &= ~IP_VS_SVC_F_SIP_HASH;
-		}
-		else {
+		} else {
 			app.user.flags |= IP_VS_SVC_F_SIP_HASH;
 		}
 	}
 
-	if( options & OPT_PERSISTENT ) {
+	if (options & OPT_PERSISTENT) {
 		app.user.flags  |= IP_VS_SVC_F_PERSISTENT;
 		app.user.timeout = svc->user.timeout;
 	}
 
-	if( options & OPT_NETMASK ) {
+	if (options & OPT_NETMASK) {
 		app.user.netmask = svc->user.netmask;
 	}
 
-	if( options & OPT_SYNPROXY ) {
-		if( svc->user.flags & IP_VS_CONN_F_SYNPROXY ) {
+	if (options & OPT_SYNPROXY) {
+		if(svc->user.flags & IP_VS_CONN_F_SYNPROXY) {
 			app.user.flags |= IP_VS_CONN_F_SYNPROXY;
 		} else {
 			app.user.flags &= ~IP_VS_CONN_F_SYNPROXY;
 		}
 	}
 
-	if( options & OPT_ONEPACKET ) {
+	if (options & OPT_ONEPACKET) {
 		app.user.flags |= IP_VS_SVC_F_ONEPACKET;
 	}
 
-	if( options & OPT_HASHTAG ) {
-                if ( svc->user.flags & IP_VS_SVC_F_SIP_HASH ) {
-                        app.user.flags |= IP_VS_SVC_F_SIP_HASH;
-                } else if ( svc->user.flags & IP_VS_SVC_F_QID_HASH ) {
-                        app.user.flags |= IP_VS_SVC_F_QID_HASH;
-                } else {
-                        app.user.flags |= IP_VS_SVC_F_SIP_HASH;
-                }
-        }
+	if (options & OPT_HASHTAG) {
+		if (svc->user.flags & IP_VS_SVC_F_SIP_HASH) {
+			app.user.flags |= IP_VS_SVC_F_SIP_HASH;
+		} else if (svc->user.flags & IP_VS_SVC_F_QID_HASH) {
+			app.user.flags |= IP_VS_SVC_F_QID_HASH;
+		} else {
+			app.user.flags |= IP_VS_SVC_F_SIP_HASH;
+		}
+	}
 
 	return ipvs_update_service(&app);
 }
 
 int ipvs_update_service_synproxy(ipvs_service_t *svc , int enable)
 {
-	ipvs_service_entry_t *entry;
+	unsigned int options = OPT_NONE;
 
-	if (!(entry = ipvs_get_service(svc, 0))) {
-		fprintf(stderr, "%s\n", ipvs_strerror(errno));
-		exit(1);
-	}
-	
-	strcpy(svc->user.sched_name , entry->user.sched_name);
-	strcpy(svc->pe_name , entry->pe_name);
-	svc->user.flags = entry->user.flags;
-	svc->user.timeout = entry->user.timeout;
-	svc->user.conn_timeout = entry->user.conn_timeout;
-	svc->user.netmask = entry->user.netmask;
-	
-	if(enable)
-		svc->user.flags = svc->user.flags | IP_VS_CONN_F_SYNPROXY;
+	options |= OPT_SYNPROXY;
+
+	if (enable)
+		svc->user.flags |= IP_VS_CONN_F_SYNPROXY;
 	else
-		svc->user.flags = svc->user.flags & (~IP_VS_CONN_F_SYNPROXY);
+		svc->user.flags &= (~IP_VS_CONN_F_SYNPROXY);
 	
-	return 0;
+	return ipvs_update_service_by_options(svc, options);
 }
 
 int ipvs_del_service(ipvs_service_t *svc)
@@ -404,7 +271,6 @@ int ipvs_del_service(ipvs_service_t *svc)
 
 	return dpvs_setsockopt(DPVS_SO_SET_DEL, &dpvs_svc, sizeof(dpvs_svc));
 }
-
 
 int ipvs_zero_service(ipvs_service_t *svc)
 {
@@ -431,7 +297,6 @@ int ipvs_add_dest(ipvs_service_t *svc, ipvs_dest_t *dest)
 	return dpvs_setsockopt(DPVS_SO_SET_ADDDEST, &svcdest, sizeof(svcdest));
 }
 
-
 int ipvs_update_dest(ipvs_service_t *svc, ipvs_dest_t *dest)
 {
 	dpvs_servicedest_t svcdest;
@@ -445,7 +310,6 @@ int ipvs_update_dest(ipvs_service_t *svc, ipvs_dest_t *dest)
 
 	return dpvs_setsockopt(DPVS_SO_SET_EDITDEST, &svcdest, sizeof(svcdest));
 }
-
 
 int ipvs_del_dest(ipvs_service_t *svc, ipvs_dest_t *dest)
 {
@@ -511,10 +375,12 @@ static void ipvs_fill_ipaddr_conf(int is_add, uint32_t flags,
 	return;
 }
 
-int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr)
+int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t *laddr)
 {
 	struct dp_vs_laddr_conf conf;
 	struct inet_addr_param param;
+
+	ipvs_func = ipvs_add_laddr;
 
 	ipvs_fill_laddr_conf(svc, laddr, &conf);
 	ipvs_fill_ipaddr_conf(1, 0, laddr, &param);
@@ -523,10 +389,12 @@ int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr)
 	return dpvs_setsockopt(SOCKOPT_SET_LADDR_ADD, &conf, sizeof(conf));
 }
 
-int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr)
+int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t *laddr)
 {
 	struct dp_vs_laddr_conf conf;
 	struct inet_addr_param param;
+
+	ipvs_func = ipvs_del_laddr;
 
 	ipvs_fill_laddr_conf(svc, laddr, &conf);
 	ipvs_fill_ipaddr_conf(0, 0, laddr, &param);
@@ -559,14 +427,18 @@ int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t *blklst)
 {
 	struct dp_vs_blklst_conf conf;
 
+	ipvs_func = ipvs_add_blklst;
+
 	ipvs_fill_blklst_conf(svc, blklst, &conf);
 
 	return dpvs_setsockopt(SOCKOPT_SET_BLKLST_ADD, &conf, sizeof(conf));
 }
 
-int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst)
+int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t *blklst)
 {
 	struct dp_vs_blklst_conf conf;
+
+	ipvs_func = ipvs_del_blklst;
 
 	ipvs_fill_blklst_conf(svc, blklst, &conf);
 
@@ -574,7 +446,7 @@ int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst)
 }
 
 /* for tunnel entry */
-static void ipvs_fill_tunnel_conf(ipvs_tunnel_t* tunnel_entry,
+static void ipvs_fill_tunnel_conf(ipvs_tunnel_t *tunnel_entry,
                                  struct ip_tunnel_param *conf)
 {
 	memset(conf, 0, sizeof(*conf));
@@ -587,19 +459,25 @@ static void ipvs_fill_tunnel_conf(ipvs_tunnel_t* tunnel_entry,
 	return;
 }
 
-int ipvs_add_tunnel(ipvs_tunnel_t* tunnel_entry)
+int ipvs_add_tunnel(ipvs_tunnel_t *tunnel_entry)
 {
 	struct ip_tunnel_param conf;
-	ipvs_fill_tunnel_conf(tunnel_entry, &conf);
+
 	ipvs_func = ipvs_add_tunnel;
+
+	ipvs_fill_tunnel_conf(tunnel_entry, &conf);
+
 	return dpvs_setsockopt(SOCKOPT_TUNNEL_ADD, &conf, sizeof(conf));
 }
 
-int ipvs_del_tunnel(ipvs_tunnel_t* tunnel_entry)
+int ipvs_del_tunnel(ipvs_tunnel_t *tunnel_entry)
 {
 	struct ip_tunnel_param conf;
-	ipvs_fill_tunnel_conf(tunnel_entry, &conf);
+
 	ipvs_func = ipvs_del_tunnel;
+
+	ipvs_fill_tunnel_conf(tunnel_entry, &conf);
+
 	return dpvs_setsockopt(SOCKOPT_TUNNEL_DEL, &conf, sizeof(conf));
 }
 
@@ -610,7 +488,6 @@ int ipvs_set_timeout(ipvs_timeout_t *to)
 	return setsockopt(sockfd, IPPROTO_IP, IP_VS_SO_SET_TIMEOUT, (char *)to,
 			  sizeof(*to));
 }
-
 
 int ipvs_start_daemon(ipvs_daemon_t *dm)
 {
@@ -629,7 +506,7 @@ int ipvs_stop_daemon(ipvs_daemon_t *dm)
 			  (char *)&dm, sizeof(dm));
 }
 
-static inline sockoptid_t  cpu2opt_svc(lcoreid_t cid, sockoptid_t old_opt)
+static inline sockoptid_t cpu2opt_svc(lcoreid_t cid, sockoptid_t old_opt)
 {
 	return old_opt + cid * (SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
 }
@@ -649,6 +526,8 @@ struct ip_vs_get_services_app *ipvs_get_services(lcoreid_t cid)
 	size_t len = 0, len_rcv = 0;
 	unsigned int i;
 
+	ipvs_func = ipvs_get_services;
+
 	len = sizeof(struct ip_vs_get_services_app) +
 		sizeof(ipvs_service_entry_t) * g_ipvs_info.num_services;
 	if (!(get = calloc(len, 1)))
@@ -661,14 +540,15 @@ struct ip_vs_get_services_app *ipvs_get_services(lcoreid_t cid)
 	}
 	dpvs_get->num_services = g_ipvs_info.num_services;
 	dpvs_get->cid = cid;
-	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICES), dpvs_get, len, (void **)&dpvs_get_rcv, &len_rcv)) {
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICES), dpvs_get, len,
+				(void **)&dpvs_get_rcv, &len_rcv)) {
 		free(get);
 		free(dpvs_get);
 		return NULL;
 	}
 
 	get->user.num_services = dpvs_get_rcv->num_services;
-        g_ipvs_info.num_services = dpvs_get_rcv->num_services;
+	g_ipvs_info.num_services = dpvs_get_rcv->num_services;
 	for (i = 0; i < dpvs_get_rcv->num_services; i++) {
 		ipvs_entry = &get->user.entrytable[i];
 		dpvs_entry = (dpvs_service_entry_t*)&dpvs_get_rcv->entrytable[i];
@@ -696,6 +576,8 @@ struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t 
 	size_t len = 0, len_rcv = 0;
 	unsigned i;
 
+	ipvs_func = ipvs_get_dests;
+
 	len = sizeof(struct ip_vs_get_dests_app) + 
 		sizeof(ipvs_dest_entry_t) * svc->user.num_dests;
 	if (!(d = calloc(len, 1)))
@@ -719,7 +601,8 @@ struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t 
 	snprintf(dpvs_dests->iifname, sizeof(dpvs_dests->iifname), "%s", svc->user.iifname);
 	snprintf(dpvs_dests->oifname, sizeof(dpvs_dests->oifname), "%s", svc->user.oifname);
 
-	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_DESTS), dpvs_dests, len, (void **)&dpvs_dests_rcv, &len_rcv) < 0) {
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_DESTS), dpvs_dests, len,
+				(void **)&dpvs_dests_rcv, &len_rcv) < 0) {
 		free(d);
 		free(dpvs_dests);
 		return NULL;
@@ -749,7 +632,6 @@ struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t 
 	dpvs_sockopt_msg_free(dpvs_dests_rcv);
 	return d;
 }
-
 
 ipvs_service_entry_t *
 ipvs_get_service(ipvs_service_t *hint, lcoreid_t cid)
@@ -856,54 +738,67 @@ void ipvs_sort_dests(struct ip_vs_get_dests_app *d, ipvs_dest_cmp_t f)
 	      sizeof(ipvs_dest_entry_t), (qsort_cmp_t)f);
 }
 
-int ipvs_set_route(struct dp_vs_route_conf* rt, int cmd)
+int ipvs_set_route(struct dp_vs_route_conf *rt, int cmd)
 {
-    int err = -1;
-    if (cmd == IPROUTE_DEL){
-        err = dpvs_setsockopt(SOCKOPT_SET_ROUTE_DEL, rt, sizeof(struct dp_vs_route_conf));
-        free(rt);
-    }
-    else if (cmd == IPROUTE_ADD){
-        err = dpvs_setsockopt(SOCKOPT_SET_ROUTE_ADD, rt, sizeof(struct dp_vs_route_conf));
-        free(rt);
-    }
-    return err;
+	int err = -1;
+
+	ipvs_func = ipvs_set_route;
+
+	if (cmd == IPROUTE_DEL){
+		err = dpvs_setsockopt(SOCKOPT_SET_ROUTE_DEL, rt, sizeof(struct dp_vs_route_conf));
+	} else if (cmd == IPROUTE_ADD){
+		err = dpvs_setsockopt(SOCKOPT_SET_ROUTE_ADD, rt, sizeof(struct dp_vs_route_conf));
+	}
+
+	return err;
 }
 
 int ipvs_set_route6(struct dp_vs_route6_conf *rt6_cfg, int cmd)
 {
-    int err = -1;
-    if (cmd == IPROUTE_DEL) {
-        rt6_cfg->ops = RT6_OPS_DEL;
-        err = dpvs_setsockopt(SOCKOPT_SET_ROUTE6_ADD_DEL, rt6_cfg, 
-                              sizeof(struct dp_vs_route6_conf));
-    } else if (cmd == IPROUTE_ADD) {
-        rt6_cfg->ops = RT6_OPS_ADD;
-        err = dpvs_setsockopt(SOCKOPT_SET_ROUTE6_ADD_DEL, rt6_cfg,
-                              sizeof(struct dp_vs_route6_conf));
-    }
-    return err;
+	int err = -1;
+
+	ipvs_func = ipvs_set_route6;
+
+	if (cmd == IPROUTE_DEL) {
+		rt6_cfg->ops = RT6_OPS_DEL;
+		err = dpvs_setsockopt(SOCKOPT_SET_ROUTE6_ADD_DEL, rt6_cfg,
+						sizeof(struct dp_vs_route6_conf));
+	} else if (cmd == IPROUTE_ADD) {
+		rt6_cfg->ops = RT6_OPS_ADD;
+		err = dpvs_setsockopt(SOCKOPT_SET_ROUTE6_ADD_DEL, rt6_cfg,
+						sizeof(struct dp_vs_route6_conf));
+	}
+	return err;
 }
 
 int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd)
 {
-   int err = -1;
-   if (cmd == IPADDRESS_DEL)
-       err = dpvs_setsockopt(SOCKOPT_SET_IFADDR_DEL, param, sizeof(struct inet_addr_param)); 
-   else if (cmd == IPADDRESS_ADD)
-       err = dpvs_setsockopt(SOCKOPT_SET_IFADDR_ADD, param, sizeof(struct inet_addr_param));
-   return err;
+	int err = -1;
+
+	ipvs_func = ipvs_set_ipaddr;
+
+	if (cmd == IPADDRESS_DEL)
+	   err = dpvs_setsockopt(SOCKOPT_SET_IFADDR_DEL, param, sizeof(struct inet_addr_param));
+	else if (cmd == IPADDRESS_ADD)
+	   err = dpvs_setsockopt(SOCKOPT_SET_IFADDR_ADD, param, sizeof(struct inet_addr_param));
+
+	return err;
 }
 
 int ipvs_send_gratuitous_arp(struct in_addr *in)
 {
-    return dpvs_setsockopt(DPVS_SO_SET_GRATARP, in, sizeof(in));
+	ipvs_func = ipvs_send_gratuitous_arp;
+
+	return dpvs_setsockopt(DPVS_SO_SET_GRATARP, in, sizeof(in));
 }
 
 ipvs_timeout_t *ipvs_get_timeout(void)
 {
+#if 0
 	ipvs_timeout_t *u;
 	socklen_t len;
+
+	ipvs_func = ipvs_get_timeout;
 
 	len = sizeof(*u);
 	if (!(u = malloc(len)))
@@ -915,12 +810,13 @@ ipvs_timeout_t *ipvs_get_timeout(void)
 		free(u);
 		return NULL;
 	}
-
+#endif
 	return NULL;
-}	
+}
 
 ipvs_daemon_t *ipvs_get_daemon(void)
 {
+#if 0
 	ipvs_daemon_t *u;
 	socklen_t len;
 
@@ -935,9 +831,11 @@ ipvs_daemon_t *ipvs_get_daemon(void)
 		free(u);
 		return NULL;
 	}
+#endif
 
 	return NULL;
 }
+
 void ipvs_close(void)
 {
 	if (sockfd != -1) {
@@ -946,48 +844,50 @@ void ipvs_close(void)
 	}
 }
 
-struct ip_vs_conn_array* ip_vs_get_conns(const struct ip_vs_conn_req *req) 
+struct ip_vs_conn_array *ip_vs_get_conns(const struct ip_vs_conn_req *req)
 {
-    int res;
-    size_t arrlen, rcvlen;
-    struct ip_vs_conn_array *conn_arr, *arr_rcv;
+	int res;
+	size_t arrlen, rcvlen;
+	struct ip_vs_conn_array *conn_arr, *arr_rcv;
 
-    if (req->flag & GET_IPVS_CONN_FLAG_SPECIFIED)
-        res = dpvs_getsockopt(SOCKOPT_GET_CONN_SPECIFIED, req,
-                sizeof(struct ip_vs_conn_req),
-                (void **)&arr_rcv, &rcvlen);
-    else
-        res = dpvs_getsockopt(SOCKOPT_GET_CONN_ALL, req,
-                sizeof(struct ip_vs_conn_req),
-                (void **)&arr_rcv, &rcvlen);
+	ipvs_func = ip_vs_get_conns;
 
-    if (res != ESOCKOPT_OK) {
-        fprintf(stderr, "%s: got errcode %d from dpvs_getsockopt\n", __func__, res);
-        return NULL;
-    }
+	if (req->flag & GET_IPVS_CONN_FLAG_SPECIFIED)
+		res = dpvs_getsockopt(SOCKOPT_GET_CONN_SPECIFIED, req,
+				sizeof(struct ip_vs_conn_req),
+				(void **)&arr_rcv, &rcvlen);
+	else
+		res = dpvs_getsockopt(SOCKOPT_GET_CONN_ALL, req,
+				sizeof(struct ip_vs_conn_req),
+				(void **)&arr_rcv, &rcvlen);
 
-    if (req->flag & GET_IPVS_CONN_FLAG_SPECIFIED)
-        arrlen = sizeof(struct ip_vs_conn_array) + sizeof(ipvs_conn_entry_t);
-    else
-        arrlen = sizeof(struct ip_vs_conn_array) + MAX_CTRL_CONN_GET_ENTRIES *
-            sizeof(ipvs_conn_entry_t);
+	if (res != ESOCKOPT_OK) {
+		fprintf(stderr, "%s: got errcode %d from dpvs_getsockopt\n", __func__, res);
+		return NULL;
+	}
 
-    if (!arr_rcv || rcvlen > arrlen) {
+	if (req->flag & GET_IPVS_CONN_FLAG_SPECIFIED)
+		arrlen = sizeof(struct ip_vs_conn_array) + sizeof(ipvs_conn_entry_t);
+	else
+		arrlen = sizeof(struct ip_vs_conn_array) + MAX_CTRL_CONN_GET_ENTRIES *
+			sizeof(ipvs_conn_entry_t);
+
+	if (!arr_rcv || rcvlen > arrlen) {
 		fprintf(stderr, "%s: bad sockopt connection repsonse\n", __func__);
 		return NULL;
-    }
+	}
 
-    conn_arr = calloc(1, arrlen);
-    if (!conn_arr) {
-        dpvs_sockopt_msg_free(arr_rcv);
-        fprintf(stderr, "%s: out of memory\n", __func__);
-        return NULL;
-    }
+	conn_arr = calloc(1, arrlen);
+	if (!conn_arr) {
+		dpvs_sockopt_msg_free(arr_rcv);
+		fprintf(stderr, "%s: out of memory\n", __func__);
+		return NULL;
+	}
 
-    memcpy(conn_arr, arr_rcv, rcvlen);
-    dpvs_sockopt_msg_free(arr_rcv);
+	memcpy(conn_arr, arr_rcv, rcvlen);
+	dpvs_sockopt_msg_free(arr_rcv);
 
-    return conn_arr;
+	return conn_arr;
 }
 
 struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t cid)
@@ -996,6 +896,8 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t ci
 	struct dp_vs_laddr_conf conf, *result;
 	size_t res_size;
 	int i;
+
+	ipvs_func = ipvs_get_laddrs;
 
 	memset(&conf, 0, sizeof(struct dp_vs_laddr_conf));
 	conf.af_s = svc->af;
@@ -1055,6 +957,8 @@ struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
 	size_t size;
 	int i, err;
 
+	ipvs_func = ipvs_get_blklsts;
+
 	err = dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL, NULL, 0, 
 				(void **)&result, &size);
 	if (err != 0)
@@ -1071,13 +975,13 @@ struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
 	for (i = 0; i < result->naddr; i++) {
 		memcpy(&array->blklsts[i], &result->blklsts[i],
 			sizeof(struct dp_vs_blklst_conf));
-		
 	}
+
 	dpvs_sockopt_msg_free(result);
 	return array;
 }
 
-void ipvs_free_service(ipvs_service_entry_t* p)
+void ipvs_free_service(ipvs_service_entry_t *p)
 {
 	free(p);
 }
@@ -1116,8 +1020,6 @@ const char *ipvs_strerror(int err)
 		{ ipvs_get_blklsts, ESRCH, "Service not defined" },
 		{ ipvs_get_dests, ESRCH, "No such service" },
 		{ ipvs_get_service, ESRCH, "No such service" },
-#ifdef _WITH_SNMP_CHECKER_
-#endif
 		{ 0, EPERM, "Permission denied (you must be root)" },
 		{ 0, EINVAL, "Invalid operation.  Possibly wrong module version, address not unicast, ..." },
 		{ 0, ENOPROTOOPT, "Protocol not available" },
@@ -1134,25 +1036,5 @@ const char *ipvs_strerror(int err)
 	}
 
 	return strerror(err);
-}
-
-void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t *rule)
-{
-	rule->user.protocol  = entry->user.protocol;
-	rule->user.__addr_v4 = entry->user.__addr_v4;
-	rule->user.port      = entry->user.port;
-	rule->user.fwmark    = entry->user.fwmark;
-	strcpy(rule->user.sched_name, entry->user.sched_name);
-	rule->user.flags     = entry->user.flags;
-	rule->user.timeout   = entry->user.timeout;
-	rule->user.conn_timeout = entry->user.conn_timeout;
-	rule->user.netmask   = entry->user.netmask;
-	rule->af        = entry->af;
-	rule->nf_addr      = entry->nf_addr;
-	strcpy(rule->pe_name, entry->pe_name);
-	strcpy(rule->user.srange, entry->user.srange);
-	strcpy(rule->user.drange, entry->user.drange);
-	strcpy(rule->user.iifname, entry->user.iifname);
-	strcpy(rule->user.iifname, entry->user.iifname);
 }
 
