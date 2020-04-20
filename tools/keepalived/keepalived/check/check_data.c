@@ -1035,6 +1035,62 @@ dump_data_check(FILE *fp)
 	dump_check_data(fp, check_data);
 }
 
+char *dump_vs_match(const virtual_server_t *vs)
+{
+	static char vs_str[1024];
+	size_t	slen = 0;
+
+	vs_str[0] = '\0';
+
+	switch (vs->service_type) {
+		case IPPROTO_TCP:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "tcp");
+			break;
+		case IPPROTO_UDP:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "udp");
+			break;
+		case IPPROTO_ICMP:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "icmp");
+			break;
+		case IPPROTO_ICMPV6:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "icmp6");
+			break;
+		default:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "unkown");
+			break;
+	}
+
+	if (vs->srange[0]) {
+		slen = strlen(vs_str);
+		if (slen + 1 >= sizeof(vs_str))
+			return vs_str;
+		snprintf(&vs_str[slen], sizeof(vs_str) - slen - 1, ",from=%s", vs->srange);
+	}
+
+	if (vs->drange[0]) {
+		slen = strlen(vs_str);
+		if (slen + 1 >= sizeof(vs_str))
+			return vs_str;
+		snprintf(&vs_str[slen], sizeof(vs_str) - slen - 1, ",to=%s", vs->drange);
+	}
+
+	if (vs->iifname[0]) {
+		slen = strlen(vs_str);
+		if (slen + 1 >= sizeof(vs_str))
+			return vs_str;
+		snprintf(&vs_str[slen], sizeof(vs_str) - slen - 1, ",iif=%s", vs->iifname);
+	}
+
+	if (vs->oifname[0]) {
+		slen = strlen(vs_str);
+		if (slen + 1 >= sizeof(vs_str))
+			return vs_str;
+		snprintf(&vs_str[slen], sizeof(vs_str) - slen - 1, ",oif=%s", vs->oifname);
+	}
+
+	return vs_str;
+}
+
 const char *
 format_vs(const virtual_server_t *vs)
 {
@@ -1042,11 +1098,13 @@ format_vs(const virtual_server_t *vs)
 	static char ret[512];
 
 	if (vs->vsgname)
-		snprintf (ret, sizeof (ret) - 1, "[%s]:%d"
+		snprintf(ret, sizeof(ret) - 1, "[%s]:%d"
 			, vs->vsgname
 			, ntohs(inet_sockaddrport(&vs->addr)));
 	else if (vs->vfwmark)
-		snprintf (ret, sizeof (ret) - 1, "FWM %u", vs->vfwmark);
+		snprintf(ret, sizeof(ret) - 1, "FWM %u", vs->vfwmark);
+	else if (vs->srange[0] || vs->drange[0] || vs->iifname[0] || vs->oifname[0])
+		snprintf(ret, sizeof(ret) - 1, "MATCH %s", dump_vs_match(vs));
 	else
 		snprintf(ret, sizeof(ret) - 1, "%s"
 			, inet_sockaddrtotrio(&vs->addr, vs->service_type));
