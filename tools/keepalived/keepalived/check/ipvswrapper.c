@@ -364,10 +364,12 @@ ipvs_change_needed(int cmd, virtual_server_group_entry_t *vsge, virtual_server_t
 
 		return (count == 0);
 	}
+#if 0
 	else if (cmd == IP_VS_SO_SET_ADDDEST)
 		return !rs->alive;
 	else if (cmd == IP_VS_SO_SET_DELDEST)
 		return rs->alive;
+#endif
 	else /* cmd == IP_VS_SO_SET_EDITDEST */
 		return true;
 }

@@ -210,10 +210,12 @@ clear_service_rs(virtual_server_t * vs, list l, bool stopping)
 
 	LIST_FOREACH(l, rs, e) {
 		if (rs->set || stopping)
-			log_message(LOG_INFO, "%s %sservice %s from VS %s",
+			log_message(LOG_INFO, "%s %sservice %s (%s,%s) from VS %s",
 					stopping ? "Shutting down" : "Removing",
 					rs->inhibit && !rs->alive ? "(inhibited) " : "",
 					FMT_RS(rs, vs),
+					rs->set ? "set" : "unset",
+					rs->alive ? "alive" : "dead",
 					FMT_VS(vs));
 
 		if (!rs->set)
