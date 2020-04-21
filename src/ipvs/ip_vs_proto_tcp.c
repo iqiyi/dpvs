@@ -638,7 +638,8 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     if (unlikely(!th))
         return NULL;
 
-    if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+    if (dp_vs_blklst_lookup(iph->af, iph->proto, &iph->daddr,
+                th->dest, &iph->saddr)) {
         *drop = true;
         return NULL;
     }
