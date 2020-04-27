@@ -537,6 +537,9 @@ static int ifa_add_route4(struct inet_ifaddr *ifa)
     if (err != EDPVS_OK)
         goto errout;
 
+    if (ifa->plen == 32)
+        return EDPVS_OK;
+
     err = route_add(&net.in, ifa->plen, RTF_FORWARD,
                     NULL, ifa->idev->dev, &ifa->addr.in, 0, 0);
     if (err != EDPVS_OK && err != EDPVS_EXIST)
