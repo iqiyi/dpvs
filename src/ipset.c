@@ -310,8 +310,8 @@ static int ipset_lcore_init(void *arg)
     if (!rte_lcore_is_enabled(rte_lcore_id()))
         return EDPVS_DISABLED;
 
-    if (netif_lcore_is_idle(rte_lcore_id()))
-        return EDPVS_IDLE;
+    if (!netif_lcore_is_fwd_worker(rte_lcore_id()))
+        return EDPVS_NOTSUPP;
 
     for (i = 0; i < IPSET_TAB_SIZE; i++)
         INIT_LIST_HEAD(&this_ipset_table_lcore[i]);

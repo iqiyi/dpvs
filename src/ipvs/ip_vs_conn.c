@@ -1191,7 +1191,7 @@ static int conn_init_lcore(void *arg)
     if (!rte_lcore_is_enabled(rte_lcore_id()))
         return EDPVS_DISABLED;
 
-    if (netif_lcore_is_idle(rte_lcore_id()))
+    if (!netif_lcore_is_fwd_worker(rte_lcore_id()))
         return EDPVS_IDLE;
 
     this_conn_tbl = rte_malloc(NULL,

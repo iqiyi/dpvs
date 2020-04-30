@@ -37,6 +37,7 @@
 typedef struct netif_lcore_mask_get
 {
     lcoreid_t master_lcore_id;
+    lcoreid_t kni_lcore_id;
     uint8_t slave_lcore_num;
     uint8_t isol_rx_lcore_num;
     uint64_t slave_lcore_mask;

@@ -21,6 +21,7 @@
 #include "list.h"
 #include "dpdk.h"
 #include "inetaddr.h"
+#include "global_data.h"
 #include "timer.h"
 #include "tc/tc.h"
 
@@ -104,6 +105,7 @@ struct netif_port_conf
 struct netif_lcore_conf
 {
     lcoreid_t id;
+    enum dpvs_lcore_role_type type;
     /* nic number of this lcore to process */
     int nports;
     /* port list of this lcore to process */
@@ -167,6 +169,7 @@ struct netif_kni {
     struct ether_addr addr;
     struct dpvs_timer kni_rtnl_timer;
     int kni_rtnl_fd;
+    struct rte_ring *rx_ring;
 } __rte_cache_aligned;
 
 union netif_bond {
@@ -264,7 +267,7 @@ void netif_update_worker_loop_cnt(void);
 int netif_register_master_xmit_msg(void);
 int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);
 bool is_lcore_id_valid(lcoreid_t cid);
-bool netif_lcore_is_idle(lcoreid_t cid);
+bool netif_lcore_is_fwd_worker(lcoreid_t cid);
 void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
                            lcoreid_t cid, uint16_t count, bool pkts_from_ring);
 

@@ -334,6 +334,8 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
     struct rte_kni_conf conf;
     struct rte_kni *kni;
     int err;
+    char ring_name[RTE_RING_NAMESIZE];
+    struct rte_ring *rb;
 
     if (!dev)
         return EDPVS_INVAL;
@@ -373,9 +375,19 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
                 __func__, mac, conf.name, strerror(errno));
     }
 
+    snprintf(ring_name, sizeof(ring_name), "kni_rx_ring_%s",
+             conf.name);
+    rb = rte_ring_create(ring_name, KNI_DEF_MBUF_SIZE,
+                         rte_socket_id(), RING_F_SC_DEQ);
+    if (unlikely(!rb)) {
+        RTE_LOG(ERR, KNI, "[%s] Failed to create kni rx ring.\n", __func__);
+        return EDPVS_DPDKAPIFAIL;
+    }
+
     snprintf(dev->kni.name, sizeof(dev->kni.name), "%s", conf.name);
     dev->kni.addr = dev->addr;
     dev->kni.kni = kni;
+    dev->kni.rx_ring = rb;
     return EDPVS_OK;
 }
 
@@ -385,7 +397,9 @@ int kni_del_dev(struct netif_port *dev)
         return EDPVS_INVAL;
 
     rte_kni_release(dev->kni.kni);
+    rte_ring_free(dev->kni.rx_ring);
     dev->kni.kni = NULL;
+    dev->kni.rx_ring = NULL;
     return EDPVS_OK;
 }
 

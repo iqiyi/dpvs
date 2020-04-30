@@ -745,6 +745,14 @@ static int link_show(struct link_param *param)
                             lcores.master_lcore_id);
                     ret = err;
                 }
+                if (lcores.kni_lcore_id) {
+                    err = link_cpu_show(lcores.kni_lcore_id, param);
+                    if (err) {
+                        fprintf(stderr, "Fail to get information for KNI cpu%d\n",
+                                lcores.kni_lcore_id);
+                        ret = err;
+                    }
+                }
 
                 printf("<< Data Plane >>\n");
                 cnt = 0;
