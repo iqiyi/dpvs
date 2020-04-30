@@ -65,9 +65,9 @@ struct blklst_entry *dp_vs_blklst_lookup(int af, uint8_t proto, const union inet
     hashkey = blklst_hashkey(vaddr, blklst);
     list_for_each_entry(blklst_node, &this_blklst_tab[hashkey], list) {
         if (blklst_node->af == af && blklst_node->proto == proto &&
-                blklst_node->vport == vport &&
-                inet_addr_equal(af, &blklst_node->vaddr, vaddr) &&
-                inet_addr_equal(af, &blklst_node->blklst, blklst))
+            blklst_node->vport == vport &&
+            inet_addr_equal(af, &blklst_node->vaddr, vaddr) &&
+            inet_addr_equal(af, &blklst_node->blklst, blklst))
             return blklst_node;
     }
     return NULL;
