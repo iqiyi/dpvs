@@ -26,6 +26,7 @@ typedef enum dpvs_lcore_role_type {
     LCORE_ROLE_MASTER,
     LCORE_ROLE_FWD_WORKER,
     LCORE_ROLE_ISOLRX_WORKER,
+    LCORE_ROLE_KNI_WORKER,
     LCORE_ROLE_MAX
 } dpvs_lcore_role_t;
 
