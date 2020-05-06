@@ -53,6 +53,7 @@ alloc_ssl(void)
 {
 	return (ssl_data_t *) MALLOC(sizeof(ssl_data_t));
 }
+
 void
 free_ssl(void)
 {
@@ -71,10 +72,16 @@ free_ssl(void)
 	FREE(ssl);
 	check_data->ssl = NULL;
 }
+
 static void
 dump_ssl(FILE *fp)
 {
-	ssl_data_t *ssl = check_data->ssl;
+	ssl_data_t *ssl;
+
+	if (!check_data || !check_data->ssl)
+		return;
+
+	ssl = check_data->ssl;
 
 	if (!ssl->password && !ssl->cafile && !ssl->certfile && !ssl->keyfile) {
 		conf_write(fp, " Using autogen SSL context");
@@ -101,6 +108,7 @@ free_vsg(void *data)
 	free_list(&vsg->vfwmark);
 	FREE(vsg);
 }
+
 static void
 dump_vsg(FILE *fp, const void *data)
 {
@@ -111,11 +119,13 @@ dump_vsg(FILE *fp, const void *data)
 	dump_list(fp, vsg->addr_range);
 	dump_list(fp, vsg->vfwmark);
 }
+
 static void
 free_vsg_entry(void *data)
 {
 	FREE(data);
 }
+
 static void
 dump_vsg_entry(FILE *fp, const void *data)
 {
@@ -147,6 +157,7 @@ dump_vsg_entry(FILE *fp, const void *data)
 	}
 	conf_write(fp, "     reloaded = %s", vsg_entry->reloaded ? "True" : "False");
 }
+
 void
 alloc_vsg(const char *gname)
 {
@@ -159,6 +170,7 @@ alloc_vsg(const char *gname)
 
 	list_add(check_data->vs_group, new);
 }
+
 void
 alloc_vsg_entry(const vector_t *strvec)
 {
@@ -308,7 +320,6 @@ dump_forwarding_method(FILE *fp, const char *prefix, const real_server_t *rs)
 		conf_write(fp, "default forwarding method = SNAT");
 		break;
 	}
-	
 }
 
 static void
@@ -430,7 +441,7 @@ dump_vs(FILE *fp, const void *data)
 
 	conf_write(fp, " SYN proxy is %s", vs->syn_proxy ? "ON" : "OFF");
 
-        switch (vs->hash_target) {
+	switch (vs->hash_target) {
 	case IP_VS_SVC_F_SIP_HASH:
 		conf_write(fp, "   hash target = sip");
 		break;
@@ -490,7 +501,7 @@ alloc_vs(const char *param1, const char *param2)
 		new->af = new->addr.ss_family;
 #ifndef LIBIPVS_USE_NL
 		if (new->af != AF_INET && new->af != AF_INET6) {
-			report_config_error(CONFIG_GENERAL_ERROR, "IPVS with IPv4 & IPv6 is supported only by this build");
+			report_config_error(CONFIG_GENERAL_ERROR, "This IPVS build supports IPv4 and IPv6 only.");
 			FREE(new);
 			skip_block(true);
 			return;
@@ -546,15 +557,17 @@ dump_laddr_group(FILE *fp, const void *data)
 {
 	const local_addr_group *laddr_group = data;
 
-	log_message(LOG_INFO, " local IP address group = %s", laddr_group->gname);
+	conf_write(fp, " local IP address group = %s", laddr_group->gname);
 	dump_list(fp, laddr_group->addr_ip);
 	dump_list(fp, laddr_group->range);
 }
+
 static void
 free_laddr_entry(void *data)
 {
 	FREE(data);
 }
+
 static void
 dump_laddr_entry(FILE *fp, const void *data)
 {
@@ -568,6 +581,7 @@ dump_laddr_entry(FILE *fp, const void *data)
 	    conf_write(fp, "   IP = %s"
 				    , inet_sockaddrtos(&laddr_entry->addr));
 }
+
 void
 alloc_laddr_group(char *gname)
 {
@@ -582,6 +596,7 @@ alloc_laddr_group(char *gname)
 
 	list_add(check_data->laddr_group, new);
 }
+
 void
 alloc_laddr_entry(const vector_t *strvec)
 {
@@ -621,7 +636,7 @@ dump_blklst_group(FILE *fp, const void *data)
 {
 	const blklst_addr_group *blklst_group = data;
 
-	log_message(LOG_INFO, " blacllist IP address group = %s", blklst_group->gname);
+	conf_write(fp, " blacllist IP address group = %s", blklst_group->gname);
 	dump_list(fp, blklst_group->addr_ip);
 	dump_list(fp, blklst_group->range);
 }
@@ -681,6 +696,78 @@ alloc_blklst_entry(const vector_t *strvec)
 		list_add(blklst_group->range, new);
 	else
 		log_message(LOG_INFO, "invalid: blacklist IP address range %d", new->range);
+}
+
+static void
+free_tunnel_group(void *data)
+{
+   tunnel_group *group = data;
+   if (!group)
+       return;
+
+   FREE_PTR(group->gname);
+   free_list(&group->tunnel_entry);
+   FREE(group);
+}
+
+static void
+dump_tunnel_group(FILE *fp, const void *data)
+{
+   const tunnel_group *group = data;
+   if (!group)
+       return;
+
+   conf_write(fp, "tunnel group = %s", group->gname);
+   dump_list(fp, group->tunnel_entry);
+}
+
+static void
+free_tunnel_entry(void *data)
+{
+   if (!data)
+       return;
+
+   FREE(data);
+}
+
+static void
+dump_tunnel_entry(FILE *fp, const void *data)
+{
+    const tunnel_entry *entry = data;
+    if (!entry)
+       return;
+
+    conf_write(fp, "tunnel name = %s, local_ip = %s, remote_ip = %s,"
+               " kind = %s, dev = %s",
+               entry->ifname,
+               inet_sockaddrtos(&entry->local),
+               inet_sockaddrtos(&entry->remote),
+               entry->kind,
+               entry->link);
+}
+
+void alloc_tunnel(char *gname)
+{
+   int size = strlen(gname);
+   tunnel_group *new;
+
+   new = (tunnel_group *) MALLOC(sizeof(tunnel_group));
+   new->gname = (char *) MALLOC(size + 1);
+   memcpy(new->gname, gname, size);
+   new->tunnel_entry = alloc_list(free_tunnel_entry, dump_tunnel_entry);
+   list_add(check_data->tunnel_group, new);
+}
+
+void alloc_tunnel_entry(char *name)
+{
+   tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+   tunnel_entry *new;
+
+   new = (tunnel_entry *) MALLOC(sizeof(tunnel_entry));
+   strncpy(new->ifname, name, sizeof(new->ifname) - 1);
+
+   if (gtunnel->tunnel_entry)
+       list_add(gtunnel->tunnel_entry, new);
 }
 
 /* Sorry server facility functions */
@@ -801,7 +888,7 @@ alloc_rs(const char *ip, const char *port)
 
 #ifndef LIBIPVS_USE_NL
 	if (new->addr.ss_family != AF_INET && new->addr.ss_family != AF_INET6) {
-		report_config_error(CONFIG_GENERAL_ERROR, "IPVS does with IPv4 & ipV6 is supported only in this build - skipping %s/%s", ip, port);
+		report_config_error(CONFIG_GENERAL_ERROR, "This IPVS build supports IPv4 and IPv6 only - skipping %s/%s", ip, port);
 		skip_block(true);
 		FREE(new);
 		return;
@@ -810,7 +897,7 @@ alloc_rs(const char *ip, const char *port)
 #if !HAVE_DECL_IPVS_DEST_ATTR_ADDR_FAMILY
 	if (vs->af != AF_UNSPEC && new->addr.ss_family != vs->af) {
 		if (!(new->addr.ss_family == AF_INET && vs->af == AF_INET6)) {
-			report_config_error(CONFIG_GENERAL_ERROR, "Your dpvs with NAT4to4 or NAT6to6 or NAT6to4 is supported only by this build");
+			report_config_error(CONFIG_GENERAL_ERROR, "This IPVS build supports NAT ipv4-to-ipv4, ipv6-to-ipv6, and ipv6-to-ipv4 only.");
 			skip_block(true);
 			FREE(new);
 			return;
@@ -885,6 +972,7 @@ alloc_check_data(void)
 #endif
 	new->laddr_group = alloc_list(free_laddr_group, dump_laddr_group);
 	new->blklst_group = alloc_list(free_blklst_group, dump_blklst_group);
+	new->tunnel_group = alloc_list(free_tunnel_group, dump_tunnel_group);
 
 	return new;
 }
@@ -901,6 +989,7 @@ free_check_data(check_data_t *data)
 #endif
 	free_list(&data->laddr_group);
 	free_list(&data->blklst_group);
+	free_list(&data->tunnel_group);
 	FREE(data);
 }
 
@@ -923,6 +1012,11 @@ dump_check_data(FILE *fp, check_data_t *data)
 			dump_list(fp, data->vs_group);
 		dump_list(fp, data->vs);
 	}
+	if (!LIST_ISEMPTY(data->tunnel_group)) {
+		conf_write(fp, "------< Tunnel definitions >------");
+		dump_list(fp, data->tunnel_group);
+	}
+
 	dump_checkers_queue(fp);
 
 #ifdef _WITH_BFD_
@@ -941,6 +1035,62 @@ dump_data_check(FILE *fp)
 	dump_check_data(fp, check_data);
 }
 
+char *dump_vs_match(const virtual_server_t *vs)
+{
+	static char vs_str[1024];
+	size_t	slen = 0;
+
+	vs_str[0] = '\0';
+
+	switch (vs->service_type) {
+		case IPPROTO_TCP:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "tcp");
+			break;
+		case IPPROTO_UDP:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "udp");
+			break;
+		case IPPROTO_ICMP:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "icmp");
+			break;
+		case IPPROTO_ICMPV6:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "icmp6");
+			break;
+		default:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "unkown");
+			break;
+	}
+
+	if (vs->srange[0]) {
+		slen = strlen(vs_str);
+		if (slen + 1 >= sizeof(vs_str))
+			return vs_str;
+		snprintf(&vs_str[slen], sizeof(vs_str) - slen - 1, ",from=%s", vs->srange);
+	}
+
+	if (vs->drange[0]) {
+		slen = strlen(vs_str);
+		if (slen + 1 >= sizeof(vs_str))
+			return vs_str;
+		snprintf(&vs_str[slen], sizeof(vs_str) - slen - 1, ",to=%s", vs->drange);
+	}
+
+	if (vs->iifname[0]) {
+		slen = strlen(vs_str);
+		if (slen + 1 >= sizeof(vs_str))
+			return vs_str;
+		snprintf(&vs_str[slen], sizeof(vs_str) - slen - 1, ",iif=%s", vs->iifname);
+	}
+
+	if (vs->oifname[0]) {
+		slen = strlen(vs_str);
+		if (slen + 1 >= sizeof(vs_str))
+			return vs_str;
+		snprintf(&vs_str[slen], sizeof(vs_str) - slen - 1, ",oif=%s", vs->oifname);
+	}
+
+	return vs_str;
+}
+
 const char *
 format_vs(const virtual_server_t *vs)
 {
@@ -948,11 +1098,13 @@ format_vs(const virtual_server_t *vs)
 	static char ret[512];
 
 	if (vs->vsgname)
-		snprintf (ret, sizeof (ret) - 1, "[%s]:%d"
+		snprintf(ret, sizeof(ret) - 1, "[%s]:%d"
 			, vs->vsgname
 			, ntohs(inet_sockaddrport(&vs->addr)));
 	else if (vs->vfwmark)
-		snprintf (ret, sizeof (ret) - 1, "FWM %u", vs->vfwmark);
+		snprintf(ret, sizeof(ret) - 1, "FWM %u", vs->vfwmark);
+	else if (vs->srange[0] || vs->drange[0] || vs->iifname[0] || vs->oifname[0])
+		snprintf(ret, sizeof(ret) - 1, "MATCH %s", dump_vs_match(vs));
 	else
 		snprintf(ret, sizeof(ret) - 1, "%s"
 			, inet_sockaddrtotrio(&vs->addr, vs->service_type));

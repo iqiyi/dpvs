@@ -257,28 +257,28 @@ start_checker_termination_thread(__attribute__((unused)) thread_ref_t thread)
 
 static void checker_queue_adj(void)
 {
-    unsigned i_checker;
-    unsigned checkers_total = LIST_SIZE(checkers_queue);
-    unsigned checkers_child_all = global_data->checker_queue_num? global_data->checker_queue_num : LIST_SIZE(checkers_queue);
-    
-    if (checkers_child_all > CHECKERS_CHILD_NUM_MAX) {
-          unsigned trim_tail = checkers_child_all - CHECKERS_CHILD_NUM_MAX;
-          unsigned trim_head = checkers_total - checkers_child_all;
-    
-          for (i_checker=0; i_checker<trim_tail; i_checker++)
-                  free_list_element(checkers_queue, checkers_queue->tail);
-          for (i_checker=0; i_checker<trim_head; i_checker++)
-                  free_list_element(checkers_queue, checkers_queue->head);
-          global_data->checker_queue_num = trim_tail;
-    
-          start_check_child();
-    } else {
-          unsigned trim_head = checkers_total - checkers_child_all;
-          
-          for (i_checker=0; i_checker<trim_head; i_checker++)
-                   free_list_element(checkers_queue, checkers_queue->head);
-          global_data->checker_queue_num = checkers_child_all;
-    }
+	unsigned i_checker;
+	unsigned checkers_total = LIST_SIZE(checkers_queue);
+	unsigned checkers_child_all = global_data->checker_queue_num? global_data->checker_queue_num : LIST_SIZE(checkers_queue);
+
+	if (checkers_child_all > CHECKERS_CHILD_NUM_MAX) {
+		unsigned trim_tail = checkers_child_all - CHECKERS_CHILD_NUM_MAX;
+		unsigned trim_head = checkers_total - checkers_child_all;
+
+		for (i_checker=0; i_checker<trim_tail; i_checker++)
+				  free_list_element(checkers_queue, checkers_queue->tail);
+		for (i_checker=0; i_checker<trim_head; i_checker++)
+			free_list_element(checkers_queue, checkers_queue->head);
+		global_data->checker_queue_num = trim_tail;
+
+		start_check_child();
+	} else {
+		unsigned trim_head = checkers_total - checkers_child_all;
+
+		for (i_checker=0; i_checker<trim_head; i_checker++)
+				free_list_element(checkers_queue, checkers_queue->head);
+		global_data->checker_queue_num = checkers_child_all;
+	}
 }
 
 /* Daemon stop sequence */

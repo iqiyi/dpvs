@@ -350,13 +350,9 @@ static void list_daemon(void);
 static int list_laddrs(ipvs_service_t *svc, int with_title, lcoreid_t cid);
 static int list_all_laddrs(lcoreid_t cid);
 static void list_blklsts_print_title(void);
-static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol);
+static int list_blklst(int af, const union nf_inet_addr *addr, uint16_t port, uint16_t protocol);
 static int list_all_blklsts(void);
 
-#if 0
-static int modprobe_ipvs(void);
-static void check_ipvs_version(void);
-#endif
 static int process_options(int argc, char **argv, int reading_stdin);
 
 
@@ -1046,7 +1042,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
 	case CMD_GETBLKLST:
 		if(options & OPT_SERVICE) {
 			list_blklsts_print_title();
-			result = list_blklst(ce.svc.nf_addr.ip, ce.svc.user.port, ce.svc.user.protocol);
+			result = list_blklst(ce.svc.af, &ce.svc.nf_addr, ce.svc.user.port, ce.svc.user.protocol);
 		}
 		else
 			result = list_all_blklsts();
@@ -1836,7 +1832,6 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 		free(vname);
 	} else { /* match */
 		char *proto;
-		char af[10];
 
 		if (se->user.protocol == IPPROTO_TCP)
 			proto = "tcp";
@@ -1847,25 +1842,17 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 		else
 			proto = "icmpv6";
 
-		if (se->af == AF_INET)
-			sprintf(af, "ipv4");
-		else if (se->af == AF_INET6)
-			sprintf(af, "ipv6");
-
 		if (format & FMT_RULE) {
 			snprintf(svc_name, sizeof(svc_name),
-			"-H af=%s, proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
-			af, proto, se->user.srange, se->user.drange, se->user.iifname, se->user.oifname);
+			"-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
+			proto, se->user.srange, se->user.drange, se->user.iifname, se->user.oifname);
 
 		} else {
 			int left = sizeof(svc_name);
 			svc_name[0] = '\0';
 
 			left -= snprintf(svc_name + strlen(svc_name), left,
-				"af=%s", af);
-
-			left -= snprintf(svc_name + strlen(svc_name), left,
-				",MATCH %s", proto);
+				"MATCH %s", proto);
 
 			if (strcmp(se->user.srange, "[::-::]:0-0") != 0 &&
                             strcmp(se->user.srange, "0.0.0.0-0.0.0.0:0-0") != 0)
@@ -2117,7 +2104,7 @@ static int list_all_laddrs(lcoreid_t cid)
 
 static void list_blklsts_print_title(void)
 {
-	printf("%-20s %-8s %-20s\n" ,
+	printf("%-20s %-8s %-20s\n",
 		"VIP:VPORT" ,
 		"PROTO" ,
 		"BLACKLIST");
@@ -2125,37 +2112,63 @@ static void list_blklsts_print_title(void)
 
 static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
 {
-	char pbuf_v[32], pbuf_d[32], port[6];
-	sprintf(pbuf_v , "%u.%u.%u.%u" , PRINT_NIP(blklst->vaddr.in.s_addr));
-	sprintf(pbuf_d , "%u.%u.%u.%u" , PRINT_NIP(blklst->blklst.in.s_addr));
-	sprintf(port, "%d", ntohs(blklst->vport));
-	if (blklst->proto ==IPPROTO_TCP)
-		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "TCP", pbuf_d);
-	else if(blklst->proto ==IPPROTO_UDP)
-		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "UDP", pbuf_d);
-	else if (blklst->proto == IPPROTO_ICMP)
-		printf("%s:%-8s %-8s %-20s\n" , pbuf_v, port, "ICMP", pbuf_d);
-	else
-		printf("proto not support!");
+	char vip[64], bip[64], port[8], proto[8];
+	const char *pattern = (blklst->af == AF_INET ?
+			"%s:%-8s %-8s %-20s\n" : "[%s]:%-8s %-8s %-20s\n");
+
+	switch (blklst->proto) {
+		case IPPROTO_TCP:
+			snprintf(proto, sizeof(proto), "%s", "TCP");
+			break;
+		case IPPROTO_UDP:
+			snprintf(proto, sizeof(proto), "%s", "UDP");
+			break;
+		case IPPROTO_ICMP:
+			snprintf(proto, sizeof(proto), "%s", "ICMP");
+			break;
+		case IPPROTO_ICMPV6:
+			snprintf(proto, sizeof(proto), "%s", "IMCPv6");
+			break;
+		default:
+			break;
+	}
+
+	snprintf(port, sizeof(port), "%u", ntohs(blklst->vport));
+
+	printf(pattern, inet_ntop(blklst->af, (const void *)&blklst->vaddr, vip, sizeof(vip)),
+			port, proto, inet_ntop(blklst->af, (const void *)&blklst->blklst, bip, sizeof(bip)));
 }
 
-static int list_blklst(uint32_t addr_v4, uint16_t port, uint16_t protocol)
+static bool inet_addr_equal(int af, const union nf_inet_addr *a1, const union nf_inet_addr *a2)
 {
-	struct dp_vs_blklst_conf_array *get;
+	switch (af) {
+		case AF_INET:
+			return a1->ip == a2->ip;
+		case AF_INET6:
+			return IN6_ARE_ADDR_EQUAL(a1, a2);
+		default:
+			return memcmp(a1, a2, sizeof(union nf_inet_addr)) == 0;
+    }
+}
+
+static int list_blklst(int af, const union nf_inet_addr *addr, uint16_t port, uint16_t protocol)
+{
 	int i;
+	struct dp_vs_blklst_conf_array *get;
+
 	if (!(get = ipvs_get_blklsts())) {
 		fprintf(stderr, "%s\n", ipvs_strerror(errno));
 		return -1;
 	}
 
 	for (i = 0; i < get->naddr; i++) {
-		if ( addr_v4== get->blklsts[i].vaddr.in.s_addr &&
-		     port == get->blklsts[i].vport&&
-		     protocol == get->blklsts[i].proto) {
+		if (inet_addr_equal(af, addr,(const union nf_inet_addr *) &get->blklsts[i].vaddr) &&
+				port == get->blklsts[i].vport && protocol == get->blklsts[i].proto) {
 			print_service_and_blklsts(&get->blklsts[i]);
 		}
 	}
 	free(get);
+
 	return 0;
 }
 
@@ -2171,8 +2184,8 @@ static int list_all_blklsts(void)
 
 	list_blklsts_print_title();
 	for (i = 0; i < get->user.num_services; i++)
-		list_blklst(get->user.entrytable[i].user.__addr_v4, get->user.entrytable[i].user.port,
-				get->user.entrytable[i].user.protocol);
+		list_blklst(get->user.entrytable[i].af, &get->user.entrytable[i].nf_addr,
+				get->user.entrytable[i].user.port, get->user.entrytable[i].user.protocol);
 	free(get);
 	return 0;
 }

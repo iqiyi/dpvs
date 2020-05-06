@@ -23,13 +23,14 @@
 
 struct blklst_entry {
     struct list_head    list;
-    union inet_addr     vaddr;
-    uint16_t            vport;
+    int af;
     uint8_t             proto;
+    uint16_t            vport;
+    union inet_addr     vaddr;
     union inet_addr     blklst;
 };
 
-struct blklst_entry *dp_vs_blklst_lookup(uint8_t proto, const union inet_addr *vaddr,
+struct blklst_entry *dp_vs_blklst_lookup(int af, uint8_t proto, const union inet_addr *vaddr,
                                          uint16_t vport, const union inet_addr *blklst);
 void dp_vs_blklst_flush(struct dp_vs_service *svc);
 

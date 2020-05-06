@@ -173,22 +173,6 @@ vs_end_handler(void)
 	uint16_t af = AF_UNSPEC;
 	bool mixed_af;
 
-	/* If the real (sorry) server uses tunnel forwarding, the address family
-	 * does not have to match the address family of the virtual server */
-	if (vs->s_svr
-#if HAVE_DECL_IPVS_DEST_ATTR_ADDR_FAMILY
-		      && vs->s_svr->forwarding_method != IP_VS_CONN_F_TUNNEL
-#endif
-									    )
-	{
-		if (vs->af == AF_UNSPEC)
-			vs->af = vs->s_svr->addr.ss_family;
-		else if (vs->af != vs->s_svr->addr.ss_family) {
-			report_config_error(CONFIG_GENERAL_ERROR, "Address family of virtual server and sorry server %s don't match - skipping sorry server.", inet_sockaddrtos(&vs->s_svr->addr));
-			FREE(vs->s_svr);
-			vs->s_svr = NULL;
-		}
-	}
 
 	if (vs->af == AF_UNSPEC) {
 		/* This only occurs if:
@@ -230,7 +214,6 @@ vs_end_handler(void)
 			 * Default to IPv4.*/
 			report_config_error(CONFIG_GENERAL_ERROR, "Address family of real/sorry servers are"
 					"not the same for vs %s.", FMT_VS(vs));
-			vs->af = AF_INET;
 		}
 	}
 }
@@ -580,6 +563,8 @@ proto_handler(const vector_t *strvec)
 		vs->service_type = IPPROTO_UDP;
 	else if (!strcasecmp(str, "ICMP"))
                 vs->service_type = IPPROTO_ICMP;
+	else if (!strcasecmp(str, "ICMPV6"))
+		vs->service_type = IPPROTO_ICMPV6;
 	else
 		report_config_error(CONFIG_GENERAL_ERROR, "Unknown protocol %s - ignoring", str);
 }
@@ -988,6 +973,54 @@ blklst_gname_handler(const vector_t *strvec)
 }
 
 static void
+tunnel_handler(const vector_t *strvec)
+{
+	alloc_tunnel(vector_slot(strvec, 1));
+}
+
+static void
+tunnel_entry_handler(const vector_t *strvec)
+{
+	alloc_tunnel_entry(vector_slot(strvec, 1));
+}
+
+static void
+kind_handler(const vector_t *strvec)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *entry = LIST_TAIL_DATA(gtunnel->tunnel_entry);
+
+	strncpy(entry->kind, vector_slot(strvec, 1), sizeof(entry->kind) - 1);
+}
+
+static void
+remote_handler(const vector_t *strvec)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *entry = LIST_TAIL_DATA(gtunnel->tunnel_entry);
+
+	inet_stosockaddr(vector_slot(strvec, 1), NULL, &entry->remote);
+}
+
+static void
+local_handler(const vector_t *strvec)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *entry = LIST_TAIL_DATA(gtunnel->tunnel_entry);
+
+	inet_stosockaddr(vector_slot(strvec, 1), NULL, &entry->local);
+}
+
+static void
+if_handler(const vector_t *strvec)
+{
+	tunnel_group *gtunnel = LIST_TAIL_DATA(check_data->tunnel_group);
+	tunnel_entry *entry = LIST_TAIL_DATA(gtunnel->tunnel_entry);
+	snprintf(entry->link, sizeof(entry->link), "%s", (char *)vector_slot(strvec, 1));
+}
+
+
+static void
 bps_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -1069,6 +1102,16 @@ init_check_keywords(bool active)
 	install_keyword("ca", &sslca_handler);
 	install_keyword("certificate", &sslcert_handler);
 	install_keyword("key", &sslkey_handler);
+
+	/* tunnel process */
+	install_keyword_root("tunnel_group", &tunnel_handler, active);
+	install_keyword("tunnel_entry", &tunnel_entry_handler);
+	install_sublevel();
+	install_keyword("kind", &kind_handler);
+	install_keyword("remote", &remote_handler);
+	install_keyword("local", &local_handler);
+	install_keyword("if", &if_handler);
+	install_sublevel_end();
 
 	/* local IP address mapping */
 	install_keyword_root("local_address_group", &laddr_group_handler, active);

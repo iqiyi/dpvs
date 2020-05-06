@@ -302,99 +302,99 @@ add_nexthops(ip_route_t *route, struct nlmsghdr *nlh, struct rtmsg *rtm)
  * */
 static int scope_n2dpvs(int scope)
 {
-    if (scope == 254)
-        return ROUTE_CF_SCOPE_HOST;
-    if (scope == 253)
-        return ROUTE_CF_SCOPE_LINK;
-    if (scope == 0)
-        return ROUTE_CF_SCOPE_GLOBAL;
-    return ROUTE_CF_SCOPE_GLOBAL;
+	if (scope == 254)
+		return ROUTE_CF_SCOPE_HOST;
+	if (scope == 253)
+		return ROUTE_CF_SCOPE_LINK;
+	if (scope == 0)
+		return ROUTE_CF_SCOPE_GLOBAL;
+	return ROUTE_CF_SCOPE_GLOBAL;
 }
 
 static int flag_n2dpvs(int scope)
 {
-    if (scope == 254)
-        return RTF_LOCALIN;
-    if (scope == 253)
-        return RTF_FORWARD; 
-    return RTF_FORWARD;
+	if (scope == 254)
+		return RTF_LOCALIN;
+	if (scope == 253)
+		return RTF_FORWARD;
+	return RTF_FORWARD;
 }
 
 static void dpvs_fill_rt4conf(ip_route_t *iproute, struct dp_vs_route_conf *route_conf)
 {
-    route_conf->af = AF_INET;
-    (route_conf->dst).in  = (iproute->dst->u).sin.sin_addr;
-    route_conf->plen = iproute->dmask;
+	route_conf->af = AF_INET;
+	(route_conf->dst).in  = (iproute->dst->u).sin.sin_addr;
+	route_conf->plen = iproute->dst->ifa.ifa_prefixlen;
 
-    if (iproute->gw){
-        (route_conf->via).in = (iproute->gw->u).sin.sin_addr;
-    } else {
-        (route_conf->via).in.s_addr = 0;
-    }
+	if (iproute->via){
+		(route_conf->via).in = (iproute->via->u).sin.sin_addr;
+	} else {
+		(route_conf->via).in.s_addr = 0;
+	}
 
-    if (iproute->src){
-        (route_conf->src).in = (iproute->src->u).sin.sin_addr;
-    } else {
-        (route_conf->src).in.s_addr = 0;
-    }
+	if (iproute->pref_src){
+		(route_conf->src).in = (iproute->pref_src->u).sin.sin_addr;
+	} else {
+		(route_conf->src).in.s_addr = 0;
+	}
 
-    route_conf->scope = scope_n2dpvs(iproute->scope);    
-    strcpy(route_conf->ifname, iproute->ifname);
-    route_conf->mtu = 0;
-    route_conf->metric = 0;
+	route_conf->scope = scope_n2dpvs(iproute->scope);
+	strncpy(route_conf->ifname, iproute->ifname, sizeof(route_conf->ifname));
+	route_conf->mtu = 0;
+	route_conf->metric = 0;
 }
 
 static void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg) 
 {
-    rt6_cfg->dst.addr = ((iproute->dst)->u).sin6_addr;
-    rt6_cfg->dst.plen = iproute->dmask;
-    rt6_cfg->src.plen = 128;
-    if (iproute->gw) {
-        rt6_cfg->gateway = (iproute->gw->u).sin6_addr;
-    } else {
-        memset(&rt6_cfg->gateway, 0, sizeof(rt6_cfg->gateway));
-    }
+	rt6_cfg->dst.addr = ((iproute->dst)->u).sin6_addr;
+	rt6_cfg->dst.plen = iproute->dst->ifa.ifa_prefixlen;
+	rt6_cfg->src.plen = 128;
+	if (iproute->via) {
+		rt6_cfg->gateway = (iproute->via->u).sin6_addr;
+	} else {
+		memset(&rt6_cfg->gateway, 0, sizeof(rt6_cfg->gateway));
+	}
 
-    if (iproute->src) {
-        rt6_cfg->src.addr = (iproute->src->u).sin6_addr;
-    } else {
-        memset(&rt6_cfg->src, 0, sizeof(rt6_cfg->src));
-    }
+	if (iproute->pref_src) {
+		rt6_cfg->src.addr = (iproute->pref_src->u).sin6_addr;
+	} else {
+		memset(&rt6_cfg->src, 0, sizeof(rt6_cfg->src));
+	}
 
-    rt6_cfg->flags |= flag_n2dpvs(iproute->scope);
-    strcpy(rt6_cfg->ifname, iproute->ifname);
-    rt6_cfg->mtu = 0;
+	rt6_cfg->flags |= flag_n2dpvs(iproute->scope);
+	strncpy(rt6_cfg->ifname, iproute->ifname, sizeof(rt6_cfg->ifname));
+	rt6_cfg->mtu = 0;
 }
 
 static int
 netlink_route(ip_route_t *iproute, int cmd)
 {
-    char *tmp_dst,*tmp_src;
+	char *tmp_dst,*tmp_src;
 
-    tmp_dst = ipaddresstos(NULL, iproute->dst);
-    tmp_src = ipaddresstos(NULL, iproute->src);
-    
-    log_message(LOG_INFO, "ip route %d %s/%d src %s port %s scope %d",
-            cmd, tmp_dst, iproute->dmask, tmp_src, iproute->ifname, iproute->scope);
-    FREE(tmp_dst);
-    FREE(tmp_src);
+	tmp_dst = ipaddresstos(NULL, iproute->dst);
+	tmp_src = ipaddresstos(NULL, iproute->pref_src);
 
-    if (iproute->dst->ifa.ifa_family == AF_INET) {
-        struct dp_vs_route_conf *route_conf;
-        route_conf = (struct dp_vs_route_conf *)malloc(sizeof(struct dp_vs_route_conf));
-        memset(route_conf, 0, sizeof(*route_conf));
-        dpvs_fill_rt4conf(iproute, route_conf);
-        ipvs_set_route(route_conf, cmd);
-        free(route_conf);
-    } else {
-        struct dp_vs_route6_conf *rt6_cfg;
-        rt6_cfg = (struct dp_vs_route6_conf *)malloc(sizeof(struct dp_vs_route6_conf));
-        memset(rt6_cfg, 0, sizeof(*rt6_cfg));
-        dpvs_fill_rt6conf(iproute, rt6_cfg);
-        ipvs_set_route6(rt6_cfg, cmd);
-        free(rt6_cfg);
-    }
-    return 1;
+	log_message(LOG_INFO, "ip route %d %s/%d src %s port %s scope %d",
+			cmd, tmp_dst, iproute->dst->ifa.ifa_prefixlen, tmp_src, iproute->ifname, iproute->scope);
+	FREE(tmp_dst);
+	FREE(tmp_src);
+
+	if (iproute->dst->ifa.ifa_family == AF_INET) {
+		struct dp_vs_route_conf *route_conf;
+		route_conf = (struct dp_vs_route_conf *)malloc(sizeof(struct dp_vs_route_conf));
+		memset(route_conf, 0, sizeof(*route_conf));
+		dpvs_fill_rt4conf(iproute, route_conf);
+		ipvs_set_route(route_conf, cmd);
+		free(route_conf);
+	} else {
+		struct dp_vs_route6_conf *rt6_cfg;
+		rt6_cfg = (struct dp_vs_route6_conf *)malloc(sizeof(struct dp_vs_route6_conf));
+		memset(rt6_cfg, 0, sizeof(*rt6_cfg));
+		dpvs_fill_rt6conf(iproute, rt6_cfg);
+		ipvs_set_route6(rt6_cfg, cmd);
+		free(rt6_cfg);
+	}
+	return 1;
 }
 
 /* Add/Delete a list of IP routes */
@@ -581,8 +581,8 @@ format_iproute(const ip_route_t *route, char *buf, size_t buf_len)
 	if (route->via)
 		op += (size_t)snprintf(op, (size_t)(buf_end - op), " via %s %s", route->via->ifa.ifa_family == AF_INET6 ? "inet6" : "inet", ipaddresstos(NULL, route->via));
 
-	if (route->oif)
-		op += (size_t)snprintf(op, (size_t)(buf_end - op), " dev %s", route->oif->ifname);
+	if (route->ifname[0])
+		op += (size_t)snprintf(op, (size_t)(buf_end - op), " dev %s", route->ifname);
 
 	if (route->table != RT_TABLE_MAIN)
 		op += (size_t)snprintf(op, (size_t)(buf_end - op), " table %u", route->table);
@@ -751,6 +751,7 @@ format_iproute(const ip_route_t *route, char *buf, size_t buf_len)
 	if (route->track_group)
 		op += (size_t)snprintf(op, (size_t)(buf_end - op), " track_group %s", route->track_group->gname);
 
+#if 0
 	if (route->set &&
 	    !route->dont_track &&
 	    (!route->oif || route->oif->ifindex != route->configured_ifindex)) {
@@ -759,6 +760,7 @@ format_iproute(const ip_route_t *route, char *buf, size_t buf_len)
 		else
 			op += (size_t)snprintf(op, (size_t)(buf_end - op), " [installed ifindex %" PRIu32 "]", route->configured_ifindex);
 	}
+#endif
 }
 
 void
@@ -1164,6 +1166,8 @@ alloc_route(list rt_list, const vector_t *strvec, bool allow_track_group)
 	new->scope = RT_SCOPE_UNIVERSE;
 	new->type = RTN_UNICAST;
 	new->family = AF_UNSPEC;
+	new->oif = NULL;
+	memset(new->ifname, 0, sizeof(new->ifname));
 
 	/* FMT parse */
 	while (i < vector_size(strvec)) {
@@ -1641,13 +1645,13 @@ alloc_route(list rt_list, const vector_t *strvec, bool allow_track_group)
 			 * when the interfaces for all of the hops have gone down. We would need to track
 			 * all of the interfaces being used, and only mark the route as down if all the
 			 * interfaces are down. */
-			report_config_error(CONFIG_GENERAL_ERROR, "Warning - cannot track route %s with no interface specified, not tracking", dest);
+			//report_config_error(CONFIG_GENERAL_ERROR, "Warning - cannot track route %s with no interface specified, not tracking", dest);
 			new->dont_track = true;
 		}
 	}
 
 	if (new->track_group && !new->oif) {
-		report_config_error(CONFIG_GENERAL_ERROR, "Static route cannot have track group if no oif specified");
+		//report_config_error(CONFIG_GENERAL_ERROR, "Static route cannot have track group if no oif specified");
 		new->track_group = NULL;
 	}
 
