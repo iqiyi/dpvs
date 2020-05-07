@@ -1,0 +1,82 @@
+######################################################################################
+# pipeline: 
+# --->-->-->-->-->-->-->-->-->-->-->> time -->-->-->-->-->-->-->-->-->-->-->-->-->-->>
+#    case1:
+#        client/proxy/realserver setup
+#            client/proxy/realserver run
+#                client/proxy/realserver clean
+#                    case2:
+#                        client/proxy/realserver setup
+#                            client/proxy/realserver run
+#                                client/proxy/realserver clean
+#                                   case3:
+#                                       ... ... 
+#
+# passed cases:
+#     all scripts on 'run' stage exit zero
+#     detail info output to stdin by the scripts
+# failed cases:
+#     any script on 'run' stage exit non-zero
+#     detailed info output to stdin by the script
+#
+######################################################################################
+
+case1: &case_name1
+    name: case_name1
+    desc: test case description lines
+    client:
+        stages:
+            setup:
+                script: ./case_name1/client_setup.sh # any script to run on setup stage
+                params: ~   # script params
+                priority: 1 # priority of the same stages
+                            # default: realserver(3) > proxy(2) > client(1)
+                delay: 3    # delay time before run the script
+                timeout: 30 # the max block time for the script
+            run:
+                script: ./case_name1/client_run.sh   # any script to run on run stage
+                params: ~
+            clean:
+                script: ./case_name1/client_clean.sh     # any script to run on clean stage
+        hosts:
+            - cilent_host1  # ip or hostname
+            - client_host2  # ip or hostname
+    proxy:
+        stages:
+            setup:
+                script: ./case_name1/proxy_setup.py
+            run:
+                script: ./case_name1/proxy_run.py
+            clean:
+                script: ./case_name1/proxy_clean.py
+        hosts:
+            - proxy_host1
+            - proxy_host2
+    realserver:
+        stages:
+            setup:
+                script: ./case_name1/rs_setup.sh
+            run:
+                script: ./case_name1/rs_run.sh
+            clean:
+                script: ./case_name1/rs_clean.sh
+        hosts:
+            - rs_host1
+            - rs_host2
+case2: &case_name2
+    name: case_name2
+    desc: ~
+    client: ~
+    proxy: ~
+    realserver: ~
+
+controller:
+    host: 'ip or hostname'
+    workdir: .
+    default_script_delay: 3
+    default_script_timeout: 60
+    report_file: ./test-report.txt
+    cases:
+        - <<: *case_name1
+        - <<: *case_name2
+
