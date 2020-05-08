@@ -369,16 +369,6 @@ static void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6
 static int
 netlink_route(ip_route_t *iproute, int cmd)
 {
-	char *tmp_dst,*tmp_src;
-
-	tmp_dst = ipaddresstos(NULL, iproute->dst);
-	tmp_src = ipaddresstos(NULL, iproute->pref_src);
-
-	log_message(LOG_INFO, "ip route %d %s/%d src %s port %s scope %d",
-			cmd, tmp_dst, iproute->dst->ifa.ifa_prefixlen, tmp_src, iproute->ifname, iproute->scope);
-	FREE(tmp_dst);
-	FREE(tmp_src);
-
 	if (iproute->dst->ifa.ifa_family == AF_INET) {
 		struct dp_vs_route_conf *route_conf;
 		route_conf = (struct dp_vs_route_conf *)malloc(sizeof(struct dp_vs_route_conf));
