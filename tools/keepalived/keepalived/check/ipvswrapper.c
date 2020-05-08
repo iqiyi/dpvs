@@ -439,14 +439,10 @@ ipvs_group_cmd(int cmd, ipvs_service_t *srule, ipvs_dest_t *drule, virtual_serve
 }
 
 static void
-ipvs_laddr_range_cmd(int cmd, local_addr_entry *laddr_entry, virtual_server_t *vs)
+ipvs_laddr_range_cmd(int cmd, local_addr_entry *laddr_entry, virtual_server_t *vs, ipvs_service_t *srule)
 {
 	uint32_t addr_ip, ip;
 	ipvs_laddr_t laddr_rule;
-	ipvs_service_t srule;
-
-	/* Allocate the room */
-	ipvs_set_srule(cmd, &srule, vs);
 
 	memset(&laddr_rule, 0, sizeof(ipvs_laddr_t));
 	laddr_rule.af = laddr_entry->addr.ss_family;
@@ -465,7 +461,7 @@ ipvs_laddr_range_cmd(int cmd, local_addr_entry *laddr_entry, virtual_server_t *v
 			laddr_rule.addr.ip = addr_ip;
 		strncpy(laddr_rule.ifname, laddr_entry->ifname, sizeof(laddr_rule.ifname));
 
-		ipvs_talk(cmd, &srule, NULL, NULL, &laddr_rule, NULL, NULL, false);
+		ipvs_talk(cmd, srule, NULL, NULL, &laddr_rule, NULL, NULL, false);
 	}
 }
 
@@ -495,7 +491,7 @@ ipvs_laddr_group_cmd(int cmd, local_addr_group *laddr_group, virtual_server_t *v
 
 	l = laddr_group->range;
 	LIST_FOREACH(l, laddr_entry, e) {
-		ipvs_laddr_range_cmd(cmd, laddr_entry, vs);
+		ipvs_laddr_range_cmd(cmd, laddr_entry, vs, srule);
 	}
 }
 
@@ -960,7 +956,7 @@ ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 				srule.nf_addr.ip = ip;
 
 			if (laddr_entry->range)
-				ipvs_laddr_range_cmd(IP_VS_SO_SET_DELLADDR, laddr_entry, vs);
+				ipvs_laddr_range_cmd(IP_VS_SO_SET_DELLADDR, laddr_entry, vs, &srule);
 			else {
 				memset(&laddr_rule, 0, sizeof(ipvs_laddr_t));
 				laddr_rule.af = laddr_entry->addr.ss_family;
@@ -991,7 +987,7 @@ ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 				srule.nf_addr.ip = addr_ip;
 
 			if (laddr_entry->range)
-				ipvs_laddr_range_cmd(IP_VS_SO_SET_DELLADDR, laddr_entry, vs);
+				ipvs_laddr_range_cmd(IP_VS_SO_SET_DELLADDR, laddr_entry, vs, &srule);
 			else {
 				memset(&laddr_rule, 0, sizeof(ipvs_laddr_t));
 				laddr_rule.af = laddr_entry->addr.ss_family;
@@ -1037,7 +1033,7 @@ ipvs_laddr_remove_entry(virtual_server_t *vs, local_addr_entry *laddr_entry)
 		srule.user.port = inet_sockaddrport(&vs->addr);
 
 		if (laddr_entry->range) {
-			ipvs_laddr_range_cmd(IP_VS_SO_SET_DELLADDR, laddr_entry, vs);
+			ipvs_laddr_range_cmd(IP_VS_SO_SET_DELLADDR, laddr_entry, vs, &srule);
 		} else {
 			memset(&laddr_rule, 0, sizeof(ipvs_laddr_t));
 			laddr_rule.af = laddr_entry->addr.ss_family;
