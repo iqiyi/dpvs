@@ -1,0 +1,11 @@
+host: 127.0.0.1
+workdir: .
+default_script_delay: 1
+default_script_timeout: 30
+default_script_priority: 0
+default_script_nonblock: true
+report_file: example-report.md
+run_parallel: false
+cases:
+    - conf/example/example-case1.yaml
+    - conf/example/example-case2.yaml

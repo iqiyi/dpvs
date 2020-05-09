@@ -1,0 +1,38 @@
+example-case2: &case2
+    desc: example test case 2
+    serv_group1:
+        stages:
+            run:
+                script: script/example/case2/sg1/run.py
+                priority: 1
+                timeout: 180
+        hosts:
+            10.123.18.33: ~
+            10.123.18.34: ~
+    serv_group2:
+        stages:
+            setup:
+                script: script/example/case2/sg2/setup.py
+            clean:
+                script: script/example/case2/sg2/clean.py
+        hosts:
+            10.15.204.12: ~
+
+example-case3: &case3
+    desc: example test case 3
+    serv_group1:
+        stages:
+            setup:
+                script: script/example/case3/sg1/setup.py
+            run:
+                script: script/example/case3/sg1/run.sh
+                nonblock: true
+            clean:
+                script: script/example/case3/sg1/clean.py
+        hosts:
+            10.15.204.15:
+                setup_params: -c 10 -t
+        files: ~
+        packages:
+            - dpdk
+            - httpd

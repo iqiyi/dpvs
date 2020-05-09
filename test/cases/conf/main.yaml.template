@@ -1,0 +1,32 @@
+######################################################################################
+# serial pipeline(run_parallel:false): 
+#   case 1 --> case 2 --> ... --> case n
+#
+# parallel pipeline(run_parallel:true): 
+#   case 1
+#   case 2
+#   ...
+#   case n
+#
+# passed cases:
+#     all scripts on 'run' stage exit zero
+#     detail info output to stdin by the scripts
+# failed cases:
+#     any script on 'run' stage exit non-zero
+#     detailed info output to stdout by the script
+#
+###################################################################################### 
+
+host: ip
+workdir: .
+default_script_delay: 0
+default_script_timeout: 60
+default_script_priority: 0
+default_script_nonblock: true
+report_file: ./report.md
+run_parallel: false
+cases:
+    - case_filename_1
+    - case_filename_2
+    - case_filename_3
+    - ......

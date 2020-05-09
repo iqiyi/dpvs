@@ -1,0 +1,62 @@
+######################################################################################
+# pipeline for a case:
+#       setup --> run --> clean
+#
+# The running order of scripts of the same stage is determined by the priority,
+# script with high priority value runs before those with low priority value.
+#
+# passed case:
+#     all scripts on 'run' stage exit zero
+#     detail info output to stdin by the scripts
+# failed cases
+#     any script on 'run' stage exit non-zero
+#     detailed info output to stdin by the script
+#
+######################################################################################
+
+case_name:
+    desc: test case description lines
+    server_group_1:
+        stages:
+            setup:
+                script: sg1_setup.sh    # any script to run on setup stage
+                priority: 1             # priority of the same stages
+                delay: 3                # delay time before run the script
+                timeout: 30             # the max block time for the script
+                nonblock: false         # whether block the script's caller process or not
+            run:
+                script: sg1_run.sh      # any script to run on run stage
+            clean:
+                script: sg1_clean.sh    # any script to run on clean stage
+        hosts:
+            host1:                      # ip
+                setup_params: script params
+                run_params: script params
+                clean_params: script params
+            host2:
+                setup_params: script params
+                run_params: script params
+                clean_params: script params
+        files:          # files required by the hosts, provided by the case
+            - file1
+            - file2
+        packages:       # packages required by the hosts,
+                        # get from packages manager tools of the system, such as yum/rpm on Centos
+            - package1
+            - package2
+    server_group_2:
+        stages:
+            setup:
+                script: sg2_setup.py
+            run:
+                script: sg2_run.py
+            clean:
+                script: sg2_clean.py
+        hosts:
+            sg2_host1: ~
+        files:
+            - sg2_file1
+            - sg2_file2
+        packages:
+            - sg2_package1
+            - sg2_package2

@@ -1,0 +1,50 @@
+example-case1: &case1
+    desc: example test case 1
+    client:
+        stages:
+            setup:
+                script: script/example/case1/client/setup.sh
+            run:
+                script: script/example/case1/client/run.sh
+            clean:
+                script: script/example/case1/client/clean.sh
+        hosts:
+            10.123.16.46:
+                setup_params: 10.100.100.100
+                run_params: -n -c 100 --options
+                clean_params: 123 abc
+        files:
+            - files/example/bin/wrk
+        packages: ~
+    proxy:
+        stages:
+            setup:
+                script: script/example/case1/proxy/setup.sh
+            run:
+                script: script/example/case1/proxy/run.sh
+                priority: 1
+                delay: 5
+                timeout: 150
+            clean:
+                script: script/example/case1/proxy/clean.sh
+        hosts:
+            10.123.16.47: ~
+        files:
+            - files/example/kmod/rte_kni.ko
+            - files/example/kmod/igb_uio.ko
+            - files/example/source/dpvs.tar.gz
+            - files/example/conf/dpvs.conf
+    realserver:
+        stages:
+            setup:
+                script: script/example/case1/realserver/setup.sh
+            run:
+                script: script/example/case1/realserver/run.sh
+            clean:
+                script: script/example/case1/realserver/clean.sh
+        hosts:
+            10.123.16.48: ~
+        files:
+            - files/example/conf/nginx.conf
+        packages:
+            - nginx
