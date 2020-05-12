@@ -23,12 +23,14 @@
 uint64_t g_cycles_per_sec;
 dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
 int g_lcore_index[DPVS_MAX_LCORE];
+int g_lcore_num;
 
 int global_data_init(void)
 {
     int i;
 
     g_cycles_per_sec = rte_get_timer_hz();
+    g_lcore_num = 0;
 
     for (i = 0; i < DPVS_MAX_LCORE; i++) {
         g_lcore_role[i] = LCORE_ROLE_IDLE;

@@ -50,6 +50,7 @@ extern dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
  *  anything else       -1
  * */
 extern int g_lcore_index[DPVS_MAX_LCORE];
+extern int g_lcore_num;
 
 int global_data_init(void);
 int global_data_term(void);

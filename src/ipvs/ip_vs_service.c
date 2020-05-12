@@ -1025,15 +1025,19 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
  * for example : SOCKOPT_SVC_BASE is 200, SOCKOPT_SVC_GET_CMD_MAX is 204,
  * old_opt 205 means core 1 get opt 200
  */
-static inline void opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t *cid)
+static inline int opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t *cid)
 {
     assert(old_opt >= SOCKOPT_SVC_BASE);
     assert(old_opt <= SOCKOPT_SVC_MAX);
-
+    int index = (old_opt - SOCKOPT_SVC_BASE)/(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
+    if (index >= g_lcore_num) {
+        return -1;
+    }
     *new_opt = (old_opt - SOCKOPT_SVC_BASE)%(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1)
                + SOCKOPT_SVC_BASE;
-    *cid     = g_lcore_index[(old_opt - SOCKOPT_SVC_BASE)/(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1)];
+    *cid = g_lcore_index[index];
     assert(*cid >= 0 && *cid < DPVS_MAX_LCORE);
+    return 0;
 }
 
 /* copy service/dest/stats */
@@ -1204,7 +1208,9 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
     sockoptid_t new_opt;
 
     netif_get_slave_lcores(&num_lcores, NULL);
-    opt2cpu(opt, &new_opt, &cid);
+    if (opt2cpu(opt, &new_opt, &cid) < 0) {
+        return EDPVS_INVAL;
+    }
     if (new_opt > SOCKOPT_SVC_MAX)
         return EDPVS_INVAL;
 
