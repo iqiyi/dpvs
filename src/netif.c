@@ -1276,6 +1276,8 @@ static void build_lcore_index(void)
     for (i = 0; i < DPVS_MAX_LCORE; i++)
         if (g_lcore_role[i] == LCORE_ROLE_ISOLRX_WORKER)
             g_lcore_index[idx++] = i;
+
+    g_lcore_num = idx;
 }
 
 static void lcore_role_init(void)
