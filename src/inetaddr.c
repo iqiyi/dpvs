@@ -1125,13 +1125,15 @@ static int copy_lcore_entries(const struct inet_device *idev,
 static int ifa_msg_get_cb(struct dpvs_msg *msg)
 {
     int ifa_cnt, len;
+    void *ptr;
     struct inet_device *idev;
     struct inet_addr_data_array *array;
     lcoreid_t cid = rte_lcore_id();
 
     if (!msg || (msg->len && msg->len != sizeof(idev)))
         return EDPVS_INVAL;
-    idev = msg->len ? (struct inet_device *)msg->data : NULL;
+    ptr = msg->len ? (void*)msg->data : NULL;
+    idev = ptr ? (*(struct inet_device **)ptr) : NULL;
 
     if (idev)
         ifa_cnt = idev->ifa_cnt[cid];
@@ -1487,7 +1489,7 @@ static int ifaddr_get_stats(struct inet_device *idev, struct inet_addr_data_arra
 
     /* collect ifa sapool stats from slaves */
     if (idev)
-        msg = msg_make(MSG_TYPE_IFA_GET, 0, DPVS_MSG_MULTICAST, rte_lcore_id(), sizeof(idev), idev);
+        msg = msg_make(MSG_TYPE_IFA_GET, 0, DPVS_MSG_MULTICAST, rte_lcore_id(), sizeof(idev), &idev);
     else
         msg = msg_make(MSG_TYPE_IFA_GET, 0, DPVS_MSG_MULTICAST, rte_lcore_id(), 0, NULL);
     if (!msg) {
@@ -1553,7 +1555,7 @@ static int ifaddr_get_verbose(struct inet_device *idev, struct inet_addr_data_ar
     off = array->naddr;
 
     if (idev)
-        msg = msg_make(MSG_TYPE_IFA_GET, 0, DPVS_MSG_MULTICAST, rte_lcore_id(), sizeof(idev), idev);
+        msg = msg_make(MSG_TYPE_IFA_GET, 0, DPVS_MSG_MULTICAST, rte_lcore_id(), sizeof(idev), &idev);
     else
         msg = msg_make(MSG_TYPE_IFA_GET, 0, DPVS_MSG_MULTICAST, rte_lcore_id(), 0, NULL);
     if (!msg) {
