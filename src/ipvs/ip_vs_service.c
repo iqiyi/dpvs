@@ -755,17 +755,6 @@ out:
     return ret;
 }
 
-
-unsigned dp_vs_get_conn_timeout(struct dp_vs_conn *conn)
-{
-    unsigned conn_timeout;
-    if (conn->dest) {
-        conn_timeout = conn->dest->conn_timeout;
-        return conn_timeout;
-    }
-    return 90;
-}
-
 static int dp_vs_services_flush(lcoreid_t cid)
 {
     int idx;

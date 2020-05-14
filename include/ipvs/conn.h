@@ -198,6 +198,9 @@ void dp_vs_conn_put(struct dp_vs_conn *conn);
 /* put conn without reset the timer */
 void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn);
 
+unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn);
+void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp);
+
 void ipvs_conn_keyword_value_init(void);
 void install_ipvs_conn_keywords(void);
 

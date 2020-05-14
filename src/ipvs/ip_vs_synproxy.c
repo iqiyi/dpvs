@@ -1195,7 +1195,6 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
     struct dp_vs_synproxy_ack_pakcet *tmbuf, *tmbuf2;
     struct list_head save_mbuf;
     struct dp_vs_dest *dest = cp->dest;
-    unsigned conn_timeout = 0;
 
     th = mbuf_header_pointer(mbuf, th_offset, sizeof(_tcph), &_tcph);
     if (unlikely(!th)) {
@@ -1219,11 +1218,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
             (cp->state == DPVS_TCP_S_SYN_SENT)) {
         cp->syn_proxy_seq.delta = ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
         cp->state = DPVS_TCP_S_ESTABLISHED;
-        conn_timeout = dp_vs_get_conn_timeout(cp);
-        if (unlikely((conn_timeout != 0) && (cp->proto == IPPROTO_TCP)))
-            cp->timeout.tv_sec = conn_timeout;
-        else
-            cp->timeout.tv_sec = pp->timeout_table[cp->state];
+        dp_vs_conn_set_timeout(cp, pp);
         dpvs_time_rand_delay(&cp->timeout, 1000000);
         if (dest) {
             rte_atomic32_inc(&dest->actconns);

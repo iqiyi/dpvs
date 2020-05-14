@@ -253,7 +253,7 @@ static int udp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
                            struct rte_mbuf *mbuf, int dir)
 {
     conn->state = DPVS_UDP_S_NORMAL;
-    conn->timeout.tv_sec = udp_timeouts[conn->state];
+    dp_vs_conn_set_timeout(conn, proto);
     return EDPVS_OK;
 }
 
@@ -781,6 +781,7 @@ static int udp_snat_out_handler(struct dp_vs_proto *proto,
 struct dp_vs_proto dp_vs_proto_udp = {
     .name               = "UDP",
     .proto              = IPPROTO_UDP,
+    .timeout_table      = udp_timeouts,
     .conn_sched         = udp_conn_sched,
     .conn_lookup        = udp_conn_lookup,
     .conn_expire        = udp_conn_expire,

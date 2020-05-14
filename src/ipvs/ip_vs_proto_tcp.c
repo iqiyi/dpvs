@@ -842,7 +842,6 @@ static int tcp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
     int new_state = DPVS_TCP_S_CLOSE;
     assert(proto && conn && mbuf);
     struct dp_vs_dest *dest = conn->dest;
-    unsigned conn_timeout = 0;
     int af = conn->af;
 #ifdef CONFIG_DPVS_IPVS_DEBUG
     char dbuf[64], cbuf[64];
@@ -899,15 +898,7 @@ tcp_state_out:
     conn->old_state = conn->state; // old_state called when connection reused
     conn->state = new_state;
 
-    if (new_state == DPVS_TCP_S_ESTABLISHED) {
-        conn_timeout = dp_vs_get_conn_timeout(conn);
-        if (unlikely(conn_timeout > 0))
-            conn->timeout.tv_sec = conn_timeout;
-        else
-            conn->timeout.tv_sec = tcp_timeouts[new_state];
-    } else {
-        conn->timeout.tv_sec = tcp_timeouts[new_state];
-    }
+    dp_vs_conn_set_timeout(conn, proto);
 
     if (dest) {
         if (!(conn->flags & DPVS_CONN_F_INACTIVE)

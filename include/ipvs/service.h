@@ -112,6 +112,4 @@ struct dp_vs_service *dp_vs_vip_lookup(int af, uint16_t protocol,
                                        const union inet_addr *vaddr,
                                        lcoreid_t cid);
 
-unsigned dp_vs_get_conn_timeout(struct dp_vs_conn *conn);
-
 #endif /* __DPVS_SVC_H__ */
