@@ -754,6 +754,10 @@ ipvs_set_srule(int cmd, ipvs_service_t *srule, virtual_server_t *vs)
 		srule->user.flags |= IP_VS_CONN_F_SYNPROXY;
 	}
 
+	if (vs->expire_quiescent_conn) {
+		srule->user.flags |= IP_VS_CONN_F_EXPIRE_QUIESCENT;
+	}
+
 	if (!strcmp(vs->sched, "conhash")) {
 		if (vs->hash_target) {
 			if ((srule->user.protocol != IPPROTO_UDP) &&

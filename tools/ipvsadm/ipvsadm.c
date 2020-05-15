@@ -200,7 +200,8 @@ static const char* optnames[] = {
 	"ifname" ,
 	"sockpair" ,
 	"hash-target",
-	"cpu"
+	"cpu",
+	"expire-quiescent",
 };
 
 /*
@@ -213,47 +214,47 @@ static const char* optnames[] = {
  */
 static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 {
-/* -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr blst syn ifname sockpair hashtag cpu*/
+/*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe laddr blst syn ifname sockpair hashtag cpu expire-quiescent*/
 /*ADD*/
-    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' ', 'x'},
+    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' '},
 /*EDIT*/
-    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x',  ' ', 'x' ,'x' ,' ', 'x'},
+    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' '},
 /*DEL*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*FLUSH*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*LIST*/
-    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x',  'x', 'x' ,' ' ,'x', ' '},
+    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x' ,' ' ,'x', ' ', 'x'},
 /*ADDSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*DELSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*EDITSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*TIMEOUT*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*STARTD*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*STOPD*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*RESTORE*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*SAVE*/
-    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*ZERO*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*ADDLADDR*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x'},
 /*DELLADDR*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x',  'x', '+' ,'x' ,'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x'},
 /*GETLADDR*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', ' '},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', ' ', 'x'},
 /*ADDBLKLST*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*DELBLKLST*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 /*GETBLKLST*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x',  'x', 'x' ,'x' ,'x', 'x'},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
 };
 
 /* printing format flags */
@@ -308,6 +309,7 @@ enum {
 	TAG_PERSISTENCE_ENGINE,
 	TAG_SOCKPAIR,
 	TAG_CPU,
+	TAG_CONN_EXPIRE_QUIESCENT,
 };
 
 /* various parsing helpers & parsing functions */
@@ -329,7 +331,7 @@ static int parse_sockpair(char *buf, ipvs_sockpair_t *sockpair);
 static int parse_match_snat(const char *buf, ipvs_service_t *svc);
 
 /* check the options based on the commands_v_options table */
-static void generic_opt_check(int command, int options);
+static void generic_opt_check(int command, unsigned int options);
 static void set_command(int *cmd, const int newcmd);
 static void set_option(unsigned int *options, unsigned int option);
 
@@ -474,6 +476,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
 		{ "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
 		{ "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
+		{ "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
 
@@ -818,7 +821,14 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			}
 		case TAG_CPU:
 			{
+			set_option(options, OPT_CPU);
 			ce->cid = atoi(optarg);
+			break;
+			}
+		case TAG_CONN_EXPIRE_QUIESCENT:
+			{
+			set_option(options, OPT_EXPIRE_QUIESCENT_CONN);
+			ce->svc.user.flags = ce->svc.user.flags | IP_VS_CONN_F_EXPIRE_QUIESCENT;
 			break;
 			}
 		default:
@@ -1363,7 +1373,7 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
 }
 
 static void
-generic_opt_check(int command, int options)
+generic_opt_check(int command, unsigned int options)
 {
 	int i, j;
 	int last = 0, count = 0;
@@ -1531,7 +1541,8 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --synproxy     -j                   TCP syn proxy\n"
 		"  --match        -H MATCH             select service by MATCH 'af,proto,srange,drange,iif,oif', af should be defined if no range defined\n"
 		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
-		"  --cpu            cid                choose cid to show\n",
+		"  --cpu            cid                choose cid to show\n"
+		"  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n",
 		DEF_SCHED);
 
 	exit(exit_status);
@@ -1938,8 +1949,10 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 		}
 		if (se->user.flags & IP_VS_CONN_F_SYNPROXY)
 			printf(" synproxy");
-        if (se->user.conn_timeout != 0)
-            printf(" conn_timeout %u", se->user.conn_timeout);
+		if (se->user.conn_timeout != 0)
+			printf(" conn_timeout %u", se->user.conn_timeout);
+		if (se->user.flags & IP_VS_CONN_F_EXPIRE_QUIESCENT)
+			printf(" expire-quiescent");
 	}
 	printf("\n");
 

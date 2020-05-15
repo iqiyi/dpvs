@@ -37,7 +37,6 @@
 #define IP_VS_SVC_F_PERSISTENT	0x0001		/* persistent port */
 #define IP_VS_SVC_F_HASHED	0x0002		/* hashed entry */
 #define IP_VS_SVC_F_ONEPACKET	0x0004		/* one-packet scheduling */
-#define IP_VS_CONN_F_SYNPROXY	0x8000		/* synproxy switch flag*/
 #define IP_VS_SVC_F_SCHED1	0x0008		/* scheduler flag 1 */
 #define IP_VS_SVC_F_SCHED2	0x0010		/* scheduler flag 2 */
 #define IP_VS_SVC_F_SCHED3	0x0020		/* scheduler flag 3 */
@@ -48,6 +47,9 @@
 
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK	IP_VS_SVC_F_SCHED1 /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT	IP_VS_SVC_F_SCHED2 /* SH use port */
+
+#define IP_VS_CONN_F_EXPIRE_QUIESCENT	0x4000	/* expire quiescent conns */
+#define IP_VS_CONN_F_SYNPROXY	0x8000		/* synproxy switch flag*/
 
 /* Destination Server Flags */
 #define IP_VS_DEST_F_AVAILABLE	0x0001		/* server is available */

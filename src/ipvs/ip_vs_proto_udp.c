@@ -249,6 +249,13 @@ static int udp_conn_expire(struct dp_vs_proto *proto, struct dp_vs_conn *conn)
     return EDPVS_OK;
 }
 
+static int udp_conn_expire_quiescent(struct dp_vs_conn *conn)
+{
+    dp_vs_conn_expire_now(conn);
+
+    return EDPVS_OK;
+}
+
 static int udp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
                            struct rte_mbuf *mbuf, int dir)
 {
@@ -779,20 +786,21 @@ static int udp_snat_out_handler(struct dp_vs_proto *proto,
 }
 
 struct dp_vs_proto dp_vs_proto_udp = {
-    .name               = "UDP",
-    .proto              = IPPROTO_UDP,
-    .timeout_table      = udp_timeouts,
-    .conn_sched         = udp_conn_sched,
-    .conn_lookup        = udp_conn_lookup,
-    .conn_expire        = udp_conn_expire,
-    .state_trans        = udp_state_trans,
-    .nat_in_handler     = udp_snat_in_handler,
-    .nat_out_handler    = udp_snat_out_handler,
-    .fnat_in_handler    = udp_fnat_in_handler,
-    .fnat_out_handler   = udp_fnat_out_handler,
-    .fnat_in_pre_handler= udp_fnat_in_pre_handler,
-    .snat_in_handler    = udp_snat_in_handler,
-    .snat_out_handler   = udp_snat_out_handler,
+    .name                  = "UDP",
+    .proto                 = IPPROTO_UDP,
+    .timeout_table         = udp_timeouts,
+    .conn_sched            = udp_conn_sched,
+    .conn_lookup           = udp_conn_lookup,
+    .conn_expire           = udp_conn_expire,
+    .conn_expire_quiescent = udp_conn_expire_quiescent,
+    .state_trans           = udp_state_trans,
+    .nat_in_handler        = udp_snat_in_handler,
+    .nat_out_handler       = udp_snat_out_handler,
+    .fnat_in_handler       = udp_fnat_in_handler,
+    .fnat_out_handler      = udp_fnat_out_handler,
+    .fnat_in_pre_handler   = udp_fnat_in_pre_handler,
+    .snat_in_handler       = udp_snat_in_handler,
+    .snat_out_handler      = udp_snat_out_handler,
 };
 
 static void defence_udp_drop_handler(vector_t tokens)

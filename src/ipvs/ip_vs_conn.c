@@ -692,6 +692,24 @@ static int dp_vs_conn_expire(void *priv)
     return DTIMER_OK;
 }
 
+void dp_vs_conn_expire_now(struct dp_vs_conn *conn)
+{
+    if (unlikely(!dp_vs_conn_is_in_timer(conn)))
+        return;
+
+    /* template quiescent connections are controlled by global
+     * config 'expire_quiescent_template' */
+    if (unlikely(dp_vs_conn_is_template(conn)))
+        return;
+
+    conn->timeout.tv_sec = 0;
+    conn->timeout.tv_usec = 0;
+
+    /* no need to call 'dpvs_timer_update', because timer would
+     * be updated in 'dp_vs_conn_put' later */
+    return;
+}
+
 static void conn_flush(void)
 {
     struct conn_tuple_hash *tuphash, *next;

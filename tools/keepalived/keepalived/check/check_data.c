@@ -440,6 +440,7 @@ dump_vs(FILE *fp, const void *data)
 		conf_write(fp, "   vip_bind_dev = %s", vs->blklst_addr_gname);
 
 	conf_write(fp, " SYN proxy is %s", vs->syn_proxy ? "ON" : "OFF");
+	conf_write(fp, " expire_quiescent_conn is %s", vs->expire_quiescent_conn ? "ON" : "OFF");
 
 	switch (vs->hash_target) {
 	case IP_VS_SVC_F_SIP_HASH:
@@ -526,7 +527,8 @@ alloc_vs(const char *param1, const char *param2)
 	new->weight = 1;
 	new->smtp_alert = -1;
 	new->conn_timeout = 0;
-	new->syn_proxy = 0;
+	new->syn_proxy = false;
+	new->expire_quiescent_conn = false;
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;

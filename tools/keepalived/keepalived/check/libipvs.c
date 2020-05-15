@@ -230,6 +230,14 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 		}
 	}
 
+	if (options & OPT_EXPIRE_QUIESCENT_CONN) {
+		if (svc->user.flags & IP_VS_CONN_F_EXPIRE_QUIESCENT) {
+			app.user.flags |= IP_VS_CONN_F_EXPIRE_QUIESCENT;
+		} else {
+			app.user.flags &= ~IP_VS_CONN_F_EXPIRE_QUIESCENT;
+		}
+	}
+
 	if (options & OPT_ONEPACKET) {
 		app.user.flags |= IP_VS_SVC_F_ONEPACKET;
 	}
