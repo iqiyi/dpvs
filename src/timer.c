@@ -35,6 +35,10 @@
 #include "parser/parser.h"
 #include "global_data.h"
 
+#ifdef CONFIG_TIMER_DEBUG
+#include "debug.h"
+#endif
+
 #define DTIMER
 #define RTE_LOGTYPE_DTIMER      RTE_LOGTYPE_USER1
 
@@ -232,8 +236,9 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
         char trace[8192];
         dpvs_backtrace(trace, sizeof(trace));
         RTE_LOG(WARNING, DTIMER, "[%02d]: invalid timer(%p) handler "
-                "-- handler:%p, priv:%p, trace:\n%s", rte_lcore_id(),
-                timer, timer->handler, timer->priv, trace);
+                "-- name:%s, handler:%p, priv:%p, trace:\n%s",
+                rte_lcore_id(), timer, timer->name, timer->handler,
+                timer->priv, trace);
     }
 #endif
 

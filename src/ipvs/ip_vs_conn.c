@@ -957,6 +957,9 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     }
 
     /* schedule conn timer */
+#ifdef CONFIG_TIMER_DEBUG
+    snprintf(new->timer.name, sizeof(new->timer.name), "%s", "conn");
+#endif
     dpvs_time_rand_delay(&new->timeout, 1000000);
     dp_vs_conn_attach_timer(new, true);
 
