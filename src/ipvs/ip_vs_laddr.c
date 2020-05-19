@@ -525,6 +525,7 @@ static int get_msg_cb(struct dpvs_msg *msg)
 
     *laddrs = *laddr_conf;
     laddrs->nladdrs = naddr;
+    laddrs->cid = cid;
     for (i = 0; i < naddr; i++) {
         laddrs->laddrs[i].af = addrs[i].af;
         laddrs->laddrs[i].addr = addrs[i].addr;
