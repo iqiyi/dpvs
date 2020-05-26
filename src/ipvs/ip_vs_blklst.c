@@ -140,7 +140,7 @@ static int dp_vs_blklst_add(int af, uint8_t proto, const union inet_addr *vaddr,
     /*set blklst ip on master lcore*/
     err = dp_vs_blklst_add_lcore(af, proto, vaddr, vport, blklst);
     if (err) {
-        RTE_LOG(INFO, SERVICE, "[%s] fail to set blklst ip\n", __func__);
+        RTE_LOG(INFO, SERVICE, "[%s] fail to set blklst ip -- %s\n", __func__, dpvs_strerror(err));
         return err;
     }
 
@@ -183,7 +183,7 @@ static int dp_vs_blklst_del(int af, uint8_t proto, const union inet_addr *vaddr,
     /*del blklst ip on master lcores*/
     err = dp_vs_blklst_del_lcore(af, proto, vaddr, vport, blklst);
     if (err) {
-        RTE_LOG(INFO, SERVICE, "%s: fail to del blklst ip\n", __func__);
+        RTE_LOG(INFO, SERVICE, "%s: fail to del blklst ip -- %s\n", __func__, dpvs_strerror(err));
         return err;
     }
 
@@ -284,7 +284,7 @@ static int blklst_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     naddr = rte_atomic32_read(&this_num_blklsts);
     *outsize = sizeof(struct dp_vs_blklst_conf_array) +
                naddr * sizeof(struct dp_vs_blklst_conf);
-    *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
+    *out = rte_calloc(NULL, 1, *outsize, 0);
     if (!(*out))
         return EDPVS_NOMEM;
     array = *out;
@@ -350,9 +350,9 @@ static int blklst_lcore_init(void *args)
     int i;
     if (!rte_lcore_is_enabled(rte_lcore_id()))
     return EDPVS_DISABLED;
-    this_blklst_tab = rte_malloc_socket(NULL,
+    this_blklst_tab = rte_malloc(NULL,
                         sizeof(struct list_head) * DPVS_BLKLST_TAB_SIZE,
-                        RTE_CACHE_LINE_SIZE, rte_socket_id());
+                        RTE_CACHE_LINE_SIZE);
     if (!this_blklst_tab)
         return EDPVS_NOMEM;
 

@@ -307,8 +307,8 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
     if (!svc || !addr)
         return EDPVS_INVAL;
 
-    new = rte_malloc_socket(NULL, sizeof(*new),
-                            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    new = rte_malloc(NULL, sizeof(*new),
+                            RTE_CACHE_LINE_SIZE);
     if (!new)
         return EDPVS_NOMEM;
 
@@ -373,8 +373,8 @@ static int dp_vs_laddr_getall(struct dp_vs_service *svc,
 
     if (svc->num_laddrs > 0) {
         *naddr = svc->num_laddrs;
-        *addrs = rte_malloc_socket(0, sizeof(struct dp_vs_laddr_entry) * svc->num_laddrs,
-                RTE_CACHE_LINE_SIZE, rte_socket_id());
+        *addrs = rte_malloc(0, sizeof(struct dp_vs_laddr_entry) * svc->num_laddrs,
+                RTE_CACHE_LINE_SIZE);
         if (!(*addrs)) {
             return EDPVS_NOMEM;
         }
@@ -630,7 +630,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                 }
                 
                 *outsize = sizeof(*laddr_conf) + naddr * sizeof(struct dp_vs_laddr_entry);
-                *out = rte_malloc_socket(0, *outsize, RTE_CACHE_LINE_SIZE, rte_socket_id());
+                *out = rte_malloc(0, *outsize, RTE_CACHE_LINE_SIZE);
                 if (!*out) {
                     if (addrs)
                         rte_free(addrs);
@@ -671,7 +671,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                     if (cid == get_msg->cid) {
                         *outsize = sizeof(*laddr_conf) + \
                                    get_msg->nladdrs * sizeof(struct dp_vs_laddr_entry);
-                        *out = rte_malloc_socket(0, *outsize, RTE_CACHE_LINE_SIZE, rte_socket_id());
+                        *out = rte_malloc(0, *outsize, RTE_CACHE_LINE_SIZE);
                         if (!*out) {
                             msg_destroy(&msg);
                             return EDPVS_NOMEM;
