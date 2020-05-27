@@ -30,8 +30,8 @@ static struct dp_vs_dest *dp_vs_fo_schedule(struct dp_vs_service *svc,
      * find virtual server with highest weight and send it traffic
      */
     list_for_each_entry(dest, &svc->dests, n_list) {
-        if (!(dest->flags & DPVS_DEST_F_OVERLOAD) &&
-                (dest->flags & DPVS_DEST_F_AVAILABLE) &&
+        if (!dp_vs_dest_is_overload(dest) &&
+                dp_vs_dest_is_avail(dest) &&
                 (rte_atomic16_read(&dest->weight) > hw)) {
             hweight = dest;
             hw = rte_atomic16_read(&dest->weight);

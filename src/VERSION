@@ -1,42 +1,42 @@
 #!/bin/sh -
 # program: dpvs
-# Feb 12, 2020
-
+# May 13, 2020
+#
+#####################################
+# This is a bugfix verison of v1.8.2.
+#####################################
+#
 # # Features
 # ----------
-# - **Per-cpu refactor for service/dest/inetaddr/laddr/sapool modules.**
-# - **Keepalived upgrades from v1.2.13 to v2.0.19.**
-# - **Add supports for newer dpdk: dpdk-stable-18.11.2 and dpdk-stable-17.11.6.**
-# - Add dpvs `scheduler module` to manage jobs on master and slaves in the same fasion.
-# - Add support for Mallenox 25G NIC MLX5.
-# - Add `iftraf module` to collect top N traffic clients.
-# - Add dpvs worker performance tuning doc.
-# - Add `debug module` for dpvs.
-# - Use dpvs mempool to allocate memory.
-# - Enable dpdk pdump tool for DPVS.
-# - Show the concrete neighbour entry info when its queue is full.
-# - Adjust header files used both by tools(keepalived/dpip/ipvsadm) and dpvs.
 # 
 # 
 # # Bugfix
 # --------
-# - Use async multicast msg to avoid config setting failures caused by msg timeout.
-# - Alleviate the NIC imiss problem caused by inetaddr lock and heap memory.
-# - Reduce sapool stats lookup failure problem.
-# - Fix memory underflow problem and add more debug info for dpvs mempool.
-# - Fix failure problem when add ipv6 addresses.
-# - Fix crash problem when delete all local addresses.
-# - Fix toa ipv6 crash problem caused by page write protect.
-# - Fix memory leak problem in `tunnel_xmit`.
-# - Fix crash problem when out of memory.
-# - Fix problem when DPDK EAL param '--master-lcore' or '--lcores' is used.
-# - Patch dpdk-stable-17.11.2 to support rh75.
-# - Several optimizations of memory allocation from eal heaps.
-# - Refactor several code episodes to make logic clear.
-# - Adjust some logs.
+# - Keepalived: Fix virtual server partial deletion problem when configured with virtual server group.
+# - Keepalived: Fix realserver deletion problem when the realservers marked as down state by health_checker.
+# - Keepalived: Fix reload problem for some configurations, such as conn timeout, blklst addresses, etc.
+# - Keepalived: Fix configurations would not load problem after restart on occasion.
+# - Keepalived: Fix port transition support problem in fullnat mode.
+# - Keepalived: Fix logging problem for MATCH/ICMP/ICMPv6 in keepalived.
+# - Keepalived: Fix snat configuration and reload problem.
+# - Keepalived: Fix conhash scheduler configuration problem in keepalived.
+# - Keepalived: Fix incorrect ipvs stats problem caused by mismatch structures of keepalived and dpvs.
+# - Keepalived: Fix crash when snat and fullnat configured together.
+# - Keepalived: Fix address family setting problem for nat64 forwarding.
+# - Keepalived: Fix dpvs route setting problem in keepalived vrrp.
+# - Keepalived: Fix laddr configuration problems with ip range style.
+# - Keepalived: Mergerd virtual server group address into range list.
+# - Keepalived: Update libipvs and related headers.
+# - Ipvsadm: do not show address family for MATCH rule.
+# - Dpvs: Fix ipv6 and nat64 blklst support problem.
+# - Dpvs: Fix duplicated ipv4 local-in routes problem.
+# - Dpvs: Allow to use non-continuous lcores, like "-l 0,1-8,11-18".
+# - Dpvs: Fix crash prolbem when cpu id is not set correctly by ipvsadm.
+# - Dpvs: Fix compile error caused by inline method.
+# - Dpvs: Fix a array boundary overflow issue.
 
 
 export VERSION=1.8
-export RELEASE=2
+export RELEASE=4
 
 echo $VERSION-$RELEASE

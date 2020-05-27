@@ -40,8 +40,8 @@ static void iftraf_dump(const struct iftraf_param *param)
     if (AF_INET == param->af) {
         printf("%s, [%s, %u -> ",
             param->ifname, inet_ntoa(param->saddr.in), ntohs(param->sport));
-        printf("%s, %u | %u], [%u, %u]",            
-            inet_ntoa(param->daddr.in), ntohs(param->dport), param->proto, param->total_recv, param->total_sent); 
+        printf("%s, %u | %u], [%u, %u]",
+            inet_ntoa(param->daddr.in), ntohs(param->dport), param->proto, param->total_recv, param->total_sent);
 
     } else if (AF_INET6 == param->af) {
         char src_addr[INET6_ADDRSTRLEN];
@@ -70,7 +70,7 @@ static int iftraf_parse_args(struct dpip_conf *conf,
         if (strcmp(conf->argv[0], "dev") == 0) {
             NEXTARG_CHECK(conf, "dev");
             snprintf(iftraf_conf->ifname, sizeof(iftraf_conf->ifname), "%s", conf->argv[0]);
-        } 
+        }
         NEXTARG(conf);
     }
 
@@ -78,7 +78,7 @@ static int iftraf_parse_args(struct dpip_conf *conf,
         fprintf(stderr, "too many arguments\n");
         return -1;
     }
-	
+
     return 0;
 }
 

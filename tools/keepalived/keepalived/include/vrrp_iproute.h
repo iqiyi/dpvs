@@ -185,9 +185,6 @@ enum ip_route {
 typedef struct _ip_route {
 	ip_address_t		*dst;
 	ip_address_t		*src;
-	uint8_t			dmask;
-	ip_address_t		*gw;		/* RTA_GATEWAY */
-	ip_address_t		*gw2;		/* Will use RTA_MULTIPATH */
 	ip_address_t		*pref_src;
 	uint8_t			family;
 	uint8_t			tos;
@@ -234,8 +231,7 @@ typedef struct _ip_route {
 	bool			ttl_propagate;
 #endif
 	uint8_t			type;
-	
-	char        ifname[16];
+	char			ifname[16];
 
 	uint32_t		realms;
 #if HAVE_DECL_RTA_ENCAP

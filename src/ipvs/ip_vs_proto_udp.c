@@ -206,8 +206,8 @@ udp_conn_lookup(struct dp_vs_proto *proto,
     if (unlikely(!uh))
         return NULL;
 
-    if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, uh->dst_port,
-                            &iph->saddr)) {
+    if (dp_vs_blklst_lookup(iph->af, iph->proto, &iph->daddr,
+                uh->dst_port, &iph->saddr)) {
         *drop = true;
         return NULL;
     }

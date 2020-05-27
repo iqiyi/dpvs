@@ -327,7 +327,6 @@ dump_http_get_check(FILE *fp, const checker_t *checker)
 	dump_list(fp, http_get_chk->url);
 	if (http_get_chk->failed_url)
 		conf_write(fp, "   Failed URL = %s", http_get_chk->failed_url->path);
-
 }
 static http_checker_t *
 alloc_http_get(const char *proto)

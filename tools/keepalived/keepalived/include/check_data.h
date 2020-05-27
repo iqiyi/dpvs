@@ -124,28 +124,28 @@ typedef struct _local_addr_group {
 
 /* blacklist ip group*/
 typedef struct _blklst_addr_entry {
-        struct sockaddr_storage addr;
-        uint32_t range;
+	struct sockaddr_storage addr;
+	uint32_t range;
 } blklst_addr_entry;
 
 
 typedef struct _blklst_addr_group {
-        char *gname;
-        list addr_ip;
-        list range;
+	char *gname;
+	list addr_ip;
+	list range;
 } blklst_addr_group;
 
 typedef struct _tunnel_entry {
-        struct sockaddr_storage remote;
-        struct sockaddr_storage local;
-        char   kind[TNLKINDSIZ];
-        char   ifname[IFNAMSIZ];
-        char   link[IFNAMSIZ];
+	struct sockaddr_storage remote;
+	struct sockaddr_storage local;
+	char   kind[TNLKINDSIZ];
+	char   ifname[IFNAMSIZ];
+	char   link[IFNAMSIZ];
 } tunnel_entry;
 
 typedef struct _tunnel_group {
-        char *gname;
-        list tunnel_entry;
+	char *gname;
+	list tunnel_entry;
 } tunnel_group;
 
 
@@ -171,7 +171,6 @@ typedef struct _virtual_server_group_entry {
 
 typedef struct _virtual_server_group {
 	char				*gname;
-	list				addr_ip;
 	list				addr_range;
 	list				vfwmark;
 } virtual_server_group_t;
@@ -270,6 +269,51 @@ typedef struct _check_data {
 #define UNSET_ALIVE(S)		((S)->alive = false)
 #define FMT_RS(R, V) (format_rs(R, V))
 #define FMT_VS(V) (format_vs((V)))
+
+static inline bool quorum_equal(const notify_script_t *quorum1,
+                                    const notify_script_t *quorum2)
+{
+        int args_index = 0;
+
+        if (!quorum1 && !quorum2)
+                return true;
+        if (!quorum1 || !quorum2)
+                return false;
+        if (quorum1->num_args != quorum2->num_args)
+                return false;
+        for (args_index = 0; args_index < quorum1->num_args; args_index++) {
+                if (strcmp(quorum1->args[args_index], quorum2->args[args_index]))
+                        return false;
+        }
+        return true;
+}
+
+#define VS_ISEQ(X,Y)    (sockstorage_equal(&(X)->addr,&(Y)->addr)                       &&\
+                         (X)->vfwmark                 == (Y)->vfwmark                   &&\
+                         (X)->service_type            == (Y)->service_type              &&\
+                         (X)->forwarding_method      == (Y)->forwarding_method  &&\
+                         (X)->hash_target             == (Y)->hash_target       &&\
+                         (X)->syn_proxy  == (Y)->syn_proxy                      &&\
+                         quorum_equal((X)->notify_quorum_up, (Y)->notify_quorum_up) &&\
+                         quorum_equal((X)->notify_quorum_down, (Y)->notify_quorum_down) &&\
+                         !strcmp((X)->sched, (Y)->sched)                                &&\
+                         (X)->persistence_timeout  == (Y)->persistence_timeout  &&\
+                         (X)->conn_timeout         == (Y)->conn_timeout  &&\
+                         (X)->bps                  == (Y)->bps                                  &&\
+                         (X)->limit_proportion     == (Y)->limit_proportion          &&\
+                         (((X)->vsgname && (Y)->vsgname &&                              \
+                           !strcmp((X)->vsgname, (Y)->vsgname)) ||                      \
+                          (!(X)->vsgname && !(Y)->vsgname))                             &&\
+                         (((X)->local_addr_gname && (Y)->local_addr_gname &&            \
+                           !strcmp((X)->local_addr_gname, (Y)->local_addr_gname)) ||    \
+                          (!(X)->local_addr_gname && !(Y)->local_addr_gname))           &&\
+                         (((X)->blklst_addr_gname && (Y)->blklst_addr_gname &&          \
+                           !strcmp((X)->blklst_addr_gname, (Y)->blklst_addr_gname)) ||  \
+                         (!(X)->blklst_addr_gname && !(Y)->blklst_addr_gname))          &&\
+                         !strcmp((X)->srange, (Y)->srange)                              &&\
+                         !strcmp((X)->drange, (Y)->drange)                              &&\
+                         !strcmp((X)->iifname, (Y)->iifname)                            &&\
+                         !strcmp((X)->oifname, (Y)->oifname))
 
 #ifndef IP_VS_SVC_F_SCHED_MH_PORT
 #define IP_VS_SVC_F_SCHED_MH_PORT IP_VS_SVC_F_SCHED_SH_PORT

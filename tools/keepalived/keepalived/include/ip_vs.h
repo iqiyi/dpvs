@@ -21,15 +21,19 @@
 
 #include "dp_vs.h"
 
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+//  Part1. headers derived from "linux/ip_vs.h"
+//
+/////////////////////////////////////////////////////////////////////////////////////////
+
 #define IP_VS_VERSION_CODE	0x010201
 #define NVERSION(version)			\
 	(version >> 16) & 0xFF,			\
 	(version >> 8) & 0xFF,			\
 	version & 0xFF
 
-/*
- *  *      Virtual Service Flags
- *   */
+/* Virtual Service Flags */
 #define IP_VS_SVC_F_PERSISTENT	0x0001		/* persistent port */
 #define IP_VS_SVC_F_HASHED	0x0002		/* hashed entry */
 #define IP_VS_SVC_F_ONEPACKET	0x0004		/* one-packet scheduling */
@@ -44,22 +48,17 @@
 
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK	IP_VS_SVC_F_SCHED1 /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT	IP_VS_SVC_F_SCHED2 /* SH use port */
-/*
- *  *      Destination Server Flags
- *   */
+
+/* Destination Server Flags */
 #define IP_VS_DEST_F_AVAILABLE	0x0001		/* server is available */
 #define IP_VS_DEST_F_OVERLOAD	0x0002		/* server is overloaded */
 
-/*
- *  *      IPVS sync daemon states
- *   */
+/* IPVS sync daemon states */
 #define IP_VS_STATE_NONE	0x0000		/* daemon is stopped */
 #define IP_VS_STATE_MASTER	0x0001		/* started as master */
 #define IP_VS_STATE_BACKUP	0x0002		/* started as backup */
 
-/*
- *  *      IPVS socket options
- *   */
+/* IPVS socket options */
 #define IP_VS_BASE_CTL		(64+1024+64)		/* base */
 
 #define IP_VS_SO_SET_NONE	IP_VS_BASE_CTL		/* just peek */
@@ -84,7 +83,7 @@
 #define IP_VS_SO_SET_DELBLKLST  (IP_VS_BASE_CTL+19)
 #define IP_VS_SO_SET_ADDTUNNEL	 (IP_VS_BASE_CTL+20)
 #define IP_VS_SO_SET_DELTUNNEL	 (IP_VS_BASE_CTL+21)
-#define IP_VS_SO_SET_MAX	IP_VS_SO_SET_DELBLKLST
+#define IP_VS_SO_SET_MAX	IP_VS_SO_SET_DELTUNNEL
 
 #define IP_VS_SO_GET_VERSION	IP_VS_BASE_CTL
 #define IP_VS_SO_GET_INFO	(IP_VS_BASE_CTL+1)
@@ -97,11 +96,10 @@
 #define IP_VS_SO_GET_LADDRS	(IP_VS_BASE_CTL+8)
 #define IP_VS_SO_GET_MAX	IP_VS_SO_GET_LADDRS
 
-
 /*
- *  *      IPVS Connection Flags
- *   *      Only flags 0..15 are sent to backup server
- *    */
+ * IPVS Connection Flags
+ * Only flags 0..15 are sent to backup server
+ */
 #define IP_VS_CONN_F_FWD_MASK	0x0007		/* mask for the fwd methods */
 #define IP_VS_CONN_F_MASQ	0x0000		/* masquerading/NAT */
 #define IP_VS_CONN_F_LOCALNODE	0x0001		/* local node */
@@ -148,40 +146,26 @@
 #define IP_VS_IFNAME_MAXLEN	16
 #define IP_VS_PEDATA_MAXLEN     255
 
-struct ip_vs_service_kern {
-        /* virtual service addresses */
-        u_int16_t               protocol;
-        __be32                  __addr_v4;   /* virtual ip address */
-        __be16                  port;
-        u_int32_t               fwmark;         /* firwall mark of service */
+struct ip_vs_service_user {
+	/* virtual service addresses */
+	u_int16_t	protocol;
+	__be32		__addr_v4;	/* virtual ip address */
+	__be16		port;
+	u_int32_t	fwmark;	/* firwall mark of service */
 
-        /* virtual service options */
-        char                    sched_name[IP_VS_SCHEDNAME_MAXLEN];
-        unsigned                flags;          /* virtual service flags */
-        unsigned                timeout;        /* persistent timeout in sec */
-        unsigned                conn_timeout;
-        __be32                  netmask;        /* persistent netmask */
-        unsigned                bps;
-        unsigned                limit_proportion;
+	/* virtual service options */
+	char		sched_name[IP_VS_SCHEDNAME_MAXLEN];
+	unsigned	flags;	/* virtual service flags */
+	unsigned	timeout;	/* persistent timeout in sec */
+	unsigned	conn_timeout;
+	__be32		netmask;	/* persistent netmask */
+	unsigned	bps;
+	unsigned	limit_proportion;
 
-        char                    srange[256];
-        char                    drange[256];
-        char                    iifname[IFNAMSIZ];
-        char                    oifname[IFNAMSIZ];
-};
-
-struct ip_vs_dest_kern {
-	/* destination server address */
-	__be32			addr;
-	__be16			port;
-
-	/* real server options */
-	unsigned		conn_flags;	/* connection flags */
-	int			weight;		/* destination weight */
-
-	/* thresholds for active connections */
-	u_int32_t		u_threshold;	/* upper threshold */
-	u_int32_t		l_threshold;	/* lower threshold */
+	char		srange[256];
+	char		drange[256];
+	char		iifname[IFNAMSIZ];
+	char		oifname[IFNAMSIZ];
 };
 
 struct ip_vs_dest_user {
@@ -198,17 +182,13 @@ struct ip_vs_dest_user {
 	__u32		l_threshold;	/* lower threshold */
 };
 
-
-struct ip_vs_laddr_kern {
-	__be32 			addr;
-};
-
 struct ip_vs_laddr_user {
 	__be32 			__addr_v4;
 	u_int16_t 		af;
 	union nf_inet_addr 	addr;
 	char 			ifname[IFNAMSIZ];
 };
+
 struct ip_vs_blklst_user {
 	__be32 			__addr_v4;
 	u_int16_t 		af;
@@ -223,14 +203,12 @@ struct ip_vs_tunnel_user {
 	union nf_inet_addr     raddr;
 };
 
-/*
- *  *	IPVS statistics object (for user space)
- *   */
+/* IPVS statistics object (for user space) */
 struct ip_vs_stats_user {
 	__u64                   conns;          /* connections scheduled */
 	__u64                   inpkts;         /* incoming packets */
-	__u64                   outpkts;        /* outgoing packets */
 	__u64                   inbytes;        /* incoming bytes */
+	__u64                   outpkts;        /* outgoing packets */
 	__u64                   outbytes;       /* outgoing bytes */
 
 	__u32			cps;		/* current connection rate */
@@ -250,27 +228,6 @@ struct ip_vs_getinfo {
 
 	/* number of virtual services */
 	unsigned int		num_services;
-};
-
-/* The argument to IP_VS_SO_GET_SERVICE */
-struct ip_vs_service_entry_kern {
-	/* which service: user fills in these */
-	u_int16_t		protocol;
-	__be32			addr;	/* virtual address */
-	__be16			port;
-	u_int32_t		fwmark;		/* firwall mark of service */
-
-	/* service options */
-	char			sched_name[IP_VS_SCHEDNAME_MAXLEN];
-	unsigned		flags;          /* virtual service flags */
-	unsigned		timeout;	/* persistent timeout */
-	unsigned		conn_timeout;
-	__be32			netmask;	/* persistent netmask */
-	unsigned		bps;
-	unsigned		limit_proportion;
-
-        /* number of lcores*/
-        unsigned int            num_lcores;
 };
 
 /* The argument to IP_VS_SO_GET_SERVICE */
@@ -303,23 +260,6 @@ struct ip_vs_service_entry {
 	char			oifname[IFNAMSIZ];
 };
 
-struct ip_vs_dest_entry_kern {
-        __be32                  addr;   /* destination address */
-        __be16                  port;
-        unsigned                conn_flags;     /* connection flags */
-        int                     weight;         /* destination weight */
-
-        u_int32_t               u_threshold;    /* upper threshold */
-        u_int32_t               l_threshold;    /* lower threshold */
-
-        u_int32_t               activeconns;    /* active connections */
-        u_int32_t               inactconns;     /* inactive connections */
-        u_int32_t               persistconns;   /* persistent connections */
-
-        /* statistics */
-        struct ip_vs_stats_user stats;
-};
-
 struct ip_vs_dest_entry {
 	__be32			__addr_v4;		/* destination address */
 	__be16			port;
@@ -332,12 +272,9 @@ struct ip_vs_dest_entry {
 	__u32		activeconns;	/* active connections */
 	__u32		inactconns;	/* inactive connections */
 	__u32		persistconns;	/* persistent connections */
-};
 
-struct ip_vs_laddr_entry_kern {
-	__be32			__addr_v4;	/* local address - internal use only */
-	u_int64_t		port_conflict;	/* conflict counts */
-	u_int32_t		conn_counts;	/* current connects */
+	/* statistics */
+	struct ip_vs_stats_user stats;
 };
 
 struct ip_vs_laddr_entry {
@@ -364,41 +301,6 @@ struct ip_vs_get_laddrs {
 	struct ip_vs_laddr_entry	entrytable[0];
 };
 
-/* The argument to IP_VS_SO_GET_DESTS */
-struct ip_vs_get_dests_kern {
-	/* which service: user fills in these */
-	u_int16_t		protocol;
-	__be32			addr;	/* virtual address - internal use only */
-	__be16			port;
-	u_int32_t		fwmark;		/* firwall mark of service */
-
-	/* number of real servers */
-	unsigned int		num_dests;
-
-	char			srange[256];
-	char			drange[256];
-	char			iifname[IFNAMSIZ];
-	char			oifname[IFNAMSIZ];
-
-	/* the real servers */
-	struct ip_vs_dest_entry_kern	entrytable[0];
-};
-
-/* The argument to IP_VS_SO_GET_DESTS */
-struct ip_vs_get_dests {
-	/* which service: user fills in these */
-	__u16		protocol;
-	__be32			addr;		/* virtual address */
-	__be16			port;
-	__u32		fwmark;		/* firwall mark of service */
-
-	/* number of real servers */
-	unsigned int		num_dests;
-
-	/* the real servers */
-	struct ip_vs_dest_entry	entrytable[0];
-};
-
 /* The argument to IP_VS_SO_GET_SERVICES */
 struct ip_vs_get_services {
 	/* number of virtual services */
@@ -414,7 +316,6 @@ struct ip_vs_timeout_user {
 	int			tcp_fin_timeout;
 	int			udp_timeout;
 };
-
 
 /* The argument to IP_VS_SO_GET_DAEMON */
 struct ip_vs_daemon_user {
@@ -435,10 +336,10 @@ struct ip_vs_daemon_user {
 #define IPADDRESS_ADD 1
 
 /*
- *  *
- *   * IPVS Generic Netlink interface definitions
- *    *
- *     */
+ *
+ *  IPVS Generic Netlink interface definitions
+ *
+ */
 
 /* Generic Netlink family info */
 
@@ -497,10 +398,10 @@ enum {
 #define IPVS_CMD_ATTR_MAX (__IPVS_SVC_ATTR_MAX - 1)
 
 /*
- *  * Attributes used to describe a service
- *   *
- *    * Used inside nested attribute IPVS_CMD_ATTR_SERVICE
- *     */
+ * Attributes used to describe a service
+ *
+ * Used inside nested attribute IPVS_CMD_ATTR_SERVICE
+ */
 enum {
 	IPVS_SVC_ATTR_UNSPEC = 0,
 	IPVS_SVC_ATTR_AF,		/* address family */
@@ -524,10 +425,10 @@ enum {
 #define IPVS_SVC_ATTR_MAX (__IPVS_SVC_ATTR_MAX - 1)
 
 /*
- *  * Attributes used to describe a destination (real server)
- *   *
- *    * Used inside nested attribute IPVS_CMD_ATTR_DEST
- *     */
+ * Attributes used to describe a destination (real server)
+ *
+ * Used inside nested attribute IPVS_CMD_ATTR_DEST
+ */
 enum {
 	IPVS_DEST_ATTR_UNSPEC = 0,
 	IPVS_DEST_ATTR_ADDR,		/* real server address */
@@ -550,10 +451,10 @@ enum {
 #define IPVS_DEST_ATTR_MAX (__IPVS_DEST_ATTR_MAX - 1)
 
 /*
- *  * Attributes describing a sync daemon
- *   *
- *    * Used inside nested attribute IPVS_CMD_ATTR_DAEMON
- *     */
+ * Attributes describing a sync daemon
+ *
+ * Used inside nested attribute IPVS_CMD_ATTR_DAEMON
+ */
 enum {
 	IPVS_DAEMON_ATTR_UNSPEC = 0,
 	IPVS_DAEMON_ATTR_STATE,		/* sync daemon state (master/backup) */
@@ -565,10 +466,10 @@ enum {
 #define IPVS_DAEMON_ATTR_MAX (__IPVS_DAEMON_ATTR_MAX - 1)
 
 /*
- *  * Attributes used to describe service or destination entry statistics
- *   *
- *    * Used inside nested attributes IPVS_SVC_ATTR_STATS and IPVS_DEST_ATTR_STATS
- *     */
+ * Attributes used to describe service or destination entry statistics
+ *
+ * Used inside nested attributes IPVS_SVC_ATTR_STATS and IPVS_DEST_ATTR_STATS
+ */
 enum {
 	IPVS_STATS_ATTR_UNSPEC = 0,
 	IPVS_STATS_ATTR_CONNS,		/* connections scheduled */
@@ -597,6 +498,13 @@ enum {
 
 #define IPVS_INFO_ATTR_MAX (__IPVS_INFO_ATTR_MAX - 1)
 
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+//  Part2. headers derived from "keepalived/include/ip_vs.h"
+//
+/////////////////////////////////////////////////////////////////////////////////////////
+
 #ifdef _WITH_LVS_64BIT_STATS_
 struct ip_vs_stats64 {
 	__u64	conns;		/* connections scheduled */
@@ -617,7 +525,7 @@ typedef struct ip_vs_stats_user ip_vs_stats_t;
 #endif
 
 struct ip_vs_service_app {
-	struct ip_vs_service_kern user;
+	struct ip_vs_service_user user;
 	uint16_t		af;
 	union nf_inet_addr	nf_addr;
 	char			pe_name[IP_VS_PENAME_MAXLEN];
@@ -635,7 +543,6 @@ struct ip_vs_dest_app {
 #endif
 #endif
 };
-
 
 struct ip_vs_service_entry_app {
 	struct ip_vs_service_entry user;
