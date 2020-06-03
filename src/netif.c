@@ -5114,7 +5114,7 @@ int netif_ctrl_term(void)
 {
     int err;
 
-    if ((err = sockopt_register(&netif_sockopt)) != EDPVS_OK)
+    if ((err = sockopt_unregister(&netif_sockopt)) != EDPVS_OK)
         return err;
 
     if ((err = lcore_stats_msg_term()) != EDPVS_OK)
