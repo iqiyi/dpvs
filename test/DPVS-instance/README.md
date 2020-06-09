@@ -73,3 +73,4 @@ Sample:
 
 #rollback env
 python cleanup.py (rollbackXX.sh generated during case seting) 1
+#P.S: DPVS-instance/statis.py is script to caculate CPS BPS.. but not support now
