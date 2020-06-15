@@ -41,6 +41,15 @@
 
 #define DP_VS_SVC_F_MATCH           0x0400      /* snat match */
 
+#define DP_VS_MAX_RS_NUM_PER_SVC    (2048)      /* max rs num per svc */
+
+/**
+ * hash table for svc
+ */
+#define DP_VS_SVC_TAB_BITS 8
+#define DP_VS_SVC_TAB_SIZE (1 << DP_VS_SVC_TAB_BITS)
+#define DP_VS_SVC_TAB_MASK (DP_VS_SVC_TAB_SIZE - 1)
+
 /* virtual service */
 struct dp_vs_service {
     struct list_head    s_list;     /* node for normal service table */
@@ -74,7 +83,7 @@ struct dp_vs_service {
     long                weight;     /* sum of servers weight */
 
     struct dp_vs_scheduler  *scheduler;
-    void                *sched_data;
+    void                *sched_data[2];
 
     struct dp_vs_stats  stats;
 
@@ -89,6 +98,8 @@ struct dp_vs_service {
 
 int dp_vs_service_init(void);
 int dp_vs_service_term(void);
+
+int dp_vs_service_hashkey(int af, unsigned proto, const union inet_addr *addr);
 
 struct dp_vs_service *
 dp_vs_service_lookup(int af, uint16_t protocol,

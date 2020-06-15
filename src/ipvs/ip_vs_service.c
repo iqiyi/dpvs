@@ -39,20 +39,13 @@
 
 static rte_atomic16_t dp_vs_num_services[DPVS_MAX_LCORE];
 
-/**
- * hash table for svc
- */
-#define DP_VS_SVC_TAB_BITS 8
-#define DP_VS_SVC_TAB_SIZE (1 << DP_VS_SVC_TAB_BITS)
-#define DP_VS_SVC_TAB_MASK (DP_VS_SVC_TAB_SIZE - 1)
-
 static struct list_head dp_vs_svc_table[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
 static struct list_head dp_vs_svc_fwm_table[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
 static struct list_head dp_vs_svc_match_list[DPVS_MAX_LCORE];
 
-static inline int dp_vs_service_hashkey(int af, unsigned proto, const union inet_addr *addr)
+int dp_vs_service_hashkey(int af, unsigned proto, const union inet_addr *addr)
 {
     uint32_t addr_fold;
 
@@ -916,21 +909,6 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
         return gratuitous_arp_send_vip(vip);
     }
 
-    // send to slave core
-    if (cid == rte_get_master_lcore()) {
-        struct dpvs_msg *msg;
-
-        msg = msg_make(set_opt_so2msg(opt), svc_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
-        if (!msg)
-            return EDPVS_NOMEM;
-
-        ret = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
-        /* go on in master core, not return */
-        if (ret != EDPVS_OK)
-            RTE_LOG(ERR, SERVICE, "[%s] fail to send multicast message\n", __func__);
-        msg_destroy(&msg);
-    }
-
     if (opt == DPVS_SO_SET_FLUSH)
         return dp_vs_services_flush(cid);
 
@@ -1005,6 +983,28 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
             break;
         default:
             ret = EDPVS_INVAL;
+    }
+
+    if (EDPVS_OK != ret) {
+        RTE_LOG(ERR, SERVICE, "[%d]: %s: , opt = %d, dpvs ret is not ok --- %s.\n",
+            cid, __func__, opt, dpvs_strerror(ret)
+        );
+        return ret;
+    }
+
+    // send to slave core
+    if (cid == rte_get_master_lcore()) {
+        struct dpvs_msg *msg;
+
+        msg = msg_make(set_opt_so2msg(opt), svc_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
+        if (!msg)
+            return EDPVS_NOMEM;
+
+        ret = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+        /* go on in master core, not return */
+        if (ret != EDPVS_OK)
+            RTE_LOG(ERR, SERVICE, "[%s] fail to send multicast message\n", __func__);
+        msg_destroy(&msg);
     }
 
     return ret;

@@ -123,6 +123,12 @@ dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
         return EDPVS_NOTSUPP;
     }
 
+    if (svc->num_dests >= DP_VS_MAX_RS_NUM_PER_SVC) {
+        RTE_LOG(ERR, SERVICE, "%s: dest num of svc is %d, exceed the limit of %d.\n",
+               __func__, svc->num_dests, DP_VS_MAX_RS_NUM_PER_SVC);
+        return EDPVS_OVERLOAD;
+    }
+
     daddr = udest->addr;
 
     /*

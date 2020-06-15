@@ -25,20 +25,37 @@
 
 struct conhash_node {
     struct list_head    list;
-    uint16_t            weight;
+    uint16_t            weight_ratio;
     int                 af;         /* address family */
     union inet_addr     addr;       /* IP address of the server */
     uint16_t            port;       /* port number of the server */
+    int                 index;      /* rs index in dests list of svc */
     struct node_s       node;       /* node in libconhash */
 };
 
 struct conhash_sched_data {
     struct list_head    nodes;      /* node list */
     struct conhash_s   *conhash;    /* consistent hash meta data */
+    rte_atomic32_t      refcnt;
+};
+
+struct conhash_svc_data {
+    struct list_head    list;
+    struct conhash_sched_data   *sched_data;
+    int                 af;
+    uint8_t             proto;      /* TCP/UDP/... */
+    union inet_addr     addr;       /* virtual IP address */
+    uint16_t            port;
+};
+
+struct conhash_rs_data {
+    void   *rs_entry_tbl[DP_VS_MAX_RS_NUM_PER_SVC];     /* rs entry table */
 };
 
 #define REPLICA 160
 #define QUIC_PACKET_8BYTE_CONNECTION_ID  (1 << 3)
+
+static struct list_head conhash_svc_data_tbl[DP_VS_SVC_TAB_SIZE];
 
 /*
  * QUIC CID hash target for quic*
@@ -106,6 +123,10 @@ dp_vs_conhash_get(struct dp_vs_service *svc, struct conhash_s *conhash,
     uint64_t quic_cid;
     uint32_t addr_fold;
     const struct node_s *node;
+    struct conhash_node *p_conhash_node = NULL;
+    struct conhash_rs_data *rs_data = NULL;
+    struct dp_vs_dest *dest = NULL;
+    int index = 0;
 
     if (svc->flags & DP_VS_SVC_F_QID_HASH) {
         if (svc->proto != IPPROTO_UDP) {
@@ -134,7 +155,15 @@ dp_vs_conhash_get(struct dp_vs_service *svc, struct conhash_s *conhash,
     }
 
     node = conhash_lookup(conhash, str);
-    return node == NULL? NULL: node->data;
+    if (node) {
+        rs_data = (struct conhash_rs_data *)svc->sched_data[1];
+        p_conhash_node = container_of(node, struct conhash_node, node);
+        index = p_conhash_node->index;
+        if (rs_data && (-1 < index) && (index < DP_VS_MAX_RS_NUM_PER_SVC)) {
+            dest = (struct dp_vs_dest *)rs_data->rs_entry_tbl[index];
+        }
+    }
+    return dest;
 }
 
 static void node_fini(struct node_s *node)
@@ -144,18 +173,13 @@ static void node_fini(struct node_s *node)
     if (!node)
         return;
 
-    if (node->data) {
-        dp_vs_dest_put((struct dp_vs_dest *)node->data);
-        node->data = NULL;
-    }
-
     p_conhash_node = container_of(node, struct conhash_node, node);
     list_del(&(p_conhash_node->list));
     rte_free(p_conhash_node);
 }
 
 static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
-        struct dp_vs_dest *dest)
+        struct dp_vs_dest *dest, struct conhash_sched_data *p_sched_data)
 {
     int ret;
     char str[40];
@@ -163,11 +187,10 @@ static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
     int16_t weight = 0;
     struct node_s *p_node;
     struct conhash_node *p_conhash_node;
-    struct conhash_sched_data *p_sched_data;
-
-    p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
+    int weight_gcd;
 
     weight = rte_atomic16_read(&dest->weight);
+    weight_gcd = dp_vs_gcd_weight(svc);
     if (weight < 0) {
         RTE_LOG(ERR, SERVICE, "%s: add dest with weight(%d) less than 0\n",
                 __func__, weight);
@@ -185,14 +208,15 @@ static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
     p_conhash_node->af = dest->af;
     p_conhash_node->addr = dest->addr;
     p_conhash_node->port = dest->port;
-    p_conhash_node->weight = weight;
+    p_conhash_node->weight_ratio = weight / weight_gcd;
+    p_conhash_node->index = -1;
 
     // add node to conhash
     p_node = &(p_conhash_node->node);
     addr_fold = inet_addr_fold(dest->af, &dest->addr);
     snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
 
-    conhash_set_node(p_node, str, weight * REPLICA);
+    conhash_set_node(p_node, str, p_conhash_node->weight_ratio * REPLICA);
     ret = conhash_add_node(p_sched_data->conhash, p_node);
     if (ret < 0) {
         RTE_LOG(ERR, SERVICE, "%s: conhash_add_node failed\n", __func__);
@@ -200,105 +224,50 @@ static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
         return EDPVS_INVAL;
     }
 
-    // set node data
-    rte_atomic32_inc(&dest->refcnt);
-    p_node->data = dest;
-
     // add conhash node to list
     list_add(&(p_conhash_node->list), &(p_sched_data->nodes));
 
     return EDPVS_OK;
 }
 
-static int dp_vs_conhash_del_dest(struct dp_vs_service *svc,
-        struct dp_vs_dest *dest)
+static int dp_vs_conhash_dest_weight_changed(struct dp_vs_service *svc,
+        struct dp_vs_dest *dest, struct conhash_svc_data * p_svc_data)
 {
-    int ret;
-    struct node_s *p_node;
-    struct conhash_node *p_conhash_node;
-    struct conhash_sched_data *p_sched_data;
-
-    p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
-
-    list_for_each_entry(p_conhash_node, &(p_sched_data->nodes), list) {
-        if (p_conhash_node->af == dest->af &&
-                inet_addr_equal(dest->af, &p_conhash_node->addr, &dest->addr) &&
-                p_conhash_node->port == dest->port) {
-            p_node = &(p_conhash_node->node);
-            ret = conhash_del_node(p_sched_data->conhash, p_node);
-            if (ret < 0) {
-                RTE_LOG(ERR, SERVICE, "%s: conhash_del_node failed\n", __func__);
-                return EDPVS_INVAL;
-            }
-            node_fini(p_node);
-            return EDPVS_OK;
-        }
-    }
-
-    return EDPVS_NOTEXIST;
-}
-
-static int dp_vs_conhash_edit_dest(struct dp_vs_service *svc,
-        struct dp_vs_dest *dest)
-{
-    int ret;
-    char str[40];
-    uint32_t addr_fold;
     int16_t weight;
-    struct node_s *p_node;
+    int weight_gcd;
     struct conhash_node *p_conhash_node;
     struct conhash_sched_data *p_sched_data;
+    int change_flag = 1;
 
+    p_sched_data = p_svc_data->sched_data;
     weight = rte_atomic16_read(&dest->weight);
-    p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
+    weight_gcd = dp_vs_gcd_weight(svc);
 
     // find node by addr and port
     list_for_each_entry(p_conhash_node, &(p_sched_data->nodes), list) {
         if (p_conhash_node->af == dest->af &&
                 inet_addr_equal(dest->af, &p_conhash_node->addr, &dest->addr) &&
                 p_conhash_node->port == dest->port) {
-            if (p_conhash_node->weight == weight)
-                return EDPVS_OK;
-
-            // del from conhash
-            p_node = &(p_conhash_node->node);
-            ret = conhash_del_node(p_sched_data->conhash, p_node);
-            if (ret < 0) {
-                RTE_LOG(ERR, SERVICE, "%s: conhash_del_node failed\n", __func__);
-                return EDPVS_INVAL;
-            }
-
-            // adjust weight
-            p_conhash_node->weight = weight;
-            addr_fold = inet_addr_fold(dest->af, &dest->addr);
-            snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
-            conhash_set_node(p_node, str, weight * REPLICA);
-
-            // add to conhash again
-            ret = conhash_add_node(p_sched_data->conhash, p_node);
-            if (ret < 0) {
-                RTE_LOG(ERR, SERVICE, "%s: conhash_set_node failed\n", __func__);
-                return EDPVS_INVAL;
-            }
-
-            return EDPVS_OK;
+            if (weight / weight_gcd == p_conhash_node->weight_ratio)
+                change_flag = 0;
+            break;
         }
     }
 
-    return EDPVS_NOTEXIST;
+    return change_flag;
 }
 
 /*
  *      Assign dest to connhash.
  */
-static int
-dp_vs_conhash_assign(struct dp_vs_service *svc)
+static int dp_vs_conhash_assign(struct dp_vs_service *svc,
+            struct conhash_sched_data *p_sched_data)
 {
     int err;
     struct dp_vs_dest *dest;
 
     list_for_each_entry(dest, &svc->dests, n_list) {
-        err = dp_vs_conhash_add_dest(svc, dest);
+        err = dp_vs_conhash_add_dest(svc, dest, p_sched_data);
         if (err != EDPVS_OK) {
             RTE_LOG(ERR, SERVICE, "%s: add dest to conhash failed\n", __func__);
             return err;
@@ -308,52 +277,241 @@ dp_vs_conhash_assign(struct dp_vs_service *svc)
     return EDPVS_OK;
 }
 
-static int dp_vs_conhash_init_svc(struct dp_vs_service *svc)
+static struct conhash_svc_data *dp_vs_conhash_get_svc_data(struct dp_vs_service *svc)
 {
-    struct conhash_sched_data *sched_data = NULL;
+    int hash;
+    struct conhash_svc_data *svc_data;
 
-    svc->sched_data = NULL;
-
-    // alloc schedule data
-    sched_data = rte_zmalloc(NULL, sizeof(struct conhash_sched_data),
-            RTE_CACHE_LINE_SIZE);
-    if (!sched_data) {
-        RTE_LOG(ERR, SERVICE, "%s: alloc schedule data faild\n", __func__);
-        return EDPVS_NOMEM;
+    hash = dp_vs_service_hashkey(svc->af, svc->proto, &svc->addr);
+    if (unlikely(hash < 0)) {
+        RTE_LOG(ERR, SERVICE, "%s: svc hash invalid.\n", __func__);
+        return NULL;
     }
 
-    // init conhash
-    sched_data->conhash = conhash_init(NULL);
-    if (!sched_data->conhash) {
-        RTE_LOG(ERR, SERVICE, "%s: conhash init faild!\n", __func__);
-        rte_free(sched_data);
-        return EDPVS_NOMEM;
+    list_for_each_entry(svc_data, &conhash_svc_data_tbl[hash], list) {
+        if ((svc_data->af == svc->af)
+            && inet_addr_equal(svc->af, &svc_data->addr, &svc->addr)
+            && (svc_data->port == svc->port)
+            && (svc_data->proto == svc->proto)) {
+                return svc_data;
+            }
     }
 
-    // init node list
-    INIT_LIST_HEAD(&(sched_data->nodes));
-
-    // assign node
-    svc->sched_data = sched_data;
-    return dp_vs_conhash_assign(svc);
+    return NULL;
 }
 
-static int dp_vs_conhash_done_svc(struct dp_vs_service *svc)
+static void dp_vs_conhash_update_node_index(struct conhash_sched_data *p_sched_data)
 {
-    struct conhash_sched_data *sched_data =
-        (struct conhash_sched_data *)(svc->sched_data);
+    struct conhash_node *p_conhash_node = NULL;
+    int i = 0;
+
+    list_for_each_entry(p_conhash_node, &(p_sched_data->nodes), list) {
+        p_conhash_node->index = i;
+        i++;
+    }
+}
+
+static void dp_vs_conhash_free_sched_data(struct conhash_sched_data *sched_data)
+{
     struct conhash_node *p_conhash_node, *p_conhash_node_next;
 
+    if (unlikely(!sched_data)) {
+        return;
+    }
     conhash_fini(sched_data->conhash, node_fini);
-
     // del nodes left in list when rs weight is 0
     list_for_each_entry_safe(p_conhash_node, p_conhash_node_next,
                              &(sched_data->nodes), list) {
        node_fini(&(p_conhash_node->node));
     }
+    rte_free(sched_data);
+}
 
-    rte_free(svc->sched_data);
-    svc->sched_data = NULL;
+static int dp_vs_conhash_create_sched_data(struct conhash_sched_data **sched_data)
+{
+    struct conhash_sched_data *tmp_sched_data = NULL;
+    int ret = EDPVS_OK;
+
+    tmp_sched_data = rte_zmalloc(NULL, sizeof(struct conhash_sched_data),
+            RTE_CACHE_LINE_SIZE);
+    if (unlikely(!tmp_sched_data)) {
+        ret = EDPVS_NOMEM;
+        RTE_LOG(ERR, SERVICE, "%s: alloc schedule data faild\n", __func__);
+        return ret;
+    }
+    // init conhash
+    tmp_sched_data->conhash = conhash_init(NULL);
+    if (unlikely(!tmp_sched_data->conhash)) {
+        ret = EDPVS_NOMEM;
+        RTE_LOG(ERR, SERVICE, "%s: conhash init faild!\n", __func__);
+        rte_free(tmp_sched_data);
+        return ret;
+    }
+    // init node list
+    INIT_LIST_HEAD(&(tmp_sched_data->nodes));
+    rte_atomic32_set(&tmp_sched_data->refcnt, 0);
+    *sched_data = tmp_sched_data;
+
+    return ret;
+}
+
+static int dp_vs_conhash_create_svc_data(struct dp_vs_service *svc,
+            struct conhash_svc_data **svc_data)
+{
+    struct conhash_sched_data *sched_data = NULL;
+    struct conhash_svc_data *tmp_svc_data = NULL;
+    int hash = 0;
+    int ret = EDPVS_OK;
+
+    hash = dp_vs_service_hashkey(svc->af, svc->proto, &svc->addr);
+    if (unlikely(hash < 0)) {
+        ret = EDPVS_INVAL;
+        RTE_LOG(ERR, SERVICE, "%s: svc hash invalid.\n", __func__);
+        return ret;
+    }
+
+    tmp_svc_data = rte_zmalloc(NULL, sizeof(struct conhash_svc_data),
+            RTE_CACHE_LINE_SIZE);
+    if (unlikely(NULL == tmp_svc_data)) {
+        ret = EDPVS_NOMEM;
+        RTE_LOG(ERR, SERVICE, "%s: alloc svc data faild\n", __func__);
+        return ret;
+    }
+    INIT_LIST_HEAD(&(tmp_svc_data->list));
+    tmp_svc_data->af = svc->af;
+    tmp_svc_data->proto = svc->proto;
+    tmp_svc_data->addr = svc->addr;
+    tmp_svc_data->port = svc->port;
+
+    ret = dp_vs_conhash_create_sched_data(&sched_data);
+    if (unlikely(EDPVS_OK != ret)) {
+        rte_free(tmp_svc_data);
+        return ret;
+    }
+    ret = dp_vs_conhash_assign(svc, sched_data);
+    if (unlikely(EDPVS_OK != ret)) {
+        dp_vs_conhash_free_sched_data(sched_data);
+        rte_free(tmp_svc_data);
+        return ret;
+    }
+    dp_vs_conhash_update_node_index(sched_data);
+
+    tmp_svc_data->sched_data = sched_data;
+    list_add(&tmp_svc_data->list, &conhash_svc_data_tbl[hash]);
+    *svc_data = tmp_svc_data;
+
+    return ret;
+}
+
+static int dp_vs_conhash_create_rs_data(struct conhash_rs_data **rs_data)
+{
+    struct conhash_rs_data *tmp_rs_data = NULL;
+
+    tmp_rs_data = rte_zmalloc(NULL, sizeof(struct conhash_rs_data),
+            RTE_CACHE_LINE_SIZE);
+    if (unlikely(!tmp_rs_data)) {
+        RTE_LOG(ERR, SERVICE, "%s: alloc rs data faild\n", __func__);
+        return EDPVS_NOMEM;
+    }
+    *rs_data = tmp_rs_data;
+
+    return EDPVS_OK;
+}
+
+static void dp_vs_conhash_update_rs_data(struct dp_vs_service *svc,
+            struct conhash_sched_data *p_sched_data)
+{
+    struct conhash_rs_data *rs_data = NULL;
+    struct conhash_node *p_conhash_node = NULL;
+    int i = 0;
+
+    rs_data = (struct conhash_rs_data *)svc->sched_data[1];
+    memset(rs_data->rs_entry_tbl, 0, sizeof(rs_data->rs_entry_tbl));
+    list_for_each_entry(p_conhash_node, &(p_sched_data->nodes), list) {
+        rs_data->rs_entry_tbl[i] = dp_vs_dest_lookup(p_conhash_node->af, svc,
+                        &p_conhash_node->addr, p_conhash_node->port);
+        if (unlikely(!rs_data->rs_entry_tbl[i])) {
+            RTE_LOG(INFO, SERVICE, "[%d]: %s: dest lookup none\n",
+                rte_lcore_id(), __func__);
+        }
+        i++;
+    }
+}
+
+static int dp_vs_conhash_init_svc(struct dp_vs_service *svc)
+{
+    struct conhash_svc_data *svc_data = NULL;
+    struct conhash_rs_data *rs_data = NULL;
+    int ret = EDPVS_OK;
+    int cid = rte_lcore_id();
+
+    // alloc rs data;
+    ret = dp_vs_conhash_create_rs_data(&rs_data);
+    if (EDPVS_OK != ret) {
+        return ret;
+    }
+
+    svc_data = dp_vs_conhash_get_svc_data(svc);
+    if (!svc_data) {
+        if (rte_get_master_lcore() == cid) {
+            // only master lcore comes here.
+            RTE_LOG(DEBUG, SERVICE, "[%d]%s: conhash init svc get svc data failed, creating\n",
+                        __func__);
+            ret = dp_vs_conhash_create_svc_data(svc, &svc_data);
+            if (EDPVS_OK != ret) {
+                rte_free(rs_data);
+                return ret;
+            }
+        }
+        else {
+            RTE_LOG(ERR, SERVICE, "[%d]: %s: svc data lookup none !\n",
+                cid, __func__);
+            ret = EDPVS_NOTEXIST;
+            rte_free(rs_data);
+            return ret;
+        }
+    }
+
+    svc->sched_data[0] = svc_data->sched_data;
+    svc->sched_data[1] = rs_data;
+    dp_vs_conhash_update_rs_data(svc, svc_data->sched_data);
+    rte_atomic32_inc(&svc_data->sched_data->refcnt);
+
+    return ret;
+}
+
+static int dp_vs_conhash_done_svc(struct dp_vs_service *svc)
+{
+    struct conhash_rs_data *rs_data = NULL;
+    struct conhash_svc_data *svc_data = NULL;
+    struct conhash_sched_data *sched_data = NULL;
+
+    rs_data = (struct conhash_rs_data *)svc->sched_data[1];
+    if (rs_data) {
+        rte_free(rs_data);
+        svc->sched_data[1] = NULL;
+    }
+
+    sched_data = (struct conhash_sched_data *)svc->sched_data[0];
+    if (sched_data) {
+        if (rte_atomic32_dec_and_test(&sched_data->refcnt)) {
+            dp_vs_conhash_free_sched_data(sched_data);
+            svc->sched_data[0] = NULL;
+        }
+        else {
+            RTE_LOG(DEBUG, SERVICE, "[%d] %s: sched data refcnt dec!\n",
+                    rte_lcore_id(), __func__);
+            return EDPVS_OK;
+        }
+    }
+
+    svc_data = dp_vs_conhash_get_svc_data(svc);
+    if (unlikely(!svc_data)) {
+        RTE_LOG(ERR, SERVICE, "%s: svc data not exist!\n", __func__);
+        return EDPVS_NOTEXIST;
+    }
+    list_del(&(svc_data->list));
+    rte_free(svc_data);
 
     return EDPVS_OK;
 }
@@ -361,25 +519,62 @@ static int dp_vs_conhash_done_svc(struct dp_vs_service *svc)
 static int dp_vs_conhash_update_svc(struct dp_vs_service *svc,
         struct dp_vs_dest *dest, sockoptid_t opt)
 {
-    int ret;
+    int ret = EDPVS_OK;
+    int cid = rte_lcore_id();
+    struct conhash_svc_data *svc_data = NULL;
+    struct conhash_sched_data *old_sched_data = NULL;
+    struct conhash_sched_data *new_sched_data = NULL;
+    int update_flag = 0;
 
-    switch (opt) {
-        case DPVS_SO_SET_ADDDEST:
-            ret = dp_vs_conhash_add_dest(svc, dest);
-            break;
-        case DPVS_SO_SET_DELDEST:
-            ret = dp_vs_conhash_del_dest(svc, dest);
-            break;
-        case DPVS_SO_SET_EDITDEST:
-            ret = dp_vs_conhash_edit_dest(svc, dest);
-            break;
-        default:
-            ret = EDPVS_INVAL;
-            break;
+    svc_data = dp_vs_conhash_get_svc_data(svc);
+    if (unlikely(!svc_data)) {
+        ret = EDPVS_NOTEXIST;
+        RTE_LOG(ERR, SERVICE, "%s: svc data not exist!\n", __func__);
+        return ret;
+    }
+    old_sched_data = svc->sched_data[0];
+    new_sched_data = svc_data->sched_data;
+
+    if (rte_get_master_lcore() == cid) {
+        // only master comes here.
+        switch (opt) {
+            case DPVS_SO_SET_ADDDEST:
+            case DPVS_SO_SET_DELDEST:
+                update_flag = 1;
+                break;
+            case DPVS_SO_SET_EDITDEST:
+                update_flag = dp_vs_conhash_dest_weight_changed(svc, dest,
+                                svc_data);
+                break;
+        }
+        if (update_flag) {
+            ret = dp_vs_conhash_create_sched_data(&new_sched_data);
+            if (unlikely(EDPVS_OK != ret)) {
+                RTE_LOG(ERR, SERVICE, "%s: create new sched data failed!\n", __func__);
+                new_sched_data = old_sched_data;
+                goto END;
+            }
+            ret = dp_vs_conhash_assign(svc, new_sched_data);
+            if (unlikely(EDPVS_OK != ret)) {
+                RTE_LOG(ERR, SERVICE, "%s: assign new sched data failed!\n", __func__);
+                dp_vs_conhash_free_sched_data(new_sched_data);
+                new_sched_data = old_sched_data;
+                goto END;
+            }
+            dp_vs_conhash_update_node_index(new_sched_data);
+        }
     }
 
-    if (ret != EDPVS_OK)
-        RTE_LOG(ERR, SERVICE, "%s: update service faild!\n", __func__);
+END:
+    svc_data->sched_data = new_sched_data;
+    svc->sched_data[0] = new_sched_data;
+    dp_vs_conhash_update_rs_data(svc, svc_data->sched_data);
+    rte_atomic32_inc(&new_sched_data->refcnt);
+    if (rte_atomic32_dec_and_test(&old_sched_data->refcnt)) {
+        RTE_LOG(DEBUG, SERVICE, "[%d]: %s: free sched data!\n",
+            cid, __func__);
+        dp_vs_conhash_free_sched_data(old_sched_data);
+    }
 
     return ret;
 }
@@ -390,10 +585,13 @@ static int dp_vs_conhash_update_svc(struct dp_vs_service *svc,
 static struct dp_vs_dest *
 dp_vs_conhash_schedule(struct dp_vs_service *svc, const struct rte_mbuf *mbuf)
 {
-    struct dp_vs_dest *dest;
-    struct conhash_sched_data *sched_data =
-        (struct conhash_sched_data *)(svc->sched_data);
+    struct dp_vs_dest *dest = NULL;
+    struct conhash_sched_data *sched_data = NULL;
 
+    sched_data = (struct conhash_sched_data *)svc->sched_data[0];
+    if (unlikely(!sched_data)) {
+        return NULL;
+    }
     dest = dp_vs_conhash_get(svc, sched_data->conhash, mbuf);
 
     return dp_vs_dest_is_valid(dest) ? dest : NULL;
@@ -414,6 +612,10 @@ static struct dp_vs_scheduler dp_vs_conhash_scheduler =
 
 int  dp_vs_conhash_init(void)
 {
+    int i;
+    for (i = 0; i < DP_VS_SVC_TAB_SIZE; i++) {
+        INIT_LIST_HEAD(&conhash_svc_data_tbl[i]);
+    }
     return register_dp_vs_scheduler(&dp_vs_conhash_scheduler);
 }
 

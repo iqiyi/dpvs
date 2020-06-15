@@ -20,14 +20,14 @@
 
 static int dp_vs_rr_init_svc(struct dp_vs_service *svc)
 {
-    svc->sched_data = &svc->dests;
+    svc->sched_data[0] = &svc->dests;
     return EDPVS_OK;
 }
 
 static int dp_vs_rr_update_svc(struct dp_vs_service *svc,
         struct dp_vs_dest *dest __rte_unused, sockoptid_t opt __rte_unused)
 {
-    svc->sched_data = &svc->dests;
+    svc->sched_data[0] = &svc->dests;
     return EDPVS_OK;
 }
 
@@ -40,7 +40,7 @@ static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
     struct list_head *p, *q;
     struct dp_vs_dest *dest;
 
-    p = (struct list_head *)svc->sched_data;
+    p = (struct list_head *)svc->sched_data[0];
     p = p->next;
     q = p;
 
@@ -61,7 +61,7 @@ static struct dp_vs_dest *dp_vs_rr_schedule(struct dp_vs_service *svc,
     return NULL;
 
 out:
-    svc->sched_data = q;
+    svc->sched_data[0] = q;
 
     return dest;
 }
