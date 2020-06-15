@@ -314,8 +314,8 @@ static int dp_vs_redirect_table_create(void)
 
     /* allocate the global redirect hash table, per socket? */
     dp_vs_cr_tbl =
-        rte_malloc_socket(NULL, sizeof(struct list_head ) * DPVS_CR_TBL_SIZE,
-                          RTE_CACHE_LINE_SIZE, rte_socket_id());
+        rte_malloc(NULL, sizeof(struct list_head ) * DPVS_CR_TBL_SIZE,
+                          RTE_CACHE_LINE_SIZE);
     if (!dp_vs_cr_tbl) {
         goto cache_free;
     }

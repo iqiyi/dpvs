@@ -176,7 +176,7 @@ static int rt6_hlist_add_lcore(const struct dp_vs_route6_conf *cf)
 
         nbuckets = rt6_hlist_buckets(cf->dst.plen);
         size = sizeof(struct rt6_hlist) + nbuckets * sizeof(struct list_head);
-        new_hlist = rte_zmalloc_socket("rt6_hlist", size, 0, rte_socket_id());
+        new_hlist = rte_zmalloc("rt6_hlist", size, 0);
         if (unlikely(!new_hlist)) {
             RTE_LOG(ERR, RT6, "[%d] %s: fail to alloc rt6_hlist\n",
                     rte_lcore_id(), __func__);
@@ -201,7 +201,7 @@ static int rt6_hlist_add_lcore(const struct dp_vs_route6_conf *cf)
     }
 
     /* create route6 entry and hash it into current hlist */
-    rt6 = rte_zmalloc_socket("rt6_entry", sizeof(struct route6), 0, rte_socket_id());
+    rt6 = rte_zmalloc("rt6_entry", sizeof(struct route6), 0);
     if (unlikely(!rt6)) {
         RTE_LOG(ERR, RT6, "[%d] %s: fail to alloc rt6_entry!\n",
                 rte_lcore_id(), __func__);
@@ -334,9 +334,12 @@ static struct dp_vs_route6_conf_array*
 
     *nbytes = sizeof(struct dp_vs_route6_conf_array) +
             g_nroutes * sizeof(struct dp_vs_route6_conf);
-    rt6_arr = rte_zmalloc_socket("rt6_sockopt_get", *nbytes, 0, rte_socket_id());
-    if (unlikely(!rt6_arr))
+    rt6_arr = rte_zmalloc("rt6_sockopt_get", *nbytes, 0);
+    if (unlikely(!rt6_arr)) {
+        RTE_LOG(WARNING, RT6, "%s: rte_zmalloc null.\n",
+            __func__);
         return NULL;
+    }
 
     off = 0;
     list_for_each_entry(hlist, &this_rt6_htable, node) {

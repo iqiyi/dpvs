@@ -1148,9 +1148,9 @@ static int conn_init_lcore(void *arg)
     if (netif_lcore_is_idle(rte_lcore_id()))
         return EDPVS_IDLE;
 
-    this_conn_tbl = rte_malloc_socket(NULL,
+    this_conn_tbl = rte_malloc(NULL,
                         sizeof(struct list_head) * DPVS_CONN_TBL_SIZE,
-                        RTE_CACHE_LINE_SIZE, rte_socket_id());
+                        RTE_CACHE_LINE_SIZE);
     if (!this_conn_tbl)
         return EDPVS_NOMEM;
 
@@ -1725,8 +1725,14 @@ int dp_vs_conn_init(void)
     char poolname[32];
 
     /* init connection template table */
-    dp_vs_ct_tbl = rte_malloc_socket(NULL, sizeof(struct list_head) * DPVS_CONN_TBL_SIZE,
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    dp_vs_ct_tbl = rte_malloc(NULL, sizeof(struct list_head) * DPVS_CONN_TBL_SIZE,
+            RTE_CACHE_LINE_SIZE);
+    if (!dp_vs_ct_tbl) {
+        err = EDPVS_NOMEM;
+        RTE_LOG(WARNING, IPVS, "%s: %s.\n",
+            __func__, dpvs_strerror(err));
+        return err;
+    }
 
     for (i = 0; i < DPVS_CONN_TBL_SIZE; i++)
         INIT_LIST_HEAD(&dp_vs_ct_tbl[i]);

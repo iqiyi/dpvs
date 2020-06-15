@@ -406,7 +406,7 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                iftraf_sorted_list.sorted_list_num * sizeof(struct iftraf_param);
     *out = rte_calloc(NULL, 1, *outsize, RTE_CACHE_LINE_SIZE);
     if (!(*out)) {
-	RTE_LOG(ERR, IFTRAF, "%s: no memory \n", __func__);
+        RTE_LOG(ERR, IFTRAF, "%s: no memory \n", __func__);
         return EDPVS_NOMEM;
     }
 
@@ -903,12 +903,12 @@ static int iftraf_enable_func(void)
         return err;
     }
 
-    iftraf_tbl = rte_malloc_socket(NULL, sizeof(struct list_head) * IFTRAF_TBL_SIZE,
-                    RTE_CACHE_LINE_SIZE, rte_socket_id());
+    iftraf_tbl = rte_malloc(NULL, sizeof(struct list_head) * IFTRAF_TBL_SIZE,
+                    RTE_CACHE_LINE_SIZE);
 
     if (!iftraf_tbl) {
         RTE_LOG(ERR, IFTRAF,
-            "%s: rte_malloc_socket null\n",
+            "%s: rte_malloc null\n",
             __func__);
         goto tbl_fail;
     }
@@ -916,12 +916,12 @@ static int iftraf_enable_func(void)
     for (i = 0; i < IFTRAF_TBL_SIZE; i++)
         INIT_LIST_HEAD(&iftraf_tbl[i]);
 
-    iftraf_iftbl = rte_malloc_socket(NULL, sizeof(struct list_head) * IFTRAF_IFTBL_SIZE,
-                      RTE_CACHE_LINE_SIZE, rte_socket_id());
+    iftraf_iftbl = rte_malloc(NULL, sizeof(struct list_head) * IFTRAF_IFTBL_SIZE,
+                      RTE_CACHE_LINE_SIZE);
 
     if (!iftraf_iftbl) {
         RTE_LOG(ERR, IFTRAF,
-            "%s: rte_malloc_socket null\n",
+            "%s: rte_malloc null\n",
             __func__);
         goto iftbl_fail;
     }
