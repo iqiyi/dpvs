@@ -76,8 +76,6 @@
 /* Global variables */
 bool using_ha_suspend;
 
-#define CHECKERS_CHILD_NUM_MAX 1000
-
 /* local variables */
 static const char *check_syslog_ident;
 static bool two_phase_terminate;

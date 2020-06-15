@@ -1263,36 +1263,34 @@ static void netif_get_isol_rx_lcores(uint8_t *nb, uint64_t *mask)
         *mask = isol_lcore_mask;
 }
 
-static void build_lcore_index(int lcore_max)
+static void build_lcore_index(void)
 {
-    int idx = 0, ii;
+    int i, idx = 0;
 
     g_lcore_index[idx++] = rte_get_master_lcore();
 
-    for (ii = 0; ii < lcore_max; ii++)
-        if (g_lcore_role[ii] == LCORE_ROLE_FWD_WORKER)
-            g_lcore_index[idx++] = ii;
+    for (i = 0; i < DPVS_MAX_LCORE; i++)
+        if (g_lcore_role[i] == LCORE_ROLE_FWD_WORKER)
+            g_lcore_index[idx++] = i;
 
-    for (ii = 0; ii < lcore_max; ii++)
-        if (g_lcore_role[ii] == LCORE_ROLE_ISOLRX_WORKER)
-            g_lcore_index[idx++] = ii;
+    for (i = 0; i < DPVS_MAX_LCORE; i++)
+        if (g_lcore_role[i] == LCORE_ROLE_ISOLRX_WORKER)
+            g_lcore_index[idx++] = i;
+
+    g_lcore_num = idx;
 }
 
 static void lcore_role_init(void)
 {
-    int i, cid, lcore_max_count;
+    int i, cid;
 
-    lcore_max_count = rte_lcore_count();
-    if (lcore_max_count > DPVS_MAX_LCORE)
-        lcore_max_count = DPVS_MAX_LCORE;
-    else
-        for (cid = lcore_max_count; cid < DPVS_MAX_LCORE; cid++)
-            g_lcore_role[cid] = LCORE_ROLE_MAX;  // invalidate nonexistent lcores
-    for (cid = 0; cid < lcore_max_count; cid++)
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++)
         if (!rte_lcore_is_enabled(cid))
-            g_lcore_role[cid] = LCORE_ROLE_MAX;  // invalidate disabled lcores
+            /* invalidate the disabled cores */
+            g_lcore_role[cid] = LCORE_ROLE_MAX;
 
     cid = rte_get_master_lcore();
+
     assert(g_lcore_role[cid] == LCORE_ROLE_IDLE);
     g_lcore_role[cid] = LCORE_ROLE_MASTER;
 
@@ -1304,17 +1302,18 @@ static void lcore_role_init(void)
         i++;
     }
 
-    for (cid = 0; cid < lcore_max_count; cid++) {
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (!list_empty(&isol_rxq_tab[cid])) {
             assert(g_lcore_role[cid] == LCORE_ROLE_IDLE);
             g_lcore_role[cid] =  LCORE_ROLE_ISOLRX_WORKER;
         }
     }
 
-    build_lcore_index(lcore_max_count);
+    build_lcore_index();
 
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++)
-        printf("[%02d]\t\t\t%s\n", cid, dpvs_lcore_role_str(g_lcore_role[cid]));
+        RTE_LOG(INFO, NETIF, "[%02d]: %s\n",
+                cid, dpvs_lcore_role_str(g_lcore_role[cid]));
 }
 
 static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)

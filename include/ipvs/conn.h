@@ -329,7 +329,7 @@ dp_vs_conn_clear_redirect_hashed(struct dp_vs_conn *conn)
     conn->flags &= ~DPVS_CONN_F_REDIRECT_HASHED;
 }
 
-inline uint32_t dp_vs_conn_hashkey(int af,
+uint32_t dp_vs_conn_hashkey(int af,
     const union inet_addr *saddr, uint16_t sport,
     const union inet_addr *daddr, uint16_t dport,
     uint32_t mask);

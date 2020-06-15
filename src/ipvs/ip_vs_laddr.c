@@ -525,6 +525,7 @@ static int get_msg_cb(struct dpvs_msg *msg)
 
     *laddrs = *laddr_conf;
     laddrs->nladdrs = naddr;
+    laddrs->cid = cid;
     for (i = 0; i < naddr; i++) {
         laddrs->laddrs[i].af = addrs[i].af;
         laddrs->laddrs[i].addr = addrs[i].addr;
@@ -554,12 +555,17 @@ static int dp_vs_copy_percore_laddrs_stats(struct dp_vs_laddr_conf *master_laddr
     return EDPVS_OK;
 }
 
-static void opt2cpu(sockoptid_t opt, sockoptid_t *new_opt, lcoreid_t *cid)
+static int opt2cpu(sockoptid_t opt, sockoptid_t *new_opt, lcoreid_t *cid)
 {
-    *cid = g_lcore_index[opt - SOCKOPT_GET_LADDR_GETALL];
+    int index = opt - SOCKOPT_GET_LADDR_GETALL;
+    if (index >= g_lcore_num) {
+        return -1;
+    }
+    *cid = g_lcore_index[index];
     assert(*cid >=0 && *cid < DPVS_MAX_LCORE);
 
     *new_opt = SOCKOPT_GET_LADDR_GETALL;
+    return 0;
 }
 
 static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
@@ -579,7 +585,9 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     lcoreid_t cid;
 
     netif_get_slave_lcores(&num_lcores, NULL);
-    opt2cpu(opt, &new_opt, &cid);
+    if (opt2cpu(opt, &new_opt, &cid) < 0) {
+        return EDPVS_INVAL;
+    }
     if (new_opt > SOCKOPT_GET_LADDR_GETALL)
         return EDPVS_INVAL;
 

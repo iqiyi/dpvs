@@ -696,6 +696,8 @@ inet_sockaddrtotrio_r(const struct sockaddr_storage *addr, uint16_t proto, char 
 			proto == IPPROTO_TCP ? "tcp" :
 			proto == IPPROTO_UDP ? "udp" :
 			proto == IPPROTO_SCTP ? "sctp" :
+			proto == IPPROTO_ICMP ? "icmp":
+			proto == IPPROTO_ICMPV6 ? "icmp6":
 			proto == 0 ? "none" : "?";
 
 	inet_sockaddrtos2(addr, addr_str);
