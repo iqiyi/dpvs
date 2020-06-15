@@ -37,6 +37,9 @@ typedef uint32_t dpvs_tick_t;
 
 /* it's internal struct, user should never modify it directly. */
 struct dpvs_timer {
+#ifdef CONFIG_TIMER_DEBUG
+    char name[32];
+#endif
     struct list_head    list;
 
     dpvs_timer_cb_t     handler;

@@ -842,7 +842,6 @@ static int tcp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
     int new_state = DPVS_TCP_S_CLOSE;
     assert(proto && conn && mbuf);
     struct dp_vs_dest *dest = conn->dest;
-    unsigned conn_timeout = 0;
     int af = conn->af;
 #ifdef CONFIG_DPVS_IPVS_DEBUG
     char dbuf[64], cbuf[64];
@@ -899,15 +898,7 @@ tcp_state_out:
     conn->old_state = conn->state; // old_state called when connection reused
     conn->state = new_state;
 
-    if (new_state == DPVS_TCP_S_ESTABLISHED) {
-        conn_timeout = dp_vs_get_conn_timeout(conn);
-        if (unlikely(conn_timeout > 0))
-            conn->timeout.tv_sec = conn_timeout;
-        else
-            conn->timeout.tv_sec = tcp_timeouts[new_state];
-    } else {
-        conn->timeout.tv_sec = tcp_timeouts[new_state];
-    }
+    dp_vs_conn_set_timeout(conn, proto);
 
     if (dest) {
         if (!(conn->flags & DPVS_CONN_F_INACTIVE)
@@ -1156,6 +1147,13 @@ static int tcp_conn_expire(struct dp_vs_proto *proto,
     return EDPVS_OK;
 }
 
+static int tcp_conn_expire_quiescent(struct dp_vs_conn *conn)
+{
+    dp_vs_conn_expire_now(conn);
+
+    return EDPVS_OK;
+}
+
 static void defence_tcp_drop_handler(vector_t tokens)
 {
     RTE_LOG(INFO, IPVS, "defence_tcp_drop ON\n");
@@ -1296,18 +1294,19 @@ static int tcp_exit(struct dp_vs_proto *proto)
 }
 
 struct dp_vs_proto dp_vs_proto_tcp = {
-    .name               = "TCP",
-    .proto              = IPPROTO_TCP,
-    .init               = tcp_init,
-    .exit               = tcp_exit,
-    .conn_sched         = tcp_conn_sched,
-    .conn_lookup        = tcp_conn_lookup,
-    .conn_expire        = tcp_conn_expire,
-    .nat_in_handler     = tcp_snat_in_handler,
-    .nat_out_handler    = tcp_snat_out_handler,
-    .fnat_in_handler    = tcp_fnat_in_handler,
-    .fnat_out_handler   = tcp_fnat_out_handler,
-    .snat_in_handler    = tcp_snat_in_handler,
-    .snat_out_handler   = tcp_snat_out_handler,
-    .state_trans        = tcp_state_trans,
+    .name                  = "TCP",
+    .proto                 = IPPROTO_TCP,
+    .init                  = tcp_init,
+    .exit                  = tcp_exit,
+    .conn_sched            = tcp_conn_sched,
+    .conn_lookup           = tcp_conn_lookup,
+    .conn_expire           = tcp_conn_expire,
+    .conn_expire_quiescent = tcp_conn_expire_quiescent,
+    .nat_in_handler        = tcp_snat_in_handler,
+    .nat_out_handler       = tcp_snat_out_handler,
+    .fnat_in_handler       = tcp_fnat_in_handler,
+    .fnat_out_handler      = tcp_fnat_out_handler,
+    .snat_in_handler       = tcp_snat_in_handler,
+    .snat_out_handler      = tcp_snat_out_handler,
+    .state_trans           = tcp_state_trans,
 };

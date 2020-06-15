@@ -489,17 +489,24 @@ static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
 
 static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn);
 
-static void dp_vs_conn_set_timeout(struct dp_vs_conn *conn,
-                                   struct dp_vs_proto *pp)
+unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn)
+{
+    if (conn && conn->dest)
+        return conn->dest->conn_timeout;
+
+    return 0;
+}
+
+void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp)
 {
     unsigned conn_timeout = 0;
 
     /* set proper timeout */
     if ((conn->proto == IPPROTO_TCP && conn->state == DPVS_TCP_S_ESTABLISHED)
         || (conn->proto == IPPROTO_UDP && conn->state == DPVS_UDP_S_NORMAL)) {
-        conn_timeout = dp_vs_get_conn_timeout(conn);
+        conn_timeout = dp_vs_conn_get_timeout(conn);
 
-        if (unlikely(conn_timeout > 0)) {
+        if (conn_timeout > 0) {
             conn->timeout.tv_sec = conn_timeout;
             return;
         }
@@ -509,8 +516,6 @@ static void dp_vs_conn_set_timeout(struct dp_vs_conn *conn,
         conn->timeout.tv_sec = pp->timeout_table[conn->state];
     else
         conn->timeout.tv_sec = 60;
-
-    dpvs_time_rand_delay(&conn->timeout, 1000000);
 }
 
 /*
@@ -626,6 +631,7 @@ static int dp_vs_conn_expire(void *priv)
 
     pp = dp_vs_proto_lookup(conn->proto);
     dp_vs_conn_set_timeout(conn, pp);
+    dpvs_time_rand_delay(&conn->timeout, 1000000);
 
     rte_atomic32_inc(&conn->refcnt);
 
@@ -684,6 +690,24 @@ static int dp_vs_conn_expire(void *priv)
 
     rte_atomic32_dec(&conn->refcnt);
     return DTIMER_OK;
+}
+
+void dp_vs_conn_expire_now(struct dp_vs_conn *conn)
+{
+    if (unlikely(!dp_vs_conn_is_in_timer(conn)))
+        return;
+
+    /* template quiescent connections are controlled by global
+     * config 'expire_quiescent_template' */
+    if (unlikely(dp_vs_conn_is_template(conn)))
+        return;
+
+    conn->timeout.tv_sec = 0;
+    conn->timeout.tv_usec = 0;
+
+    /* no need to call 'dpvs_timer_update', because timer would
+     * be updated in 'dp_vs_conn_put' later */
+    return;
 }
 
 static void conn_flush(void)
@@ -933,6 +957,9 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     }
 
     /* schedule conn timer */
+#ifdef CONFIG_TIMER_DEBUG
+    snprintf(new->timer.name, sizeof(new->timer.name), "%s", "conn");
+#endif
     dpvs_time_rand_delay(&new->timeout, 1000000);
     dp_vs_conn_attach_timer(new, true);
 

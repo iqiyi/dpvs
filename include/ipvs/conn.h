@@ -36,13 +36,14 @@ enum {
 };
 
 enum {
-    DPVS_CONN_F_HASHED          = 0x0040,
-    DPVS_CONN_F_REDIRECT_HASHED = 0x0080,
-    DPVS_CONN_F_INACTIVE        = 0x0100,
-    DPVS_CONN_F_IN_TIMER        = 0x0200,
-    DPVS_CONN_F_SYNPROXY        = 0x8000,
-    DPVS_CONN_F_TEMPLATE        = 0x1000,
-    DPVS_CONN_F_NOFASTXMIT      = 0x2000,
+    DPVS_CONN_F_HASHED           = 0x0040,
+    DPVS_CONN_F_REDIRECT_HASHED  = 0x0080,
+    DPVS_CONN_F_INACTIVE         = 0x0100,
+    DPVS_CONN_F_IN_TIMER         = 0x0200,
+    DPVS_CONN_F_EXPIRE_QUIESCENT = 0x4000,
+    DPVS_CONN_F_SYNPROXY         = 0x8000,
+    DPVS_CONN_F_TEMPLATE         = 0x1000,
+    DPVS_CONN_F_NOFASTXMIT       = 0x2000,
 };
 
 struct dp_vs_conn_param {
@@ -197,6 +198,11 @@ dp_vs_ct_in_get(int af, uint16_t proto,
 void dp_vs_conn_put(struct dp_vs_conn *conn);
 /* put conn without reset the timer */
 void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn);
+
+unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn);
+void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp);
+
+void dp_vs_conn_expire_now(struct dp_vs_conn *conn);
 
 void ipvs_conn_keyword_value_init(void);
 void install_ipvs_conn_keywords(void);

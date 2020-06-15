@@ -387,6 +387,9 @@ struct neighbour_entry *neigh_add_table(int af, const union inet_addr *ipaddr,
     INIT_LIST_HEAD(&new_neighbour->queue_list);
 
     if (!(new_neighbour->flag & NEIGHBOUR_STATIC)) {
+#ifdef CONFIG_TIMER_DEBUG
+        snprintf(new_neighbour->timer.name, sizeof(new_neighbour->timer.name), "%s", "neigh");
+#endif
         dpvs_time_rand_delay(&delay, 200000); /* delay 200ms randomly to avoid timer performance problem */
         dpvs_timer_sched(&new_neighbour->timer, &delay,
                 neighbour_timer_event, new_neighbour, false);

@@ -1005,6 +1005,19 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
             dir = DPVS_CONN_DIR_OUTBOUND;
         else
             dir = DPVS_CONN_DIR_INBOUND;
+    } else {
+        /* assert(conn->dest->svc != NULL); */
+        if (conn->dest && conn->dest->svc &&
+                prot->conn_expire_quiescent &&
+                (conn->dest->svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT)) {
+            if (rte_atomic16_read(&conn->dest->weight) == 0) {
+                RTE_LOG(INFO, IPVS, "%s: the conn is quiescent, expire it right now,"
+                        " and drop the packet!\n", __func__);
+                prot->conn_expire_quiescent(conn);
+                dp_vs_conn_put(conn);
+                return INET_DROP;
+            }
+        }
     }
 
     if (conn->flags & DPVS_CONN_F_SYNPROXY) {
