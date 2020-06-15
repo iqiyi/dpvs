@@ -371,7 +371,7 @@ start_check(list old_checkers_queue, data_t *prev_global_data)
 
 	/* Initialize IPVS topology */
 	if (!init_services())
-		stop_check(KEEPALIVED_EXIT_FATAL);
+	    stop_check(KEEPALIVED_EXIT_FATAL);
 	
 	/* Dump configuration */
 	if (__test_bit(DUMP_CONF_BIT, &debug))
