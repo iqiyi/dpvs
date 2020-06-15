@@ -117,6 +117,12 @@ static int dp_vs_blklst_del_lcore(int af, uint8_t proto, const union inet_addr *
     return EDPVS_NOTEXIST;
 }
 
+static uint32_t blklst_msg_seq(void)
+{
+    static uint32_t counter = 0;
+    return counter++;
+}
+
 static int dp_vs_blklst_add(int af, uint8_t proto, const union inet_addr *vaddr,
                             uint16_t vport, const union inet_addr *blklst)
 {
@@ -145,7 +151,7 @@ static int dp_vs_blklst_add(int af, uint8_t proto, const union inet_addr *vaddr,
     }
 
     /*set blklst ip on all slave lcores*/
-    msg = msg_make(MSG_TYPE_BLKLST_ADD, 0, DPVS_MSG_MULTICAST,
+    msg = msg_make(MSG_TYPE_BLKLST_ADD, blklst_msg_seq(), DPVS_MSG_MULTICAST,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
     if (unlikely(!msg))
         return EDPVS_NOMEM;
@@ -188,7 +194,7 @@ static int dp_vs_blklst_del(int af, uint8_t proto, const union inet_addr *vaddr,
     }
 
     /*del blklst ip on all slave lcores*/
-    msg = msg_make(MSG_TYPE_BLKLST_DEL, 0, DPVS_MSG_MULTICAST,
+    msg = msg_make(MSG_TYPE_BLKLST_DEL, blklst_msg_seq(), DPVS_MSG_MULTICAST,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
     if (!msg)
         return EDPVS_NOMEM;

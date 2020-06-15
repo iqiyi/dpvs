@@ -1137,7 +1137,7 @@ static int ifa_msg_get_cb(struct dpvs_msg *msg)
 
     if (!msg || (msg->len && msg->len != sizeof(idev)))
         return EDPVS_INVAL;
-    ptr = msg->len ? (void*)msg->data : NULL;
+    ptr = msg->len ? (void *)msg->data : NULL;
     idev = ptr ? (*(struct inet_device **)ptr) : NULL;
 
     if (idev)
