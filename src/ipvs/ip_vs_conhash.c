@@ -55,7 +55,8 @@ struct conhash_rs_data {
 #define REPLICA 160
 #define QUIC_PACKET_8BYTE_CONNECTION_ID  (1 << 3)
 
-static struct list_head conhash_svc_data_tbl[DP_VS_SVC_TAB_SIZE];
+static struct list_head s_conhash_svc_data_tbl[DP_VS_SVC_TAB_SIZE];
+static int s_conhash_max_try_cnt = 200;
 
 /*
  * QUIC CID hash target for quic*
@@ -288,7 +289,7 @@ static struct conhash_svc_data *dp_vs_conhash_get_svc_data(struct dp_vs_service 
         return NULL;
     }
 
-    list_for_each_entry(svc_data, &conhash_svc_data_tbl[hash], list) {
+    list_for_each_entry(svc_data, &s_conhash_svc_data_tbl[hash], list) {
         if ((svc_data->af == svc->af)
             && inet_addr_equal(svc->af, &svc_data->addr, &svc->addr)
             && (svc_data->port == svc->port)
@@ -397,7 +398,7 @@ static int dp_vs_conhash_create_svc_data(struct dp_vs_service *svc,
     dp_vs_conhash_update_node_index(sched_data);
 
     tmp_svc_data->sched_data = sched_data;
-    list_add(&tmp_svc_data->list, &conhash_svc_data_tbl[hash]);
+    list_add(&tmp_svc_data->list, &s_conhash_svc_data_tbl[hash]);
     *svc_data = tmp_svc_data;
 
     return ret;
@@ -444,6 +445,7 @@ static int dp_vs_conhash_init_svc(struct dp_vs_service *svc)
     struct conhash_rs_data *rs_data = NULL;
     int ret = EDPVS_OK;
     int cid = rte_lcore_id();
+    int try_cnt = 0;
 
     // alloc rs data;
     ret = dp_vs_conhash_create_rs_data(&rs_data);
@@ -452,6 +454,18 @@ static int dp_vs_conhash_init_svc(struct dp_vs_service *svc)
     }
 
     svc_data = dp_vs_conhash_get_svc_data(svc);
+    if (unlikely(svc_data && (rte_get_master_lcore() == cid))) {
+        RTE_LOG(INFO, SERVICE, "[%d]: %s: master waits slave lcores to free svc data!\n",
+                cid, __func__);
+        while ((svc_data = dp_vs_conhash_get_svc_data(svc))) {
+            rte_delay_ms(1);
+            if (unlikely(++try_cnt >= s_conhash_max_try_cnt)) {
+                RTE_LOG(ERR, SERVICE, "%s: master gets existed svc data !!\n",
+                    __func__);
+                break;
+            }
+        }
+    }
     if (!svc_data) {
         if (rte_get_master_lcore() == cid) {
             // only master lcore comes here.
@@ -525,6 +539,7 @@ static int dp_vs_conhash_update_svc(struct dp_vs_service *svc,
     struct conhash_sched_data *old_sched_data = NULL;
     struct conhash_sched_data *new_sched_data = NULL;
     int update_flag = 0;
+    int try_cnt = 0;
 
     svc_data = dp_vs_conhash_get_svc_data(svc);
     if (unlikely(!svc_data)) {
@@ -548,6 +563,25 @@ static int dp_vs_conhash_update_svc(struct dp_vs_service *svc,
                 break;
         }
         if (update_flag) {
+            while (rte_atomic32_read(&old_sched_data->refcnt) < g_lcore_num) {
+                /**
+                *   Because the asynchronous message is transmitted between the slaves and the master,
+                *   it may happen that the sche data is freed by the master in advance.
+                *   (In theory, the sche data should always be freed by the slave lcore)
+                *   For example, rs1 rs2 are added, rs3 is being added in master lcore,
+                *   and the slaves have not received the asynchronous msg to add rs2,
+                *   the old sched data will be freed by master lcore in the process of adding rs3.
+                *   ps:
+                *       If we use synchronization msg between slaves and master to config svc/rs,
+                *       the timeout log may be printed.
+                */
+                rte_delay_ms(1);
+                if (unlikely(++try_cnt >= s_conhash_max_try_cnt)) {
+                    RTE_LOG(ERR, SERVICE, "%s: refcnt of sche data is %d, less than %d !!\n",
+                        __func__, rte_atomic32_read(&old_sched_data->refcnt), g_lcore_num);
+                    break;
+                }
+            }
             ret = dp_vs_conhash_create_sched_data(&new_sched_data);
             if (unlikely(EDPVS_OK != ret)) {
                 RTE_LOG(ERR, SERVICE, "%s: create new sched data failed!\n", __func__);
@@ -614,7 +648,7 @@ int  dp_vs_conhash_init(void)
 {
     int i;
     for (i = 0; i < DP_VS_SVC_TAB_SIZE; i++) {
-        INIT_LIST_HEAD(&conhash_svc_data_tbl[i]);
+        INIT_LIST_HEAD(&s_conhash_svc_data_tbl[i]);
     }
     return register_dp_vs_scheduler(&dp_vs_conhash_scheduler);
 }
