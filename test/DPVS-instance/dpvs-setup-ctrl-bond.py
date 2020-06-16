@@ -1,8 +1,8 @@
+#!/usr/bin/python
+#coding=utf-8
 ########script to setup env of dpvs and run########
 #-- INPUT:DPVS version
 #-- OUTPUT:setup info: succeed/failed
-
-#coding=utf-8
 import os
 import sys
 import time
@@ -223,7 +223,7 @@ if __name__ == '__main__':
     else:
         DPVS_VERSION = "v1.7.8" 
         git_enable = False
-    FILE_CONTENT = ""
+    FILE_CONTENT = "#!/usr/bin/sh \n"
     file_name = ENV_FILE_DIR + "/" + "old_env.sh"
     if not os.path.exists(ENV_FILE_DIR):
         os.makedirs(ENV_FILE_DIR)

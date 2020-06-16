@@ -1,7 +1,8 @@
+#!/usr/bin/python
+#coding=utf-8
 ########script to rollback env of dpvs########
 ## INPUT:none
 ## OUTPUT:succeed/failed
-#coding=utf-8
 import os
 import sys
 import commands
@@ -22,6 +23,9 @@ def rollback_env(file_name):
             
 if __name__ == '__main__':
     #rollback after all cases done
+    if len(sys.argv) < 1:
+        print "usage:"
+        print "  python dpvs_env_rollback.py"
     file_name = "/root/old_env/old_env.sh"
     rb_res = rollback_env(file_name)
     if rb_res["status"]:

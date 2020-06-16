@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #coding=utf-8
 import os
 import sys
@@ -35,7 +36,7 @@ if __name__ == '__main__':
     '''server ifconfig & service running'''
     if len(sys.argv) < 3:
         print "usage:"
-        print "  python dpvs_DR_rs_setup.py ip1,...,ipn vip net.ipv4.conf.lo.arp_ignore"
+        print "  python dpvs_DR_rs_setup.py ip1,...,ipn vip"
     config_ip = sys.argv[1]
     vip_info = sys.argv[2]
     netparam = "net.ipv4.conf.lo.arp_ignore"
@@ -55,7 +56,7 @@ if __name__ == '__main__':
     if not os.path.exists(ENV_FILE_DIR):
         os.mkdir(ENV_FILE_DIR)
     file_name = ENV_FILE_DIR + "/rollback_rs.sh"
-    FILE_CONTENT = ""
+    FILE_CONTENT = "#!/usr/bin/sh \n"
     num = 0
     for ip in ip_list:
         '''sample: ifconfig eth2:0 192.168.1.40'''
@@ -75,7 +76,7 @@ if __name__ == '__main__':
         file_writen(FILE_CONTENT, file_name)
         print "vip add to lo failed!"
         sys.exit(-1)
-    cmd0 = "ip addr del " + vip_info + " dev lo \n"
+    cmd0 = "ip addr del " + vip_info + "/32 dev lo \n"
     FILE_CONTENT = cmd0 + FILE_CONTENT
 
     cmd = "sysctl -w " + netparam + "=1"

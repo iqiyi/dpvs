@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #coding=utf-8
 import os
 import sys
@@ -66,7 +67,7 @@ if __name__ == '__main__':
     if not os.path.exists(ENV_FILE_DIR):
         os.mkdir(ENV_FILE_DIR)
     file_name = ENV_FILE_DIR + "/rollback_fnat_onearm.sh"
-    FILE_CONTENT = ""
+    FILE_CONTENT = "#!/usr/bin/sh \n"
     num = 0
     for ip in ip_list:
         '''sample: ifconfig eth2:0 192.168.1.40'''

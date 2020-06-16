@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #coding=utf-8
 import os
 import sys
@@ -29,22 +30,35 @@ if __name__ == '__main__':
         print "python dpvs_cli_run.py vip:vport 1/0(default 0:donnot conduct stress test)"
     vip_info = sys.argv[1]
     '''stress test flag get''' 
+    ipv6 = False
     if len(sys.argv) == 3:
         str_flag = sys.argv[2]
         if str_flag == "0":
             stress = False
-        else:
+        elif str_flag == "1":
             stress = True
+        else:
+            ipv6 = True
+            if len(sys.argv) == 4 and sys.argv[3] == '1':
+                stress = True
+            else:
+                stress = False
+
     else:
         stress = False
 
     '''whether conduct stress test'''
-    if not stress:
+    if not stress and not ipv6:
         r = requests.get("http://" + vip_info + "/")
         if r.status_code != 200:
             print "test vip:vport service failed!"
             sys.exit(-1)
-    else:
+    elif not stress and ipv6:
+        r = requests.get("http://[" + vip_info + "]:" + str_flag + "/")
+        if r.status_code != 200:
+            print "test vip:vport service failed!"
+            sys.exit(-1)
+    elif stress and not ipv6:
         '''stress test'''
         req_total = 0
         for i in range(2):
@@ -57,6 +71,17 @@ if __name__ == '__main__':
                     continue
                 req_total = req_total + long(line.split()[0])
                 break
+    else:
+        '''stress test'''
+        req_total = 0
+        for i in range(2):
+            s, r = commands.getstatusoutput("/root/wrk -c 1000 -d 30 -t 48 http://[" + vip_info + "]:" + str_flag + "/")
+            if s != 0:
+                print "wrk stress test conduct failed!"
+                sys.exit(-1)
+            for line in r.split("\n"):
+                if line.find("requests in") == -1:
+                    continue
         QPS = "QPS:" + str(req_total /60.0 /1024) + "Kreq/s \n"
         fname = ENV_FILE_DIR + "/stress_test.txt"
         file_writen(QPS, fname)

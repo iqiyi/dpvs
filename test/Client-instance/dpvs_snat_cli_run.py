@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #coding=utf-8
 import os
 import sys
@@ -44,7 +45,4 @@ if __name__ == '__main__':
 
     cmd = "ping -c 10 " + ip_info.split(":")[0] 
     s, r = commands.getstatusoutput(cmd)
-    if s != 0:
-        print "default route config failed!"
-        sys.exit(-1)
     print(CONFIG_PASS + "client ") 

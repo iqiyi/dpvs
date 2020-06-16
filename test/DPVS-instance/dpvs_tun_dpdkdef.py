@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #coding=utf-8
 import os
 import sys
@@ -52,7 +53,7 @@ if __name__ == '__main__':
     if not os.path.exists(ENV_FILE_DIR):
         os.mkdir(ENV_FILE_DIR)
     file_name = ENV_FILE_DIR + "/rollback_tun_onearm.sh"
-    FILE_CONTENT = ""
+    FILE_CONTENT = "#!/usr/bin/sh \n"
     '''check dpvs + dpdk nic status'''
     s, r = commands.getstatusoutput("/root/dpvs/bin/dpip link show | grep dpdk")
     if s != 0 or r.find(dev) == -1:

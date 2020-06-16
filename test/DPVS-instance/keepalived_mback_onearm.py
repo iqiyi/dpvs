@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #coding=utf-8
 import os
 import sys
@@ -146,7 +147,7 @@ if __name__ == '__main__':
     if not os.path.exists(ENV_FILE_DIR):
         os.mkdir(ENV_FILE_DIR)
     file_name = ENV_FILE_DIR + "/rollback_alived_mback.sh"
-    FILE_CONTENT = ""
+    FILE_CONTENT = "#!/usr/bin/sh \n"
     if master == "1":
         state = 'MASTER'
         priority = '100'

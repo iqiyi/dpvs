@@ -1,8 +1,8 @@
+#!/usr/bin/python
+#coding=utf-8
 ########script to setup env of dpvs and run########
 #-- INPUT:DPVS version
 #-- OUTPUT:setup info: succeed/failed
-
-#coding=utf-8
 import os
 import sys
 import time
@@ -123,7 +123,7 @@ def dpdk_env_setup(FILE_CONTENT, ifaces):
             stats, _ = commands.getstatusoutput(tmp_bind)
             if stats != 0:
                 return {"status":False, "content":FILE_CONTENT, "bind_num":0, "detail":"DPDK devbind failed"}
-        elif nic.find("drv=ixgbe") == -1 or nic.find("drv=igb_uio") == -1:  #networks not other or kernel
+        elif nic.find("drv=ixgbe") == -1 and nic.find("drv=igb_uio") == -1:  #networks not other or kernel
             for elem in nic.split():
                 if elem.find("drv=") != -1:
                     tmp_bind = unbind_cmd + nic.split()[0] #bind kernel
@@ -260,7 +260,7 @@ if __name__ == '__main__':
     else:
         DPVS_VERSION = "v1.7.8" 
         git_enable = False
-    FILE_CONTENT = ""
+    FILE_CONTENT = "#!/usr/bin/sh \n"
     file_name = ENV_FILE_DIR + "/" + "old_env.sh"
     if not os.path.exists(ENV_FILE_DIR):
         os.makedirs(ENV_FILE_DIR)

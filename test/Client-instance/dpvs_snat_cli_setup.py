@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #coding=utf-8
 import os
 import sys
@@ -34,7 +35,7 @@ if __name__ == '__main__':
     '''client ifconfig & stress test'''
     if len(sys.argv) < 2:
         print "usage:"
-        print "python dpvs_snat_cli_setup.py route ip(defaul "")"
+        print "python dpvs_snat_cli_setup.py route ip"
     route_info = sys.argv[1]
     '''find iface to config ip --- iface to ssh login'''
     try:
@@ -57,7 +58,7 @@ if __name__ == '__main__':
     if not os.path.exists(ENV_FILE_DIR):
         os.mkdir(ENV_FILE_DIR)
     file_name = ENV_FILE_DIR + "/rollback_client_snat.sh"
-    FILE_CONTENT = ""
+    FILE_CONTENT = "#!/usr/bin/sh \n"
     file_writen(FILE_CONTENT, file_name)
     cmd = "ip route add default via " + route_info + " dev " + iface
     s, r = commands.getstatusoutput(cmd)
