@@ -860,6 +860,7 @@ int msg_type_table_print(char *buf, int len)
                 rem_len = len - strlen(buf) - 1;
                 if (strlen(line) > rem_len) {
                     RTE_LOG(WARNING, MSGMGR, "%s: buffer not enough\n", __func__);
+		      rte_rwlock_read_unlock(&mt_lock[ii][jj]);
                     return EDPVS_INVAL;
                 }
                 strncat(buf, line, rem_len);

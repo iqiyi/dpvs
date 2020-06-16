@@ -822,6 +822,11 @@ static int ifa_entry_add(const struct ifaddr_action *param)
             goto del_route;
     }
 
+#ifdef CONFIG_TIMER_DEBUG
+    snprintf(ifa->timer.name, sizeof(ifa->timer.name), "%s", "ifa_temp_timer");
+    snprintf(ifa->dad_timer.name, sizeof(ifa->dad_timer.name), "%s", "ifa_dad_timer");
+#endif
+
     if (!(ifa->flags & IFA_F_PERMANENT)) {
         timeo.tv_sec = ifa->valid_lft;
         if (is_master) {
@@ -1132,7 +1137,7 @@ static int ifa_msg_get_cb(struct dpvs_msg *msg)
 
     if (!msg || (msg->len && msg->len != sizeof(idev)))
         return EDPVS_INVAL;
-    ptr = msg->len ? (void*)msg->data : NULL;
+    ptr = msg->len ? (void *)msg->data : NULL;
     idev = ptr ? (*(struct inet_device **)ptr) : NULL;
 
     if (idev)

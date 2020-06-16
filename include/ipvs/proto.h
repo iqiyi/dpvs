@@ -53,6 +53,9 @@ struct dp_vs_proto {
     int (*conn_expire)(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn);
 
+    /* expire quiescent connections timely */
+    int (*conn_expire_quiescent)(struct dp_vs_conn *conn);
+
     /* for NAT mode */
     int (*nat_in_handler)(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn,
