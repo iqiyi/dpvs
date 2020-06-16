@@ -1,42 +1,25 @@
 #!/bin/sh -
 # program: dpvs
-# May 13, 2020
+# Jun 16, 2020
 #
 #####################################
-# This is a bugfix verison of v1.8.2.
+# Deprecate version v1.8.2, v1.8.4
 #####################################
 #
 # # Features
 # ----------
-# 
+# - Support per-service established timeout for udp.
+# - Expire quiescent connections for udp and tcp with per-service config.
 # 
 # # Bugfix
 # --------
-# - Keepalived: Fix virtual server partial deletion problem when configured with virtual server group.
-# - Keepalived: Fix realserver deletion problem when the realservers marked as down state by health_checker.
-# - Keepalived: Fix reload problem for some configurations, such as conn timeout, blklst addresses, etc.
-# - Keepalived: Fix configurations would not load problem after restart on occasion.
-# - Keepalived: Fix port transition support problem in fullnat mode.
-# - Keepalived: Fix logging problem for MATCH/ICMP/ICMPv6 in keepalived.
-# - Keepalived: Fix snat configuration and reload problem.
-# - Keepalived: Fix conhash scheduler configuration problem in keepalived.
-# - Keepalived: Fix incorrect ipvs stats problem caused by mismatch structures of keepalived and dpvs.
-# - Keepalived: Fix crash when snat and fullnat configured together.
-# - Keepalived: Fix address family setting problem for nat64 forwarding.
-# - Keepalived: Fix dpvs route setting problem in keepalived vrrp.
-# - Keepalived: Fix laddr configuration problems with ip range style.
-# - Keepalived: Mergerd virtual server group address into range list.
-# - Keepalived: Update libipvs and related headers.
-# - Ipvsadm: do not show address family for MATCH rule.
-# - Dpvs: Fix ipv6 and nat64 blklst support problem.
-# - Dpvs: Fix duplicated ipv4 local-in routes problem.
-# - Dpvs: Allow to use non-continuous lcores, like "-l 0,1-8,11-18".
-# - Dpvs: Fix crash prolbem when cpu id is not set correctly by ipvsadm.
-# - Dpvs: Fix compile error caused by inline method.
-# - Dpvs: Fix a array boundary overflow issue.
+# - Fix problem that keepalived supports only 1k realservers at max.
+# - Fix dpvs crash problem caused by "dpip addr" command.
+# - Fix laddr display problem of slave workers.
+# - Remove auto generated keepalived make files.
 
 
 export VERSION=1.8
-export RELEASE=4
+export RELEASE=5
 
 echo $VERSION-$RELEASE
