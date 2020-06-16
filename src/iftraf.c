@@ -387,7 +387,7 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     if (!conf || size < sizeof(struct dp_vs_iftraf_conf) || !out || !outsize)
         return EDPVS_INVAL;
-	cf = conf;
+    cf = conf;
 
     if (cf && strlen(cf->ifname)) {
         port = netif_port_get_by_name(cf->ifname);
@@ -505,7 +505,7 @@ static void inline iftraf_tlb_add(struct iftraf_pkt *param)
             entry->daddr.in6.s6_addr32[0],entry->daddr.in6.s6_addr32[1],
             entry->daddr.in6.s6_addr32[2],entry->daddr.in6.s6_addr32[3],
             ntohs(entry->sport), ntohs(entry->dport), param->pkt_len);
-	}
+    }
 
     /* Update record */
     entry->last_write = history_pos;
