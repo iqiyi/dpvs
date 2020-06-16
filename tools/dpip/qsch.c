@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "sockopt.h"
 #include "conf/tc.h"

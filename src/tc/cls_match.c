@@ -25,11 +25,11 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include "netif.h"
-#include "match.h"
 #include "vlan.h"
 #include "tc/tc.h"
 #include "tc/sch.h"
 #include "tc/cls.h"
+#include "conf/match.h"
 #include "conf/tc.h"
 
 struct match_cls_priv {

@@ -36,7 +36,9 @@ clean:
 	for i in $(SUBDIRS); do $(MAKE) -C $$i clean || exit 1; done
 
 distclean:
-	$(MAKE) -C tools/keepalived distclean || exit 1
+	$(MAKE) -C tools/keepalived distclean || true
+	-rm -f tools/keepalived/configure
+	-rm -f tools/keepalived/Makefile
 
 install:all
 	-mkdir -p $(INSDIR)

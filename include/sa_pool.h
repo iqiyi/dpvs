@@ -52,7 +52,6 @@ int sa_pool_init(void);
 int sa_pool_term(void);
 
 int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high);
-
 int sa_pool_destroy(struct inet_ifaddr *ifa);
 
 /**
@@ -67,7 +66,8 @@ int sa_release(const struct netif_port *dev,
                const struct sockaddr_storage *daddr,
                const struct sockaddr_storage *saddr);
 
-int sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats);
+int get_sa_pool_stats(const struct inet_ifaddr *ifa,
+                       struct sa_pool_stats *stats);
 
 /* config file */
 void install_sa_pool_keywords(void);

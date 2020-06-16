@@ -113,8 +113,6 @@ int neigh_gratuitous_arp(struct in_addr *src, struct netif_port *port);
 
 int neigh_resolve_input(struct rte_mbuf *mbuf, struct netif_port *port);
 
-void neigh_process_ring(void *arg);
-
 void neigh_confirm(int af, union inet_addr *nexthop, struct netif_port *port);
 
 int neigh_sync_core(const void *param, bool add_del, enum param_kind kind);

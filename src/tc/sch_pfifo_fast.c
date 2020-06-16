@@ -39,8 +39,8 @@ static const uint8_t prio2band[TC_PRIO_MAX + 1] = {
 static const int bitmap2band[] = {-1, 0, 1, 0, 2, 0, 1, 0};
 
 struct pfifo_fast_priv {
-    uint32_t bitmap[RTE_MAX_LCORE];
-    struct tc_mbuf_head q[RTE_MAX_LCORE][PFIFO_FAST_BANDS];
+    uint32_t bitmap[DPVS_MAX_LCORE];
+    struct tc_mbuf_head q[DPVS_MAX_LCORE][PFIFO_FAST_BANDS];
 
 #define this_bitmap bitmap[rte_lcore_id()]
 #define this_pff_q  q[rte_lcore_id()]

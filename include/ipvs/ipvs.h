@@ -17,7 +17,7 @@
  */
 #ifndef __DPVS_IPVS_H__
 #define __DPVS_IPVS_H__
-#include "common.h"
+#include "conf/common.h"
 #include "inet.h"
 #include "ipvs/service.h"
 

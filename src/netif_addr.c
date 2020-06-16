@@ -299,6 +299,54 @@ int netif_mc_dump(struct netif_port *dev,
     return err;
 }
 
+int __netif_mc_print(struct netif_port *dev,
+                     char *buf, int *len, int *pnaddr)
+{
+    struct ether_addr addrs[NETIF_MAX_HWADDR];
+    size_t naddr = NELEMS(addrs);
+    int err, i;
+    int strlen = 0;
+
+    err = __netif_mc_dump(dev, addrs, &naddr);
+    if (err != EDPVS_OK)
+        goto errout;
+
+    for (i = 0; i < naddr; i++) {
+        err = snprintf(buf + strlen, *len - strlen,
+                "        link %02x:%02x:%02x:%02x:%02x:%02x\n",
+                addrs[i].addr_bytes[0], addrs[i].addr_bytes[1],
+                addrs[i].addr_bytes[2], addrs[i].addr_bytes[3],
+                addrs[i].addr_bytes[4], addrs[i].addr_bytes[5]);
+        if (err < 0) {
+            err = EDPVS_NOROOM;
+            goto errout;
+        }
+        strlen += err;
+    }
+
+    *len = strlen;
+    *pnaddr = naddr;
+    return EDPVS_OK;
+
+errout:
+    *len = 0;
+    *pnaddr = 0;
+    buf[0] = '\0';
+    return err;
+}
+
+int netif_mc_print(struct netif_port *dev,
+                     char *buf, int *len, int *pnaddr)
+{
+    int err;
+
+    rte_rwlock_read_lock(&dev->dev_lock);
+    err = __netif_mc_print(dev, buf, len, pnaddr);
+    rte_rwlock_read_unlock(&dev->dev_lock);
+
+    return err;
+}
+
 int __netif_mc_sync(struct netif_port *to, struct netif_port *from)
 {
     int err;

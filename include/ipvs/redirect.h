@@ -17,7 +17,7 @@
  */
 #ifndef __DPVS_REDIRECT_H__
 #define __DPVS_REDIRECT_H__
-#include "common.h"
+#include "conf/common.h"
 #include "list.h"
 #include "dpdk.h"
 #include "netif.h"

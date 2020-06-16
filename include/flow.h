@@ -24,38 +24,11 @@
 #ifndef __DPVS_FLOW_H__
 #define __DPVS_FLOW_H__
 
-#ifdef __DPVS__
-#include "common.h"
+#include "conf/common.h"
+#include "conf/flow.h"
 #include "netif.h"
 #include "inet.h"
-#endif
 
-/* linux:include/uapi/route.h */
-#define RTF_UP          0x0001      /* route usable                 */
-#define RTF_GATEWAY     0x0002      /* destination is a gateway     */
-#define RTF_HOST        0x0004      /* host entry (net otherwise)   */
-#define RTF_REINSTATE   0x0008      /* reinstate route after tmout  */
-#define RTF_DYNAMIC     0x0010      /* created dyn. (by redirect)   */
-#define RTF_MODIFIED    0x0020      /* modified dyn. (by redirect)  */
-#define RTF_MTU         0x0040      /* specific MTU for this route  */
-#define RTF_MSS         RTF_MTU     /* Compatibility :-(            */
-#define RTF_WINDOW      0x0080      /* per route window clamping    */
-#define RTF_IRTT        0x0100      /* Initial round trip time      */
-#define RTF_REJECT      0x0200      /* Reject route                 */
-
-/* dpvs defined. */
-#define RTF_FORWARD     0x0400
-#define RTF_LOCALIN     0x0800
-#define RTF_DEFAULT     0x1000
-#define RTF_KNI         0X2000
-#define RTF_OUTWALL     0x4000
-
-struct rt6_prefix {
-    struct in6_addr     addr;
-    int                 plen;
-};
-
-#ifdef __DPVS__
 /* common flow info of upper layer (l4) */
 union flow_ul {
     struct {
@@ -122,5 +95,4 @@ struct flow6 {
 #define fl6_dport       __fl_ul.ports.dport
 };
 
-#endif /* __DPVS__ */
 #endif /* __DPVS_FLOW_H__ */

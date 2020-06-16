@@ -1,0 +1,48 @@
+*.orig
+*.rej
+*.o
+*.a
+README
+bin/
+keepalived.spec
+*~
+*.swp
+.dir-locals.el
+keepalived-*.tar.gz
+
+
+# http://www.gnu.org/software/automake
+Makefile
+Makefile.in
+
+# http://www.gnu.org/software/autoconf
+/ar-lib
+/autom4te.cache
+/autoscan.log
+/autoscan-*.log
+/aclocal.m4
+/compile
+/config.cache
+/config.h.in
+/config.log
+/config.status
+/configure.scan
+/depcomp
+/install-sh
+/missing
+stamp-h?
+
+.deps/
+
+/tmp/
+/devel/
+
+# To be able to build without automake/autoconf comment out the following
+lib/config.h.in
+/configure
+
+# For snap builds
+parts/
+prime/
+stage/
+keepalived*.snap

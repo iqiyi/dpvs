@@ -25,7 +25,7 @@ CFLAGS = -g -O0
 CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes
 
 CFLAGS += -I ../../include
-CFLAGS += -I ../keepalived/keepalived/libipvs-2.6
+CFLAGS += -I ../keepalived/keepalived/include
 
 LIBS = -lnuma
 DEFS = -D DPVS_MAX_LCORE=64
@@ -34,7 +34,7 @@ CFLAGS += $(DEFS)
 
 OBJS = dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
 	   qsch.o cls.o tunnel.o ipset.o ipv6.o iftraf.o ../../src/common.o \
-	   ../keepalived/keepalived/libipvs-2.6/sockopt.o
+	   ../keepalived/keepalived/check/sockopt.o
 
 all: $(TARGET)
 

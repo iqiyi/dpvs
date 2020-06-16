@@ -39,10 +39,6 @@ typedef uint32_t dpvs_tick_t;
 struct dpvs_timer {
     struct list_head    list;
 
-#ifdef CONFIG_TIMER_DEBUG
-    struct list_head    dummy;
-#endif
-
     dpvs_timer_cb_t     handler;
     void                *priv;
     bool                is_period;
@@ -54,8 +50,8 @@ struct dpvs_timer {
     dpvs_tick_t         delay;
 };
 
-inline dpvs_tick_t timeval_to_ticks(const struct timeval *tv);
-inline void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv);
+dpvs_tick_t timeval_to_ticks(const struct timeval *tv);
+void ticks_to_timeval(const dpvs_tick_t ticks, struct timeval *tv);
 
 int dpvs_timer_init(void);
 int dpvs_timer_term(void);

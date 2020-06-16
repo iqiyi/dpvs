@@ -25,7 +25,7 @@
 #ifndef __DPVS_TC_SCH_H__
 #define __DPVS_TC_SCH_H__
 #include <assert.h>
-#include "common.h"
+#include "conf/common.h"
 #ifdef __DPVS__
 #include "dpdk.h"
 #include "timer.h"
@@ -82,14 +82,14 @@ struct Qsch {
     rte_atomic32_t          refcnt;
 
     uint32_t                limit;
-    struct tc_mbuf_head     q[RTE_MAX_LCORE];
+    struct tc_mbuf_head     q[DPVS_MAX_LCORE];
     uint32_t                flags;
 
     struct Qsch_ops         *ops;
 
     /* per-lcore statistics */
-    struct qsch_qstats      qstats[RTE_MAX_LCORE];
-    struct qsch_bstats      bstats[RTE_MAX_LCORE];
+    struct qsch_qstats      qstats[DPVS_MAX_LCORE];
+    struct qsch_bstats      bstats[DPVS_MAX_LCORE];
 
     struct dpvs_timer       rc_timer;
 

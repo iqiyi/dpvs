@@ -19,7 +19,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <openssl/md5.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpdk.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/synproxy.h"
@@ -700,7 +700,8 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         }
 
         /* drop packet from blacklist */
-        if (dp_vs_blklst_lookup(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+        if (dp_vs_blklst_lookup(iph->af, iph->proto, &iph->daddr,
+                    th->dest, &iph->saddr)) {
             goto syn_rcv_out;
         }
     } else {

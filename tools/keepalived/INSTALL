@@ -1,54 +1,249 @@
-Kernel needing
+Kernel needs
 ==============
 
   Compile a kernel with the following options :
 
   Kernel/User netlink socket
-  Network firewalls (for Kernel 2.2)
   LinuxVirtualServer
 
-  Keepalived support all LVS code : including IPVS code for kernel 2.2
-  and kernel 2.4
+  Keepalived supports all LVS code.
 
-Libraries dependency
+Library dependencies
 ====================
 
   In order to compile Keepalived needs the following libraries :
 
   * OpenSSL, <www.openssl.org>
-  * popt
+
+Linux flavours
+==============
+
+RedHat based systems (RedHat Enterprise/CentOS/Fedora)
+------------------------------------------------------
+The following build packages are needed:
+	make
+	autoconf automake (to build from git source tree rather than tarball)
+The following libraries need to be installed:
+	openssl-devel libnl3-devel ipset-devel iptables-devel
+For magic file identification support:
+	file-devel
+For SNMP support:
+	net-snmp-devel
+For DBUS support:
+	glib2-devel
+For JSON support:
+	json-c-devel
+For PCRE support
+	pcre2-devel
+For nftables support
+	libnftnl-devel libmnl-devel
+
+For building the documentation, the following packages need to be installed:
+	Fedora: python-sphinx (will pull in: python2-sphinx_rtd_theme)
+	CentOS-and-friends: python-sphinx epel-release python-sphinx_rtd_theme
+   For latex or pdf files, the following are also needed:
+	Fedora: latexmk python-sphinx-latex
+	CentOS-and-friends: latexmk texlive texlive-titlesec texlive-framed texlive-threeparttable texlive-wrapfig texlive-multirow
+
+Debian/Ubuntu
+-------------
+For building packages:
+	build-essential pkg-config, and to build from git repo automake autoconf
+The following libraries need to be installed:
+	iptables-dev libipset-dev libnl-3-dev libnl-genl-3-dev libssl-dev
+For magic file identification support:
+	libmagic-dev
+For SNMP support:
+	libsnmp-dev
+For DBUS support:
+	libglib2.0-dev
+For JSON support:
+	libjson-c-dev
+For PCRE support:
+	libpcre2-dev
+For nftables support
+	libnftnl-dev libmnl-dev
+
+For building the documentation, the following packages need to be installed:
+	python-sphinx python-sphinx-rtd-theme
+   For latex or pdf files, the following are also needed:
+	texlive-latex-base texlive-generic-extra texlive-latex-recommended texlive-fonts-recommended texlive-latex-extra
+
+Alpine Linux
+------------
+The following libraries need to be installed:
+	iptables-dev ipset-dev libnl3-dev musl-dev libnftnl-dev and openssl-dev or libressl-dev
+For magic file identification support:
+	file-dev
+For SNMP support:
+	net-snmp-dev (requires libressl-dev and not openssl-dev)
+For PCRE support
+	pcre2-dev
+
+For building the documentation, the following packages need to be installed:
+	py-sphinx py3-sphinx_rtd_theme
+   For latex or pdf files, you'll need texlive or similar, which is not yet
+   available as a distro package.
+
+
+Archlinux
+---------
+Run the following to install the required libraries:
+	pacman -S ipset libnl1
+For magic file identification support:
+	TDB
+For SNMP support:
+	pacman -S net-snmp
+for PCRE support:
+	pcre-2 (may be installed by default)
+
+For building the documentation, the following packages need to be installed:
+	python-sphinx python-sphinx_rtd_theme
+   For latex or pdf files, the following are also needed:
+	texlive-core texlive-bin texlive-latexextra
+
+Kernel configuration requirements
+---------------------------------
+The following list is probably incomplete, and will be updated as other
+options become known.
+
+BPF
+EPOLL
+SIGNALFD
+TIMERFD
+SYSCTL
+PROC_FS
+INET
+IP_MULTICAST
+IPV6
+IP_VS (unless --disable-lvs is specified)
+  IP_VS suboptions to match the real_server/virtual_server configuration
+NETFILTER_XTABLES - if strict_mode or no_accept.
+  NETFILTER_XT options and IP_SET
+NF_TABLES and associated components - to use nftables for strict_mode or no_accept
+IP_ADVANCED_ROUTER and various associated options if static/dynamic routes specified
+FIB_RULES if static or dynamic rules are specified
+
+Installing from a git repo
+==========================
+To install from a git repo, execute:
+  1. Ensure you have autoconf and automake installed
+  2. git clone http://github.com/acassen/keepalived
+  3. cd keepalived
+  4. ./build_setup	# generate the autoconf and automake environment
+  5. Follow the instructions below for Installation, omitting the first two steps.
 
 Installation
 ============
 
-  1. uncompress the tarball
+  1. tar -xf TARFILE
   2. cd into the directory
   3. './configure'
   4. 'make'
   5. 'make install'. This will install keepalived on your system,
      binaries and configuration file :
      * keepalived : The keepalived daemon program.
-     * genhash : The MD5 url digest generator. You need it to 
+     * genhash : The MD5 url digest generator. You need it to
                  configure HTTP GET check and SSL GET check in
                  order to compute MD5SUM digest etalon.
      * /etc/keepalived/keepalived.conf
-  6. link keepalived.init into your runlevel directory. On redhat systems :
+  6. link keepalived.init into your runlevel directory. On Red Hat systems :
      ln -s /etc/rc.d/init.d/keepalived.init /etc/rc.d/rc3.d/S99keepalived
 
-  By default configure script use /usr/local as base directory. You can change
-  this value to your own by passing --prefix value to configure script
+  By default the configure script uses /usr/local as base directory. You can
+  change this value to your own by passing it the --prefix value.
 
   eg: './configure --prefix=/usr/'
+
+Building RPM files
+==================
+
+ If building from tarball:
+  1a. tar -xf TARFILE
+  1b. cd into the directory
+
+ If building from git clone:
+  1. ./build_setup 
+
+ For tarball and git
+  2. ./configure
+  3. make rpm
+
+ The .rpm files will be created in directory `rpm --eval "%{_rpmdir}"`/ARCH
+
+Modifying source code
+=====================
+
+If you modify the source code, especially configure.ac or any Makefile.am
+file, you will need to regenerate the build files. Keepalived uses automake
+and so you will need to have automake and autoconf installed.
 
 Configuration
 =============
 
-  Just take a look to the /etc/keepalived/keepalived.conf file installed.
-  It will give you all the informations needed. If you want more informations
-  considering keepalived, please refer to the keepalived homepage into the
-  documentation section.
+  Just take a look at the /etc/keepalived/keepalived.conf file installed.
+  It will give you all the information needed. Alternativley, run
+  'man keepalived.conf' or look at doc/keepalived.conf.SYNOPSIS.
+  If you want more information about keepalived, please refer to the
+  keepalived homepage into the documentation section.
 
   http://www.keepalived.org
+
+
+Creating a docker container
+===========================
+There is a very useful github project maintained by osixia for building a
+docker container with keepalived.
+
+To use, run the following:
+git clone https://github.com/osixia/docker-keepalived.git
+cd docker-keepalived
+make build
+docker run --name keepalived --cap-add=NET_ADMIN --net=host \
+  --env KEEPALIVED_INTERFACE=eth0 -d osixia/keepalived:1.3.5 \
+	# or whatever version of keepalived you have
+
+To update the keepalived source code, put a new tarball in the image
+directory (the Dockerfile may need updating with a new version).
+
+Useful docker commands are:
+docker logs keepalvied 2>&1 | lessa	# view system logs of container
+docker exec it keepalived bash		# execute shell in container
+docker rm -f keepalived			# Remove the container
+
+keepalived is unable to load the ip_tables, ip6_tables, xt_set and ip_vs
+modules from within the container, so ensure they are already loaded in
+the host system.
+
+To generate a core file in the root filesystem of the container,
+/proc/sys/kernel/core_pattern needs to be updated in the host system,
+and not from the container (or in other words the -M option to keepalived
+does not work within a container. Installing gdb in the container (edit
+the image/Dockerfile to add it before make build) may be helpful if you
+need to examine core files in the container.
+
+
+Running in an AWS container
+===========================
+The VRRP protocol is not enabled in AWS security groups. If you are using AWS,
+create a rule in the AWS security group. The rule should be "Custom Protocol"
+and value should be "112" (the VRRP protocol number). All ports should be opened.
+
+
+Running with SElinux
+====================
+If the system running keepalived has SElinux enabled in enforcing mode, keepalived
+may have difficulty running scripts, accessing configuration files, etc, especially
+if keepalived is being started by systemd.
+
+By default, scripts should be located in /usr/libexec/keepalived, or alternatively,
+to set the necessary security context for a script, execute:
+chcon -t keepalived_unconfined_script_exec_t PATH_TO_SCRIPT
+
+See
+   https://www.mankier.com/8/keepalived_selinux and
+   https://www.mankier.com/8/keepalived_unconfined_script_selinux
+for further details of SElinux and keepalived.
 
 
 Have fun with it !

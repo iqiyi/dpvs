@@ -27,53 +27,10 @@
 #include <net/if.h>
 #include <netinet/ip.h>
 #include <endian.h>
-#if defined(__DPVS__)
+#include "conf/ip_tunnel.h"
 #include "list.h"
 #include "netif.h"
 #include "route.h"
-#endif
-
-#define TNLKINDSIZ              16
-
-#define TUNNEL_F_CSUM           htobe16(0x01)
-#define TUNNEL_F_ROUTING        htobe16(0x02)
-#define TUNNEL_F_KEY            htobe16(0x04)
-#define TUNNEL_F_SEQ            htobe16(0x08)
-#define TUNNEL_F_STRICT         htobe16(0x10)
-#define TUNNEL_F_REC            htobe16(0x20)
-#define TUNNEL_F_VERSION        htobe16(0x40)
-#define TUNNEL_F_NO_KEY         htobe16(0x80)
-#define TUNNEL_F_DONT_FRAGMENT  htobe16(0x0100)
-#define TUNNEL_F_OAM            htobe16(0x0200)
-#define TUNNEL_F_CRIT_OPT       htobe16(0x0400)
-#define TUNNEL_F_GENEVE_OPT     htobe16(0x0800)
-#define TUNNEL_F_VXLAN_OPT      htobe16(0x1000)
-#define TUNNEL_F_NOCACHE        htobe16(0x2000)
-#define TUNNEL_F_ERSPAN_OPT     htobe16(0x4000)
-
-enum {
-    /* set */
-    SOCKOPT_TUNNEL_ADD          = 1000,
-    SOCKOPT_TUNNEL_DEL,
-    SOCKOPT_TUNNEL_CHANGE,
-    SOCKOPT_TUNNEL_REPLACE,
-
-    /* get */
-    SOCKOPT_TUNNEL_SHOW,
-};
-
-struct ip_tunnel_param {
-    char            ifname[IFNAMSIZ];
-    char            kind[TNLKINDSIZ];
-    char            link[IFNAMSIZ];
-    __be16          i_flags;
-    __be16          o_flags;
-    __be32          i_key;
-    __be32          o_key;
-    struct iphdr    iph;
-} __attribute__((__packed__));
-
-#if defined(__DPVS__)
 
 struct ip_tunnel_tab;
 
@@ -151,5 +108,4 @@ int ipip_term(void);
 int gre_init(void);
 int gre_term(void);
 
-#endif /* __DPVS__ */
 #endif /* __DPVS_TUNNEL_H__ */

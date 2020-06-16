@@ -20,7 +20,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "conf/netif.h"
 #include "sockopt.h"
