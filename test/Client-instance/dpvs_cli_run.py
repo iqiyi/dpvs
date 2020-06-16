@@ -28,6 +28,7 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         print "usage:"
         print "python dpvs_cli_run.py vip:vport 1/0(default 0:donnot conduct stress test)"
+        print "OR                     ip6-vip   vport 1/0(stress test or not)"
     vip_info = sys.argv[1]
     '''stress test flag get''' 
     ipv6 = False

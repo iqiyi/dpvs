@@ -11,6 +11,7 @@ as SNAT client need ping and do not need stress test,just split into two scripts
 Usage:
     python dpvs_cli_setup.py ip1,ip2(config ips) 
     python dpvs_cli_run.py vip:vport  1/0(stress test or not)
+                           IPV6  port  1/0(stress test or not)
     python dpvs_snat_cli_setup.py route
     python dpvs_snat_cli_run.py ip:port 
 
