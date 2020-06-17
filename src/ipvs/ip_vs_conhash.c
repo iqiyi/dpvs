@@ -469,8 +469,8 @@ static int dp_vs_conhash_init_svc(struct dp_vs_service *svc)
     if (!svc_data) {
         if (rte_get_master_lcore() == cid) {
             // only master lcore comes here.
-            RTE_LOG(DEBUG, SERVICE, "[%d]%s: conhash init svc get svc data failed, creating\n",
-                        __func__);
+            RTE_LOG(DEBUG, SERVICE, "[%d] %s: conhash init svc get svc data failed, creating\n",
+                        cid, __func__);
             ret = dp_vs_conhash_create_svc_data(svc, &svc_data);
             if (EDPVS_OK != ret) {
                 rte_free(rs_data);
