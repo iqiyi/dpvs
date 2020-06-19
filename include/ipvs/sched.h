@@ -50,6 +50,8 @@ int dp_vs_bind_scheduler(struct dp_vs_service *svc,
 
 int dp_vs_unbind_scheduler(struct dp_vs_service *svc);
 
+int dp_vs_gcd_weight(struct dp_vs_service *svc);
+
 void dp_vs_scheduler_put(struct dp_vs_scheduler *scheduler);
 
 int register_dp_vs_scheduler(struct dp_vs_scheduler *scheduler);

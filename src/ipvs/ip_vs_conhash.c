@@ -25,7 +25,7 @@
 
 struct conhash_node {
     struct list_head    list;
-    uint16_t            weight;
+    uint16_t            weight_ratio;
     int                 af;         /* address family */
     union inet_addr     addr;       /* IP address of the server */
     uint16_t            port;       /* port number of the server */
@@ -164,10 +164,12 @@ static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
     struct node_s *p_node;
     struct conhash_node *p_conhash_node;
     struct conhash_sched_data *p_sched_data;
+    int weight_gcd;
 
     p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
 
     weight = rte_atomic16_read(&dest->weight);
+    weight_gcd = dp_vs_gcd_weight(svc);
     if (weight < 0) {
         RTE_LOG(ERR, SERVICE, "%s: add dest with weight(%d) less than 0\n",
                 __func__, weight);
@@ -185,14 +187,14 @@ static int dp_vs_conhash_add_dest(struct dp_vs_service *svc,
     p_conhash_node->af = dest->af;
     p_conhash_node->addr = dest->addr;
     p_conhash_node->port = dest->port;
-    p_conhash_node->weight = weight;
+    p_conhash_node->weight_ratio = weight / weight_gcd;
 
     // add node to conhash
     p_node = &(p_conhash_node->node);
     addr_fold = inet_addr_fold(dest->af, &dest->addr);
     snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
 
-    conhash_set_node(p_node, str, weight * REPLICA);
+    conhash_set_node(p_node, str, p_conhash_node->weight_ratio * REPLICA);
     ret = conhash_add_node(p_sched_data->conhash, p_node);
     if (ret < 0) {
         RTE_LOG(ERR, SERVICE, "%s: conhash_add_node failed\n", __func__);
@@ -248,8 +250,10 @@ static int dp_vs_conhash_edit_dest(struct dp_vs_service *svc,
     struct node_s *p_node;
     struct conhash_node *p_conhash_node;
     struct conhash_sched_data *p_sched_data;
+    int weight_gcd;
 
     weight = rte_atomic16_read(&dest->weight);
+    weight_gcd = dp_vs_gcd_weight(svc);
     p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
 
     // find node by addr and port
@@ -257,7 +261,7 @@ static int dp_vs_conhash_edit_dest(struct dp_vs_service *svc,
         if (p_conhash_node->af == dest->af &&
                 inet_addr_equal(dest->af, &p_conhash_node->addr, &dest->addr) &&
                 p_conhash_node->port == dest->port) {
-            if (p_conhash_node->weight == weight)
+            if (p_conhash_node->weight_ratio == weight / weight_gcd)
                 return EDPVS_OK;
 
             // del from conhash
@@ -269,10 +273,10 @@ static int dp_vs_conhash_edit_dest(struct dp_vs_service *svc,
             }
 
             // adjust weight
-            p_conhash_node->weight = weight;
+            p_conhash_node->weight_ratio = weight / weight_gcd;
             addr_fold = inet_addr_fold(dest->af, &dest->addr);
             snprintf(str, sizeof(str), "%u%d", addr_fold, dest->port);
-            conhash_set_node(p_node, str, weight * REPLICA);
+            conhash_set_node(p_node, str, p_conhash_node->weight_ratio * REPLICA);
 
             // add to conhash again
             ret = conhash_add_node(p_sched_data->conhash, p_node);

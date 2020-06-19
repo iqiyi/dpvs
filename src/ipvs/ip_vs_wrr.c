@@ -27,38 +27,6 @@ struct dp_vs_wrr_mark {
 };
 
 /*
- *    Get the gcd of server weights
- */
-static int gcd(int a, int b)
-{
-    int c;
-
-    while ((c = a % b)) {
-        a = b;
-        b = c;
-    }
-    return b;
-}
-
-static int dp_vs_wrr_gcd_weight(struct dp_vs_service *svc)
-{
-    struct dp_vs_dest *dest;
-    int weight;
-    int g = 0;
-
-    list_for_each_entry(dest, &svc->dests, n_list) {
-        weight = rte_atomic16_read(&dest->weight);
-        if (weight > 0) {
-            if (g > 0)
-                g = gcd(weight, g);
-            else
-                g = weight;
-        }
-    }
-    return g ? g : 1;
-}
-
-/*
  *    Get the maximum weight of the service destinations.
  */
 static int dp_vs_wrr_max_weight(struct dp_vs_service *svc)
@@ -89,7 +57,7 @@ static int dp_vs_wrr_init_svc(struct dp_vs_service *svc)
     mark->cl = &svc->dests;
     mark->cw = 0;
     mark->mw = dp_vs_wrr_max_weight(svc);
-    mark->di = dp_vs_wrr_gcd_weight(svc);
+    mark->di = dp_vs_gcd_weight(svc);
     svc->sched_data = mark;
 
     return EDPVS_OK;
@@ -112,7 +80,7 @@ static int dp_vs_wrr_update_svc(struct dp_vs_service *svc,
 
     mark->cl = &svc->dests;
     mark->mw = dp_vs_wrr_max_weight(svc);
-    mark->di = dp_vs_wrr_gcd_weight(svc);
+    mark->di = dp_vs_gcd_weight(svc);
     if (mark->cw > mark->mw)
         mark->cw = 0;
     return 0;
