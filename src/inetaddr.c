@@ -78,13 +78,11 @@ static uint32_t ifa_msg_seq(void)
 static inline struct inet_device *dev_get_idev(const struct netif_port *dev)
 {
     assert(dev && dev->in_ptr);
-    rte_atomic32_inc(&dev->in_ptr->refcnt);
     return dev->in_ptr;
 }
 
 static inline void idev_put(struct inet_device *idev)
 {
-    rte_atomic32_dec(&idev->refcnt);
 }
 
 static inline void imc_hash(struct inet_ifmcaddr *imc, struct inet_device *idev)

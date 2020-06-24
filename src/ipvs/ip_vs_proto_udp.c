@@ -52,6 +52,9 @@ struct conn_uoa {
     uint8_t         acked;
 };
 
+static struct rte_mempool *g_uoa_cache[DPVS_MAX_SOCKET];
+#define this_uoa_cache (g_uoa_cache[rte_socket_id()])
+
 static int g_uoa_max_trail = UOA_DEF_MAX_TRAIL; /* zero to disable UOA */
 static int g_uoa_mode = UOA_M_OPP; /* by default */
 
@@ -148,6 +151,7 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
                         struct dp_vs_conn **conn,
                         int *verdict)
 {
+    int err;
     struct udp_hdr *uh, _udph;
     struct dp_vs_service *svc;
     bool outwall = false;
@@ -177,8 +181,8 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
     if ((*conn)->dest->fwdmode == DPVS_FWD_MODE_FNAT && g_uoa_max_trail > 0) {
         struct conn_uoa *uoa;
 
-        (*conn)->prot_data = rte_zmalloc(NULL, sizeof(struct conn_uoa), 0);
-        if (!(*conn)->prot_data) {
+        err = rte_mempool_get(this_uoa_cache, (void **)&((*conn)->prot_data));
+        if (err != 0) {
             RTE_LOG(WARNING, IPVS, "%s: no memory for UOA\n", __func__);
         } else {
             uoa = (struct conn_uoa *)(*conn)->prot_data;
@@ -243,8 +247,9 @@ udp_conn_lookup(struct dp_vs_proto *proto,
 
 static int udp_conn_expire(struct dp_vs_proto *proto, struct dp_vs_conn *conn)
 {
-    if (conn->prot_data)
-        rte_free(conn->prot_data);
+    if (conn->prot_data) {
+        rte_mempool_put(this_uoa_cache, conn->prot_data);
+    }
 
     return EDPVS_OK;
 }
@@ -785,9 +790,60 @@ static int udp_snat_out_handler(struct dp_vs_proto *proto,
     return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL);
 }
 
+static int create_uoa_cache(void)
+{
+    int i;
+    char pool_name[32];
+
+    for (i = 0; i < get_numa_nodes(); i++) {
+        snprintf(pool_name, sizeof(pool_name), "dp_vs_uoa_%d", i);
+
+        g_uoa_cache[i] = rte_mempool_create(pool_name,
+                                            dp_vs_conn_pool_size(),
+                                            sizeof(struct conn_uoa),
+                                            dp_vs_conn_pool_cache_size(),
+                                            0, NULL, NULL, NULL, NULL, i, 0);
+
+        if (unlikely(!g_uoa_cache[i])) {
+            return EDPVS_NOMEM;
+        }
+    }
+
+    return EDPVS_OK;
+}
+
+static void destroy_uoa_cache(void)
+{
+    int i;
+
+    for (i = 0; i < get_numa_nodes(); i++) {
+        rte_mempool_free(g_uoa_cache[i]);
+    }
+}
+
+static int udp_init(struct dp_vs_proto *proto)
+{
+    int err;
+
+    err = create_uoa_cache();
+    if (unlikely(err != EDPVS_OK)) {
+        return err;
+    }
+
+    return EDPVS_OK;
+}
+
+static int udp_exit(struct dp_vs_proto *proto)
+{
+    destroy_uoa_cache();
+    return EDPVS_OK;
+}
+
 struct dp_vs_proto dp_vs_proto_udp = {
     .name                  = "UDP",
     .proto                 = IPPROTO_UDP,
+    .init                  = udp_init,
+    .exit                  = udp_exit,
     .timeout_table         = udp_timeouts,
     .conn_sched            = udp_conn_sched,
     .conn_lookup           = udp_conn_lookup,
