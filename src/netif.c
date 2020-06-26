@@ -4159,13 +4159,6 @@ int netif_term(void)
 
 
 /************************************ Ctrl Plane ***************************************/
-#define NETIF_CTRL_BUFFER_LEN     4096
-
-lcoreid_t g_master_lcore_id;
-static uint8_t g_slave_lcore_num;
-static uint8_t g_isol_rx_lcore_num;
-static uint64_t g_slave_lcore_mask;
-static uint64_t g_isol_rx_lcore_mask;
 
 static int get_lcore_mask(void **out, size_t *out_len)
 {

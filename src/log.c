@@ -23,7 +23,6 @@
 #include "netif.h"
 #include "sys_time.h"
 #include "log.h"
-#include "conf/common.h"
 #include "dpdk.h"
 #include "global_data.h"
 
