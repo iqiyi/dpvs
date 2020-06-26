@@ -99,7 +99,6 @@ static struct dp_vs_conn *dp_vs_conn_alloc(enum dpvs_fwd_mode fwdmode,
         return NULL;
     }
 
-    memset(conn, 0, sizeof(struct dp_vs_conn));
     conn->connpool = this_conn_cache;
     this_conn_count++;
 
