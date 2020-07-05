@@ -957,6 +957,10 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
     struct dp_vs_synproxy_opt opt;
     struct dp_vs_service *svc;
     int res_cookie_check;
+    struct dp_vs_synproxy_opt tcp_opt;
+    struct ether_hdr *eth;
+    struct ether_addr ethaddr;
+    struct netif_port *dev;
 
     /* Do not check svc syn-proxy flag, as it may be changed after syn-proxy step 1. */
     if (!th->syn && th->ack && !th->rst && !th->fin &&
@@ -986,6 +990,61 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
             RTE_LOG(DEBUG, IPVS, "%s: syn_cookie check failed seq=%u\n", __func__,
                     ntohl(th->ack_seq) - 1);
             dp_vs_service_put(svc);
+
+            /* mbuf will be reused and ether header will be set.
+             * FIXME: to support non-ether packets. */
+            if (mbuf->l2_len != sizeof(struct ether_hdr)) {
+                *verdict = INET_DROP;
+                return 0;
+            }
+
+            /* set tx offload flags */
+            assert(mbuf->port <= NETIF_MAX_PORTS);
+            dev = netif_port_get(mbuf->port);
+            if (unlikely(!dev)) {
+                RTE_LOG(ERR, IPVS, "%s: device eth%d not found\n",
+                        __func__, mbuf->port);
+                *verdict = INET_DROP;
+                return 0;
+            }
+            if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+                if (af == AF_INET)
+                    mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+                else
+                    mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
+            }
+
+            /* reuse mbuf */
+            syn_proxy_reuse_mbuf(af, mbuf, th, &tcp_opt);
+
+            // Set RST flag for response.
+            th->rst = 1;
+            th->ack = 0;
+            th->syn = 0;
+
+            /* set L2 header and send the packet out
+             * It is noted that "ipv4_xmit" should not used here,
+             * because mbuf is reused. */
+            eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
+            if (unlikely(!eth)) {
+                RTE_LOG(ERR, IPVS, "%s: no memory\n", __func__);
+                *verdict = INET_DROP;
+                return 0;
+            }
+            memcpy(&ethaddr, &eth->s_addr, sizeof(struct ether_addr));
+            memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct ether_addr));
+            memcpy(&eth->d_addr, &ethaddr, sizeof(struct ether_addr));
+
+            if (unlikely(EDPVS_OK != (res = netif_xmit(mbuf, dev)))) {
+                RTE_LOG(ERR, IPVS, "%s: netif_xmit failed -- %s\n",
+                        __func__, dpvs_strerror(res));
+                /* should not set verdict to INET_DROP since netif_xmit
+                 * always consume the mbuf while INET_DROP means mbuf'll
+                 * be free in INET_HOOK.*/
+            }
+
+            // NOTE: By right we should return `INET_STOLEN` here but we haven't
+            // find a good way to free `mbuf` if return `INET_STOLEN` directly.
             *verdict = INET_DROP;
             return 0;
         }
