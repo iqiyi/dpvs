@@ -1555,11 +1555,19 @@ inline static void recv_on_isol_lcore(void *dump)
 
     list_for_each_entry(isol_rxq, &isol_rxq_tab[cid], lnode) {
         assert(isol_rxq->cid == cid);
+again:
         rx_len = rte_eth_rx_burst(isol_rxq->pid, isol_rxq->qid,
                 mbufs, NETIF_MAX_PKT_BURST);
         /* It is safe to reuse lcore_stats for isolate recieving. Isolate recieving
          * always lays on different lcores from packet processing. */
         lcore_stats_burst(&lcore_stats[cid], rx_len);
+
+        if (rx_len == 0)
+            continue;
+
+        lcore_stats[cid].ipackets += rx_len;
+        for (i = 0; i < rx_len; i++)
+            lcore_stats[cid].ibytes += mbufs[i]->pkt_len;
 
         res = rte_ring_enqueue_bulk(isol_rxq->rb, (void *const * )mbufs, rx_len, &qspc);
         if (res < rx_len) {
@@ -1569,6 +1577,9 @@ inline static void recv_on_isol_lcore(void *dump)
             for (i = res; i < rx_len; i++)
                 rte_pktmbuf_free(mbufs[i]);
         }
+
+        if (rx_len >= NETIF_MAX_PKT_BURST && rte_ring_free_count(isol_rxq->rb) >= NETIF_MAX_PKT_BURST)
+            goto again;
     }
 }
 
