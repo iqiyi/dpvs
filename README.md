@@ -250,4 +250,4 @@ Pls see the [License](./LICENSE.md) file.
 `DPVS` is developing by [iQiYi](https://www.iqiyi.com) *QLB* team since April 2016 and now open-sourced. It's already widely used in iQiYi IDC for L4 load balancer and SNAT clusters, and we plan to replace all our LVS clusters with DPVS. We are very happy that **more people can get involved** in this project. Welcome to try, report issues and submit pull requests. And pls feel free to contact us through **Github** or **Email**.
 
 * github: `https://github.com/iqiyi/dpvs`
-* email: `qlb-devel # dev.qiyi.com` (pls remove the white-spaces and replace `#` with `@`).
+* email: `iig_cloud_qlb # qiyi.com` (pls remove the white-spaces and replace `#` with `@`).
