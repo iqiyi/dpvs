@@ -334,6 +334,18 @@ blklst_gname_handler(vector_t *strvec)
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	vs->blklst_addr_gname = set_value(strvec);
 }
+static void
+whtlst_group_handler(vector_t *strvec)
+{
+    alloc_whtlst_group(vector_slot(strvec, 1));
+    alloc_value_block(strvec, alloc_whtlst_entry);
+}
+static void
+whtlst_gname_handler(vector_t *strvec)
+{
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    vs->whtlst_addr_gname = set_value(strvec);
+}
 
 static void
 tunnel_handler(vector_t *strvec)
@@ -492,6 +504,8 @@ check_init_keywords(void)
 	install_keyword_root("local_address_group", &laddr_group_handler);
 	/* blacklist IP */
 	install_keyword_root("deny_address_group", &blklst_group_handler);
+    /* whitelist IP */
+    install_keyword_root("allow_address_group", &whtlst_group_handler);
 
 	/* Virtual server mapping */
 	install_keyword_root("virtual_server_group", &vsg_handler);
@@ -545,6 +559,7 @@ check_init_keywords(void)
 
 	install_keyword("laddr_group_name", &laddr_gname_handler);
 	install_keyword("daddr_group_name", &blklst_gname_handler);
+    install_keyword("daddr_group_name", &whtlst_gname_handler);
 	install_keyword("syn_proxy", &syn_proxy_handler);
 	install_keyword("vip_bind_dev", &bind_dev_handler);
 

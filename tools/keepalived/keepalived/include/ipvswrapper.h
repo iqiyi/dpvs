@@ -97,6 +97,8 @@ extern local_addr_group *ipvs_get_laddr_group_by_name(char *, list);
 extern int ipvs_laddr_remove_entry(virtual_server_t *, local_addr_entry *);
 extern blklst_addr_group *ipvs_get_blklst_group_by_name(char *, list);
 extern int ipvs_blklst_remove_entry(virtual_server_t *, blklst_addr_entry *);
+extern whtlst_addr_group *ipvs_get_whtlst_group_by_name(char *, list);
+extern int ipvs_whtlst_remove_entry(virtual_server_t *, whtlst_addr_entry *);
 extern int ipvs_cmd(int, list, virtual_server_t *, real_server_t *);
 extern int ipvs_syncd_cmd(int, char *, int, int);
 extern void ipvs_syncd_master(char *, int);

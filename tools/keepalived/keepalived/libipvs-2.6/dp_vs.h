@@ -7,6 +7,7 @@
 #include "conf/inetaddr.h"
 #include "conf/laddr.h"
 #include "conf/blklst.h"
+#include "conf/whtlst.h"
 #include "conf/conn.h"
 #include "ip_tunnel.h"
 #include "ipvs/service.h"

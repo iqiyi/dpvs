@@ -204,6 +204,9 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_IPV6_STATS                 16
 #define MSG_TYPE_ROUTE6                     17
 #define MSG_TYPE_NEIGH_GET                  18
+// Start from 22 due to 19-21 are occupied by `MSG_TYPE_IPSET_ADD`, `MSG_TYPE_IPSET_DEL` and `MSG_TYPE_IPSET_FLUSH`.
+#define MSG_TYPE_WHTLST_ADD                 22
+#define MSG_TYPE_WHTLST_DEL                 23
 
 #define SOCKOPT_VERSION_MAJOR               1
 #define SOCKOPT_VERSION_MINOR               0

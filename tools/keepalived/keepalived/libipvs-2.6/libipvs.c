@@ -423,6 +423,44 @@ int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst)
 	return dpvs_setsockopt(SOCKOPT_SET_BLKLST_DEL, &conf, sizeof(conf));
 }
 
+/*for white list*/
+static void ipvs_fill_whtlst_conf(ipvs_service_t *svc, ipvs_whtlst_t *whtlst,
+                                  struct dp_vs_whtlst_conf *conf)
+{
+    memset(conf, 0, sizeof(*conf));
+    conf->af        = svc->af;
+    conf->proto     = svc->protocol;
+    conf->vport     = svc->port;
+    conf->fwmark    = svc->fwmark;
+    if (svc->af == AF_INET) {
+        conf->vaddr.in = svc->addr.in;
+        conf->whtlst.in = whtlst->addr.in;
+    } else {
+        conf->vaddr.in6 = svc->addr.in6;
+        conf->whtlst.in6 = whtlst->addr.in6;
+    }
+
+    return;
+}
+
+int ipvs_add_whtlst(ipvs_service_t *svc, ipvs_whtlst_t *whtlst)
+{
+    struct dp_vs_whtlst_conf conf;
+
+    ipvs_fill_whtlst_conf(svc, whtlst, &conf);
+
+    return dpvs_setsockopt(SOCKOPT_SET_WHTLST_ADD, &conf, sizeof(conf));
+}
+
+int ipvs_del_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst)
+{
+    struct dp_vs_whtlst_conf conf;
+
+    ipvs_fill_whtlst_conf(svc, whtlst, &conf);
+
+    return dpvs_setsockopt(SOCKOPT_SET_WHTLST_DEL, &conf, sizeof(conf));
+}
+
 /* for tunnel entry */
 static void ipvs_fill_tunnel_conf(ipvs_tunnel_t* tunnel_entry,
                                  struct ip_tunnel_param *conf)
@@ -700,6 +738,34 @@ struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
 	return array;
 }
 
+struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void)
+{
+    struct dp_vs_whtlst_conf_array *array, *result;
+    size_t size;
+    int i, err;
+
+    err = dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL, NULL, 0,
+                          (void **)&result, &size);
+    if (err != 0)
+        return NULL;
+    if (size < sizeof(*result)
+        || size != sizeof(*result) + \
+		result->naddr * sizeof(struct dp_vs_whtlst_conf)) {
+        dpvs_sockopt_msg_free(result);
+        return NULL;
+    }
+    if (!(array = malloc(size)))
+        return NULL;
+    memcpy(array, result, sizeof(struct dp_vs_whtlst_conf_array));
+    for (i = 0; i < result->naddr; i++) {
+        memcpy(&array->whtlsts[i], &result->whtlsts[i],
+               sizeof(struct dp_vs_whtlst_conf));
+
+    }
+    dpvs_sockopt_msg_free(result);
+    return array;
+}
+
 struct ip_vs_get_dests *ipvs_get_dests(ipvs_service_entry_t *svc)
 {
 	struct ip_vs_get_dests *d;
@@ -953,6 +1019,11 @@ const char *ipvs_strerror(int err)
 		{ ipvs_del_blklst, ESRCH, "Service not defined" },
 		{ ipvs_del_blklst, ENOENT, "No such deny address" },
 		{ ipvs_get_blklsts, ESRCH, "Service not defined" },
+        { ipvs_add_whtlst, ESRCH, "Service not defined" },
+        { ipvs_add_whtlst, EEXIST, "whitelist address already exists" },
+        { ipvs_del_whtlst, ESRCH, "Service not defined" },
+        { ipvs_del_whtlst, ENOENT, "No such deny address" },
+        { ipvs_get_whtlsts, ESRCH, "Service not defined" },
 		{ 0, EPERM, "Permission denied (you must be root)" },
 		{ 0, EINVAL, "Invalid operation.  Possibly wrong module version, address not unicast, ..." },
 		{ 0, ENOPROTOOPT, "Protocol not available" },
