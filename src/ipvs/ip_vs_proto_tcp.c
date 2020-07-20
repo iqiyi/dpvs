@@ -168,6 +168,8 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         struct ip6_hdr *ip6h = ip6_hdr(mbuf);
         if (rt6 && rt6->rt6_dev)
             dev = rt6->rt6_dev;
+        else if (conn->in_dev)
+            dev = conn->in_dev;
         else if (conn->out_dev)
             dev = conn->out_dev;
         if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
@@ -185,6 +187,8 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         struct ipv4_hdr *iph = ip4_hdr(mbuf);
         if (rt && rt->port)
             dev = rt->port;
+        else if (conn->in_dev)
+            dev = conn->in_dev;
         else if (conn->out_dev)
             dev = conn->out_dev;
         if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
