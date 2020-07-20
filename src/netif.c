@@ -3667,10 +3667,14 @@ int netif_port_start(struct netif_port *port)
         update_bond_macaddr(port);
 
     /* add in6_addr multicast address */
-    ret = idev_add_mcast_init(port);
-    if (ret != EDPVS_OK) {
-        RTE_LOG(WARNING, NETIF, "multicast address add failed for device %s\n", port->name);
-        return ret;
+    int cid = 0;
+    rte_eal_mp_remote_launch(idev_add_mcast_init, port, CALL_MASTER);
+    RTE_LCORE_FOREACH_SLAVE(cid) {
+        if ((ret = rte_eal_wait_lcore(cid)) < 0) {
+            RTE_LOG(WARNING, NETIF, "%s: lcore %d: multicast address add failed for device %s\n",
+                    __func__, cid, port->name);
+            return ret;
+        }
     }
 
     /* flush FDIR filters */
