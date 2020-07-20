@@ -60,10 +60,19 @@ static struct toa_ip6_sk_lock toa_ip6_sk_lock;
 static struct proto_ops *inet6_stream_ops_p = NULL;
 static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+typedef struct sock *(*syn_recv_sock_func_pt)(
+        const struct sock *sk, struct sk_buff *skb,
+        struct request_sock *req,
+        struct dst_entry *dst,
+        struct request_sock *req_unhash,
+        bool *own_req);
+#else
 typedef struct sock *(*syn_recv_sock_func_pt)(
         struct sock *sk, struct sk_buff *skb,
         struct request_sock *req,
         struct dst_entry *dst);
+#endif
 static syn_recv_sock_func_pt tcp_v6_syn_recv_sock_org_pt = NULL;
 #endif
 
@@ -425,9 +434,15 @@ static void *get_toa_data(int af, struct sk_buff *skb, int *nat64)
  *  try to get local address
  * @return return what the original inet_getname() returns.
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,1)
+static int
+inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
+        int peer)
+#else
 static int
 inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
         int *uaddr_len, int peer)
+#endif
 {
     int retval = 0;
     struct sock *sk = sock->sk;
@@ -438,10 +453,14 @@ inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
         sk->sk_user_data);
 
     /* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,1)
+    retval = inet_getname(sock, uaddr, peer);
+#else
     retval = inet_getname(sock, uaddr, uaddr_len, peer);
+#endif
 
     /* set our value if need */
-    if (retval == 0 && NULL != sk->sk_user_data && peer) {
+    if (retval >= 0 && NULL != sk->sk_user_data && peer) {
         if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready &&
             !sock_flag(sk, SOCK_NAT64)) {
             memcpy(&tdata, &sk->sk_user_data, sizeof(tdata));
@@ -580,9 +599,15 @@ out:
 #endif
 
 #ifdef TOA_IPV6_ENABLE
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,1)
+static int
+inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
+          int peer)
+#else
 static int
 inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
           int *uaddr_len, int peer)
+#endif
 {
     int retval = 0;
     struct sock *sk = sock->sk;
@@ -592,12 +617,16 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
         sk->sk_user_data);
 
     /* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,1)
+    retval = inet6_getname(sock, uaddr, peer);
+#else
     retval = inet6_getname(sock, uaddr, uaddr_len, peer);
+#endif
 
     /* set our value if need */
     lock_cpu_toa_ip6_sk();
 
-    if (retval == 0 && NULL != sk->sk_user_data && peer) {
+    if (retval >= 0 && NULL != sk->sk_user_data && peer) {
         if (sk_data_ready_addr == (unsigned long) sk->sk_data_ready) {
             struct toa_ip6_entry* ptr_ip6_entry  = sk->sk_user_data;
             struct toa_ip6_data* ptr_ip6_data = &ptr_ip6_entry->toa_data;
@@ -669,9 +698,18 @@ get_kernel_ipv6_symbol(void)
  * @param dst [out] route cache entry
  * @return NULL if fail new socket if succeed.
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+static struct sock *
+tcp_v4_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+            struct request_sock *req,
+            struct dst_entry *dst,
+            struct request_sock *req_unhash,
+            bool *own_req)
+#else
 static struct sock *
 tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
             struct request_sock *req, struct dst_entry *dst)
+#endif
 {
     struct sock *newsock = NULL;
     int nat64 = 0;
@@ -679,7 +717,11 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
     TOA_DBG("tcp_v4_syn_recv_sock_toa called\n");
 
     /* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+    newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst, req_unhash, own_req);
+#else
     newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst);
+#endif
 
     /* set our value if need */
     if (NULL != newsock && NULL == newsock->sk_user_data) {
@@ -710,9 +752,18 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 }
 
 #ifdef TOA_IPV6_ENABLE
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+static struct sock *
+tcp_v6_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+             struct request_sock *req,
+             struct dst_entry *dst,
+             struct request_sock *req_unhash,
+             bool *own_req)
+#else
 static struct sock *
 tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
              struct request_sock *req, struct dst_entry *dst)
+#endif
 {
     struct sock *newsock = NULL;
     int nat64 = 0;
@@ -720,7 +771,12 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
     TOA_DBG("tcp_v6_syn_recv_sock_toa called\n");
 
     /* call orginal one */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+    newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash,
+            own_req);
+#else
     newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst);
+#endif
 
     /* set our value if need */
     if (NULL != newsock && NULL == newsock->sk_user_data) {
