@@ -1217,7 +1217,16 @@ void dp_vs_xmit_icmp(struct rte_mbuf *mbuf,
                      struct dp_vs_proto *prot,
                      struct dp_vs_conn *conn, int dir)
 {
-    int af = conn->af;
+    int af;
+    struct conn_tuple_hash *t;
+
+    if (dir == DPVS_CONN_DIR_INBOUND) {
+        t = &tuplehash_in(conn);
+    } else {
+        t = &tuplehash_out(conn);
+    }
+
+    af = t->af;
 
     assert(af == AF_INET || af == AF_INET6);
 

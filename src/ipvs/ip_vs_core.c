@@ -515,7 +515,10 @@ static int xmit_outbound_icmp(struct rte_mbuf *mbuf,
                               struct dp_vs_proto *prot,
                               struct dp_vs_conn *conn)
 {
-    int af = conn->af;
+    struct conn_tuple_hash *t;
+
+    t = &tuplehash_out(conn);
+    int af = t->af;
 
     assert(af == AF_INET || af == AF_INET6);
     if (af == AF_INET)
