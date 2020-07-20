@@ -149,6 +149,8 @@ static uint8_t g_isol_rx_lcore_num;
 static uint64_t g_slave_lcore_mask;
 static uint64_t g_isol_rx_lcore_mask;
 
+bool dp_vs_fdir_filter_enable = true;
+
 bool is_lcore_id_valid(lcoreid_t cid)
 {
     if (unlikely(cid >= DPVS_MAX_LCORE))
@@ -470,6 +472,24 @@ static void fdir_status_handler(vector_t tokens)
     else
         RTE_LOG(INFO, NETIF, "%s:fdir_status = %s\n",
                 current_device->name, status);
+
+    FREE_PTR(str);
+}
+
+static void fdir_filter_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+
+    assert(str);
+
+    if (strcasecmp(str, "on") == 0)
+        dp_vs_fdir_filter_enable = true;
+    else if (strcasecmp(str, "off") == 0)
+        dp_vs_fdir_filter_enable = false;
+    else
+        RTE_LOG(WARNING, IPVS, "invalid fdir:filter %s\n", str);
+
+    RTE_LOG(INFO, IPVS, "fdir:filter = %s\n", dp_vs_fdir_filter_enable ? "on" : "off");
 
     FREE_PTR(str);
 }
@@ -839,6 +859,7 @@ void install_netif_keywords(void)
     install_keyword("mode", fdir_mode_handler, KW_TYPE_INIT);
     install_keyword("pballoc", fdir_pballoc_handler, KW_TYPE_INIT);
     install_keyword("status", fdir_status_handler, KW_TYPE_INIT);
+    install_keyword("filter", fdir_filter_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
     install_keyword("kni_name", kni_name_handler, KW_TYPE_INIT);

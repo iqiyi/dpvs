@@ -302,12 +302,48 @@ static int sa_pool_free_hash(struct sa_pool *ap)
     return EDPVS_OK;
 }
 
+static int sa_pool_add_filter(struct inet_ifaddr *ifa, struct sa_pool *ap,
+                             lcoreid_t cid)
+{
+    int err = EDPVS_OK;
+    uint32_t filtids[MAX_FDIR_PROTO];
+    struct sa_fdir *fdir = &sa_fdirs[cid];
+
+    if (dp_vs_fdir_filter_enable) {
+        /* if add filter failed, waste some soft-id is acceptable. */
+        filtids[0] = fdir->soft_id++;
+        filtids[1] = fdir->soft_id++;
+
+        err = sa_add_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
+                            fdir->port_base, filtids);
+
+        if (err == EDPVS_OK) {
+            ap->filter_id[0] = filtids[0];
+            ap->filter_id[1] = filtids[1];
+        }
+    }
+
+    return err;
+}
+
+static int sa_pool_del_filter(struct inet_ifaddr *ifa, struct sa_pool *ap,
+                               lcoreid_t cid)
+{
+    int err = EDPVS_OK;
+    struct sa_fdir *fdir = &sa_fdirs[cid];
+
+    if (dp_vs_fdir_filter_enable)
+        err = sa_del_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
+                            fdir->port_base, ap->filter_id); /* thread-safe ? */
+
+    return err;
+}
+
 int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
 {
     int err;
     struct sa_pool *ap;
     struct sa_fdir *fdir;
-    uint32_t filtids[MAX_FDIR_PROTO];
     lcoreid_t cid = rte_lcore_id();
 
     if (cid > 64 || !((sa_lcore_mask & (1UL << cid)))) {
@@ -341,16 +377,10 @@ int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
         goto free_ap;
     }
 
-    filtids[0] = fdir->soft_id++;
-    filtids[1] = fdir->soft_id++;
-    err = sa_add_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
-                        fdir->port_base, filtids); /* thread-safe ? */
+    err = sa_pool_add_filter(ifa, ap, cid);
     if (err != EDPVS_OK) {
         goto free_hash;
     }
-
-    ap->filter_id[0] = filtids[0];
-    ap->filter_id[1] = filtids[1];
 
     ifa->sa_pool = ap;
 
@@ -398,8 +428,7 @@ int sa_pool_destroy(struct inet_ifaddr *ifa)
     if (!rte_atomic32_dec_and_test(&ap->refcnt))
         return EDPVS_OK;
 
-    err = sa_del_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
-            sa_fdirs[cid].port_base, ap->filter_id); /* thread-safe ? */
+    err = sa_pool_del_filter(ifa, ap, cid);
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, SAPOOL, "[%02d] %s: sa_del_filter failed -- %s\n",
                 cid, __func__, dpvs_strerror(err));
