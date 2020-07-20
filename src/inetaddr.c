@@ -709,6 +709,7 @@ static void inet_ifaddr_dad_start(struct inet_ifaddr *ifa)
         return;
 
     dpvs_time_rand_delay(&tv, 1000000);
+    dpvs_timer_cancel(&ifa->dad_timer, true);
     dpvs_timer_sched(&ifa->dad_timer, &tv, inet_ifaddr_dad_completed, ifa, true);
 
     ndisc_send_dad(ifa->idev->dev, &ifa->addr.in6);
@@ -885,7 +886,7 @@ static int ifa_entry_mod(const struct ifaddr_action *param)
         goto errout;
     }
 
-    dpvs_time_now(&ifa->tstemp, false); /* mod time */
+    dpvs_time_now(&ifa->tstemp, is_master); /* mod time */
 
     ifa->bcast = param->bcast;
     ifa->scope = param->scope;
