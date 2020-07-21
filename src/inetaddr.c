@@ -354,6 +354,25 @@ static struct inet_ifaddr *ifa_lookup(struct inet_device *idev,
     return NULL;
 }
 
+static struct inet_ifaddr *expired_ifa_lookup(struct inet_device *idev,
+                                              const union inet_addr *addr,
+                                              uint8_t plen, int af)
+{
+    struct inet_ifaddr *ifa;
+    lcoreid_t cid = rte_lcore_id();
+
+    list_for_each_entry(ifa, &ifa_expired_list[cid], h_list) {
+        if ((!plen || ifa->plen == plen) && (ifa->af == af)
+            && inet_addr_equal(af, &ifa->addr, addr)
+            && ifa->idev == idev) {
+            rte_atomic32_inc(&ifa->refcnt);
+            return ifa;
+        }
+    }
+
+    return NULL;
+}
+
 static void ifa_put(struct inet_ifaddr *ifa)
 {
     if (rte_atomic32_dec_and_test(&ifa->refcnt)) {
@@ -783,6 +802,22 @@ static int ifa_entry_add(const struct ifaddr_action *param)
         ifa_put(ifa);
         err = EDPVS_EXIST;
         goto errout;
+    }
+
+    /* reuse expired ifa */
+    ifa = expired_ifa_lookup(idev, &param->addr, param->plen, param->af);
+    if (ifa) {
+        if (ifa->flags & IFA_F_SAPOOL) {
+            inc_sa_pool_refcnt(ifa); /* hold sa_pool again */
+        }
+        list_del_init(&ifa->h_list);
+        ifa_hash(idev, ifa);
+        ifa_put(ifa);
+
+        RTE_LOG(DEBUG, IFA, "[%02d] %s: reuse expired ifaddr %s\n", rte_lcore_id(), __func__,
+                inet_ntop(ifa->af, &ifa->addr, ipstr, sizeof(ipstr)));
+
+        return EDPVS_OK;
     }
 
     ifa = rte_calloc(NULL, 1, sizeof(*ifa), RTE_CACHE_LINE_SIZE);

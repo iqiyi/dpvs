@@ -69,6 +69,8 @@ int sa_release(const struct netif_port *dev,
 int get_sa_pool_stats(const struct inet_ifaddr *ifa,
                        struct sa_pool_stats *stats);
 
+void inc_sa_pool_refcnt(struct inet_ifaddr *ifa);
+
 /* config file */
 void install_sa_pool_keywords(void);
 

@@ -858,6 +858,10 @@ int get_sa_pool_stats(const struct inet_ifaddr *ifa, struct sa_pool_stats *stats
     return EDPVS_OK;
 }
 
+void inc_sa_pool_refcnt(struct inet_ifaddr *ifa) {
+    rte_atomic32_inc(&ifa->sa_pool->refcnt);
+}
+
 int sa_pool_init(void)
 {
     int shift;
