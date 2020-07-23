@@ -20,7 +20,7 @@
 
 /* weighted fail over scheduling */
 static struct dp_vs_dest *dp_vs_fo_schedule(struct dp_vs_service *svc,
-        const struct rte_mbuf *mbuf __rte_unused)
+        const struct rte_mbuf *mbuf __rte_unused, const struct dp_vs_iphdr *iph __rte_unused)
 {
 
     struct dp_vs_dest *dest, *hweight = NULL;

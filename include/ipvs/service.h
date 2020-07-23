@@ -34,12 +34,15 @@
 #define RTE_LOGTYPE_SERVICE RTE_LOGTYPE_USER3
 #define DP_VS_SVC_F_PERSISTENT      0x0001      /* peristent port */
 #define DP_VS_SVC_F_HASHED          0x0002      /* hashed entry */
-#define DP_VS_SVC_F_SYNPROXY        0x8000      /* synrpoxy flag */
+#define DP_VS_SVC_F_ONEPACKET       0x0004      /* one-packet scheduling */
+#define DP_VS_SVC_F_SCHED1          0x0008      /* scheduler flag 1 */
+#define DP_VS_SVC_F_SCHED2          0x0010      /* scheduler flag 2 */
+#define DP_VS_SVC_F_SCHED3          0x0020      /* scheduler flag 3 */
 
 #define DP_VS_SVC_F_SIP_HASH        0x0100      /* sip hash target */
 #define DP_VS_SVC_F_QID_HASH        0x0200      /* quic cid hash target */
-
 #define DP_VS_SVC_F_MATCH           0x0400      /* snat match */
+#define DP_VS_SVC_F_SYNPROXY        0x8000      /* synrpoxy flag */
 
 /* virtual service */
 struct dp_vs_service {

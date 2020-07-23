@@ -1149,6 +1149,8 @@ init_check_keywords(bool active)
 	install_keyword("flag-3", &lbflags_handler);
 	install_keyword("sh-port", &lbflags_handler);
 	install_keyword("sh-fallback", &lbflags_handler);
+	install_keyword("mh-port", &lbflags_handler);
+	install_keyword("mh-fallback", &lbflags_handler);
 #endif
 	install_keyword("lb_kind", &forwarding_handler);
 	install_keyword("establish_timeout", &establish_timeout_handler);
