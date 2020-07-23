@@ -387,7 +387,7 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     if (!conf || size < sizeof(struct dp_vs_iftraf_conf) || !out || !outsize)
         return EDPVS_INVAL;
-	cf = conf;
+    cf = conf;
 
     if (cf && strlen(cf->ifname)) {
         port = netif_port_get_by_name(cf->ifname);
