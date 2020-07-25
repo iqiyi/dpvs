@@ -87,6 +87,38 @@ int dp_vs_unbind_scheduler(struct dp_vs_service *svc)
 }
 
 /*
+ *    Get the gcd of server weights
+ */
+static int gcd(int a, int b)
+{
+    int c;
+
+    while ((c = a % b)) {
+        a = b;
+        b = c;
+    }
+    return b;
+}
+
+int dp_vs_gcd_weight(struct dp_vs_service *svc)
+{
+    struct dp_vs_dest *dest;
+    int weight;
+    int g = 0;
+
+    list_for_each_entry(dest, &svc->dests, n_list) {
+        weight = rte_atomic16_read(&dest->weight);
+        if (weight > 0) {
+            if (g > 0)
+                g = gcd(weight, g);
+            else
+                g = weight;
+        }
+    }
+    return g ? g : 1;
+}
+
+/*
  *  Lookup scheduler and try to load it if it doesn't exist
  */
 struct dp_vs_scheduler *dp_vs_scheduler_get(const char *sched_name)
