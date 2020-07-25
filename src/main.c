@@ -36,6 +36,7 @@
 #include "sys_time.h"
 #include "route6.h"
 #include "iftraf.h"
+#include "eal_mem.h"
 #include "scheduler.h"
 
 #define DPVS    "dpvs"
@@ -254,7 +255,10 @@ int main(int argc, char *argv[])
 
     if ((err = iftraf_init()) != EDPVS_OK)
         rte_exit(EXIT_FAILURE, "Fail to init stats: %s\n", dpvs_strerror(err));
-    
+
+    if ((err = eal_mem_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "Fail to init eal mem: %s\n", dpvs_strerror(err));
+
     /* config and start all available dpdk ports */
     nports = dpvs_rte_eth_dev_count();
     for (pid = 0; pid < nports; pid++) {
@@ -291,6 +295,10 @@ int main(int argc, char *argv[])
 
 end:
     dpvs_state_set(DPVS_STATE_FINISH);
+    if ((err = eal_mem_term()) !=0 )
+        rte_exit(EXIT_FAILURE, "Fail to term eal mem: %s\n",
+                dpvs_strerror(err));
+
     if ((err = iftraf_term()) !=0 )
         rte_exit(EXIT_FAILURE, "Fail to term iftraf: %s\n",
                 dpvs_strerror(err));
