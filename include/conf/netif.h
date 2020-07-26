@@ -29,10 +29,6 @@
 #define RTE_ETHDEV_QUEUE_STAT_CNTRS     16
 #define NETIF_MAX_BOND_SLAVES           32
 
-typedef uint8_t lcoreid_t;
-typedef uint16_t portid_t;
-typedef uint16_t queueid_t;
-
 /*** end of type from dpdk.h ***/
 
 enum {

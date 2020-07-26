@@ -75,6 +75,13 @@ typedef uint32_t    __u32;
 typedef uint8_t lcoreid_t;
 #endif
 
+#ifndef portid_t
+typedef uint16_t portid_t;
+#endif
+
+#ifndef queueid_t
+typedef uint16_t queueid_t;
+#endif
 
 #define DPVS_WAIT_WHILE(expr) while(expr){;}
 
