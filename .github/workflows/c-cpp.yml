@@ -1,0 +1,17 @@
+name: DPVS C/C++ CI
+
+on:
+  push:
+    branches: [ master devel ]
+  pull_request:
+    branches: [ master devel ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: make
+      run: make
