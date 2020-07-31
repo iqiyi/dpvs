@@ -17,8 +17,10 @@
  */
 #ifndef __NETIF_CONF_H__
 #define __NETIF_CONF_H__
+
 #include <linux/if_ether.h>
 #include <net/if.h>
+#include "conf/sockopts.h"
 
 #define NETIF_MAX_PORTS     4096
 
@@ -30,24 +32,6 @@
 #define NETIF_MAX_BOND_SLAVES           32
 
 /*** end of type from dpdk.h ***/
-
-enum {
-    /* get */
-    SOCKOPT_NETIF_GET_LCORE_MASK = 500,
-    SOCKOPT_NETIF_GET_LCORE_BASIC,
-    SOCKOPT_NETIF_GET_LCORE_STATS,
-    SOCKOPT_NETIF_GET_PORT_LIST,
-    SOCKOPT_NETIF_GET_PORT_BASIC,
-    SOCKOPT_NETIF_GET_PORT_STATS,
-    SOCKOPT_NETIF_GET_PORT_EXT_INFO,
-    SOCKOPT_NETIF_GET_BOND_STATUS,
-    SOCKOPT_NETIF_GET_MAX,
-    /* set */
-    SOCKOPT_NETIF_SET_LCORE = 500,
-    SOCKOPT_NETIF_SET_PORT,
-    SOCKOPT_NETIF_SET_BOND,
-    SOCKOPT_NETIF_SET_MAX,
-};
 
 /* all lcores in use */
 typedef struct netif_lcore_mask_get

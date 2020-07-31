@@ -21,18 +21,10 @@
  */
 #ifndef __DPVS_LADDR_CONF_H__
 #define __DPVS_LADDR_CONF_H__
+
 #include "inet.h"
 #include "net/if.h"
-
-enum {
-    /* set */
-    SOCKOPT_SET_LADDR_ADD   = 100,
-    SOCKOPT_SET_LADDR_DEL,
-    SOCKOPT_SET_LADDR_FLUSH,
-
-    /* get */
-    SOCKOPT_GET_LADDR_GETALL,
-};
+#include "conf/sockopts.h"
 
 #define SOCKOPT_LADDR_BASE SOCKOPT_SET_LADDR_ADD
 #define SOCKOPT_GET_LADDR_MAX 199

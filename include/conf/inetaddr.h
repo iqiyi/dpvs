@@ -17,21 +17,12 @@
  */
 #ifndef __DPVS_INETADDR_CONF_H__
 #define __DPVS_INETADDR_CONF_H__
+
 #include <stdint.h>
 #include <linux/if_addr.h>
 #include "inet.h"
 #include "net/if.h"
-
-enum {
-    /* set */
-    SOCKOPT_SET_IFADDR_ADD  = 400,
-    SOCKOPT_SET_IFADDR_DEL,
-    SOCKOPT_SET_IFADDR_SET,
-    SOCKOPT_SET_IFADDR_FLUSH,
-
-    /* get */
-    SOCKOPT_GET_IFADDR_SHOW,
-};
+#include "conf/sockopts.h"
 
 enum {
     IFA_SCOPE_GLOBAL        = 0,

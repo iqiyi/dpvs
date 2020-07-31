@@ -20,15 +20,7 @@
 #define __DPVS_ROUTE6_CONF_H__
 
 #include "flow.h"
-
-enum {
-    /* set */
-    SOCKOPT_SET_ROUTE6_ADD_DEL  = 6300,
-    SOCKOPT_SET_ROUTE6_FLUSH,
-
-    /* get */
-    SOCKOPT_GET_ROUTE6_SHOW     = 6300,
-};
+#include "conf/sockopts.h"
 
 enum {
     RT6_OPS_GET = 1,

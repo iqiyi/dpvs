@@ -1576,8 +1576,8 @@ static int sockopt_conn_get(sockoptid_t opt, const void *in, size_t inlen,
 
 static struct dpvs_sockopts conn_sockopts = {
     .version        = SOCKOPT_VERSION,
-    .set_opt_min    = 0,
-    .set_opt_max    = 0,
+    .set_opt_min    = SOCKOPT_SET_CONN,
+    .set_opt_max    = SOCKOPT_SET_CONN,
     .set            = NULL,
     .get_opt_min    = SOCKOPT_GET_CONN_ALL,
     .get_opt_max    = SOCKOPT_GET_CONN_SPECIFIED,

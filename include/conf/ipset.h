@@ -22,15 +22,7 @@
 #ifndef __DPVS_IPSET_CONF_H__
 #define __DPVS_IPSET_CONF_H__
 
-enum {
-    /* set */
-    SOCKOPT_SET_IPSET_ADD   = 3300,
-    SOCKOPT_SET_IPSET_DEL,
-    SOCKOPT_SET_IPSET_FLUSH,
-
-    /* get */
-    SOCKOPT_GET_IPSET_SHOW,
-};
+#include "conf/sockopts.h"
 
 struct dp_vs_ipset_conf {
 	int af;
