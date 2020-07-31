@@ -790,6 +790,9 @@ static int udp_snat_out_handler(struct dp_vs_proto *proto,
     return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL);
 }
 
+static int create_uoa_cache(void);
+static void destroy_uoa_cache(void);
+
 static int create_uoa_cache(void)
 {
     int i;
@@ -805,6 +808,7 @@ static int create_uoa_cache(void)
                                             0, NULL, NULL, NULL, NULL, i, 0);
 
         if (unlikely(!g_uoa_cache[i])) {
+            destroy_uoa_cache();
             return EDPVS_NOMEM;
         }
     }
@@ -817,7 +821,10 @@ static void destroy_uoa_cache(void)
     int i;
 
     for (i = 0; i < get_numa_nodes(); i++) {
-        rte_mempool_free(g_uoa_cache[i]);
+        if (g_uoa_cache[i]) {
+            rte_mempool_free(g_uoa_cache[i]);
+            g_uoa_cache[i] = NULL;
+        }
     }
 }
 
