@@ -181,8 +181,7 @@ static void dp_vs_conn_refresh_timer(struct dp_vs_conn *conn, bool lock)
         return;
 
     if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
-        conn->timeout.tv_sec = 0;
-        conn->timeout.tv_usec = 0;
+        return;
     }
 
     if (dp_vs_conn_is_template(conn)) {
@@ -1166,9 +1165,7 @@ void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn)
 /* put back the conn and reset it's timer */
 void dp_vs_conn_put(struct dp_vs_conn *conn)
 {
-    if ((conn->flags & DPVS_CONN_F_ONE_PACKET) &&
-            (rte_atomic32_read(&conn->refcnt) == 1) &&
-            !dp_vs_conn_is_in_timer(conn)) {
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
         dp_vs_conn_expire(conn);
         return;
     }
