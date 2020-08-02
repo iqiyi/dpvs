@@ -469,7 +469,6 @@ struct inet_ifaddr *inet_addr_ifa_get_expired(int af, const struct netif_port *d
 {
     struct inet_ifaddr *ifa;
     struct inet_device *idev;
-    lcoreid_t cid = rte_lcore_id();
 
     if (!dev) {
         dev = inet_addr_get_iface(af, addr);
@@ -480,16 +479,10 @@ struct inet_ifaddr *inet_addr_ifa_get_expired(int af, const struct netif_port *d
     idev = dev_get_idev(dev);
     assert(idev != NULL);
 
-    list_for_each_entry(ifa, &ifa_expired_list[cid], h_list) {
-        if (ifa->af == af && inet_addr_equal(af, &ifa->addr, addr)) {
-            idev_put(idev);
-            rte_atomic32_inc(&ifa->refcnt);
-            return ifa;
-        }
-    }
+    ifa = expired_ifa_lookup(idev, addr, 0, af);
 
     idev_put(idev);
-    return NULL;
+    return ifa;
 }
 
 void inet_addr_ifa_put(struct inet_ifaddr *ifa)
@@ -808,7 +801,7 @@ static int ifa_entry_add(const struct ifaddr_action *param)
     ifa = expired_ifa_lookup(idev, &param->addr, param->plen, param->af);
     if (ifa) {
         if (ifa->flags & IFA_F_SAPOOL) {
-            inc_sa_pool_refcnt(ifa); /* hold sa_pool again */
+            hold_ifa_sa_pool(ifa); /* hold sa_pool again */
         }
         list_del_init(&ifa->h_list);
         ifa_hash(idev, ifa);
