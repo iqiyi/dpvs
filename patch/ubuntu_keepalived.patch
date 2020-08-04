@@ -1,0 +1,32 @@
+--- tools/keepalived/configure-origin.ac	2020-07-29 14:31:45.282997622 +0800
++++ tools/keepalived/configure.ac	2020-07-29 14:30:38.712993278 +0800
+@@ -1070,29 +1070,6 @@ AM_CONDITIONAL([BUILD_GENHASH], [test $B
+ 
+ dnl ----[ Check for IPv4 devconf netlink support ]----
+ IPV4_DEVCONF=No
+-if test .$enable_vrrp != .no; then
+-  dnl ----[Check have IPV4_DEVCONF defines - since Linux 3.11]----
+-  SAV_CPPFLAGS="$CPPFLAGS"
+-  CPPFLAGS="$CPP_FLAGS $kernelinc"
+-  IPV4_DEVCONF=Yes
+-  AC_CHECK_DECLS([
+-    IPV4_DEVCONF_ARP_IGNORE,
+-    IPV4_DEVCONF_ACCEPT_LOCAL,
+-    IPV4_DEVCONF_RP_FILTER,
+-    IPV4_DEVCONF_ARPFILTER],
+-    [],
+-    [
+-      IPV4_DEVCONF=No
+-      break
+-    ],
+-    [[#include <linux/ip.h>]])
+-  if test $IPV4_DEVCONF = Yes; then
+-    AC_DEFINE([_HAVE_IPV4_DEVCONF_], [ 1 ], [Define to 1 if have IPv4 netlink device configuration])
+-    add_system_opt([IPV4_DEVCONF])
+-  fi
+-  AC_CHECK_HEADERS([linux/rtnetlink.h], [], [AC_MSG_ERROR([Unusable linux/rtnetlink.h])], [$RTNETLINK_EXTRA_INCLUDE])
+-  CPPFLAGS="$SAV_CPPFLAGS"
+-fi
+ 
+ dnl ----[ Check for IPv6 Advanced API (RFC3542) - since Linux 2.6.14 ]----
+ IPV6_ADVANCED_API=No
