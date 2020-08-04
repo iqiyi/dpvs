@@ -214,12 +214,14 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add)
 }
 
 /* add ipv6 multicast address after port start */
-int idev_add_mcast_init(struct netif_port *dev)
+int idev_add_mcast_init(void *args)
 {
     int err;
     struct inet_device *idev;
     union inet_addr all_nodes, all_routers;
     struct ether_addr eaddr_nodes, eaddr_routers;
+
+    struct netif_port *dev = (struct netif_port *) args;
 
     idev = dev_get_idev(dev);
 
