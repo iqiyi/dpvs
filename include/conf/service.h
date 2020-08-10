@@ -44,6 +44,7 @@ struct dp_vs_service_conf {
     uint32_t            netmask;        /* persistent netmask */
     unsigned            bps;
     unsigned            limit_proportion;
+    uint32_t            proxy_protocol;
 };
 
 struct dp_vs_service_entry {
@@ -71,6 +72,7 @@ struct dp_vs_service_entry {
     char                drange[256];
     char                iifname[IFNAMSIZ];
     char                oifname[IFNAMSIZ];
+    uint32_t            proxy_protocol;
 };
 
 struct dp_vs_get_services {
@@ -98,6 +100,7 @@ struct dp_vs_service_user {
     char              drange[256];
     char              iifname[IFNAMSIZ];
     char              oifname[IFNAMSIZ];
+    uint32_t          proxy_protocol;
 };
 
 struct dp_vs_getinfo {

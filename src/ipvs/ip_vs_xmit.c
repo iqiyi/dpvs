@@ -29,6 +29,7 @@
 #include "ipvs/xmit.h"
 #include "ipvs/nat64.h"
 #include "parser/parser.h"
+#include "ipvs/proxy_protocol.h"
 
 static bool fast_xmit_close = false;
 static bool xmit_ttl = false;
@@ -696,8 +697,16 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
                     struct dp_vs_conn *conn,
                     struct rte_mbuf *mbuf)
 {
+    int err;
     int af = conn->af;
     assert(af == AF_INET || af == AF_INET6);
+
+    if (conn->proxy_protocol) {
+        err = dp_vs_pphdr_inbound(mbuf, conn);
+        if (err < 0) {
+            goto notsupp;
+        }
+    }
 
     if (tuplehash_in(conn).af == AF_INET &&
         tuplehash_out(conn).af == AF_INET)
@@ -709,6 +718,7 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
         tuplehash_out(conn).af == AF_INET)
         return __dp_vs_xmit_fnat64(proto, conn, mbuf);
 
+notsupp:
     rte_pktmbuf_free(mbuf);
     return EDPVS_NOTSUPP;
 }
@@ -1004,8 +1014,16 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn,
                         struct rte_mbuf *mbuf)
 {
+    int err;
     int af = conn->af;
     assert(af == AF_INET || af == AF_INET6);
+
+    if (conn->proxy_protocol) {
+        err = dp_vs_pphdr_outbound(mbuf, conn);
+        if (err < 0) {
+            goto notsupp;
+        }
+    }
 
     if (tuplehash_in(conn).af == AF_INET &&
         tuplehash_out(conn).af == AF_INET)
@@ -1017,6 +1035,7 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
         tuplehash_out(conn).af == AF_INET)
         return __dp_vs_out_xmit_fnat46(proto, conn, mbuf);
 
+notsupp:
     rte_pktmbuf_free(mbuf);
     return EDPVS_NOTSUPP;
 }

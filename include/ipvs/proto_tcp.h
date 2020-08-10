@@ -105,5 +105,7 @@ void tcp6_send_csum(struct ipv6_hdr *iph, struct tcphdr *th);
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir);
 void install_proto_tcp_keywords(void);
 void tcp_keyword_value_init(void);
+void tcpopt_get_mss(int af, struct rte_mbuf *mbuf, uint16_t *mss);
+void tcpopt_update_mss(int af, struct rte_mbuf *mbuf, uint16_t new_mss);
 
 #endif

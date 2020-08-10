@@ -84,6 +84,7 @@ struct dp_vs_service {
     uint32_t            num_laddrs;
 
     /* ... flags, timer ... */
+    uint32_t            proxy_protocol;
 } __rte_cache_aligned;
 
 

@@ -64,6 +64,7 @@ typedef struct dp_vs_service_entry_app {
 	X->netmask          = Y->user.netmask; 			\
 	X->bps              = Y->user.bps; 			\
 	X->limit_proportion = Y->user.limit_proportion; 	\
+	X->proxy_protocol   = Y->user.proxy_protocol; 	    \
 	snprintf(X->sched_name, IP_VS_SCHEDNAME_MAXLEN, "%s", Y->user.sched_name); \
 	snprintf(X->srange, sizeof(X->srange), "%s", Y->user.srange); \
 	snprintf(X->drange, sizeof(X->drange), "%s", Y->user.drange); \

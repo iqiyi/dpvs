@@ -246,6 +246,7 @@ typedef struct _virtual_server {
 	char 	*local_addr_gname; 	/*local ip address group name*/
 	char 	*blklst_addr_gname; 	/*black list ip group name*/	
 	char 	*vip_bind_dev; 		/*the interface name, vip bindto*/
+	uint32_t proxy_protocol;
 } virtual_server_t;
 
 /* Configuration data root */
@@ -303,6 +304,7 @@ static inline bool quorum_equal(const notify_script_t *quorum1,
                          (X)->conn_timeout            == (Y)->conn_timeout              &&\
                          (X)->bps                     == (Y)->bps                       &&\
                          (X)->limit_proportion        == (Y)->limit_proportion          &&\
+                         (X)->proxy_protocol          == (Y)->proxy_protocol            &&\
                          (((X)->vsgname && (Y)->vsgname &&                              \
                            !strcmp((X)->vsgname, (Y)->vsgname)) ||                      \
                           (!(X)->vsgname && !(Y)->vsgname))                             &&\

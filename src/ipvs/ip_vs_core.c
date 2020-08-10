@@ -81,6 +81,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
 #ifdef CONFIG_DPVS_IPVS_DEBUG
     char sbuf[64], dbuf[64], maskbuf[64];
 #endif
+    param.proxy_protocol = false;
 
     assert(svc && iph && mbuf);
 
@@ -186,6 +187,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
     struct dp_vs_conn_param param;
     struct sockaddr_storage daddr, saddr;
     uint16_t _ports[2];
+    param.proxy_protocol = false;
 
     if (unlikely(iph->proto == IPPROTO_ICMP)) {
         struct icmphdr *ich, _icmph;
@@ -281,6 +283,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     struct dp_vs_dest *dest;
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
+    param.proxy_protocol = false;
 
     assert(svc && iph && mbuf);
 
@@ -337,6 +340,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                               ports[0], ports[1], 0, &param);
     }
 
+    param.proxy_protocol = svc->proxy_protocol ? true : false;
     conn = dp_vs_conn_new(mbuf, iph, &param, dest,
             is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
     if (!conn)
