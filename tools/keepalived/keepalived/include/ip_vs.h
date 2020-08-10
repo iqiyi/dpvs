@@ -168,6 +168,7 @@ struct ip_vs_service_user {
 	char		drange[256];
 	char		iifname[IFNAMSIZ];
 	char		oifname[IFNAMSIZ];
+    unsigned    proxy_protocol;
 };
 
 struct ip_vs_dest_user {
@@ -260,6 +261,7 @@ struct ip_vs_service_entry {
 	char			drange[256];
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
+    unsigned        proxy_protocol;
 };
 
 struct ip_vs_dest_entry {

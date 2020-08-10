@@ -163,6 +163,8 @@ vs_handler(const vector_t *strvec)
 		return;
 
 	alloc_vs(strvec_slot(strvec, 1), vector_size(strvec) >= 3 ? strvec_slot(strvec, 2) : NULL);
+    virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+    vs->proxy_protocol = global_data->proxy_protocol;
 }
 static void
 vs_end_handler(void)
@@ -1100,6 +1102,13 @@ hash_target_handler(const vector_t *strvec)
 	}
 }
 
+static void
+proxy_protocol_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	vs->proxy_protocol = 1;
+}
+
 void
 init_check_keywords(bool active)
 {
@@ -1169,6 +1178,7 @@ init_check_keywords(bool active)
 	install_keyword("oif", &oif_handler);
 	install_keyword("iif", &iif_handler);
 	install_keyword("hash_target", &hash_target_handler);
+	install_keyword("proxy_protocol", &proxy_protocol_handler);
 
 	/* Pool regression detection and handling. */
 	install_keyword("alpha", &vs_alpha_handler);
