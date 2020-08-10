@@ -155,6 +155,95 @@ inline void tcp6_send_csum(struct ipv6_hdr *iph, struct tcphdr *th) {
     th->check = ip6_udptcp_cksum((struct ip6_hdr *)iph, th,
             (void *)th - (void *)iph, IPPROTO_TCP);
 }
+ 
+void tcpopt_get_mss(int af, struct rte_mbuf *mbuf, uint16_t *mss)
+{
+    int len;
+    const unsigned char *ptr;
+    const struct tcphdr *th = tcp_hdr(mbuf);
+
+    if (!mss) {
+        return;
+    }
+    if (unlikely(af != AF_INET && af != AF_INET6)) {
+        RTE_LOG(INFO, IPVS, "%s: invalid af (%d)\n", __func__, af);
+        return;
+    }
+
+    len = (th->doff << 2) - sizeof(struct tcphdr);
+    ptr = (unsigned char *)(th + 1);
+
+    while (len > 0) {
+        int opcode = *ptr++;
+        int opsize;
+
+        switch (opcode) {
+        case TCP_OPT_EOL:
+            return;
+        case TCP_OPT_NOP:
+            len--;
+            continue;
+        default:
+            opsize = *ptr++;
+            if (opsize < 2)     /* silly options */
+                return;
+            if (opsize > len)   /* partial options */
+                return;
+            if ((opcode == TCP_OPT_MSS) && (opsize == TCP_OLEN_MSS)) {
+                *mss = ntohs(*(__be16 *) ptr);
+                return;
+            }
+            ptr += opsize - 2;
+            len -= opsize;
+            break;
+        }
+    }
+
+    return;
+}
+
+void tcpopt_update_mss(int af, struct rte_mbuf *mbuf, uint16_t new_mss)
+{
+    int len;
+    const unsigned char *ptr;
+    const struct tcphdr *th = tcp_hdr(mbuf);
+
+    if (unlikely(af != AF_INET && af != AF_INET6)) {
+        RTE_LOG(INFO, IPVS, "%s: invalid af (%d)\n", __func__, af);
+        return ;
+    }
+
+    len = (th->doff << 2) - sizeof(struct tcphdr);
+    ptr = (unsigned char *)(th + 1);
+
+    while (len > 0) {
+        int opcode = *ptr++;
+        int opsize;
+
+        switch (opcode) {
+        case TCP_OPT_EOL:
+            return;
+        case TCP_OPT_NOP:
+            len--;
+            continue;
+        default:
+            opsize = *ptr++;
+            if (opsize < 2)     /* silly options */
+                return;
+            if (opsize > len)   /* partial options */
+                return;
+            if ((opcode == TCP_OPT_MSS) && (opsize == TCP_OLEN_MSS)) {
+                *((uint16_t *)ptr) = htons(new_mss);
+                return;
+            }
+            ptr += opsize - 2;
+            len -= opsize;
+            break;
+        }
+    }
+
+    return;
+}
 
 static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         const struct dp_vs_conn *conn, struct rte_mbuf *mbuf)

@@ -35,6 +35,7 @@
 #include "check_data.h"
 #include "vector.h"
 #include "layer4.h"
+#include "pphdr.h"
 
 /* Checkers structure definition */
 typedef struct _checker {
