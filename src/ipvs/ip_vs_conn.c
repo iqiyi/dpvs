@@ -99,14 +99,13 @@ static struct dp_vs_conn *dp_vs_conn_alloc(enum dpvs_fwd_mode fwdmode,
         return NULL;
     }
 
-    conn->connpool = this_conn_cache;
     this_conn_count++;
 
     /* no need to create redirect for the global template connection */
     if (likely((flags & DPVS_CONN_F_TEMPLATE) == 0))
         r = dp_vs_redirect_alloc(fwdmode);
 
-     conn->redirect = r;
+    conn->redirect = r;
 
     return conn;
 }
@@ -800,6 +799,18 @@ static void conn_flush(void)
 #endif
 }
 
+static inline void dp_vs_conn_pre_init(struct dp_vs_conn *new)
+{
+    size_t len;
+
+    len = offsetof(struct dp_vs_conn, redirect)
+            - offsetof(struct dp_vs_conn, pad1);
+
+    memset(&new->pad1, 0, len);
+
+    INIT_LIST_HEAD(&new->ack_mbuf);
+}
+
 struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
                                   const struct dp_vs_iphdr *iph,
                                   struct dp_vs_conn_param *param,
@@ -817,7 +828,10 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     if (unlikely(!new))
         return NULL;
 
-    new->flags = flags;
+    dp_vs_conn_pre_init(new);
+
+    new->connpool = this_conn_cache;
+    new->flags    = flags;
 
     /* set proper RS port */
     if (dp_vs_conn_is_template(new) || param->ct_dport != 0)
