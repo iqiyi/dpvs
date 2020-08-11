@@ -380,6 +380,9 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 {
     struct ipv4_hdr *iph;
     uint16_t hlen, len;
+    struct flow4 fl4;
+    struct route_entry *rt = NULL;
+
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
     assert(mbuf);
 
@@ -427,6 +430,15 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 #ifdef CONFIG_DPVS_IP_HEADER_DEBUG
     ip4_show_hdr(__func__, mbuf);
 #endif
+
+    if (unlikely(iph->time_to_live <= 1)){
+        fl4.fl4_daddr.s_addr = iph->src_addr;
+        rt = route4_output(&fl4);
+        if(!rt)
+            return EDPVS_INVAL;
+        mbuf->userdata = rt;
+        icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+    }
 
     if (unlikely(iph->next_proto_id == IPPROTO_OSPF))
         return EDPVS_KNICONTINUE;

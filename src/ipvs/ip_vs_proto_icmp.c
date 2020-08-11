@@ -224,8 +224,20 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
         icmp_type = ((struct icmphdr *)ich)->type;
         icmp_code = ((struct icmphdr *)ich)->code;
         if (!is_icmp_reply(icmp_type)) {
-            sport = ((struct icmphdr *)ich)->un.echo.id;
-            dport = icmp_type << 8 | icmp_code;
+            if(unlikely(icmp_type == ICMP_TIME_EXCEEDED)) {
+                ich = mbuf_header_pointer(mbuf, iph->len + sizeof(struct iphdr) 
+                    + sizeof(_icmph), sizeof(_icmph), &_icmph);
+                if(unlikely(!ich))
+                    return NULL;
+                icmp_type = ((struct icmphdr *)ich)->type;
+                icmp_code = ((struct icmphdr *)ich)->code;
+                sport = ((struct icmphdr *)ich)->un.echo.id;
+                dport = icmp_type << 8 | icmp_code;   
+            }
+            else {
+                sport = ((struct icmphdr *)ich)->un.echo.id;
+                dport = icmp_type << 8 | icmp_code;
+            }
         } else if (icmp_invert_type(&type, icmp_type)) {
             sport = type << 8 | icmp_code;
             dport = ((struct icmphdr *)ich)->un.echo.id;
