@@ -24,7 +24,11 @@
 #include "eal_mem.h"
 #include "ctrl.h"
 
+#if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
+#define MAX_SEGMENT_NUM         (512)
+#else
 #define MAX_SEGMENT_NUM         RTE_MAX_MEMSEG
+#endif
 #define MAX_MEMZONE_NUM         RTE_MAX_MEMZONE
 
 static uint64_t eal_get_free_seg_len(int socket_id)
@@ -43,60 +47,114 @@ static uint64_t eal_get_free_seg_len(int socket_id)
     return len;
 }
 
+#if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
+static int dp_vs_fill_mem_seg_info(const struct rte_memseg_list *msl, const struct rte_memseg *ms,
+            void *arg)
+{
+    eal_all_mem_seg_ret_t *eal_mem_segs = (eal_all_mem_seg_ret_t *)arg;
+    eal_mem_seg_ret_t *seg_ret = NULL;
+
+    if (MAX_SEGMENT_NUM == eal_mem_segs->seg_num) {
+        return 0;
+    }
+    seg_ret = &eal_mem_segs->seg_info[eal_mem_segs->seg_num];
+    eal_mem_segs->seg_num++;
+
+    seg_ret->phys_addr = ms->phys_addr;
+    seg_ret->virt_addr = ms->addr_64;
+    seg_ret->len = ms->len;
+    seg_ret->hugepage_sz = ms->hugepage_sz;
+    seg_ret->socket_id = ms->socket_id;
+    seg_ret->nchannel = ms->nchannel;
+    seg_ret->nrank = ms->nrank;
+    seg_ret->free_seg_len = eal_get_free_seg_len(ms->socket_id);
+
+    return 0;
+}
+
+static void dp_vs_fill_mem_zone_info(const struct rte_memzone *mz, void *arg)
+{
+    eal_all_mem_zone_ret_t *eal_mem_zones = (eal_all_mem_zone_ret_t *)arg;
+    eal_mem_zone_ret_t *zone_ret = NULL;
+
+    if (MAX_MEMZONE_NUM == eal_mem_zones->zone_num) {
+        return;
+    }
+    zone_ret = &eal_mem_zones->zone_info[eal_mem_zones->zone_num];
+    eal_mem_zones->zone_num++;
+
+    memcpy(zone_ret->name, mz->name, EAL_MEM_NAME_LEN);
+    zone_ret->phys_addr = mz->phys_addr;
+    zone_ret->virt_addr = mz->addr_64;
+    zone_ret->len = mz->len;
+    zone_ret->hugepage_sz = mz->hugepage_sz;
+    zone_ret->socket_id = mz->socket_id;
+}
+#endif
+
 static int dp_vs_get_eal_mem_seg(eal_all_mem_seg_ret_t *eal_mem_segs)
 {
+#if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
+    rte_memseg_walk(dp_vs_fill_mem_seg_info, eal_mem_segs);
+#else
     const struct rte_mem_config *mcfg;
+    eal_mem_seg_ret_t *seg_ret;
     unsigned i = 0;
-    unsigned j = 0;
 
     /* get pointer to global configuration */
     mcfg = rte_eal_get_configuration()->mem_config;
 
-    eal_mem_segs->seg_num = 0;
     for (i = 0; i < MAX_SEGMENT_NUM; i++) {
         if (NULL == mcfg->memseg[i].addr) {
             break;
         }
-        j = eal_mem_segs->seg_num;
+        seg_ret = &eal_mem_segs->seg_info[eal_mem_segs->seg_num];
         eal_mem_segs->seg_num++;
-        eal_mem_segs->seg_info[j].phys_addr = mcfg->memseg[i].phys_addr;
-        eal_mem_segs->seg_info[j].virt_addr = mcfg->memseg[i].addr_64;
-        eal_mem_segs->seg_info[j].len = mcfg->memseg[i].len;
-        eal_mem_segs->seg_info[j].hugepage_sz = mcfg->memseg[i].hugepage_sz;
-        eal_mem_segs->seg_info[j].socket_id = mcfg->memseg[i].socket_id;
-        eal_mem_segs->seg_info[j].nchannel = rte_memory_get_nchannel();
-        eal_mem_segs->seg_info[j].nrank = rte_memory_get_nrank();
-        eal_mem_segs->seg_info[j].free_seg_len = eal_get_free_seg_len(mcfg->memseg[i].socket_id);
+        seg_ret->phys_addr = mcfg->memseg[i].phys_addr;
+        seg_ret->virt_addr = mcfg->memseg[i].addr_64;
+        seg_ret->len = mcfg->memseg[i].len;
+        seg_ret->hugepage_sz = mcfg->memseg[i].hugepage_sz;
+        seg_ret->socket_id = mcfg->memseg[i].socket_id;
+        seg_ret->nchannel = mcfg->memseg[i].nchannel;
+        seg_ret->nrank = mcfg->memseg[i].nrank;
+        seg_ret->free_seg_len = eal_get_free_seg_len(mcfg->memseg[i].socket_id);
     }
+#endif
 
    return 0;
 }
 
 static int dp_vs_get_eal_mem_zone(eal_all_mem_zone_ret_t *eal_mem_zones)
 {
+
+#if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
+    rte_memzone_walk(dp_vs_fill_mem_zone_info, eal_mem_zones);
+#else
     eal_mem_zone_ret_t *zone_ret;
     struct rte_mem_config *mcfg;
+    struct rte_memzone* mz;
     unsigned i = 0;
 
     /* get pointer to global configuration */
     mcfg = rte_eal_get_configuration()->mem_config;
 
     rte_rwlock_read_lock(&mcfg->mlock);
-    eal_mem_zones->zone_num = 0;
     for (i = 0; i < MAX_MEMZONE_NUM; i++) {
-        if (NULL == mcfg->memzone[i].addr) {
+        mz = &mcfg->memzone[i];
+        if (NULL == mz->addr) {
             break;
         }
         zone_ret = &eal_mem_zones->zone_info[eal_mem_zones->zone_num];
         eal_mem_zones->zone_num++;
-        memcpy(zone_ret->name, mcfg->memzone[i].name, EAL_MEM_NAME_LEN);
-        zone_ret->phys_addr = mcfg->memzone[i].phys_addr;
-        zone_ret->virt_addr = mcfg->memzone[i].addr_64;
-        zone_ret->len = mcfg->memzone[i].len;
-        zone_ret->hugepage_sz = mcfg->memzone[i].hugepage_sz;
-        zone_ret->socket_id = mcfg->memzone[i].socket_id;
+        memcpy(zone_ret->name, mz->name, EAL_MEM_NAME_LEN);
+        zone_ret->phys_addr = mz->phys_addr;
+        zone_ret->virt_addr = mz->addr_64;
+        zone_ret->len = mz->len;
+        zone_ret->hugepage_sz = mz->hugepage_sz;
+        zone_ret->socket_id = mz->socket_id;
     }
     rte_rwlock_read_unlock(&mcfg->mlock);
+#endif
 
     return 0;
 }
