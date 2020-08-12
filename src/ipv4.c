@@ -431,7 +431,7 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
     ip4_show_hdr(__func__, mbuf);
 #endif
 
-    if (unlikely(iph->time_to_live <= 1)){
+    if (unlikely(iph->time_to_live <= 1)) {
         fl4.fl4_daddr.s_addr = iph->src_addr;
         rt = route4_output(&fl4);
         if(!rt)
