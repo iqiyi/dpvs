@@ -77,6 +77,7 @@ struct sa_fdir {
     __be16                  port_base;
     uint16_t                soft_id;    /* current unsed soft-id,
                                            increase after use. */
+    uint16_t                shift;
 };
 
 static struct sa_fdir       sa_fdirs[DPVS_MAX_LCORE];
@@ -195,14 +196,23 @@ static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
 {
     int hash;
     struct sa_entry_pool *pool;
+    struct sa_entry * sep;
     uint32_t port; /* should be u32 or 65535==0 */
+    uint32_t sa_entry_pool_size;
+    uint32_t sa_entry_size;
+    uint32_t sa_entry_num;
 
-    ap->pool_hash = rte_malloc(NULL, sizeof(struct sa_entry_pool) * hash_sz,
+    sa_entry_num = MAX_PORT >> fdir->shift;
+    sa_entry_pool_size = sizeof(struct sa_entry_pool) * hash_sz;
+    sa_entry_size = sizeof(struct sa_entry) * sa_entry_num * hash_sz;
+
+    ap->pool_hash = rte_malloc(NULL, sa_entry_pool_size + sa_entry_size,
                                RTE_CACHE_LINE_SIZE);
     if (!ap->pool_hash)
         return EDPVS_NOMEM;
 
     ap->pool_hash_sz = hash_sz;
+    sep = (struct sa_entry *)&ap->pool_hash[hash_sz];
 
     /* the big loop takes about 17ms */
     for (hash = 0; hash < hash_sz; hash++) {
@@ -213,6 +223,8 @@ static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
 
         pool->used_cnt = 0;
         pool->free_cnt = 0;
+        pool->shift = fdir->shift;
+        pool->sa_entries = &sep[sa_entry_num * hash];
 
         for (port = ap->low; port <= ap->high; port++) {
             struct sa_entry *sa;
@@ -221,7 +233,7 @@ static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
                 ((uint16_t)port & fdir->mask) != ntohs(fdir->port_base))
                 continue;
 
-            sa = &pool->sa_entries[(uint16_t)port];
+            sa = &pool->sa_entries[(uint16_t)(port >> pool->shift)];
             sa->addr = ap->ifa->addr;
             sa->port = htons((uint16_t)port);
             list_add_tail(&sa->list, &pool->free_enties);
@@ -500,7 +512,7 @@ static inline int sa_pool_release(struct sa_entry_pool *pool,
     /* it's too slow to traverse the used_enties list
      * (by list_for_each_entry_safe) to find the @entry
      * matchs @sin. */
-    ent = &pool->sa_entries[port];
+    ent = &pool->sa_entries[port >> pool->shift];
     if (!(ent->flags & SA_F_USED)) {
         RTE_LOG(WARNING, SAPOOL, "%s: port %d not in use !\n", __func__, port);
         return EDPVS_INVAL;
@@ -828,6 +840,7 @@ int sa_pool_init(void)
         sa_fdirs[cid].lcore = cid;
         sa_fdirs[cid].port_base = htons(port_base);
         sa_fdirs[cid].soft_id = 0;
+        sa_fdirs[cid].shift = shift;
 
         port_base++;
     }

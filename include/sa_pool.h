@@ -72,7 +72,7 @@ struct sa_entry {
 };
 
 struct sa_entry_pool {
-    struct sa_entry         sa_entries[MAX_PORT];
+    struct sa_entry         *sa_entries;
     struct list_head        used_enties;
     struct list_head        free_enties;
     /* another way is use total_used/free_cnt in sa_pool,
@@ -81,6 +81,7 @@ struct sa_entry_pool {
     uint16_t                used_cnt;
     uint16_t                free_cnt;
     uint32_t                miss_cnt;
+    uint16_t                shift;
 };
 
 /* no lock needed because inet_ifaddr.sa_pool
