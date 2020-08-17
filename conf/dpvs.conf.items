@@ -15,6 +15,7 @@ global_defs {
     log_level         INFO              <none>
     log_file          /var/log/dpvs.log <none>
     <init> log_async_mode    off        <off, on|off>
+    <init> pdump      off               <off, on|off>
 }
 
 ! netif config

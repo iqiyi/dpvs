@@ -48,8 +48,18 @@ LIBS += -Wl,--no-as-needed -fvisibility=default \
 		-Wl,--no-whole-archive -lrt -lm -ldl -lcrypto
 
 ifeq ($(CONFIG_PDUMP), y)
-LIBS += -Wl,--whole-archive -lrte_acl -lrte_member -lrte_eventdev -lrte_reorder -lrte_cryptodev -lrte_vhost
-LIBS += -Wl,-lpcap -lrte_pmd_pcap -lrte_bus_vmbus -lrte_pmd_netvsc
+LIBS += -Wl,--whole-archive -lrte_acl -lrte_member -lrte_eventdev -lrte_reorder -lrte_cryptodev \
+		-lrte_vhost -lrte_pmd_pcap
+
+ifneq ("$(wildcard $(RTE_SDK)/$(RTE_TARGET)/lib/librte_bus_vmbus.a)", "")
+	LIBS += -lrte_bus_vmbus
+endif
+
+ifneq ("$(wildcard $(RTE_SDK)/$(RTE_TARGET)/lib/librte_pmd_netvsc.a)", "")
+	LIBS += -lrte_pmd_netvsc
+endif
+
+LIBS += -Wl,--no-whole-archive -lpcap
 endif
 
 ifeq ($(CONFIG_MLX5), y)

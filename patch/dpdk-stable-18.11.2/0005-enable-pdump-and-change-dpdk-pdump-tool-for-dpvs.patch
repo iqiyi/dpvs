@@ -284,15 +284,6 @@ index d12ae98..5c15ea0 100644
  
  #
  # Compile example software rings based PMD
-@@ -870,7 +870,7 @@ CONFIG_RTE_LIBRTE_REORDER=y
- #
- CONFIG_RTE_LIBRTE_PORT=y
- CONFIG_RTE_PORT_STATS_COLLECT=n
--CONFIG_RTE_PORT_PCAP=n
-+CONFIG_RTE_PORT_PCAP=y
- 
- #
- # Compile librte_table
 diff --git a/lib/librte_pdump/rte_pdump.c b/lib/librte_pdump/rte_pdump.c
 index 6c3a885..d9a3258 100644
 --- a/lib/librte_pdump/rte_pdump.c
