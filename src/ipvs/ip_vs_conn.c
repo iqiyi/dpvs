@@ -129,6 +129,9 @@ static void dp_vs_conn_attach_timer(struct dp_vs_conn *conn, bool lock)
     if (dp_vs_conn_is_in_timer(conn))
         return;
 
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        return;
+    }
     if (dp_vs_conn_is_template(conn)) {
         if (lock)
             rc = dpvs_timer_sched(&conn->timer, &conn->timeout,
@@ -176,6 +179,10 @@ static void dp_vs_conn_refresh_timer(struct dp_vs_conn *conn, bool lock)
 {
     if (!dp_vs_conn_is_in_timer(conn))
         return;
+
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        return;
+    }
 
     if (dp_vs_conn_is_template(conn)) {
         if (lock)
@@ -263,6 +270,10 @@ static inline int dp_vs_conn_hash(struct dp_vs_conn *conn)
 {
     int err;
 
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        return EDPVS_OK;
+    }
+
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_lock(&this_conn_lock);
 #endif
@@ -305,6 +316,8 @@ static inline int dp_vs_conn_unhash(struct dp_vs_conn *conn)
 
             err = EDPVS_OK;
         }
+    } else if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        return EDPVS_OK;
     } else {
         err = EDPVS_NOTEXIST;
     }
@@ -633,7 +646,9 @@ static int dp_vs_conn_expire(void *priv)
     dp_vs_conn_set_timeout(conn, pp);
     dpvs_time_rand_delay(&conn->timeout, 1000000);
 
-    rte_atomic32_inc(&conn->refcnt);
+    if (!(conn->flags & DPVS_CONN_F_ONE_PACKET)) {
+        rte_atomic32_inc(&conn->refcnt);
+    }
 
     if (dp_vs_conn_resend_packets(conn, pp) == EDPVS_OK) {
         /* expire later */
@@ -1150,6 +1165,10 @@ void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn)
 /* put back the conn and reset it's timer */
 void dp_vs_conn_put(struct dp_vs_conn *conn)
 {
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        dp_vs_conn_expire(conn);
+        return;
+    }
     dp_vs_conn_refresh_timer(conn, true);
 
     assert(rte_atomic32_read(&conn->refcnt) > 0);

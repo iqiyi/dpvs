@@ -1907,7 +1907,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 		if (se->pe_name[0])
 			printf(" pe %s", se->pe_name);
 		if (se->user.flags & IP_VS_SVC_F_ONEPACKET)
-			printf(" ops");
+			printf(" --ops");
 	} else if (format & FMT_STATS) {
 		printf("%-33s", svc_name);
 		print_largenum(se->stats.conns, format);
@@ -1944,9 +1944,9 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 					printf(" mask %i", se->user.netmask);
 			if (se->pe_name[0])
 				printf(" pe %s", se->pe_name);
-			if (se->user.flags & IP_VS_SVC_F_ONEPACKET)
-				printf(" ops");
 		}
+		if (se->user.flags & IP_VS_SVC_F_ONEPACKET)
+			printf(" ops");
 		if (se->user.flags & IP_VS_CONN_F_SYNPROXY)
 			printf(" synproxy");
 		if (se->user.conn_timeout != 0)
