@@ -496,7 +496,7 @@ index 6c3a885..d9a3258 100644
  		queue = p->data.dis_v1.queue;
  		ring = p->data.dis_v1.ring;
  		mp = p->data.dis_v1.mp;
-+                filter = p->data.en_v1.filter;
++                filter = p->data.dis_v1.filter;
  	}
  
  	/* validation if packet capture is for all queues */
