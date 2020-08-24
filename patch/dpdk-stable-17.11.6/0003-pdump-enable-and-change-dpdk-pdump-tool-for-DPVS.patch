@@ -1,6 +1,6 @@
-diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-17.11.6-new/app/pdump/main.c
---- /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c	2019-05-22 03:15:57.000000000 +0800
-+++ dpdk-stable-17.11.6-new/app/pdump/main.c	2020-08-19 14:36:39.969922730 +0800
+diff -uparN dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-17.11.6-new/app/pdump/main.c
+--- dpdk-stable-17.11.6/app/pdump/main.c	2019-05-22 03:15:57.000000000 +0800
++++ dpdk-stable-17.11.6-new/app/pdump/main.c	2020-08-24 11:09:32.166622729 +0800
 @@ -54,6 +54,7 @@
  #include <rte_mempool.h>
  #include <rte_ring.h>
@@ -57,7 +57,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
  			"[ring-size=<ring size>default:16384],"
  			"[mbuf-size=<mbuf data size>default:2176],"
  			"[total-num-mbufs=<number of mbufs>default:65535]'\n"
-@@ -270,6 +291,58 @@ parse_uint_value(const char *key, const
+@@ -270,6 +291,60 @@ parse_uint_value(const char *key, const
  }
  
  static int
@@ -99,6 +99,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
 +static int
 +parse_proto(const char *key __rte_unused, const char *value, void *extra_args) {
 +    struct pdump_tuples *pt =extra_args;
++
 +    if (!strcmp(value, "tcp")) {
 +        pt->filter->proto = IPPROTO_TCP;
 +    } else if (!strcmp(value, "udp")) {
@@ -108,6 +109,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
 +    } else {
 +        printf("invalid value:\"%s\" for key:\"%s\", "
 +	    "value must be tcp/udp/icmp\n", value, key);
++        return -EINVAL;
 +    }
 +    return 0;
 +}
@@ -116,7 +118,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
  parse_pdump(const char *optarg)
  {
  	struct rte_kvargs *kvlist;
-@@ -396,6 +469,73 @@ parse_pdump(const char *optarg)
+@@ -396,6 +471,73 @@ parse_pdump(const char *optarg)
  	} else
  		pt->total_num_mbufs = MBUFS_PER_POOL;
  
@@ -190,7 +192,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
  	num_tuples++;
  
  free_kvlist:
-@@ -540,6 +680,8 @@ cleanup_rings(void)
+@@ -540,6 +682,8 @@ cleanup_rings(void)
  			rte_ring_free(pt->rx_ring);
  		if (pt->tx_ring)
  			rte_ring_free(pt->tx_ring);
@@ -199,7 +201,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
  	}
  }
  
-@@ -583,11 +725,10 @@ configure_vdev(uint16_t port_id)
+@@ -583,11 +727,10 @@ configure_vdev(uint16_t port_id)
  {
  	struct ether_addr addr;
  	const uint16_t rxRings = 0, txRings = 1;
@@ -212,7 +214,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
  		return -1;
  
  	ret = rte_eth_dev_configure(port_id, rxRings, txRings,
-@@ -799,20 +940,20 @@ enable_pdump(void)
+@@ -799,20 +942,20 @@ enable_pdump(void)
  						pt->queue,
  						RTE_PDUMP_FLAG_RX,
  						pt->rx_ring,
@@ -237,7 +239,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
  			}
  		} else if (pt->dir == RTE_PDUMP_FLAG_RX) {
  			if (pt->dump_by_type == DEVICE_ID)
-@@ -820,22 +961,22 @@ enable_pdump(void)
+@@ -820,22 +963,22 @@ enable_pdump(void)
  						pt->device_id,
  						pt->queue,
  						pt->dir, pt->rx_ring,
@@ -264,9 +266,9 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/main.c dpdk-stable-1
  		}
  		if (ret < 0 || ret1 < 0) {
  			cleanup_pdump_resources();
-diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/Makefile dpdk-stable-17.11.6-new/app/pdump/Makefile
---- /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/Makefile	2019-05-22 03:15:57.000000000 +0800
-+++ dpdk-stable-17.11.6-new/app/pdump/Makefile	2020-08-19 14:32:33.640238442 +0800
+diff -uparN dpdk-stable-17.11.6/app/pdump/Makefile dpdk-stable-17.11.6-new/app/pdump/Makefile
+--- dpdk-stable-17.11.6/app/pdump/Makefile	2019-05-22 03:15:57.000000000 +0800
++++ dpdk-stable-17.11.6-new/app/pdump/Makefile	2020-08-19 19:12:09.011111072 +0800
 @@ -41,6 +41,6 @@ CFLAGS += $(WERROR_FLAGS)
  
  SRCS-y := main.c
@@ -275,9 +277,9 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/app/pdump/Makefile dpdk-stable
 +include $(RTE_SDK)/mk/rte.pdump.mk
  
  endif
-diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/config/common_base dpdk-stable-17.11.6-new/config/common_base
---- /home/limiao/dpvs/dpdk-stable-17.11.6/config/common_base	2019-05-22 03:15:57.000000000 +0800
-+++ dpdk-stable-17.11.6-new/config/common_base	2020-08-18 20:16:49.487437921 +0800
+diff -uparN dpdk-stable-17.11.6/config/common_base dpdk-stable-17.11.6-new/config/common_base
+--- dpdk-stable-17.11.6/config/common_base	2019-05-22 03:15:57.000000000 +0800
++++ dpdk-stable-17.11.6-new/config/common_base	2020-08-19 19:12:09.011111072 +0800
 @@ -399,7 +399,7 @@ CONFIG_RTE_PMD_RING_MAX_TX_RINGS=16
  #
  # Compile software PMD backed by PCAP files
@@ -287,9 +289,9 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/config/common_base dpdk-stable
  
  #
  # Compile link bonding PMD library
-diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c dpdk-stable-17.11.6-new/lib/librte_pdump/rte_pdump.c
---- /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c	2019-05-22 03:15:57.000000000 +0800
-+++ dpdk-stable-17.11.6-new/lib/librte_pdump/rte_pdump.c	2020-08-19 14:38:44.466763167 +0800
+diff -uparN dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c dpdk-stable-17.11.6-new/lib/librte_pdump/rte_pdump.c
+--- dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c	2019-05-22 03:15:57.000000000 +0800
++++ dpdk-stable-17.11.6-new/lib/librte_pdump/rte_pdump.c	2020-08-24 12:03:10.436176887 +0800
 @@ -46,6 +46,10 @@
  #include <rte_lcore.h>
  #include <rte_log.h>
@@ -301,7 +303,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  
  #include "rte_pdump.h"
  
-@@ -177,6 +181,129 @@ pdump_pktmbuf_copy(struct rte_mbuf *m, s
+@@ -177,6 +181,132 @@ pdump_pktmbuf_copy(struct rte_mbuf *m, s
  	return m_dup;
  }
  
@@ -370,11 +372,14 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
 +                af = AF_INET;
 +                s_addr.in.s_addr = arp->arp_data.arp_sip;
 +                d_addr.in.s_addr = arp->arp_data.arp_tip;
++                //proto = IPPROTO_ICMP; 
 +        } else if (type == rte_cpu_to_be_16(ETHER_TYPE_IPv4)) {
 +                struct ipv4_hdr *ip4 = rte_pktmbuf_mtod(m, struct ipv4_hdr *);
 +                af = AF_INET;
 +                s_addr.in.s_addr = ip4->src_addr;
 +                d_addr.in.s_addr = ip4->dst_addr;
++                proto = ip4->next_proto_id;
++                iph_len = (ip4->version_ihl & 0xf) << 2;
 +        } else if (type == rte_cpu_to_be_16(ETHER_TYPE_IPv6)) {
 +                struct ipv6_hdr *ip6 = rte_pktmbuf_mtod(m, struct ipv6_hdr *);
 +                af = AF_INET6;
@@ -431,7 +436,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  static inline void
  pdump_copy(struct rte_mbuf **pkts, uint16_t nb_pkts, void *user_params)
  {
-@@ -193,6 +320,8 @@ pdump_copy(struct rte_mbuf **pkts, uint1
+@@ -193,6 +323,8 @@ pdump_copy(struct rte_mbuf **pkts, uint1
  	ring = cbs->ring;
  	mp = cbs->mp;
  	for (i = 0; i < nb_pkts; i++) {
@@ -440,7 +445,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  		p = pdump_pktmbuf_copy(pkts[i], mp);
  		if (p)
  			dup_bufs[d_pkts++] = p;
-@@ -229,7 +358,7 @@ pdump_tx(uint16_t port __rte_unused, uin
+@@ -229,7 +361,7 @@ pdump_tx(uint16_t port __rte_unused, uin
  static int
  pdump_register_rx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
  				struct rte_ring *ring, struct rte_mempool *mp,
@@ -449,7 +454,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  {
  	uint16_t qid;
  	struct pdump_rxtx_cbs *cbs = NULL;
-@@ -247,6 +376,7 @@ pdump_register_rx_callbacks(uint16_t end
+@@ -247,6 +379,7 @@ pdump_register_rx_callbacks(uint16_t end
  			}
  			cbs->ring = ring;
  			cbs->mp = mp;
@@ -457,7 +462,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  			cbs->cb = rte_eth_add_first_rx_callback(port, qid,
  								pdump_rx, cbs);
  			if (cbs->cb == NULL) {
-@@ -283,7 +413,7 @@ pdump_register_rx_callbacks(uint16_t end
+@@ -283,7 +416,7 @@ pdump_register_rx_callbacks(uint16_t end
  static int
  pdump_register_tx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
  				struct rte_ring *ring, struct rte_mempool *mp,
@@ -466,7 +471,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  {
  
  	uint16_t qid;
-@@ -302,6 +432,7 @@ pdump_register_tx_callbacks(uint16_t end
+@@ -302,6 +435,7 @@ pdump_register_tx_callbacks(uint16_t end
  			}
  			cbs->ring = ring;
  			cbs->mp = mp;
@@ -474,7 +479,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  			cbs->cb = rte_eth_add_tx_callback(port, qid, pdump_tx,
  								cbs);
  			if (cbs->cb == NULL) {
-@@ -345,6 +476,7 @@ set_pdump_rxtx_cbs(struct pdump_request
+@@ -345,6 +479,7 @@ set_pdump_rxtx_cbs(struct pdump_request
  	uint16_t operation;
  	struct rte_ring *ring;
  	struct rte_mempool *mp;
@@ -482,7 +487,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  
  	flags = p->flags;
  	operation = p->op;
-@@ -360,6 +492,7 @@ set_pdump_rxtx_cbs(struct pdump_request
+@@ -360,6 +495,7 @@ set_pdump_rxtx_cbs(struct pdump_request
  		queue = p->data.en_v1.queue;
  		ring = p->data.en_v1.ring;
  		mp = p->data.en_v1.mp;
@@ -490,7 +495,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  	} else {
  		ret = rte_eth_dev_get_port_by_name(p->data.dis_v1.device,
  				&port);
-@@ -372,6 +505,7 @@ set_pdump_rxtx_cbs(struct pdump_request
+@@ -372,6 +508,7 @@ set_pdump_rxtx_cbs(struct pdump_request
  		queue = p->data.dis_v1.queue;
  		ring = p->data.dis_v1.ring;
  		mp = p->data.dis_v1.mp;
@@ -498,7 +503,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  	}
  
  	/* validation if packet capture is for all queues */
-@@ -403,7 +537,7 @@ set_pdump_rxtx_cbs(struct pdump_request
+@@ -403,7 +540,7 @@ set_pdump_rxtx_cbs(struct pdump_request
  	if (flags & RTE_PDUMP_FLAG_RX) {
  		end_q = (queue == RTE_PDUMP_ALL_QUEUES) ? nb_rx_q : queue + 1;
  		ret = pdump_register_rx_callbacks(end_q, port, queue, ring, mp,
@@ -507,7 +512,7 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  		if (ret < 0)
  			return ret;
  	}
-@@ -412,7 +546,7 @@ set_pdump_rxtx_cbs(struct pdump_request
+@@ -412,7 +549,7 @@ set_pdump_rxtx_cbs(struct pdump_request
  	if (flags & RTE_PDUMP_FLAG_TX) {
  		end_q = (queue == RTE_PDUMP_ALL_QUEUES) ? nb_tx_q : queue + 1;
  		ret = pdump_register_tx_callbacks(end_q, port, queue, ring, mp,
@@ -516,9 +521,9 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.c d
  		if (ret < 0)
  			return ret;
  	}
-diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.h dpdk-stable-17.11.6-new/lib/librte_pdump/rte_pdump.h
---- /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.h	2019-05-22 03:15:57.000000000 +0800
-+++ dpdk-stable-17.11.6-new/lib/librte_pdump/rte_pdump.h	2020-08-19 10:25:21.337110474 +0800
+diff -uparN dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.h dpdk-stable-17.11.6-new/lib/librte_pdump/rte_pdump.h
+--- dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.h	2019-05-22 03:15:57.000000000 +0800
++++ dpdk-stable-17.11.6-new/lib/librte_pdump/rte_pdump.h	2020-08-19 19:12:09.012111071 +0800
 @@ -44,6 +44,8 @@
  #include <stdint.h>
  #include <rte_mempool.h>
@@ -560,9 +565,9 @@ diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/lib/librte_pdump/rte_pdump.h d
  /**
   * Initialize packet capturing handling
   *
-diff -uparN /home/limiao/dpvs/dpdk-stable-17.11.6/mk/rte.pdump.mk dpdk-stable-17.11.6-new/mk/rte.pdump.mk
---- /home/limiao/dpvs/dpdk-stable-17.11.6/mk/rte.pdump.mk	1970-01-01 08:00:00.000000000 +0800
-+++ dpdk-stable-17.11.6-new/mk/rte.pdump.mk	2020-08-19 10:43:24.118066737 +0800
+diff -uparN dpdk-stable-17.11.6/mk/rte.pdump.mk dpdk-stable-17.11.6-new/mk/rte.pdump.mk
+--- dpdk-stable-17.11.6/mk/rte.pdump.mk	1970-01-01 08:00:00.000000000 +0800
++++ dpdk-stable-17.11.6-new/mk/rte.pdump.mk	2020-08-19 19:12:09.012111071 +0800
 @@ -0,0 +1,349 @@
 +#   BSD LICENSE
 +#
