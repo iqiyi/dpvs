@@ -20,6 +20,9 @@
 #include <net/ipv6.h>
 #include <net/transp_v6.h>
 #include <net/sock.h>
+#ifdef TOA_NAT64_ENABLE
+#  include <linux/netfilter.h>  /* for 'struct nf_sockopt_ops' */
+#endif
 
 #define TOA_VERSION "2.0.0.0"
 
