@@ -1085,7 +1085,7 @@ if test .$enable_vrrp != .no; then
       IPV4_DEVCONF=No
       break
     ],
-    [[#include <linux/ip.h>]])
+    [[#include <uapi/linux/ip.h>]])
   if test $IPV4_DEVCONF = Yes; then
     AC_DEFINE([_HAVE_IPV4_DEVCONF_], [ 1 ], [Define to 1 if have IPv4 netlink device configuration])
     add_system_opt([IPV4_DEVCONF])
