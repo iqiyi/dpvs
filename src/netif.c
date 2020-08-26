@@ -2268,8 +2268,10 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
     mbuf->l2_len = sizeof(struct ether_hdr);
     /* Remove ether_hdr at the beginning of an mbuf */
     data_off = mbuf->data_off;
-    if (unlikely(NULL == rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr))))
+    if (unlikely(NULL == rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr)))) {
+        rte_pktmbuf_free(mbuf);
         return EDPVS_INVPKT;
+    }
 
     err = pt->func(mbuf, dev);
 
