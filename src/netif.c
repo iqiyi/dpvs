@@ -2472,16 +2472,31 @@ static void lcore_job_xmit(void *args)
 }
 
 static int timer_sched_interval_us;
+static rte_atomic64_t ticks;
+static int64_t ticks_tbl[DPVS_MAX_LCORE] = { 0 };
+
+static void lcore_job_slave_timer_manage(void *args) 
+{
+    int64_t local_ticks;
+    lcoreid_t cid = rte_lcore_id();    
+
+    local_ticks = rte_atomic64_read(&ticks);
+    while (local_ticks != ticks_tbl[cid]) {
+        rte_timer_manage();
+        ticks_tbl[cid]++;
+    }
+}
+
 static void lcore_job_timer_manage(void *args)
 {
-    static uint64_t tm_manager_time[DPVS_MAX_LCORE] = { 0 };
+    static uint64_t tm_manager_time;
     uint64_t now = rte_get_timer_cycles();
-    portid_t cid = rte_lcore_id();
 
-    if (unlikely((now - tm_manager_time[cid]) * 1000000 / g_cycles_per_sec
+    if (unlikely((now - tm_manager_time) * 1000000 / g_cycles_per_sec
             > timer_sched_interval_us)) {
+        rte_atomic64_inc(&ticks);
         rte_timer_manage();
-        tm_manager_time[cid] = now;
+        tm_manager_time = now;
     }
 }
 
@@ -2540,7 +2555,7 @@ static void netif_lcore_init(void)
 
     netif_jobs[2].role = LCORE_ROLE_FWD_WORKER;
     snprintf(netif_jobs[2].job.name, sizeof(netif_jobs[2].job.name) - 1, "%s", "timer_manage");
-    netif_jobs[2].job.func = lcore_job_timer_manage;
+    netif_jobs[2].job.func = lcore_job_slave_timer_manage;
     netif_jobs[2].job.data = NULL;
     netif_jobs[2].job.type = LCORE_JOB_LOOP;
 

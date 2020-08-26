@@ -101,6 +101,10 @@ void dp_vs_redirect_hash(struct dp_vs_conn *conn)
     uint32_t hash;
     struct dp_vs_redirect *r = conn->redirect;
 
+    if (dp_vs_redirect_disable) {
+        return;
+    }
+
     if (!r || unlikely(dp_vs_conn_is_redirect_hashed(conn))) {
         return;
     }

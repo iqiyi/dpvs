@@ -908,7 +908,8 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     }
 
     /* init redirect if it exists */
-    dp_vs_redirect_init(new);
+    if (!dp_vs_redirect_disable)
+        dp_vs_redirect_init(new);
 
     /* add to hash table (dual dir for each bucket) */
     if ((err = dp_vs_conn_hash(new)) != EDPVS_OK)
