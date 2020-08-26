@@ -19,16 +19,8 @@
 #define __DPVS_VLAN_CONF_H__
 #include <stdint.h>
 #include <net/if.h>
+#include "conf/sockopts.h"
 #include "vlan.h"
-
-enum {
-    /* set */
-    SOCKOPT_SET_VLAN_ADD    = 800,
-    SOCKOPT_SET_VLAN_DEL,
-
-    /* get */
-    SOCKOPT_GET_VLAN_SHOW,
-};
 
 struct vlan_param {
     char        real_dev[IFNAMSIZ]; /* underlying device name */

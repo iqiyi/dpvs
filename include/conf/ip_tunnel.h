@@ -24,9 +24,11 @@
  */
 #ifndef __DPVS_TUNNEL_CONF_H__
 #define __DPVS_TUNNEL_CONF_H__
+
 #include <net/if.h>
 #include <netinet/ip.h>
 #include <endian.h>
+#include "conf/sockopts.h"
 
 #define TNLKINDSIZ              16
 
@@ -45,17 +47,6 @@
 #define TUNNEL_F_VXLAN_OPT      htobe16(0x1000)
 #define TUNNEL_F_NOCACHE        htobe16(0x2000)
 #define TUNNEL_F_ERSPAN_OPT     htobe16(0x4000)
-
-enum {
-    /* set */
-    SOCKOPT_TUNNEL_ADD          = 1000,
-    SOCKOPT_TUNNEL_DEL,
-    SOCKOPT_TUNNEL_CHANGE,
-    SOCKOPT_TUNNEL_REPLACE,
-
-    /* get */
-    SOCKOPT_TUNNEL_SHOW,
-};
 
 struct ip_tunnel_param {
     char            ifname[IFNAMSIZ];
