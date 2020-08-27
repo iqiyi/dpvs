@@ -112,8 +112,7 @@ typedef struct dp_vs_service_entry_app {
 	X->user.l_threshold      = Y->min_conn;			\
 	X->user.activeconns      = Y->actconns;			\
 	X->user.inactconns       = Y->inactconns;			\
-	X->user.persistconns     = Y->persistconns;			\
-	memcpy(&X->stats, &Y->stats, sizeof(X->stats));}
+	X->user.persistconns     = Y->persistconns;}
 
 static void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t *rule)
 {
@@ -575,6 +574,23 @@ struct ip_vs_get_services_app *ipvs_get_services(lcoreid_t cid)
 #ifdef _WITH_SNMP_CHECKER_
 #endif	/* _WITH_SNMP_CHECKER_ */
 
+static int ipvs_parse_stats(ip_vs_stats_t * ipvs_stats, struct dp_vs_stats* dpvs_stats)
+{
+    ipvs_stats->conns = dpvs_stats->conns;
+    ipvs_stats->inpkts = dpvs_stats->inpkts;
+    ipvs_stats->inbytes = dpvs_stats->inbytes;
+    ipvs_stats->outpkts = dpvs_stats->outpkts;
+    ipvs_stats->outbytes = dpvs_stats->outbytes;
+
+    ipvs_stats->cps = dpvs_stats->cps;
+    ipvs_stats->inpps = dpvs_stats->inpps;
+    ipvs_stats->inbps = dpvs_stats->inbps;
+    ipvs_stats->outpps = dpvs_stats->outpps;
+    ipvs_stats->outbps = dpvs_stats->outbps;
+
+    return 0;
+}
+
 struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t cid)
 {
 	struct ip_vs_get_dests_app *d;
@@ -633,6 +649,7 @@ struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t 
 		ipvs_entry = &d->user.entrytable[i];
 		dpvs_entry = &dpvs_dests_rcv->entrytable[i];
 		DPRS_2_IPRS(ipvs_entry, dpvs_entry);
+		ipvs_parse_stats(&ipvs_entry->stats, &dpvs_entry->stats);
 		if (d->user.entrytable[i].af == AF_INET)
 			d->user.entrytable[i].user.__addr_v4 = d->user.entrytable[i].nf_addr.ip;
 	}

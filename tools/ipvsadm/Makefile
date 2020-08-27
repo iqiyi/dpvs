@@ -84,7 +84,7 @@ endif
 
 OBJS		= ipvsadm.o config_stream.o dynamic_array.o
 LIBS		= $(POPT_LIB) -lnuma
-DEFINES		= -DVERSION=\"$(VERSION)\" -DSCHEDULERS=\"$(SCHEDULERS)\" \
+DEFINES		= -D_IPVSADM_VERSION=\"$(VERSION)\" -DSCHEDULERS=\"$(SCHEDULERS)\" \
 		  -DPE_LIST=\"$(PE_LIST)\" $(POPT_DEFINE)
 DEFINES		+= $(shell if [ ! -f ../ip_vs.h ]; then	\
 		     echo "-DHAVE_NET_IP_VS_H"; fi;)

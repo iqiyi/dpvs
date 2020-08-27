@@ -91,6 +91,8 @@
  */
 
 #undef __KERNEL__	/* Makefile lazyness ;) */
+#include "../keepalived/lib/config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <netdb.h>
@@ -117,7 +119,7 @@
 #include "config_stream.h"
 #include "../keepalived/keepalived/include/libipvs.h"
 
-#define IPVSADM_VERSION_NO	"v" VERSION
+#define IPVSADM_VERSION_NO	"v" _IPVSADM_VERSION
 #define IPVSADM_VERSION_DATE	"2008/5/15"
 #define IPVSADM_VERSION		IPVSADM_VERSION_NO " " IPVSADM_VERSION_DATE
 
@@ -1984,10 +1986,17 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 			print_largenum(e->stats.outbytes, format);
 			printf("\n");
 		} else if (format & FMT_RATE) {
+#ifdef _WITH_LVS_64BIT_STATS_
+			printf("  -> %-28s %8llu %8llu %8llu", dname,
+			       e->stats.cps,
+			       e->stats.inpps,
+			       e->stats.outpps);
+#else
 			printf("  -> %-28s %8u %8u %8u", dname,
 			       e->stats.cps,
 			       e->stats.inpps,
 			       e->stats.outpps);
+#endif
 			print_largenum(e->stats.inbps, format);
 			print_largenum(e->stats.outbps, format);
 			printf("\n");
