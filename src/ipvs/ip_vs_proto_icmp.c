@@ -193,7 +193,6 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
     uint8_t icmp_type = 0;
     uint8_t icmp_code = 0;
     struct dp_vs_conn *conn;
-    union inet_addr s_addr = iph->saddr;
     assert(proto && iph && mbuf);
 
     if (AF_INET6 == af) {
@@ -225,31 +224,8 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
         icmp_type = ((struct icmphdr *)ich)->type;
         icmp_code = ((struct icmphdr *)ich)->code;
         if (!is_icmp_reply(icmp_type)) {
-            /* support for traceroute (ICMP method) */
-            if(unlikely(icmp_type == ICMP_TIME_EXCEEDED)) {
-                struct iphdr *ip_hdr, _iphdr;
-                /* get inner IP header */
-                ip_hdr = (struct iphdr *)mbuf_header_pointer(mbuf, iph->len +
-                                       sizeof(_icmph), sizeof(_iphdr), &_iphdr);
- 
-                if(unlikely(!ip_hdr))
-                    return NULL;
-                    
-                if(unlikely(ntohs(ip_hdr->tot_len) < sizeof(_iphdr) + 
-                                                        sizeof(_icmph)))
-                    return NULL;
- 
-                s_addr.in.s_addr = ip_hdr->daddr;
-                /* get inner ICMP header */
-                ich = ip_hdr + 1;
-                icmp_type = ((struct icmphdr *)ich)->type;
-                icmp_code = ((struct icmphdr *)ich)->code;
-                sport = icmp_type << 8 | icmp_code;
-                dport = ((struct icmphdr *)ich)->un.echo.id;
-            } else {
-                sport = ((struct icmphdr *)ich)->un.echo.id;
-                dport = icmp_type << 8 | icmp_code;
-            }
+            sport = ((struct icmphdr *)ich)->un.echo.id;
+            dport = icmp_type << 8 | icmp_code;
         } else if (icmp_invert_type(&type, icmp_type)) {
             sport = type << 8 | icmp_code;
             dport = ((struct icmphdr *)ich)->un.echo.id;
@@ -258,17 +234,24 @@ static struct dp_vs_conn *icmp_conn_lookup(struct dp_vs_proto *proto,
         }
     }
 
-    conn = dp_vs_conn_get(iph->af, iph->proto, &s_addr, &iph->daddr,
+    conn = dp_vs_conn_get(iph->af, iph->proto, &iph->saddr, &iph->daddr,
                           sport, dport, direct, reverse);
     if (conn) {
         return conn;
     } else {
         struct dp_vs_redirect *r;
 
-        r = dp_vs_redirect_get(iph->af, iph->proto,
-                               &s_addr, &iph->daddr,
-                               sport, dport);
-        if (r) {
+        if(unlikely(reverse)) {
+            r = dp_vs_redirect_get(iph->af, iph->proto,
+                                   &iph->daddr, &iph->saddr,
+                                   dport, sport);
+        } else {
+            r = dp_vs_redirect_get(iph->af, iph->proto,
+                                   &iph->saddr, &iph->daddr,
+                                   sport, dport);
+        }
+
+       if (r) {
             *peer_cid = r->cid;
         }
     }

@@ -704,6 +704,11 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
     dp_vs_fill_iphdr(AF_INET, mbuf, &dciph);
 
+    if(ich->type == ICMP_TIME_EXCEEDED) {
+        dciph.saddr.in.s_addr = iph->dst_addr;
+        dciph.daddr.in.s_addr = ciph->dst_addr;
+    }
+
     conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true, &drop, &peer_cid);
 
     /*
