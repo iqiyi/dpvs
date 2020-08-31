@@ -300,19 +300,18 @@ ipvs_group_range_cmd(int cmd, ipvs_service_t *srule, ipvs_dest_t *drule, virtual
 static bool
 is_vsge_alive(virtual_server_group_entry_t *vsge, virtual_server_t *vs)
 {
-	unsigned t = -1;
 	if (vsge->is_fwmark) {
 		if (vs->af == AF_INET)
-			return (vsge->fwm4_alive == t ? 0 : !!vsge->fwm4_alive);
+			return !!vsge->fwm4_alive;
 		else
-			return (vsge->fwm6_alive == t ? 0 : !!vsge->fwm6_alive);
+			return !!vsge->fwm6_alive;
 	}
 	else if (vs->service_type == IPPROTO_TCP)
-		return (vsge->tcp_alive == t ? 0 : !!vsge->tcp_alive);
+		return !!vsge->tcp_alive;
 	else if (vs->service_type == IPPROTO_UDP)
-		return (vsge->udp_alive == t ? 0 : !!vsge->udp_alive);
+		return !!vsge->udp_alive;
 	else
-		return (vsge->sctp_alive == t ? 0 : !!vsge->sctp_alive);
+		return !!vsge->sctp_alive;
 }
 
 static void
@@ -335,8 +334,9 @@ update_vsge_alive_count(virtual_server_group_entry_t *vsge, const virtual_server
 
 	if (up)
 		(*alive_p)++;
-	else
+	else  if ((*alive_p) != 0){
 		(*alive_p)--;
+        }
 }
 
 static void
