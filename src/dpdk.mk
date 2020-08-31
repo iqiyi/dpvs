@@ -44,11 +44,11 @@ LIBS += -Wl,--no-as-needed -fvisibility=default \
 		-Wl,--whole-archive -lrte_hash -lrte_kvargs -Wl,-lrte_mbuf -lrte_eal \
 		-Wl,-lrte_mempool -lrte_ring -lrte_cmdline -lrte_cfgfile -lrte_kni \
 		-lrte_mempool_ring -lrte_timer -lrte_net -Wl,-lrte_pmd_virtio \
-		-lrte_pci -lrte_bus_pci -lrte_bus_vdev -lrte_lpm -lrte_pdump \
+		-lrte_pci -lrte_bus_pci -lrte_bus_vdev -lrte_lpm -lrte_pdump -lrte_acl\
 		-Wl,--no-whole-archive -lrt -lm -ldl -lcrypto
 
 ifeq ($(CONFIG_PDUMP), y)
-LIBS += -Wl,--whole-archive -lrte_acl -lrte_member -lrte_eventdev -lrte_reorder -lrte_cryptodev \
+LIBS += -Wl,--whole-archive -lrte_member -lrte_eventdev -lrte_reorder -lrte_cryptodev \
 		-lrte_vhost -lrte_pmd_pcap
 
 ifneq ("$(wildcard $(RTE_SDK)/$(RTE_TARGET)/lib/librte_bus_vmbus.a)", "")

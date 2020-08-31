@@ -34,6 +34,7 @@
 #include "ipvs/proto_udp.h"
 #include "ipvs/synproxy.h"
 #include "scheduler.h"
+#include "ipvs/service_match_acl.h"
 
 typedef void (*sighandler_t)(int);
 
@@ -89,6 +90,7 @@ static vector_t install_keywords(void)
     install_sublevel_end();
 
     install_ipv6_keywords();
+    install_service_match_keywords();
 
     return g_keywords;
 }

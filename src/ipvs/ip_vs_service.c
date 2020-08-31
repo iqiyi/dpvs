@@ -37,6 +37,7 @@
 #include "assert.h"
 #include "neigh.h"
 #include "ipset.h"
+#include "ipvs/service_match_acl.h"
 
 static rte_atomic32_t dp_vs_num_services[DPVS_MAX_LCORE];
 
@@ -125,6 +126,7 @@ static int dp_vs_service_hash(struct dp_vs_service *svc, lcoreid_t cid)
         hash = dp_vs_service_match_hashkey(svc->match);
         if (cid == rte_get_master_lcore()) {
             pthread_mutex_lock(&dp_vs_svc_match_mutex);
+            dp_vs_svc_match_acl_add(svc, cid);
         }
         hlist_add_head(&svc->m_list, &dp_vs_svc_match_list[cid][hash]);
         if (cid == rte_get_master_lcore()) {
@@ -158,6 +160,7 @@ static int dp_vs_service_unhash(struct dp_vs_service *svc)
         lcoreid_t cid = rte_lcore_id();
         if (cid == rte_get_master_lcore()) {
             pthread_mutex_lock(&dp_vs_svc_match_mutex);
+            dp_vs_svc_match_acl_del(svc);
         }
         hlist_del(&svc->m_list);
         if (cid == rte_get_master_lcore()) {
@@ -252,7 +255,6 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
 {
     struct route_entry *rt = mbuf->userdata;
     struct ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
-    struct dp_vs_service *svc;
     union inet_addr saddr, daddr;
     __be16 _ports[2], *ports;
     portid_t oif = NETIF_PORT_ID_ALL;
@@ -291,31 +293,7 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
         route4_put(rt);
     }
 
-    int idx = 0;
-    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
-    hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
-        struct dp_vs_match *m = svc->match;
-        struct netif_port *idev, *odev;
-        assert(m);
-
-        if (!strlen(m->oifname))
-            oif = NETIF_PORT_ID_ALL;
-
-        idev = netif_port_get_by_name(m->iifname);
-        odev = netif_port_get_by_name(m->oifname);
-
-        if (svc->af == AF_INET && svc->proto == iph->next_proto_id &&
-            __service_in_range(AF_INET, &saddr, ports[0], &m->srange) &&
-            __service_in_range(AF_INET, &daddr, ports[1], &m->drange) &&
-            (!idev || idev->id == mbuf->port) &&
-            (!odev || odev->id == oif)
-           ) {
-            return svc;
-        }
-    }
-    }
-
-    return NULL;
+    return dp_vs_get_match_svc_ip4(iph->next_proto_id, &saddr, &daddr, ports[0], ports[1], mbuf->port, oif);
 }
 
 static struct dp_vs_service *
@@ -324,7 +302,6 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
     struct route6 *rt = mbuf->userdata;
     struct ip6_hdr *iph = ip6_hdr(mbuf);
     uint8_t ip6nxt = iph->ip6_nxt;
-    struct dp_vs_service *svc;
     union inet_addr saddr, daddr;
     __be16 _ports[2], *ports;
     portid_t oif = NETIF_PORT_ID_ALL;
@@ -363,33 +340,8 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
         route6_put(rt);
     }
 
-    int idx = 0;
-    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
-    hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
-        struct dp_vs_match *m = svc->match;
-        struct netif_port *idev, *odev;
-        assert(m);
-
-        if (!strlen(m->oifname))
-            oif = NETIF_PORT_ID_ALL;
-
-        idev = netif_port_get_by_name(m->iifname);
-        odev = netif_port_get_by_name(m->oifname);
-
-        ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
-
-        if (svc->af == AF_INET6 && svc->proto == ip6nxt &&
-            __service_in_range(AF_INET6, &saddr, ports[0], &m->srange) &&
-            __service_in_range(AF_INET6, &daddr, ports[1], &m->drange) &&
-            (!idev || idev->id == mbuf->port) &&
-            (!odev || odev->id == oif)
-           ) {
-            return svc;
-        }
-    }
-    }
-
-    return NULL;
+    ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+    return dp_vs_get_match_svc_ip6(ip6nxt, &saddr, &daddr, ports[0], ports[1], mbuf->port, oif);
 }
 
 static struct dp_vs_service *
@@ -1020,7 +972,8 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
     }
 
     if (usvc.protocol != IPPROTO_TCP && usvc.protocol != IPPROTO_UDP &&
-        usvc.protocol != IPPROTO_ICMP && usvc.protocol != IPPROTO_ICMPV6) {
+        usvc.protocol != IPPROTO_ICMP && usvc.protocol != IPPROTO_ICMPV6 &&
+        usvc.protocol != IPPROTO_IP) {
         RTE_LOG(ERR, SERVICE, "%s: protocol not support.\n", __func__);
         return EDPVS_INVAL;
     }
@@ -1607,6 +1560,10 @@ int dp_vs_service_init(void)
     int idx, cid, err;
     struct dpvs_msg_type msg_type;
 
+    err = dp_vs_svc_match_init();
+    if (err != EDPVS_OK) {
+        return err;
+    }
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
             INIT_LIST_HEAD(&dp_vs_svc_table[cid][idx]);
@@ -1760,5 +1717,6 @@ int dp_vs_service_term(void)
         dp_vs_services_flush(cid);
     }
     dp_vs_dest_term();
+    dp_vs_svc_match_term();
     return EDPVS_OK;
 }

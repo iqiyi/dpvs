@@ -1109,6 +1109,25 @@ static struct netif_lcore_conf lcore_conf[DPVS_MAX_LCORE + 1] = {
 };
 */
 
+/* wait for all lcores to complete a loop */
+int dpvs_wait_lcores(void)
+{
+    uint64_t loop[DPVS_MAX_LCORE];
+    int i = 0;
+    for (i = 0; i< DPVS_MAX_LCORE; i++) {
+        loop[i] = lcore_stats[i].lcore_loop;
+    }
+    do {
+        sched_yield();
+        for (i = 0; i < DPVS_MAX_LCORE; i++) {
+            if (is_lcore_id_fwd(i) && loop[i] == lcore_stats[i].lcore_loop) {
+                break;
+            }
+        }
+    } while(i < DPVS_MAX_LCORE);
+    return 0;
+}
+
 static int isol_rxq_add(lcoreid_t cid, portid_t pid, queueid_t qid,
         unsigned rb_sz, struct netif_queue_conf *rxq);
 static void isol_rxq_del(struct rx_partner *isol_rxq, bool force);

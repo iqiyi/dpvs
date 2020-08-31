@@ -84,6 +84,12 @@ struct dp_vs_service {
     struct list_head    *laddr_curr;
     uint32_t            num_laddrs;
 
+    /* DPDK ACL target is uint32_t, we should translate u32 to svc
+     * BASE+cache_line_size*u32 could index 256G memory,
+     * maybe enough for most situations
+     */
+    /* used to index svc */
+    uint32_t            idx;
     /* ... flags, timer ... */
 } __rte_cache_aligned;
 

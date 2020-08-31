@@ -267,6 +267,7 @@ bool is_lcore_id_valid(lcoreid_t cid);
 bool netif_lcore_is_idle(lcoreid_t cid);
 void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
                            lcoreid_t cid, uint16_t count, bool pkts_from_ring);
+int dpvs_wait_lcores(void);
 
 /************************** protocol API *****************************/
 int netif_register_pkt(struct pkt_type *pt);

@@ -1342,6 +1342,8 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
                 svc->user.protocol = IPPROTO_ICMP;
             else if (strcmp(val, "icmpv6") == 0)
                 svc->user.protocol = IPPROTO_ICMPV6;
+            else if (strcmp(val, "any") == 0)
+                svc->user.protocol = IPPROTO_IP;
             else
                 return -1;
         } else if (strcmp(key, "af") == 0){
@@ -1833,8 +1835,10 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 				proto = "UDP";
 			else if (se->user.protocol == IPPROTO_ICMP)
 				proto = "ICMP";
-			else
-				proto = "ICMPv6";
+			else if (se->user.protocol == IPPROTO_ICMPV6)
+				proto = "icmpv6";
+			else if (se->user.protocol == IPPROTO_IP)
+				proto = "any";
 
 			sprintf(svc_name, "%s  %s", proto, vname);
 			if (se->af != AF_INET6)

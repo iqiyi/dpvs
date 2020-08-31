@@ -565,6 +565,8 @@ proto_handler(const vector_t *strvec)
                 vs->service_type = IPPROTO_ICMP;
 	else if (!strcasecmp(str, "ICMPV6"))
 		vs->service_type = IPPROTO_ICMPV6;
+	else if (!strcmp(str, "ANY"))
+		vs->service_type = IPPROTO_IP; /* for snat */
 	else
 		report_config_error(CONFIG_GENERAL_ERROR, "Unknown protocol %s - ignoring", str);
 }
