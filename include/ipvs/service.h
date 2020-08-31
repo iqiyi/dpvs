@@ -46,7 +46,7 @@
 struct dp_vs_service {
     struct list_head    s_list;     /* node for normal service table */
     struct list_head    f_list;     /* node for fwmark service table */
-    struct list_head    m_list;     /* node for match  service table */
+    struct hlist_node   m_list;     /* node for match  service table */
     rte_atomic32_t      refcnt;     /* svc is per core, conn will not refer to svc, but dest will.
                                      *  while conn will refer to dest */
 
@@ -112,5 +112,7 @@ void dp_vs_service_put(struct dp_vs_service *svc);
 struct dp_vs_service *dp_vs_vip_lookup(int af, uint16_t protocol,
                                        const union inet_addr *vaddr,
                                        lcoreid_t cid);
+int dp_vs_services_match_iter(int (*cb)(struct dp_vs_service *, void*),
+                     void* data, lcoreid_t cid);
 
 #endif /* __DPVS_SVC_H__ */

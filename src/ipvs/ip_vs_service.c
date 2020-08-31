@@ -21,6 +21,7 @@
  */
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <rte_hash_crc.h>
 #include "inet.h"
 #include "ipv4.h"
 #include "ipv6.h"
@@ -37,12 +38,12 @@
 #include "neigh.h"
 #include "ipset.h"
 
-static rte_atomic16_t dp_vs_num_services[DPVS_MAX_LCORE];
+static rte_atomic32_t dp_vs_num_services[DPVS_MAX_LCORE];
 
 /**
  * hash table for svc
  */
-#define DP_VS_SVC_TAB_BITS 8
+#define DP_VS_SVC_TAB_BITS 14
 #define DP_VS_SVC_TAB_SIZE (1 << DP_VS_SVC_TAB_BITS)
 #define DP_VS_SVC_TAB_MASK (DP_VS_SVC_TAB_SIZE - 1)
 
@@ -50,7 +51,37 @@ static struct list_head dp_vs_svc_table[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
 static struct list_head dp_vs_svc_fwm_table[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
-static struct list_head dp_vs_svc_match_list[DPVS_MAX_LCORE];
+/* lock for master lcore */
+static pthread_mutex_t dp_vs_svc_match_mutex = PTHREAD_MUTEX_INITIALIZER;
+static struct hlist_head dp_vs_svc_match_list[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
+
+/* this is for match acl thread */
+int dp_vs_services_match_iter(int (*cb)(struct dp_vs_service *, void*),
+                     void* data, lcoreid_t cid)
+{
+    int idx = 0;
+    struct dp_vs_service *svc = NULL;
+    int ret = EDPVS_OK;
+
+    if (cid == rte_get_master_lcore()) {
+        pthread_mutex_lock(&dp_vs_svc_match_mutex);
+    }
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+        hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
+            ret = cb(svc, data);
+            if (ret != EDPVS_OK) {
+                if (cid == rte_get_master_lcore()) {
+                    pthread_mutex_unlock(&dp_vs_svc_match_mutex);
+                }
+                return ret;
+            }
+        }
+    }
+    if (cid == rte_get_master_lcore()) {
+        pthread_mutex_unlock(&dp_vs_svc_match_mutex);
+    }
+    return EDPVS_OK;
+}
 
 static inline int dp_vs_service_hashkey(int af, unsigned proto, const union inet_addr *addr)
 {
@@ -71,6 +102,13 @@ static inline unsigned dp_vs_service_fwm_hashkey(uint32_t fwmark)
     return fwmark & DP_VS_SVC_TAB_MASK;
 }
 
+static inline unsigned dp_vs_service_match_hashkey(const struct dp_vs_match *match)
+{
+    uint32_t hash = 0;
+    hash = rte_hash_crc(match, sizeof(struct dp_vs_match), 0x12345678);
+    return hash & DP_VS_SVC_TAB_MASK;
+}
+
 static int dp_vs_service_hash(struct dp_vs_service *svc, lcoreid_t cid)
 {
     int hash;
@@ -84,7 +122,14 @@ static int dp_vs_service_hash(struct dp_vs_service *svc, lcoreid_t cid)
         hash = dp_vs_service_fwm_hashkey(svc->fwmark);
         list_add(&svc->f_list, &dp_vs_svc_fwm_table[cid][hash]);
     } else if (svc->match) {
-        list_add(&svc->m_list, &dp_vs_svc_match_list[cid]);
+        hash = dp_vs_service_match_hashkey(svc->match);
+        if (cid == rte_get_master_lcore()) {
+            pthread_mutex_lock(&dp_vs_svc_match_mutex);
+        }
+        hlist_add_head(&svc->m_list, &dp_vs_svc_match_list[cid][hash]);
+        if (cid == rte_get_master_lcore()) {
+            pthread_mutex_unlock(&dp_vs_svc_match_mutex);
+        }
     } else {
         /*
          *  Hash it by <protocol,addr,port> in dp_vs_svc_table
@@ -109,9 +154,16 @@ static int dp_vs_service_unhash(struct dp_vs_service *svc)
 
     if (svc->fwmark)
         list_del(&svc->f_list);
-    else if (svc->match)
-        list_del(&svc->m_list);
-    else
+    else if (svc->match) {
+        lcoreid_t cid = rte_lcore_id();
+        if (cid == rte_get_master_lcore()) {
+            pthread_mutex_lock(&dp_vs_svc_match_mutex);
+        }
+        hlist_del(&svc->m_list);
+        if (cid == rte_get_master_lcore()) {
+            pthread_mutex_unlock(&dp_vs_svc_match_mutex);
+        }
+    } else
         list_del(&svc->s_list);
 
     svc->flags &= ~DP_VS_SVC_F_HASHED;
@@ -239,7 +291,9 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
         route4_put(rt);
     }
 
-    list_for_each_entry(svc, &dp_vs_svc_match_list[cid], m_list) {
+    int idx = 0;
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+    hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
         struct dp_vs_match *m = svc->match;
         struct netif_port *idev, *odev;
         assert(m);
@@ -258,6 +312,7 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
            ) {
             return svc;
         }
+    }
     }
 
     return NULL;
@@ -308,7 +363,9 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
         route6_put(rt);
     }
 
-    list_for_each_entry(svc, &dp_vs_svc_match_list[cid], m_list) {
+    int idx = 0;
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+    hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
         struct dp_vs_match *m = svc->match;
         struct netif_port *idev, *odev;
         assert(m);
@@ -329,6 +386,7 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
            ) {
             return svc;
         }
+    }
     }
 
     return NULL;
@@ -382,12 +440,14 @@ static struct dp_vs_service *
 __dp_vs_service_match_find(int af, uint8_t proto, const struct dp_vs_match *match,
                        lcoreid_t cid)
 {
-    struct dp_vs_service *svc;
+    struct dp_vs_service *svc = NULL;
+    uint32_t hash = 0;
 
     if (!match || is_empty_match(match))
         return NULL;
 
-    list_for_each_entry(svc, &dp_vs_svc_match_list[cid], m_list) {
+    hash = dp_vs_service_match_hashkey(match);
+    hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][hash], m_list) {
         assert(svc->match);
         if (af == svc->af && proto == svc->proto &&
             memcmp(match, svc->match, sizeof(struct dp_vs_match)) == 0)
@@ -540,7 +600,7 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
         goto out_err;
     sched = NULL;
 
-    rte_atomic16_inc(&dp_vs_num_services[cid]);
+    rte_atomic32_inc(&dp_vs_num_services[cid]);
 
     ret = dp_vs_service_hash(svc, cid);
     if (ret != EDPVS_OK)
@@ -630,7 +690,7 @@ static void __dp_vs_service_del(struct dp_vs_service *svc)
     struct dp_vs_dest *dest, *nxt;
 
     /* Count only IPv4 services for old get/setsockopt interface */
-    rte_atomic16_dec(&dp_vs_num_services[rte_lcore_id()]);
+    rte_atomic32_dec(&dp_vs_num_services[rte_lcore_id()]);
 
     /* Unbind scheduler */
     dp_vs_unbind_scheduler(svc);
@@ -740,13 +800,15 @@ static int dp_vs_service_get_entries(int num_services,
         }
     }
 
-    list_for_each_entry(svc, &dp_vs_svc_match_list[cid], m_list) {
-        if (count >= num_services)
-            goto out;
-        ret = dp_vs_service_copy(&uptr->entrytable[count], svc);
-        if (ret != EDPVS_OK)
-            goto out;
-        count++;
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+        hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
+            if (count >= num_services)
+                goto out;
+            ret = dp_vs_service_copy(&uptr->entrytable[count], svc);
+            if (ret != EDPVS_OK)
+                goto out;
+            count++;
+        }
     }
 
     if (count < num_services)
@@ -759,6 +821,7 @@ static int dp_vs_services_flush(lcoreid_t cid)
 {
     int idx;
     struct dp_vs_service *svc, *nxt;
+    struct hlist_node *n = NULL;
 
     /*
      * Flush the service table hashed by <protocol,addr,port>
@@ -780,9 +843,11 @@ static int dp_vs_services_flush(lcoreid_t cid)
         }
     }
 
-    list_for_each_entry_safe(svc, nxt,
-                    &dp_vs_svc_match_list[cid], m_list) {
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+        hlist_for_each_entry_safe(svc, n,
+                &dp_vs_svc_match_list[cid][idx], m_list) {
             dp_vs_service_del(svc);
+        }
     }
 
     return EDPVS_OK;
@@ -816,8 +881,10 @@ static int dp_vs_services_zero(lcoreid_t cid)
         }
     }
 
-    list_for_each_entry(svc, &dp_vs_svc_match_list[cid], m_list) {
-        dp_vs_service_zero(svc);
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+        hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
+            dp_vs_service_zero(svc);
+        }
     }
 
     dp_vs_estats_clear();
@@ -1067,9 +1134,9 @@ static int dp_vs_services_get_uc_cb(struct dpvs_msg *msg)
 
     /* service may be changed */
     get = (struct dp_vs_get_services *)msg->data;
-    if (get->num_services != rte_atomic16_read(&dp_vs_num_services[cid])) {
+    if (get->num_services != rte_atomic32_read(&dp_vs_num_services[cid])) {
         RTE_LOG(ERR, SERVICE, "%s: svc number %d not match %d in cid=%d.\n",
-        __func__, get->num_services, rte_atomic16_read(&dp_vs_num_services[cid]), cid);
+        __func__, get->num_services, rte_atomic32_read(&dp_vs_num_services[cid]), cid);
         return EDPVS_INVAL;
     }
 
@@ -1222,7 +1289,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                     return EDPVS_NOMEM;
                 info->version = 0;
                 info->size = 0;
-                info->num_services = rte_atomic16_read(&dp_vs_num_services[cid]);
+                info->num_services = rte_atomic32_read(&dp_vs_num_services[cid]);
                 info->num_lcores = num_lcores;
                 *out = info;
                 *outlen = sizeof(struct dp_vs_getinfo);
@@ -1544,9 +1611,9 @@ int dp_vs_service_init(void)
         for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
             INIT_LIST_HEAD(&dp_vs_svc_table[cid][idx]);
             INIT_LIST_HEAD(&dp_vs_svc_fwm_table[cid][idx]);
+            INIT_HLIST_HEAD(&dp_vs_svc_match_list[cid][idx]);
         }
-        INIT_LIST_HEAD(&dp_vs_svc_match_list[cid]);
-        rte_atomic16_init(&dp_vs_num_services[cid]);
+        rte_atomic32_init(&dp_vs_num_services[cid]);
     }
     dp_vs_dest_init();
     sockopt_register(&sockopts_svc);
