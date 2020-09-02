@@ -243,6 +243,8 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 	}
 
 	if (options & OPT_HASHTAG) {
+		app.user.flags &= ~ IP_VS_SVC_F_QID_HASH;
+		app.user.flags &= ~ IP_VS_SVC_F_SIP_HASH;
 		if (svc->user.flags & IP_VS_SVC_F_SIP_HASH) {
 			app.user.flags |= IP_VS_SVC_F_SIP_HASH;
 		} else if (svc->user.flags & IP_VS_SVC_F_QID_HASH) {
