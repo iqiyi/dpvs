@@ -53,7 +53,7 @@ static struct list_head dp_vs_svc_table[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 static struct list_head dp_vs_svc_fwm_table[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
 /* lock for master lcore */
-static pthread_mutex_t dp_vs_svc_match_mutex = PTHREAD_MUTEX_INITIALIZER;
+static rte_rwlock_t dp_vs_svc_match_lock[DPVS_MAX_LCORE];
 static struct hlist_head dp_vs_svc_match_list[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
 /* this is for match acl thread */
@@ -64,23 +64,17 @@ int dp_vs_services_match_iter(int (*cb)(struct dp_vs_service *, void*),
     struct dp_vs_service *svc = NULL;
     int ret = EDPVS_OK;
 
-    if (cid == rte_get_master_lcore()) {
-        pthread_mutex_lock(&dp_vs_svc_match_mutex);
-    }
+    rte_rwlock_read_lock(&dp_vs_svc_match_lock[cid]);
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
             ret = cb(svc, data);
             if (ret != EDPVS_OK) {
-                if (cid == rte_get_master_lcore()) {
-                    pthread_mutex_unlock(&dp_vs_svc_match_mutex);
-                }
+                rte_rwlock_read_unlock(&dp_vs_svc_match_lock[cid]);
                 return ret;
             }
         }
     }
-    if (cid == rte_get_master_lcore()) {
-        pthread_mutex_unlock(&dp_vs_svc_match_mutex);
-    }
+    rte_rwlock_read_unlock(&dp_vs_svc_match_lock[cid]);
     return EDPVS_OK;
 }
 
@@ -124,14 +118,10 @@ static int dp_vs_service_hash(struct dp_vs_service *svc, lcoreid_t cid)
         list_add(&svc->f_list, &dp_vs_svc_fwm_table[cid][hash]);
     } else if (svc->match) {
         hash = dp_vs_service_match_hashkey(svc->match);
-        if (cid == rte_get_master_lcore()) {
-            pthread_mutex_lock(&dp_vs_svc_match_mutex);
-            dp_vs_svc_match_acl_add(svc, cid);
-        }
+        rte_rwlock_write_lock(&dp_vs_svc_match_lock[cid]);
+        dp_vs_svc_match_acl_add(svc, cid);
         hlist_add_head(&svc->m_list, &dp_vs_svc_match_list[cid][hash]);
-        if (cid == rte_get_master_lcore()) {
-            pthread_mutex_unlock(&dp_vs_svc_match_mutex);
-        }
+        rte_rwlock_write_unlock(&dp_vs_svc_match_lock[cid]);
     } else {
         /*
          *  Hash it by <protocol,addr,port> in dp_vs_svc_table
@@ -158,14 +148,10 @@ static int dp_vs_service_unhash(struct dp_vs_service *svc)
         list_del(&svc->f_list);
     else if (svc->match) {
         lcoreid_t cid = rte_lcore_id();
-        if (cid == rte_get_master_lcore()) {
-            pthread_mutex_lock(&dp_vs_svc_match_mutex);
-            dp_vs_svc_match_acl_del(svc);
-        }
+        rte_rwlock_write_lock(&dp_vs_svc_match_lock[cid]);
+        dp_vs_svc_match_acl_del(svc);
         hlist_del(&svc->m_list);
-        if (cid == rte_get_master_lcore()) {
-            pthread_mutex_unlock(&dp_vs_svc_match_mutex);
-        }
+        rte_rwlock_write_unlock(&dp_vs_svc_match_lock[cid]);
     } else
         list_del(&svc->s_list);
 
@@ -293,7 +279,7 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
         route4_put(rt);
     }
 
-    return dp_vs_get_match_svc_ip4(iph->next_proto_id, &saddr, &daddr, ports[0], ports[1], mbuf->port, oif);
+    return dp_vs_get_match_svc_ip4(iph->next_proto_id, &saddr, &daddr, ports[0], ports[1], mbuf->port, oif, cid);
 }
 
 static struct dp_vs_service *
@@ -341,7 +327,7 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
     }
 
     ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
-    return dp_vs_get_match_svc_ip6(ip6nxt, &saddr, &daddr, ports[0], ports[1], mbuf->port, oif);
+    return dp_vs_get_match_svc_ip6(ip6nxt, &saddr, &daddr, ports[0], ports[1], mbuf->port, oif, cid);
 }
 
 static struct dp_vs_service *

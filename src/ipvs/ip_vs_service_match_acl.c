@@ -19,12 +19,12 @@
  * BASE+cache_line_size*u32 could index 256G memory,
  * maybe enough for most situations?
  */
-static struct dp_vs_service **dpvs_svcs = NULL;
-static struct rte_ring *dpvs_svc_idxq = NULL;
-static uint64_t dpvs_match4_generation = 0;
-static uint64_t dpvs_match6_generation = 0;
-static struct rte_acl_ctx *dp_vs_svc_match_acl4 = NULL;
-static struct rte_acl_ctx *dp_vs_svc_match_acl6 = NULL;
+static struct dp_vs_service **dpvs_svcs[DPVS_MAX_LCORE] = { NULL };
+static struct rte_ring *dpvs_svc_idxq[DPVS_MAX_LCORE] = { NULL };
+static uint64_t dpvs_match4_generation[DPVS_MAX_LCORE] = { 0 };
+static uint64_t dpvs_match6_generation[DPVS_MAX_LCORE] = { 0 };
+static struct rte_acl_ctx *dp_vs_svc_match_acl4[DPVS_MAX_LCORE] = { NULL };
+static struct rte_acl_ctx *dp_vs_svc_match_acl6[DPVS_MAX_LCORE] = { NULL };
 static int stop_build = 0;
 
 struct dp_vs_match_ipv4 {
@@ -583,7 +583,7 @@ static int dpvs_match_to_rules(struct dp_vs_service *svc, void *data)
     return EDPVS_OK;
 }
 
-static int build_acl(int af)
+static int build_acl(int af, lcoreid_t cid)
 {
     char name[PATH_MAX];
     struct rte_acl_param acl_param;
@@ -601,18 +601,17 @@ static int build_acl(int af)
         dim = RTE_DIM(dpvs_match_defs6);
         memcpy(&acl_build_param.defs, dpvs_match_defs6,
                     sizeof(dpvs_match_defs6));
-        pctx = &dp_vs_svc_match_acl6;
+        pctx = &dp_vs_svc_match_acl6[cid];
     } else {
         dim = RTE_DIM(dpvs_match_defs4);
         memcpy(&acl_build_param.defs, dpvs_match_defs4,
                     sizeof(dpvs_match_defs4));
-        pctx = &dp_vs_svc_match_acl4;
+        pctx = &dp_vs_svc_match_acl4[cid];
     }
     bl.af = af;
     bl.cnt = 0;
     INIT_LIST_HEAD(&bl.head);
-    if (dp_vs_services_match_iter(dpvs_match_to_rules, &bl,
-                rte_get_master_lcore()) != EDPVS_OK) {
+    if (dp_vs_services_match_iter(dpvs_match_to_rules, &bl, cid) != EDPVS_OK) {
         rules_block_list_clean(&bl);
         return EDPVS_NOMEM;
     }
@@ -620,7 +619,7 @@ static int build_acl(int af)
         goto end;
     }
     acl_build_param.num_fields = dim;
-    snprintf(name, sizeof(name), "dpvs_match_acl%x",
+    snprintf(name, sizeof(name), "MatchAcl%d.%x", cid,
             rte_atomic32_add_return(&acl_build_idx, 1));
     acl_param.name = name;
     acl_param.socket_id = SOCKET_ID_ANY;
@@ -667,35 +666,35 @@ ctx_create_failed:
     return -1;
 }
 
-static struct dp_vs_service *dpvs_idx_svc(uint32_t idx)
+static struct dp_vs_service *dpvs_idx_svc(uint32_t idx, lcoreid_t cid)
 {
     if (unlikely(idx >= DPVS_SVC_MAX)) {
         return NULL;
     }
-    return dpvs_svcs[idx];
+    return dpvs_svcs[cid][idx];
 }
 
 int dp_vs_svc_match_acl_add(struct dp_vs_service *svc, lcoreid_t cid)
 {
     void *p = NULL;
     uint32_t idx = 0;
-    if (!svc || cid != rte_get_master_lcore()) {
+    if (!svc) {
         return 0;
     }
-    rte_ring_dequeue(dpvs_svc_idxq, &p);
+    rte_ring_dequeue(dpvs_svc_idxq[cid], &p);
     idx = (unsigned long)p;
     svc->idx = idx;
-    dpvs_svcs[idx] = svc;
+    dpvs_svcs[cid][idx] = svc;
     /* maybe we should put v4/v6 svc into diff list */
     if (svc->af == AF_INET) {
-        dpvs_match4_generation++;
+        dpvs_match4_generation[cid]++;
     } else {
-        dpvs_match6_generation++;
+        dpvs_match6_generation[cid]++;
     }
     return 0;
 }
 
-int dp_vs_svc_match_acl_del(struct dp_vs_service *svc)
+int dp_vs_svc_match_acl_del(struct dp_vs_service *svc, lcoreid_t cid)
 {
     uint64_t idx = 0;
     if (!svc) {
@@ -704,28 +703,28 @@ int dp_vs_svc_match_acl_del(struct dp_vs_service *svc)
     if (svc->idx <= 0 || svc->idx >= DPVS_SVC_MAX) {
         return -1;
     }
-    if (dpvs_svcs[svc->idx] != svc) {
+    if (dpvs_svcs[cid][svc->idx] != svc) {
         return -1;
     }
-    dpvs_svcs[svc->idx] = NULL;
+    dpvs_svcs[cid][svc->idx] = NULL;
     idx = svc->idx;
-    rte_ring_enqueue(dpvs_svc_idxq, (void*)idx);
     svc->idx = 0;
+    rte_ring_enqueue(dpvs_svc_idxq[cid], (void*)idx);
     if (svc->af == AF_INET) {
-        dpvs_match4_generation++;
+        dpvs_match4_generation[cid]++;
     } else {
-        dpvs_match6_generation++;
+        dpvs_match6_generation[cid]++;
     }
     return 0;
 }
 
 struct dp_vs_service *dp_vs_get_match_svc_ip4(uint8_t proto, union inet_addr *saddr,
                      union inet_addr *daddr, __be16 sport, __be16 dport,
-                     portid_t iif, portid_t oif)
+                     portid_t iif, portid_t oif, lcoreid_t cid)
 {
     struct dp_vs_service *svc = NULL;
     struct rte_acl_ctx *ctx = NULL;
-    ctx = dp_vs_svc_match_acl4;
+    ctx = dp_vs_svc_match_acl4[cid];
     if (ctx) {
         struct dp_vs_match_ipv4 entry;
         const uint8_t* pentry = (void*)&entry;
@@ -739,7 +738,7 @@ struct dp_vs_service *dp_vs_get_match_svc_ip4(uint8_t proto, union inet_addr *sa
         entry.oifid = oif;
         if (!rte_acl_classify(ctx, &pentry,
                      &idx, 1, DEFAULT_MAX_CATEGORIES) && idx) {
-            svc = dpvs_idx_svc(idx);
+            svc = dpvs_idx_svc(idx, cid);
         }
     }
     return svc;
@@ -747,11 +746,11 @@ struct dp_vs_service *dp_vs_get_match_svc_ip4(uint8_t proto, union inet_addr *sa
 
 struct dp_vs_service *dp_vs_get_match_svc_ip6(uint8_t proto, union inet_addr *saddr,
                      union inet_addr *daddr, __be16 sport, __be16 dport,
-                     portid_t iif, portid_t oif)
+                     portid_t iif, portid_t oif, lcoreid_t cid)
 {
     struct dp_vs_service *svc = NULL;
     struct rte_acl_ctx *ctx = NULL;
-    ctx = dp_vs_svc_match_acl6;
+    ctx = dp_vs_svc_match_acl6[cid];
     if (ctx) {
         struct dp_vs_match_ipv6 entry;
         const uint8_t* pentry = (void*)&entry;
@@ -765,7 +764,7 @@ struct dp_vs_service *dp_vs_get_match_svc_ip6(uint8_t proto, union inet_addr *sa
         entry.oifid = oif;
         if (!rte_acl_classify(ctx, &pentry,
                      &idx, 1, DEFAULT_MAX_CATEGORIES) && idx) {
-            svc = dpvs_idx_svc(idx);
+            svc = dpvs_idx_svc(idx, cid);
         }
     }
     return svc;
@@ -798,39 +797,44 @@ static int dpvs_svc_match_build_thread_init(void *data)
 
 static void *dpvs_svc_match_build_loop(void *data)
 {
-    uint64_t pre4 = 0;
-    uint64_t pre6 = 0;
+    uint64_t pre4[DPVS_MAX_LCORE] = { 0 };
+    uint64_t pre6[DPVS_MAX_LCORE] = { 0 };
     struct timeval t1;
     struct timeval t2;
     struct timeval d;
+    int cid = 0;
+    int build = 0;
     dpvs_svc_match_build_thread_init(data);
     while (!stop_build) {
-        if (pre4 == dpvs_match4_generation &&
-            pre6 == dpvs_match6_generation) {
-            usleep(100000);
-            continue;
-        }
         gettimeofday(&t1, NULL);
-        if (pre4 != dpvs_match4_generation) {
-            pre4 = dpvs_match4_generation;
-            build_acl(AF_INET);
+        for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
+            if (pre4[cid] != dpvs_match4_generation[cid]) {
+                pre4[cid] = dpvs_match4_generation[cid];
+                build_acl(AF_INET, cid);
+                build = 1;
+            }
+            if (pre6[cid] != dpvs_match6_generation[cid]) {
+                pre6[cid] = dpvs_match6_generation[cid];
+                build_acl(AF_INET6, cid);
+                build = 1;
+            }
         }
-        if (pre6 != dpvs_match6_generation) {
-            pre6 = dpvs_match6_generation;
-            build_acl(AF_INET6);
-        }
-        gettimeofday(&t2, NULL);
-        if (t2.tv_usec < t1.tv_usec) {
-            d.tv_usec = t2.tv_usec + 1000000 - t1.tv_usec;
-            d.tv_sec = t2.tv_sec - t1.tv_sec - 1;
+        if (build) {
+            gettimeofday(&t2, NULL);
+            if (t2.tv_usec < t1.tv_usec) {
+                d.tv_usec = t2.tv_usec + 1000000 - t1.tv_usec;
+                d.tv_sec = t2.tv_sec - t1.tv_sec - 1;
+            } else {
+                d.tv_usec = t2.tv_usec - t1.tv_usec;
+                d.tv_sec = t2.tv_sec - t1.tv_sec;
+            }
+            RTE_LOG(DEBUG, IPVS, "build acl time used:%lu.%06lu,"
+                    " start at %lu.%06lu end at %lu.%06lu\n",
+                    d.tv_sec, d.tv_usec,
+                    t1.tv_sec, t1.tv_usec, t2.tv_sec, t2.tv_usec);
         } else {
-            d.tv_usec = t2.tv_usec - t1.tv_usec;
-            d.tv_sec = t2.tv_sec - t1.tv_sec;
+            usleep(100000);
         }
-        RTE_LOG(DEBUG, IPVS, "build acl for generation4 %ld, generation6 %ld,"
-                             " time used:%lu.%06lu, start at %lu.%06lu end at %lu.%06lu\n",
-                            pre4, pre6, d.tv_sec, d.tv_usec,
-                            t1.tv_sec, t1.tv_usec, t2.tv_sec, t2.tv_usec);
     }
     return NULL;
 }
@@ -838,29 +842,34 @@ static void *dpvs_svc_match_build_loop(void *data)
 int dp_vs_svc_match_init(void)
 {
     uint64_t i = 0;
-    dpvs_svc_idxq = rte_ring_create("dpvs_idx_q", rte_align32pow2(DPVS_SVC_MAX),
-                                         SOCKET_ID_ANY, 0);
-    if (!dpvs_svc_idxq) {
-        RTE_LOG(ERR, IPVS, "fail to create dpvs_idx_q\n");
-        dp_vs_svc_match_term();
-        return EDPVS_NOMEM;
+    int size = 0;
+    int cid = 0;
+    char name[RTE_RING_NAMESIZE];
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
+        snprintf(name, RTE_RING_NAMESIZE, "dpvs_idx_q%d", cid);
+        dpvs_svc_idxq[cid] = rte_ring_create(name, rte_align32pow2(DPVS_SVC_MAX),
+                SOCKET_ID_ANY, 0);
+        if (!dpvs_svc_idxq[cid]) {
+            RTE_LOG(ERR, IPVS, "fail to create %s\n", name);
+            dp_vs_svc_match_term();
+            return EDPVS_NOMEM;
+        }
+        for (i = 1; i < DPVS_SVC_MAX; i++) {
+            rte_ring_enqueue(dpvs_svc_idxq[cid], (void*)i);
+        }
+        size = sizeof(struct dp_vs_service*) * DPVS_SVC_MAX * DPVS_MAX_LCORE;
+        dpvs_svcs[cid] = rte_malloc(NULL, size, RTE_CACHE_LINE_SIZE);
+        if (!dpvs_svcs[cid]) {
+            RTE_LOG(ERR, IPVS, "fail to alloc dpvs_svcs\n");
+            dp_vs_svc_match_term();
+            return EDPVS_NOMEM;
+        }
+        memset(dpvs_svcs[cid], 0, size);
+        dp_vs_svc_match_acl4[cid] = NULL;
+        dp_vs_svc_match_acl6[cid] = NULL;
     }
-    for (i = 1; i < DPVS_SVC_MAX; i++) {
-        rte_ring_enqueue(dpvs_svc_idxq, (void*)i);
-    }
-    dpvs_svcs = rte_malloc(NULL, sizeof(struct dp_vs_service*) * DPVS_SVC_MAX,
-                            RTE_CACHE_LINE_SIZE);
-    if (!dpvs_svcs) {
-        RTE_LOG(ERR, IPVS, "fail to alloc dpvs_svcs\n");
-        dp_vs_svc_match_term();
-        return EDPVS_NOMEM;
-    }
-    memset(dpvs_svcs, 0, sizeof(struct dp_vs_service*) * DPVS_SVC_MAX);
-    dp_vs_svc_match_acl4 = NULL;
-    dp_vs_svc_match_acl6 = NULL;
-    pthread_t tid;
-
     stop_build = 0;
+    pthread_t tid;
     if (pthread_create(&tid, NULL, dpvs_svc_match_build_loop, NULL)) {
         RTE_LOG(ERR, IPVS, "fail to create dpvs_svc_match_build_loop thread\n");
         dp_vs_svc_match_term();
@@ -871,20 +880,23 @@ int dp_vs_svc_match_init(void)
 
 int dp_vs_svc_match_term(void)
 {
+    int cid = 0;
     stop_build = 1;
-    if (dp_vs_svc_match_acl4) {
-        rte_acl_free(dp_vs_svc_match_acl4);
-        dp_vs_svc_match_acl4 = NULL;
-    }
-    if (dp_vs_svc_match_acl6) {
-        rte_acl_free(dp_vs_svc_match_acl6);
-        dp_vs_svc_match_acl6 = NULL;
-    }
-    if (dpvs_svcs) {
-        rte_free(dpvs_svcs);
-    }
-    if (dpvs_svc_idxq) {
-        rte_ring_free(dpvs_svc_idxq);
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
+        if (dp_vs_svc_match_acl4[cid]) {
+            rte_acl_free(dp_vs_svc_match_acl4[cid]);
+            dp_vs_svc_match_acl4[cid] = NULL;
+        }
+        if (dp_vs_svc_match_acl6[cid]) {
+            rte_acl_free(dp_vs_svc_match_acl6[cid]);
+            dp_vs_svc_match_acl6[cid] = NULL;
+        }
+        if (dpvs_svcs[cid]) {
+            rte_free(dpvs_svcs[cid]);
+        }
+        if (dpvs_svc_idxq[cid]) {
+            rte_ring_free(dpvs_svc_idxq[cid]);
+        }
     }
     return EDPVS_OK;
 }
