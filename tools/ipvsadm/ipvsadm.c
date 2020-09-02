@@ -950,7 +950,6 @@ static int process_options(int argc, char **argv, int reading_stdin)
 	}
 
 	switch (ce.cmd) {
-	ipvs_init(ce.cid);
 	case CMD_LIST:
 		if ((options & (OPT_CONNECTION|OPT_TIMEOUT|OPT_DAEMON) &&
 		     options & (OPT_STATS|OPT_RATE|OPT_THRESHOLDS)) ||
@@ -1792,7 +1791,7 @@ static void
 print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid)
 {
 	struct ip_vs_get_dests_app *d;
-	char svc_name[256];
+	char svc_name[1024];
 	int i;
 
 	if (!(d = ipvs_get_dests(se, cid))) {
@@ -1917,7 +1916,9 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 		print_largenum(se->stats.outbytes, format);
 	} else if (format & FMT_RATE) {
 		if (se->user.bps > 0) {
-			sprintf(svc_name, "%s bps %dM", svc_name, se->user.bps);
+			char buf[128];
+			snprintf(buf, sizeof(buf),  " bps %dM", se->user.bps);
+			strncat(svc_name, buf, sizeof(svc_name)-strlen(svc_name)-1);
 		}
 		printf("%-33s", svc_name);
 		print_largenum(se->stats.cps, format);
