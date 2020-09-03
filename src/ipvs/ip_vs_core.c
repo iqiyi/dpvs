@@ -281,6 +281,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     struct dp_vs_dest *dest;
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
+    uint32_t flags = 0;
 
     assert(svc && iph && mbuf);
 
@@ -337,8 +338,13 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                               ports[0], ports[1], 0, &param);
     }
 
-    conn = dp_vs_conn_new(mbuf, iph, &param, dest,
-            is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
+    if (is_synproxy_on) {
+        flags |= DPVS_CONN_F_SYNPROXY;
+    }
+    if (svc->flags & DP_VS_SVC_F_ONEPACKET && iph->proto == IPPROTO_UDP) {
+        flags |= DPVS_CONN_F_ONE_PACKET;
+    }
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest, flags);
     if (!conn)
         return NULL;
 

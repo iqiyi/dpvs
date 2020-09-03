@@ -117,7 +117,7 @@ bool inet_chk_mcast_addr(int af, struct netif_port *dev,
 
 void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa);
 
-int idev_add_mcast_init(struct netif_port *dev);
+int idev_add_mcast_init(void *args);
 
 int inet_addr_init(void);
 int inet_addr_term(void);

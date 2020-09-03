@@ -39,7 +39,7 @@ CFLAGS += -march=native \
 LIBS += -L $(DPDKDIR)/lib
 
 LIBS += -Wl,--no-as-needed -fvisibility=default \
-        -Wl,--whole-archive -lrte_pmd_vmxnet3_uio -lrte_pmd_i40e -lrte_pmd_ixgbe \
+        -Wl,--whole-archive -lrte_pmd_vmxnet3_uio -lrte_pmd_i40e -lrte_pmd_ixgbe -lrte_pmd_ena \
 		-lrte_pmd_e1000 -lrte_pmd_bnxt -lrte_pmd_ring -lrte_pmd_bond -lrte_ethdev -lrte_ip_frag \
 		-Wl,--whole-archive -lrte_hash -lrte_kvargs -Wl,-lrte_mbuf -lrte_eal \
 		-Wl,-lrte_mempool -lrte_ring -lrte_cmdline -lrte_cfgfile -lrte_kni \
@@ -47,7 +47,23 @@ LIBS += -Wl,--no-as-needed -fvisibility=default \
 		-lrte_pci -lrte_bus_pci -lrte_bus_vdev -lrte_lpm -lrte_pdump \
 		-Wl,--no-whole-archive -lrt -lm -ldl -lcrypto
 
+ifeq ($(CONFIG_PDUMP), y)
+LIBS += -Wl,--whole-archive -lrte_acl -lrte_member -lrte_eventdev -lrte_reorder -lrte_cryptodev \
+		-lrte_vhost -lrte_pmd_pcap
+
+ifneq ("$(wildcard $(RTE_SDK)/$(RTE_TARGET)/lib/librte_bus_vmbus.a)", "")
+	LIBS += -lrte_bus_vmbus
+endif
+
+ifneq ("$(wildcard $(RTE_SDK)/$(RTE_TARGET)/lib/librte_pmd_netvsc.a)", "")
+	LIBS += -lrte_pmd_netvsc
+endif
+
+LIBS += -Wl,--no-whole-archive -lpcap
+endif
+
 ifeq ($(CONFIG_MLX5), y)
 LIBS += -Wl,--whole-archive -lrte_pmd_mlx5 -Wl,--no-whole-archive
 LIBS += -libverbs -lmlx5 -lmnl
 endif
+

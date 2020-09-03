@@ -22,14 +22,9 @@
  */
 #ifndef __DPVS_IPV6_CONF_H__
 #define __DPVS_IPV6_CONF_H__
-#include "inet.h"
 
-enum {
-    /* set */
-    SOCKOPT_IP6_SET = 1100,
-    /* get */
-    SOCKOPT_IP6_STATS,
-};
+#include "inet.h"
+#include "conf/sockopts.h"
 
 struct ip6_stats_param {
     struct inet_stats stats;

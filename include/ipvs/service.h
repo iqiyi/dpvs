@@ -34,6 +34,7 @@
 #define RTE_LOGTYPE_SERVICE RTE_LOGTYPE_USER3
 #define DP_VS_SVC_F_PERSISTENT      0x0001      /* peristent port */
 #define DP_VS_SVC_F_HASHED          0x0002      /* hashed entry */
+#define DP_VS_SVC_F_ONEPACKET       0x0004      /* one-packet scheduling */
 #define DP_VS_SVC_F_SYNPROXY        0x8000      /* synrpoxy flag */
 
 #define DP_VS_SVC_F_SIP_HASH        0x0100      /* sip hash target */
