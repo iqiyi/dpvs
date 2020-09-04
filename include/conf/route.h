@@ -21,19 +21,10 @@
  */
 #ifndef __DPVS_ROUTE_CONF_H__
 #define __DPVS_ROUTE_CONF_H__
+
 #include "inet.h"
 #include "net/if.h"
-
-enum {
-    /* set */
-    SOCKOPT_SET_ROUTE_ADD   = 300,
-    SOCKOPT_SET_ROUTE_DEL,
-    SOCKOPT_SET_ROUTE_SET,
-    SOCKOPT_SET_ROUTE_FLUSH,
-
-    /* get */
-    SOCKOPT_GET_ROUTE_SHOW,
-};
+#include "conf/sockopts.h"
 
 enum {
     ROUTE_CF_SCOPE_NONE     = 0,

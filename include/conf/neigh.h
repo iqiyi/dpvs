@@ -21,15 +21,7 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include "inet.h"
-
-enum {
-    /* get */
-    SOCKOPT_GET_NEIGH_SHOW = 600,
-
-    /* set */
-    SOCKOPT_SET_NEIGH_ADD,
-    SOCKOPT_SET_NEIGH_DEL,
-};
+#include "conf/sockopts.h"
 
 enum {
     DPVS_NUD_S_NONE        = 0,
