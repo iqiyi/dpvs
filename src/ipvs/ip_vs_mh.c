@@ -61,9 +61,6 @@ struct dp_vs_mh_state {
     int rshift;
 };
 
-int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
-                                   struct dp_vs_iphdr *iph);
-
 static inline void generate_hash_secret(hsiphash_key_t *hash1,
         hsiphash_key_t *hash2)
 {
@@ -100,8 +97,10 @@ static void dp_vs_mh_reset(struct dp_vs_mh_state *s)
 
     l = &s->lookup[0];
     for (i = 0; i < DP_VS_MH_TAB_SIZE; i++) {
-        if (l->dest)
+        if (l->dest) {
+            dp_vs_dest_put(l->dest);
             l->dest = NULL;
+        }
         l++;
     }
 }
@@ -196,6 +195,9 @@ static int dp_vs_mh_populate(struct dp_vs_mh_state *s,
             dest = s->lookup[c].dest;
             new_dest = list_entry(p, struct dp_vs_dest, n_list);
             if (dest != new_dest) {
+                if (dest)
+                    dp_vs_dest_put(dest);
+                rte_atomic32_inc(&new_dest->refcnt);
                 s->lookup[c].dest = new_dest;
             }
 
