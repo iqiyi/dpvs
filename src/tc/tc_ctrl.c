@@ -98,7 +98,7 @@ static int fill_cls_param(struct tc_cls *cls, struct tc_cls_param *pr)
 }
 
 /* with tc->lock */
-static int __tc_so_qsch_set(struct netif_tc *tc, tc_oper_t oper,
+static int __tc_so_qsch_set(struct netif_tc *tc, sockoptid_t oper,
                             const struct tc_qsch_param *qpar)
 {
     struct Qsch *sch = NULL;
@@ -147,7 +147,7 @@ static int __tc_so_qsch_set(struct netif_tc *tc, tc_oper_t oper,
 }
 
 /* with tc->lock */
-static int __tc_so_qsch_get(struct netif_tc *tc, tc_oper_t oper,
+static int __tc_so_qsch_get(struct netif_tc *tc, sockoptid_t oper,
                             const struct tc_qsch_param *qpar,
                             union tc_param **arr, int *narr)
 {
@@ -220,7 +220,7 @@ errout:
 }
 
 /* with tc->lock */
-static int __tc_so_cls_set(struct netif_tc *tc, tc_oper_t oper,
+static int __tc_so_cls_set(struct netif_tc *tc, sockoptid_t oper,
                            const struct tc_cls_param *cpar)
 {
     struct Qsch *sch;
@@ -264,7 +264,7 @@ static int __tc_so_cls_set(struct netif_tc *tc, tc_oper_t oper,
 }
 
 /* with tc->lock */
-static int __tc_so_cls_get(struct netif_tc *tc, tc_oper_t oper,
+static int __tc_so_cls_get(struct netif_tc *tc, sockoptid_t oper,
                            const struct tc_cls_param *cpar,
                            union tc_param **arr, int *narr)
 {

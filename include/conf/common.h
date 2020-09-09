@@ -24,6 +24,8 @@
 #include <sys/types.h>
 #include <linux/if_ether.h>
 
+typedef uint32_t sockoptid_t;
+
 #ifndef NELEMS
 #define NELEMS(a)       (sizeof(a) / sizeof((a)[0]))
 #endif

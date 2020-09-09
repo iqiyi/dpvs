@@ -211,19 +211,19 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 /* for svc per_core, refer to service.h*/
 enum {
     MSG_TYPE_SVC_SET_FLUSH = MSG_TYPE_IFA_SYNC + 1,
-    MSG_TYPE_SVC_SET_ZERO,    
-    MSG_TYPE_SVC_SET_ADD,      
-    MSG_TYPE_SVC_SET_EDIT,    
-    MSG_TYPE_SVC_SET_DEL,     
-    MSG_TYPE_SVC_SET_ADDDEST, 
+    MSG_TYPE_SVC_SET_ZERO,
+    MSG_TYPE_SVC_SET_ADD,
+    MSG_TYPE_SVC_SET_EDIT,
+    MSG_TYPE_SVC_SET_DEL,
+    MSG_TYPE_SVC_SET_ADDDEST,
     MSG_TYPE_SVC_SET_EDITDEST,
     MSG_TYPE_SVC_SET_DELDEST,
     MSG_TYPE_LADDR_SET_ADD,
     MSG_TYPE_LADDR_SET_DEL,
     MSG_TYPE_LADDR_SET_FLUSH,
-    MSG_TYPE_SVC_GET_INFO,    
+    MSG_TYPE_SVC_GET_INFO,
     MSG_TYPE_SVC_GET_SERVICES,
-    MSG_TYPE_SVC_GET_SERVICE, 
+    MSG_TYPE_SVC_GET_SERVICE,
     MSG_TYPE_SVC_GET_DESTS,
     MSG_TYPE_LADDR_GET_ALL,
 };
@@ -239,8 +239,6 @@ enum {
 
 //#define SOCKOPT_MSG_BUFFER_SIZE             (1UL << 12)
 #define SOCKOPT_ERRSTR_LEN                  64
-
-typedef uint32_t sockoptid_t;
 
 enum sockopt_type {
     SOCKOPT_GET = 0,

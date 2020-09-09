@@ -18,14 +18,7 @@
 #ifndef __DPVS_SOCKOPTS_CONF_H__
 #define __DPVS_SOCKOPTS_CONF_H__
 
-typedef enum {
-    /* tc */
-    SOCKOPT_TC_ADD  = 900,
-    SOCKOPT_TC_DEL,
-    SOCKOPT_TC_CHANGE,
-    SOCKOPT_TC_REPLACE,
-    SOCKOPT_TC_SHOW = 900,
-} tc_oper_t;
+#include <conf/common.h>
 
 enum {
     /* laddr */
@@ -33,6 +26,8 @@ enum {
     SOCKOPT_SET_LADDR_DEL,
     SOCKOPT_SET_LADDR_FLUSH,
     SOCKOPT_GET_LADDR_GETALL = 100,
+#define SOCKOPT_LADDR_BASE     SOCKOPT_SET_LADDR_ADD
+#define SOCKOPT_GET_LADDR_MAX  199
 
     /* service */
     DPVS_SO_SET_FLUSH   = 200,
@@ -99,14 +94,21 @@ enum {
     SOCKOPT_SET_VLAN_DEL,
     SOCKOPT_GET_VLAN_SHOW = 800,
 
+    /* tc */
+    SOCKOPT_TC_ADD  = 900,
+    SOCKOPT_TC_DEL,
+    SOCKOPT_TC_CHANGE,
+    SOCKOPT_TC_REPLACE,
+    SOCKOPT_TC_SHOW = 900,
+
     /* connection */
     SOCKOPT_SET_CONN     = 1000,
     SOCKOPT_GET_CONN_ALL = 1000,
     SOCKOPT_GET_CONN_SPECIFIED,
 
     /* ip6 */
-    SOCKOPT_IP6_SET = 1100,
-    SOCKOPT_IP6_STATS,
+    SOCKOPT_IP6_SET   = 1100,
+    SOCKOPT_IP6_STATS = 1100,
 
     /* tunnel */
     SOCKOPT_TUNNEL_ADD  = 1200,
