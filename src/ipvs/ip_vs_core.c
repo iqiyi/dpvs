@@ -111,7 +111,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
         ct = dp_vs_ct_in_get(svc->af, iph->proto, &snet, &iph->daddr, 0, ports[1]);
         if (!ct || !dp_vs_check_template(ct)) {
             /* no template found, or the dest of the conn template is not available */
-            dest = svc->scheduler->schedule(svc, mbuf);
+            dest = svc->scheduler->schedule(svc, mbuf, iph);
             if (unlikely(NULL == dest)) {
                 RTE_LOG(WARNING, IPVS, "%s: persist-schedule: no dest found.\n", __func__);
                 return NULL;
@@ -135,7 +135,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
          * fw-mark based service: not support */
         ct = dp_vs_ct_in_get(svc->af, iph->proto, &snet, &iph->daddr, 0, 0);
         if (!ct || !dp_vs_check_template(ct)) {
-            dest = svc->scheduler->schedule(svc, mbuf);
+            dest = svc->scheduler->schedule(svc, mbuf, iph);
             if (unlikely(NULL == dest)) {
                 RTE_LOG(WARNING, IPVS, "%s: persist-schedule: no dest found.\n", __func__);
                 return NULL;
@@ -293,7 +293,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     if (svc->flags & DP_VS_SVC_F_PERSISTENT)
         return dp_vs_sched_persist(svc, iph,  mbuf, is_synproxy_on);
 
-    dest = svc->scheduler->schedule(svc, mbuf);
+    dest = svc->scheduler->schedule(svc, mbuf, iph);
     if (!dest) {
         RTE_LOG(WARNING, IPVS, "%s: no dest found.\n", __func__);
 #ifdef CONFIG_DPVS_MBUF_DEBUG

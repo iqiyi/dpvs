@@ -379,7 +379,8 @@ static int dp_vs_conhash_update_svc(struct dp_vs_service *svc,
  *      Consistent Hashing scheduling
  */
 static struct dp_vs_dest *
-dp_vs_conhash_schedule(struct dp_vs_service *svc, const struct rte_mbuf *mbuf)
+dp_vs_conhash_schedule(struct dp_vs_service *svc, const struct rte_mbuf *mbuf,
+            const struct dp_vs_iphdr *iph __rte_unused)
 {
     struct dp_vs_dest *dest;
     struct conhash_sched_data *sched_data =

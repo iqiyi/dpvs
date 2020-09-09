@@ -24,7 +24,7 @@ static inline unsigned int dp_vs_wlc_dest_overhead(struct dp_vs_dest *dest)
 }
 
 static struct dp_vs_dest *dp_vs_wlc_schedule(struct dp_vs_service *svc,
-                                             const struct rte_mbuf *mbuf)
+                    const struct rte_mbuf *mbuf, const struct dp_vs_iphdr *iph __rte_unused)
 {
     struct dp_vs_dest *dest, *least;
     unsigned int loh, doh;

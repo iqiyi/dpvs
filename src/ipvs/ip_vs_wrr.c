@@ -90,7 +90,7 @@ static int dp_vs_wrr_update_svc(struct dp_vs_service *svc,
  * Weighted Round-Robin Scheduling
  */
 static struct dp_vs_dest *dp_vs_wrr_schedule(struct dp_vs_service *svc,
-                                             const struct rte_mbuf *mbuf)
+                    const struct rte_mbuf *mbuf, const struct dp_vs_iphdr *iph __rte_unused)
 {
     struct dp_vs_dest *dest;
     struct dp_vs_wrr_mark *mark = svc->sched_data;
