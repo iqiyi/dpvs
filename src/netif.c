@@ -2471,17 +2471,17 @@ static void lcore_job_xmit(void *args)
     }
 }
 
+RTE_DEFINE_PER_LCORE(uint64_t, tm_manager_time);
+#define this_tm_manager_time (RTE_PER_LCORE(tm_manager_time))
 static int timer_sched_interval_us;
 static void lcore_job_timer_manage(void *args)
 {
-    static uint64_t tm_manager_time[DPVS_MAX_LCORE] = { 0 };
     uint64_t now = rte_get_timer_cycles();
-    portid_t cid = rte_lcore_id();
 
-    if (unlikely((now - tm_manager_time[cid]) * 1000000 / g_cycles_per_sec
+    if (unlikely((now - this_tm_manager_time) * 1000000 / g_cycles_per_sec
             > timer_sched_interval_us)) {
         rte_timer_manage();
-        tm_manager_time[cid] = now;
+        this_tm_manager_time = now;
     }
 }
 
