@@ -52,6 +52,9 @@ static int mp_elem_create(char *name_pref, struct dpvs_mp_elem *mp_elt, uint32_t
     if (cache_size >= obj_num * 2/3)
         cache_size = obj_num / 2;
 
+    is_power2((int)obj_num, 1, (int *)&obj_num);
+    --obj_num;
+
     snprintf(name, sizeof(name), "%s_s%d_n%d", name_pref, obj_sz, obj_num);
     pool = rte_mempool_create(name, obj_num, obj_sz, cache_size, 0, NULL, NULL,
             NULL, NULL, SOCKET_ID_ANY, 0);

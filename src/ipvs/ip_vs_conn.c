@@ -41,7 +41,7 @@
 #define DPVS_CONN_TBL_MASK          (DPVS_CONN_TBL_SIZE - 1)
 
 /* too big ? adjust according to free mem ?*/
-#define DPVS_CONN_POOL_SIZE_DEF     2097152
+#define DPVS_CONN_POOL_SIZE_DEF     2097151
 #define DPVS_CONN_POOL_SIZE_MIN     65536
 #define DPVS_CONN_CACHE_SIZE_DEF    256
 
@@ -1863,9 +1863,9 @@ static void conn_pool_size_handler(vector_t tokens)
                 str, DPVS_CONN_POOL_SIZE_DEF);
         conn_pool_size = DPVS_CONN_POOL_SIZE_DEF;
     } else {
-        is_power2(pool_size, 0, &pool_size);
-        RTE_LOG(INFO, IPVS, "conn_pool_size = %d (round to 2^n)\n", pool_size);
-        conn_pool_size = pool_size;
+        is_power2(pool_size, 1, &pool_size);
+        RTE_LOG(INFO, IPVS, "conn_pool_size = %d (round to 2^n-1)\n", pool_size);
+        conn_pool_size = pool_size - 1;
     }
 
     FREE_PTR(str);

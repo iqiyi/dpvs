@@ -367,7 +367,8 @@ int tc_init(void)
 
         snprintf(plname, sizeof(plname), "tc_mbuf_pool_%d", s);
 
-        tc_mbuf_pools[s] = rte_mempool_create(plname, tc_mbuf_pool_size,
+        is_power2(tc_mbuf_pool_size, 1, &tc_mbuf_pool_size);
+        tc_mbuf_pools[s] = rte_mempool_create(plname, tc_mbuf_pool_size - 1,
                                               sizeof(struct tc_mbuf),
                                               tc_mbuf_cache_size,
                                               0, NULL, NULL, NULL, NULL,
