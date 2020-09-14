@@ -137,6 +137,7 @@ pid_t bfd_child;					/* BFD child process ID */
 const char *bfd_pidfile;				/* overrule default pidfile */
 static bool free_bfd_pidfile;
 #endif
+char *reload_done_file = PID_DIR RELOAD_DONE_FILE;     /* reload done file */
 unsigned long daemon_mode;				/* VRRP/CHECK/BFD subsystem selection */
 #ifdef _WITH_SNMP_
 bool snmp_option;					/* Enable SNMP support */

@@ -73,6 +73,7 @@
 #include "track_process.h"
 #endif
 
+extern char *reload_done_file;
 /* Global variables */
 bool using_ha_suspend;
 
@@ -402,6 +403,23 @@ check_validate_config(void)
 	start_check(NULL, NULL);
 }
 
+/* Create the reload done file */
+int
+mark_reload_done(char *file_name)
+{
+	struct timeval t;
+    FILE *file = fopen(file_name, "w");
+
+	if (!file) {
+		log_message(LOG_INFO, "file_write : Can not open %s file",
+		       file_name);
+		return 0;
+	}
+	gettimeofday(&t, NULL);
+	fprintf(file, "reload done at %lu.%06lu\n", t.tv_sec, t.tv_usec);
+	fclose(file);
+	return 1;
+}
 #ifndef _DEBUG_
 /* Reload thread */
 static int
@@ -456,6 +474,7 @@ reload_check_thread(__attribute__((unused)) thread_ref_t thread)
 	free_check_data(old_check_data);
 	free_global_data(old_global_data);
 	free_list(&old_checkers_queue);
+	mark_reload_done(reload_done_file);
 	UNSET_RELOAD;
 
 	return 0;

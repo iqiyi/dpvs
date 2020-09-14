@@ -49,6 +49,7 @@
 #define BFD_PID_FILE		"bfd"
 #endif
 #define	PID_EXTENSION		".pid"
+#define RELOAD_DONE_FILE "keepalived_reload_done"
 
 extern const char *pid_directory;
 
