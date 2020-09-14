@@ -179,8 +179,9 @@ static int dpvs_job_loop(void *arg)
     /* skip irrelative job loops */
     if (role == LCORE_ROLE_MAX)
         return EDPVS_INVAL;
-    if (role == LCORE_ROLE_IDLE)
+    if (role == LCORE_ROLE_IDLE && !netif_lcore_has_idle_job(cid)) {
         return EDPVS_IDLE;
+    }
 
     RTE_LOG(INFO, DSCHED, "lcore %02d enter %s loop\n", cid, dpvs_lcore_role_str(role));
 

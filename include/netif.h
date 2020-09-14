@@ -108,6 +108,7 @@ struct netif_lcore_conf
     int nports;
     /* port list of this lcore to process */
     struct netif_port_conf pqs[NETIF_MAX_RTE_PORTS];
+    char name[32];
 } __rte_cache_aligned;
 
 /* isolate RX lcore */
@@ -264,6 +265,7 @@ void netif_update_worker_loop_cnt(void);
 int netif_register_master_xmit_msg(void);
 int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);
 bool is_lcore_id_valid(lcoreid_t cid);
+bool netif_lcore_has_idle_job(lcoreid_t cid);
 bool netif_lcore_is_idle(lcoreid_t cid);
 void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
                            lcoreid_t cid, uint16_t count, bool pkts_from_ring);

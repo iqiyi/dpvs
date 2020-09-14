@@ -1166,6 +1166,7 @@ static void config_lcores(struct list_head *worker_list)
 
         tk = 0;
         lcore_conf[id].id = worker_min->cpu_id;
+        strcpy(lcore_conf[id].name, worker_min->name);
         list_for_each_entry_reverse(queue, &worker_min->port_list, queue_list_node) {
             port = netif_port_get_by_name(queue->port_name);
             if (port)
@@ -1216,6 +1217,13 @@ bool netif_lcore_is_idle(lcoreid_t cid)
     if (cid > DPVS_MAX_LCORE)
         return true;
     return (lcore_conf[lcore2index[cid]].nports == 0) ? true : false;
+}
+
+bool netif_lcore_has_idle_job(lcoreid_t cid)
+{
+    if (cid > DPVS_MAX_LCORE)
+        return false;
+    return !strncmp(lcore_conf[lcore2index[cid]].name, "_job", strlen("_job"));
 }
 
 static void lcore_index_init(void)

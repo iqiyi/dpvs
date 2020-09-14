@@ -118,7 +118,5 @@ void dp_vs_service_put(struct dp_vs_service *svc);
 struct dp_vs_service *dp_vs_vip_lookup(int af, uint16_t protocol,
                                        const union inet_addr *vaddr,
                                        lcoreid_t cid);
-int dp_vs_services_match_iter(int (*cb)(struct dp_vs_service *, void*),
-                     void* data, lcoreid_t cid);
 
 #endif /* __DPVS_SVC_H__ */

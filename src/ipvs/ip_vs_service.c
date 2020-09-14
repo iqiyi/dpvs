@@ -52,31 +52,8 @@ static struct list_head dp_vs_svc_table[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
 static struct list_head dp_vs_svc_fwm_table[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
-/* lock for master lcore */
-static rte_rwlock_t dp_vs_svc_match_lock[DPVS_MAX_LCORE];
 static struct hlist_head dp_vs_svc_match_list[DPVS_MAX_LCORE][DP_VS_SVC_TAB_SIZE];
 
-/* this is for match acl thread */
-int dp_vs_services_match_iter(int (*cb)(struct dp_vs_service *, void*),
-                     void* data, lcoreid_t cid)
-{
-    int idx = 0;
-    struct dp_vs_service *svc = NULL;
-    int ret = EDPVS_OK;
-
-    rte_rwlock_read_lock(&dp_vs_svc_match_lock[cid]);
-    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
-        hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
-            ret = cb(svc, data);
-            if (ret != EDPVS_OK) {
-                rte_rwlock_read_unlock(&dp_vs_svc_match_lock[cid]);
-                return ret;
-            }
-        }
-    }
-    rte_rwlock_read_unlock(&dp_vs_svc_match_lock[cid]);
-    return EDPVS_OK;
-}
 
 static inline int dp_vs_service_hashkey(int af, unsigned proto, const union inet_addr *addr)
 {
@@ -118,10 +95,8 @@ static int dp_vs_service_hash(struct dp_vs_service *svc, lcoreid_t cid)
         list_add(&svc->f_list, &dp_vs_svc_fwm_table[cid][hash]);
     } else if (svc->match) {
         hash = dp_vs_service_match_hashkey(svc->match);
-        rte_rwlock_write_lock(&dp_vs_svc_match_lock[cid]);
         dp_vs_svc_match_acl_add(svc, cid);
         hlist_add_head(&svc->m_list, &dp_vs_svc_match_list[cid][hash]);
-        rte_rwlock_write_unlock(&dp_vs_svc_match_lock[cid]);
     } else {
         /*
          *  Hash it by <protocol,addr,port> in dp_vs_svc_table
@@ -148,10 +123,8 @@ static int dp_vs_service_unhash(struct dp_vs_service *svc)
         list_del(&svc->f_list);
     else if (svc->match) {
         lcoreid_t cid = rte_lcore_id();
-        rte_rwlock_write_lock(&dp_vs_svc_match_lock[cid]);
-        dp_vs_svc_match_acl_del(svc);
+        dp_vs_svc_match_acl_del(svc, cid);
         hlist_del(&svc->m_list);
-        rte_rwlock_write_unlock(&dp_vs_svc_match_lock[cid]);
     } else
         list_del(&svc->s_list);
 

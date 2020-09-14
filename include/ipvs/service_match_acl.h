@@ -12,7 +12,6 @@ struct dp_vs_service *dp_vs_get_match_svc_ip6(uint8_t proto, union inet_addr *sa
                      portid_t iif, portid_t oif, lcoreid_t cid);
 int dp_vs_svc_match_init(void);
 int dp_vs_svc_match_term(void);
-void install_service_match_keywords(void);
 
 #endif /* __DPVS_SVC_MATCH_ACL_H__ */
 

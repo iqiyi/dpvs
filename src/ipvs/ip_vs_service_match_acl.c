@@ -9,6 +9,8 @@
 #include "ipvs/service.h"
 #include "parser/parser.h"
 #include "ipvs/service_match_acl.h"
+#include "scheduler.h"
+#include "rculist.h"
 
 #define DEFAULT_MAX_CATEGORIES    1
 #define DPVS_SVC_MAX 1000000
@@ -25,7 +27,51 @@ static uint64_t dpvs_match4_generation[DPVS_MAX_LCORE] = { 0 };
 static uint64_t dpvs_match6_generation[DPVS_MAX_LCORE] = { 0 };
 static struct rte_acl_ctx *dp_vs_svc_match_acl4[DPVS_MAX_LCORE] = { NULL };
 static struct rte_acl_ctx *dp_vs_svc_match_acl6[DPVS_MAX_LCORE] = { NULL };
-static int stop_build = 0;
+#define RULE_TAB_SIZE (1<<14)
+static uint64_t dpvs_match4_cnt[DPVS_MAX_LCORE] = { 0 };
+static struct hlist_head dp_vs_match4_list[DPVS_MAX_LCORE][RULE_TAB_SIZE];
+static uint64_t dpvs_match6_cnt[DPVS_MAX_LCORE] = { 0 };
+static struct hlist_head dp_vs_match6_list[DPVS_MAX_LCORE][RULE_TAB_SIZE];
+
+struct rcu_list {
+    struct rcu_list *n;
+};
+struct rcu_list rcu_free_list = {NULL};
+static void rcu_list_add(struct rcu_list* rcu, struct rcu_list* head)
+{
+    int success = 1;
+    struct rcu_list *old = NULL;
+    do {
+        old = head->n;
+        rcu->n = old;
+        rte_wmb();
+        success = rte_atomic64_cmpset((void*)&head->n, (uint64_t)old, (uint64_t)rcu);
+    } while (!success);
+}
+static void rcu_list_take(struct rcu_list* head, struct rcu_list* new_head)
+{
+    int success = 1;
+    do {
+        new_head->n = head->n;
+        rte_rmb();
+        success = rte_atomic64_cmpset((void*)&head->n, (uint64_t)new_head->n, 0);
+    } while (!success);
+}
+
+struct dp_vs_match_list {
+    struct hlist_node node;
+    struct rcu_list rcu;
+    struct dp_vs_match match;
+    uint32_t idx;
+    uint8_t proto;
+};
+
+static uint32_t dp_vs_match_hash(struct dp_vs_match *match)
+{
+    uint32_t hash = 0;
+    hash = rte_hash_crc(match, sizeof(struct dp_vs_match), 0x12345678);
+    return hash & RULE_TAB_SIZE;
+}
 
 struct dp_vs_match_ipv4 {
     uint8_t  proto;
@@ -226,24 +272,24 @@ RTE_ACL_RULE_DEF(dpvs_match_rule6, RTE_DIM(dpvs_match_defs6));
 
 /* acl name MUST NOT be repeated with existing */
 static rte_atomic32_t acl_build_idx;
-static int svc_to_match_acl4(struct dp_vs_service *svc, struct dpvs_match_rule4 *rule)
+static int svc_to_match_acl4(struct dp_vs_match_list *match, struct dpvs_match_rule4 *rule)
 {
     uint32_t min = 0;
     uint32_t max = 0;
     struct netif_port* dev = NULL;
     rule->data.category_mask = -1;
     rule->data.priority = 1;
-    rule->data.userdata = svc->idx;;
+    rule->data.userdata = match->idx;;
 
-    rule->field[PROTO_FIELD_IPV4].value.u8 = svc->proto;
+    rule->field[PROTO_FIELD_IPV4].value.u8 = match->proto;
     rule->field[PROTO_FIELD_IPV4].mask_range.u8 = 0xff;
     /* for snat, 0 proto match any proto */
-    if (!svc->proto) {
+    if (!match->proto) {
         rule->field[PROTO_FIELD_IPV4].mask_range.u8 = 0x0;
     }
 
-    min = ntohl(svc->match->srange.min_addr.in.s_addr);
-    max = ntohl(svc->match->srange.max_addr.in.s_addr);
+    min = ntohl(match->match.srange.min_addr.in.s_addr);
+    max = ntohl(match->match.srange.max_addr.in.s_addr);
     if (min > max) {
         return 0;
     }
@@ -255,8 +301,8 @@ static int svc_to_match_acl4(struct dp_vs_service *svc, struct dpvs_match_rule4 
     rule->field[SRC_FIELD_IPV4].value.u32 = min;
     rule->field[SRC_FIELD_IPV4].mask_range.u32 = max;
 
-    min = ntohl(svc->match->drange.min_addr.in.s_addr);
-    max = ntohl(svc->match->drange.max_addr.in.s_addr);
+    min = ntohl(match->match.drange.min_addr.in.s_addr);
+    max = ntohl(match->match.drange.max_addr.in.s_addr);
     if (min > max) {
         return 0;
     }
@@ -268,8 +314,8 @@ static int svc_to_match_acl4(struct dp_vs_service *svc, struct dpvs_match_rule4 
     rule->field[DST_FIELD_IPV4].value.u32 = min;
     rule->field[DST_FIELD_IPV4].mask_range.u32 = max;
 
-    min = ntohs(svc->match->srange.min_port);
-    max = ntohs(svc->match->srange.max_port);
+    min = ntohs(match->match.srange.min_port);
+    max = ntohs(match->match.srange.max_port);
     if (min > max) {
         return 0;
     }
@@ -281,8 +327,8 @@ static int svc_to_match_acl4(struct dp_vs_service *svc, struct dpvs_match_rule4 
     rule->field[SRCP_FIELD_IPV4].value.u16 = min;
     rule->field[SRCP_FIELD_IPV4].mask_range.u16 = max;
 
-    min = ntohs(svc->match->drange.min_port);
-    max = ntohs(svc->match->drange.max_port);
+    min = ntohs(match->match.drange.min_port);
+    max = ntohs(match->match.drange.max_port);
     if (min > max) {
         return 0;
     }
@@ -294,7 +340,7 @@ static int svc_to_match_acl4(struct dp_vs_service *svc, struct dpvs_match_rule4 
     rule->field[DSTP_FIELD_IPV4].value.u16 = min;
     rule->field[DSTP_FIELD_IPV4].mask_range.u16 = max;
 
-    dev = netif_port_get_by_name(svc->match->iifname);
+    dev = netif_port_get_by_name(match->match.iifname);
     if (dev) {
         rule->field[IIFID_FIELD_IPV4].value.u16 = ntohs(dev->id);
         rule->field[IIFID_FIELD_IPV4].mask_range.u16 = ntohs(dev->id);
@@ -303,7 +349,7 @@ static int svc_to_match_acl4(struct dp_vs_service *svc, struct dpvs_match_rule4 
         rule->field[IIFID_FIELD_IPV4].mask_range.u16 = 0xffff;
     }
 
-    dev = netif_port_get_by_name(svc->match->oifname);
+    dev = netif_port_get_by_name(match->match.oifname);
     if (dev) {
         rule->field[OIFID_FIELD_IPV4].value.u16 = ntohs(dev->id);
         rule->field[OIFID_FIELD_IPV4].mask_range.u16 = ntohs(dev->id);
@@ -402,7 +448,7 @@ static int ip6_range_split(struct inet_addr_range *s,
     return k;
 }
 
-static int svc_to_match_acl6(struct dp_vs_service *svc, struct dpvs_match_rule6 *rule)
+static int svc_to_match_acl6(struct dp_vs_match_list *match, struct dpvs_match_rule6 *rule)
 {
     uint32_t min = 0;
     uint32_t max = 0;
@@ -418,17 +464,17 @@ static int svc_to_match_acl6(struct dp_vs_service *svc, struct dpvs_match_rule6 
 
     rule->data.category_mask = -1;
     rule->data.priority = 1;
-    rule->data.userdata = svc->idx;;
+    rule->data.userdata = match->idx;;
 
-    rule->field[PROTO_FIELD_IPV6].value.u8 = svc->proto;
+    rule->field[PROTO_FIELD_IPV6].value.u8 = match->proto;
     rule->field[PROTO_FIELD_IPV6].mask_range.u8 = 0xff;
     /* for snat, 0 proto match any proto */
-    if (!svc->proto) {
+    if (!match->proto) {
         rule->field[PROTO_FIELD_IPV6].mask_range.u8 = 0x0;
     }
 
-    min = ntohs(svc->match->srange.min_port);
-    max = ntohs(svc->match->srange.max_port);
+    min = ntohs(match->match.srange.min_port);
+    max = ntohs(match->match.srange.max_port);
     if (min > max) {
         return 0;
     }
@@ -440,8 +486,8 @@ static int svc_to_match_acl6(struct dp_vs_service *svc, struct dpvs_match_rule6 
     rule->field[SRCP_FIELD_IPV6].value.u16 = min;
     rule->field[SRCP_FIELD_IPV6].mask_range.u16 = max;
 
-    min = ntohs(svc->match->drange.min_port);
-    max = ntohs(svc->match->drange.max_port);
+    min = ntohs(match->match.drange.min_port);
+    max = ntohs(match->match.drange.max_port);
     if (min > max) {
         return 0;
     }
@@ -453,7 +499,7 @@ static int svc_to_match_acl6(struct dp_vs_service *svc, struct dpvs_match_rule6 
     rule->field[DSTP_FIELD_IPV6].value.u16 = min;
     rule->field[DSTP_FIELD_IPV6].mask_range.u16 = max;
 
-    dev = netif_port_get_by_name(svc->match->iifname);
+    dev = netif_port_get_by_name(match->match.iifname);
     if (dev) {
         rule->field[IIFID_FIELD_IPV6].value.u16 = ntohs(dev->id);
         rule->field[IIFID_FIELD_IPV6].mask_range.u16 = ntohs(dev->id);
@@ -462,7 +508,7 @@ static int svc_to_match_acl6(struct dp_vs_service *svc, struct dpvs_match_rule6 
         rule->field[IIFID_FIELD_IPV6].mask_range.u16 = 0xffff;
     }
 
-    dev = netif_port_get_by_name(svc->match->oifname);
+    dev = netif_port_get_by_name(match->match.oifname);
     if (dev) {
         rule->field[OIFID_FIELD_IPV6].value.u16 = ntohs(dev->id);
         rule->field[OIFID_FIELD_IPV6].mask_range.u16 = ntohs(dev->id);
@@ -471,8 +517,8 @@ static int svc_to_match_acl6(struct dp_vs_service *svc, struct dpvs_match_rule6 
         rule->field[OIFID_FIELD_IPV6].mask_range.u16 = 0xffff;
     }
 
-    src_cnt = ip6_range_split(&svc->match->srange, srange);
-    dst_cnt = ip6_range_split(&svc->match->drange, drange);
+    src_cnt = ip6_range_split(&match->match.srange, srange);
+    dst_cnt = ip6_range_split(&match->match.drange, drange);
     cnt = src_cnt * dst_cnt;
     if (cnt > 1) {
         memcpy(&rule[1], rule, sizeof(*rule) * (cnt - 1));
@@ -498,91 +544,6 @@ static int svc_to_match_acl6(struct dp_vs_service *svc, struct dpvs_match_rule6 
     return cnt;
 }
 
-struct rules_block_node {
-    struct list_head list;
-    int cnt;
-    struct rte_acl_rule rule[0];
-};
-
-struct rules_block_list {
-    int cnt;
-    int af;
-    struct list_head head;
-};
-#define BLOCK_RULES_CNT 4096
-
-static void* rules_block_list_get_rules(struct rules_block_list* bl, uint32_t cnt)
-{
-    struct rules_block_node *n = NULL;
-    int size = 0;
-    if (cnt > BLOCK_RULES_CNT) {
-        return NULL;
-    }
-    if (bl->af == AF_INET) {
-        size = sizeof(struct dpvs_match_rule4);
-    } else {
-        size = sizeof(struct dpvs_match_rule6);
-    }
-    if (!list_empty(&bl->head)) {
-        n = list_last_entry(&bl->head, struct rules_block_node, list);
-        if (n->cnt + cnt < BLOCK_RULES_CNT) {
-            return ((void*)n->rule) + n->cnt * size;
-        }
-    }
-    size = sizeof(struct rules_block_node) + size * BLOCK_RULES_CNT;
-    n = malloc(size);
-    if (!n) {
-        return NULL;
-    }
-    memset(n, 0, size);
-    list_add_tail(&n->list, &bl->head);
-    return n->rule;
-}
-
-static int rules_block_list_add(struct rules_block_list* bl, uint32_t cnt)
-{
-    struct rules_block_node *n = NULL;
-    n = list_last_entry(&bl->head, struct rules_block_node, list);
-    assert(n->cnt + cnt < BLOCK_RULES_CNT);
-    n->cnt += cnt;
-    bl->cnt += cnt;
-    return 0;
-}
-
-static int rules_block_list_clean(struct rules_block_list* bl)
-{
-    struct rules_block_node *p = NULL;
-    struct rules_block_node *n = NULL;
-    list_for_each_entry_safe(p, n, &bl->head, list) {
-        free(p);
-    }
-    return EDPVS_OK;
-}
-static int dpvs_match_to_rules(struct dp_vs_service *svc, void *data)
-{
-    struct rules_block_list *bl = data;
-    int rule_cnt = 0;
-    void *rule = NULL;
-    if (svc->af == AF_INET) {
-        rule_cnt = 1;
-        rule = rules_block_list_get_rules(bl, rule_cnt);
-        if (!rule) {
-            return EDPVS_NOMEM;
-        }
-        svc_to_match_acl4(svc, rule);
-    } else {
-        rule_cnt = ip6_range_split(&svc->match->srange, NULL) *
-            ip6_range_split(&svc->match->drange, NULL);
-        rule = rules_block_list_get_rules(bl, rule_cnt);
-        if (!rule) {
-            return EDPVS_NOMEM;
-        }
-        rule_cnt = svc_to_match_acl6(svc, rule);
-    }
-    rules_block_list_add(bl, rule_cnt);
-    return EDPVS_OK;
-}
-
 static int build_acl(int af, lcoreid_t cid)
 {
     char name[PATH_MAX];
@@ -592,8 +553,7 @@ static int build_acl(int af, lcoreid_t cid)
     struct rte_acl_ctx **pctx = NULL;
     struct rte_acl_ctx *tmp = NULL;
     int dim = 0;
-    struct rules_block_list bl;
-    struct rules_block_node *n = NULL;
+    struct hlist_head *list = NULL;
 
     memset(&acl_build_param, 0, sizeof(acl_build_param));
     acl_build_param.num_categories = DEFAULT_MAX_CATEGORIES;
@@ -602,20 +562,17 @@ static int build_acl(int af, lcoreid_t cid)
         memcpy(&acl_build_param.defs, dpvs_match_defs6,
                     sizeof(dpvs_match_defs6));
         pctx = &dp_vs_svc_match_acl6[cid];
+        acl_param.max_rule_num = dpvs_match4_cnt[cid];
+        list = dp_vs_match4_list[cid];
     } else {
         dim = RTE_DIM(dpvs_match_defs4);
         memcpy(&acl_build_param.defs, dpvs_match_defs4,
                     sizeof(dpvs_match_defs4));
         pctx = &dp_vs_svc_match_acl4[cid];
+        acl_param.max_rule_num = dpvs_match6_cnt[cid];
+        list = dp_vs_match6_list[cid];
     }
-    bl.af = af;
-    bl.cnt = 0;
-    INIT_LIST_HEAD(&bl.head);
-    if (dp_vs_services_match_iter(dpvs_match_to_rules, &bl, cid) != EDPVS_OK) {
-        rules_block_list_clean(&bl);
-        return EDPVS_NOMEM;
-    }
-    if (!bl.cnt) {
+    if (!acl_param.max_rule_num) {
         goto end;
     }
     acl_build_param.num_fields = dim;
@@ -625,30 +582,40 @@ static int build_acl(int af, lcoreid_t cid)
     acl_param.socket_id = SOCKET_ID_ANY;
     acl_param.rule_size = RTE_ACL_RULE_SZ(dim);
 
-    acl_param.max_rule_num = bl.cnt;
     context = rte_acl_create(&acl_param);
     if (!context) {
         RTE_LOG(ERR, IPVS, "rte_acl_create failed\n");
         goto ctx_create_failed;
     }
 
-    list_for_each_entry_reverse(n, &bl.head, list) {
-        if (!n->cnt) {
-            continue;
-        }
-        if (rte_acl_add_rules(context, n->rule, n->cnt) < 0) {
-            RTE_LOG(ERR, IPVS, "add rules failed\n");
-            goto add_rule_fail;
+    void *buf = malloc(64 * sizeof(struct dpvs_match_rule6));
+    if (!buf) {
+        goto nobuf;
+    }
+    struct dp_vs_match_list *m = NULL;
+    int cnt = 0;
+    int i = 0;
+    for (i = 0; i < RULE_TAB_SIZE; i++) {
+        hlist_for_each_entry_rcu(m, &list[i], node) {
+            if (af == AF_INET) {
+                cnt = svc_to_match_acl4(m, buf);
+            } else {
+                cnt = svc_to_match_acl6(m, buf);
+            }
+            if (!cnt) {
+                continue;
+            }
+            if (rte_acl_add_rules(context, buf, cnt) < 0) {
+                RTE_LOG(ERR, IPVS, "add rules failed\n");
+                goto add_rule_fail;
+            }
         }
     }
-
-    /* build acl needs lots of memory */
-    rules_block_list_clean(&bl);
-
     if (rte_acl_build(context, &acl_build_param) != 0) {
         RTE_LOG(ERR, IPVS, "rte_acl_build failed\n");
         goto build_failed;
     }
+    free(buf);
 end:
     tmp = *pctx;
     *pctx = context;
@@ -660,9 +627,10 @@ end:
     return 0;
 build_failed:
 add_rule_fail:
+    free(buf);
+nobuf:
     rte_acl_free(context);
 ctx_create_failed:
-    rules_block_list_clean(&bl);
     return -1;
 }
 
@@ -681,14 +649,25 @@ int dp_vs_svc_match_acl_add(struct dp_vs_service *svc, lcoreid_t cid)
     if (!svc) {
         return 0;
     }
+    struct dp_vs_match_list *l = rte_zmalloc(NULL, sizeof(*l), 0);
+    if (!l) {
+        return EDPVS_NOMEM;
+    }
     rte_ring_dequeue(dpvs_svc_idxq[cid], &p);
     idx = (unsigned long)p;
     svc->idx = idx;
     dpvs_svcs[cid][idx] = svc;
-    /* maybe we should put v4/v6 svc into diff list */
+    l->match = *svc->match;
+    l->idx = idx;
+    l->proto = svc->proto;
+    idx = dp_vs_match_hash(&l->match);
     if (svc->af == AF_INET) {
+        hlist_add_head_rcu(&l->node, &dp_vs_match4_list[cid][idx]);
+        dpvs_match4_cnt[cid]++;
         dpvs_match4_generation[cid]++;
     } else {
+        hlist_add_head_rcu(&l->node, &dp_vs_match6_list[cid][idx]);
+        dpvs_match6_cnt[cid]++;
         dpvs_match6_generation[cid]++;
     }
     return 0;
@@ -710,10 +689,24 @@ int dp_vs_svc_match_acl_del(struct dp_vs_service *svc, lcoreid_t cid)
     idx = svc->idx;
     svc->idx = 0;
     rte_ring_enqueue(dpvs_svc_idxq[cid], (void*)idx);
+    idx = dp_vs_match_hash(svc->match);
+    struct dp_vs_match_list *l = NULL;
+    struct hlist_head *h = NULL;
     if (svc->af == AF_INET) {
+        h = &dp_vs_match4_list[cid][idx];
+        dpvs_match4_cnt[cid]--;
         dpvs_match4_generation[cid]++;
     } else {
+        h = &dp_vs_match6_list[cid][idx];
+        dpvs_match6_cnt[cid]--;
         dpvs_match6_generation[cid]++;
+    }
+    hlist_for_each_entry(l, h, node) {
+        if (!memcmp(&l->match, svc->match, sizeof(l->match))
+            && l->proto == svc->proto) {
+            hlist_del_rcu(&l->node);
+            rcu_list_add(&l->rcu, &rcu_free_list);
+        }
     }
     return 0;
 }
@@ -770,73 +763,85 @@ struct dp_vs_service *dp_vs_get_match_svc_ip6(uint8_t proto, union inet_addr *sa
     return svc;
 }
 
-static char thread_name[16] = "match_acl";
-static int bind_cpu = -1;
-static int dpvs_svc_match_build_thread_init(void *data)
+static void dpvs_svc_match_build_job(void *data)
 {
-    int ret = 0;
-    pthread_t tid;
-    cpu_set_t cpuset;
-
-    tid = pthread_self();
-    ret = pthread_setname_np(tid, thread_name);
-    if (ret != 0) {
-        RTE_LOG(WARNING, EAL, "pthread_setname_np failed\n");
-    }
-
-    if (bind_cpu >= 0) {
-        CPU_ZERO(&cpuset);
-        CPU_SET(bind_cpu, &cpuset);
-        ret = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
-        if (ret != 0) {
-            RTE_LOG(WARNING, EAL, "pthread_setaffinity_np failed, cpu %d\n", bind_cpu);
-        }
-    }
-    return 0;
-}
-
-static void *dpvs_svc_match_build_loop(void *data)
-{
-    uint64_t pre4[DPVS_MAX_LCORE] = { 0 };
-    uint64_t pre6[DPVS_MAX_LCORE] = { 0 };
+    static uint64_t pre4[DPVS_MAX_LCORE] = { 0 };
+    static uint64_t pre6[DPVS_MAX_LCORE] = { 0 };
     struct timeval t1;
     struct timeval t2;
     struct timeval d;
     int cid = 0;
     int build = 0;
-    dpvs_svc_match_build_thread_init(data);
-    while (!stop_build) {
-        gettimeofday(&t1, NULL);
-        for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
-            if (pre4[cid] != dpvs_match4_generation[cid]) {
-                pre4[cid] = dpvs_match4_generation[cid];
-                build_acl(AF_INET, cid);
-                build = 1;
-            }
-            if (pre6[cid] != dpvs_match6_generation[cid]) {
-                pre6[cid] = dpvs_match6_generation[cid];
-                build_acl(AF_INET6, cid);
-                build = 1;
-            }
+    gettimeofday(&t1, NULL);
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
+        if (pre4[cid] != dpvs_match4_generation[cid]) {
+            pre4[cid] = dpvs_match4_generation[cid];
+            build_acl(AF_INET, cid);
+            build = 1;
         }
-        if (build) {
-            gettimeofday(&t2, NULL);
-            if (t2.tv_usec < t1.tv_usec) {
-                d.tv_usec = t2.tv_usec + 1000000 - t1.tv_usec;
-                d.tv_sec = t2.tv_sec - t1.tv_sec - 1;
-            } else {
-                d.tv_usec = t2.tv_usec - t1.tv_usec;
-                d.tv_sec = t2.tv_sec - t1.tv_sec;
-            }
-            RTE_LOG(DEBUG, IPVS, "build acl time used:%lu.%06lu,"
-                    " start at %lu.%06lu end at %lu.%06lu\n",
-                    d.tv_sec, d.tv_usec,
-                    t1.tv_sec, t1.tv_usec, t2.tv_sec, t2.tv_usec);
-        } else {
-            usleep(100000);
+        if (pre6[cid] != dpvs_match6_generation[cid]) {
+            pre6[cid] = dpvs_match6_generation[cid];
+            build_acl(AF_INET6, cid);
+            build = 1;
         }
     }
-    return NULL;
+    if (build) {
+        gettimeofday(&t2, NULL);
+        if (t2.tv_usec < t1.tv_usec) {
+            d.tv_usec = t2.tv_usec + 1000000 - t1.tv_usec;
+            d.tv_sec = t2.tv_sec - t1.tv_sec - 1;
+        } else {
+            d.tv_usec = t2.tv_usec - t1.tv_usec;
+            d.tv_sec = t2.tv_sec - t1.tv_sec;
+        }
+        RTE_LOG(DEBUG, IPVS, "build acl time used:%lu.%06lu,"
+                " start at %lu.%06lu end at %lu.%06lu\n",
+                d.tv_sec, d.tv_usec,
+                t1.tv_sec, t1.tv_usec, t2.tv_sec, t2.tv_usec);
+    }
+    return;
+}
+
+static void dpvs_svc_match_rcu_free(void *data)
+{
+    struct rcu_list head;
+    struct rcu_list *n;
+    struct rcu_list *n2;
+    rcu_list_take(&rcu_free_list, &head);
+    for (n = head.n; n; n = n2) {
+        n2 = n->n;
+        rte_free(container_of(n, struct dp_vs_match_list, rcu));
+    }
+}
+
+static struct dpvs_lcore_job idle_job[] = {
+    {
+        .name = "match_acl",
+        .func = dpvs_svc_match_build_job,
+        .data = NULL,
+        .type = LCORE_JOB_LOOP,
+    },
+    {
+        .name = "rcu_free",
+        .func = dpvs_svc_match_rcu_free,
+        .data = NULL,
+        .type = LCORE_JOB_LOOP,
+    },
+};
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+static int register_idle_job(void)
+{
+    int i = 0;
+    int ret = EDPVS_OK;
+    for (i = 0; i < ARRAY_SIZE(idle_job); i++) {
+        ret = dpvs_lcore_job_register(&idle_job[i], LCORE_ROLE_IDLE);
+        if (ret != EDPVS_OK) {
+            RTE_LOG(ERR, CFG_FILE, "%s: fail to register cfgfile_reload job\n", __func__);
+            return ret;
+        }
+    }
+    return EDPVS_OK;
 }
 
 int dp_vs_svc_match_init(void)
@@ -867,13 +872,15 @@ int dp_vs_svc_match_init(void)
         memset(dpvs_svcs[cid], 0, size);
         dp_vs_svc_match_acl4[cid] = NULL;
         dp_vs_svc_match_acl6[cid] = NULL;
+        for (i = 0; i < RULE_TAB_SIZE; i++) {
+            INIT_HLIST_HEAD(&dp_vs_match4_list[cid][i]);
+            INIT_HLIST_HEAD(&dp_vs_match6_list[cid][i]);
+        }
     }
-    stop_build = 0;
-    pthread_t tid;
-    if (pthread_create(&tid, NULL, dpvs_svc_match_build_loop, NULL)) {
-        RTE_LOG(ERR, IPVS, "fail to create dpvs_svc_match_build_loop thread\n");
+    if (register_idle_job() != EDPVS_OK) {
+        RTE_LOG(ERR, IPVS, "fail to register_idle_job\n");
         dp_vs_svc_match_term();
-        return EDPVS_SYSCALL;
+        return EDPVS_INVAL;
     }
     return EDPVS_OK;
 }
@@ -881,7 +888,6 @@ int dp_vs_svc_match_init(void)
 int dp_vs_svc_match_term(void)
 {
     int cid = 0;
-    stop_build = 1;
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (dp_vs_svc_match_acl4[cid]) {
             rte_acl_free(dp_vs_svc_match_acl4[cid]);
@@ -899,31 +905,5 @@ int dp_vs_svc_match_term(void)
         }
     }
     return EDPVS_OK;
-}
-
-static void bind_cpu_handler(vector_t tokens)
-{
-    char *str = set_value(tokens);
-    assert(str);
-    bind_cpu = atoi(str);
-    FREE_PTR(str);
-}
-
-static void thread_name_handler(vector_t tokens)
-{
-    char *str = set_value(tokens);
-    assert(str);
-    if (str[0] ) {
-        strncpy(thread_name, str, 15);
-        thread_name[15] = 0;
-    }
-    FREE_PTR(str);
-}
-
-void install_service_match_keywords(void)
-{
-    install_keyword_root("service_match", NULL);
-    install_keyword("bind_cpu", bind_cpu_handler, KW_TYPE_INIT);
-    install_keyword("thead_name", thread_name_handler, KW_TYPE_NORMAL);
 }
 
