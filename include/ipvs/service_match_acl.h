@@ -1,6 +1,7 @@
 #ifndef __DPVS_SVC_MATCH_ACL_H__
 #define __DPVS_SVC_MATCH_ACL_H__
 
+int dp_vs_match_acl_enable;
 struct dp_vs_service *dp_vs_svc_match_acl_lookup(int af, uint8_t proto, const struct dp_vs_match *match);
 int dp_vs_svc_match_acl_add(struct dp_vs_service *svc, lcoreid_t cid);
 int dp_vs_svc_match_acl_del(struct dp_vs_service *svc, lcoreid_t cid);

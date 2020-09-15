@@ -214,6 +214,7 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
 {
     struct route_entry *rt = mbuf->userdata;
     struct ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
+    struct dp_vs_service *svc;
     union inet_addr saddr, daddr;
     __be16 _ports[2], *ports;
     portid_t oif = NETIF_PORT_ID_ALL;
@@ -252,7 +253,35 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
         route4_put(rt);
     }
 
-    return dp_vs_get_match_svc_ip4(iph->next_proto_id, &saddr, &daddr, ports[0], ports[1], mbuf->port, oif, cid);
+    if (dp_vs_match_acl_enable) {
+        return dp_vs_get_match_svc_ip4(iph->next_proto_id, &saddr, &daddr,
+                                 ports[0], ports[1], mbuf->port, oif, cid);
+    }
+    int idx = 0;
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+    hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
+        struct dp_vs_match *m = svc->match;
+        struct netif_port *idev, *odev;
+        assert(m);
+
+        if (!strlen(m->oifname))
+            oif = NETIF_PORT_ID_ALL;
+
+        idev = netif_port_get_by_name(m->iifname);
+        odev = netif_port_get_by_name(m->oifname);
+
+        if (svc->af == AF_INET && svc->proto == iph->next_proto_id &&
+            __service_in_range(AF_INET, &saddr, ports[0], &m->srange) &&
+            __service_in_range(AF_INET, &daddr, ports[1], &m->drange) &&
+            (!idev || idev->id == mbuf->port) &&
+            (!odev || odev->id == oif)
+           ) {
+            return svc;
+        }
+    }
+    }
+
+    return NULL;
 }
 
 static struct dp_vs_service *
@@ -261,6 +290,7 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
     struct route6 *rt = mbuf->userdata;
     struct ip6_hdr *iph = ip6_hdr(mbuf);
     uint8_t ip6nxt = iph->ip6_nxt;
+    struct dp_vs_service *svc;
     union inet_addr saddr, daddr;
     __be16 _ports[2], *ports;
     portid_t oif = NETIF_PORT_ID_ALL;
@@ -299,8 +329,38 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
         route6_put(rt);
     }
 
-    ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
-    return dp_vs_get_match_svc_ip6(ip6nxt, &saddr, &daddr, ports[0], ports[1], mbuf->port, oif, cid);
+    if (dp_vs_match_acl_enable) {
+        ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+        return dp_vs_get_match_svc_ip6(ip6nxt, &saddr, &daddr,
+                     ports[0], ports[1], mbuf->port, oif, cid);
+    }
+    int idx = 0;
+    for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
+    hlist_for_each_entry(svc, &dp_vs_svc_match_list[cid][idx], m_list) {
+        struct dp_vs_match *m = svc->match;
+        struct netif_port *idev, *odev;
+        assert(m);
+
+        if (!strlen(m->oifname))
+            oif = NETIF_PORT_ID_ALL;
+
+        idev = netif_port_get_by_name(m->iifname);
+        odev = netif_port_get_by_name(m->oifname);
+
+        ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+
+        if (svc->af == AF_INET6 && svc->proto == ip6nxt &&
+            __service_in_range(AF_INET6, &saddr, ports[0], &m->srange) &&
+            __service_in_range(AF_INET6, &daddr, ports[1], &m->drange) &&
+            (!idev || idev->id == mbuf->port) &&
+            (!odev || odev->id == oif)
+           ) {
+            return svc;
+        }
+    }
+    }
+
+    return NULL;
 }
 
 static struct dp_vs_service *

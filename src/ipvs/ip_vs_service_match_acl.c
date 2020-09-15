@@ -17,6 +17,8 @@
 #define DPVS_SVC_HT_SIZE 0x10000
 #define HASH_INIT_VAL 0x12345678
 
+int dp_vs_match_acl_enable = 0;
+
 /* DPDK ACL target is uint32_t, we should translate u32 to svc.
  * BASE+cache_line_size*u32 could index 256G memory,
  * maybe enough for most situations?
@@ -562,15 +564,15 @@ static int build_acl(int af, lcoreid_t cid)
         memcpy(&acl_build_param.defs, dpvs_match_defs6,
                     sizeof(dpvs_match_defs6));
         pctx = &dp_vs_svc_match_acl6[cid];
-        acl_param.max_rule_num = dpvs_match4_cnt[cid];
-        list = dp_vs_match4_list[cid];
+        acl_param.max_rule_num = dpvs_match6_cnt[cid];
+        list = dp_vs_match6_list[cid];
     } else {
         dim = RTE_DIM(dpvs_match_defs4);
         memcpy(&acl_build_param.defs, dpvs_match_defs4,
                     sizeof(dpvs_match_defs4));
         pctx = &dp_vs_svc_match_acl4[cid];
-        acl_param.max_rule_num = dpvs_match6_cnt[cid];
-        list = dp_vs_match6_list[cid];
+        acl_param.max_rule_num = dpvs_match4_cnt[cid];
+        list = dp_vs_match4_list[cid];
     }
     if (!acl_param.max_rule_num) {
         goto end;
@@ -705,7 +707,12 @@ int dp_vs_svc_match_acl_del(struct dp_vs_service *svc, lcoreid_t cid)
         if (!memcmp(&l->match, svc->match, sizeof(l->match))
             && l->proto == svc->proto) {
             hlist_del_rcu(&l->node);
-            rcu_list_add(&l->rcu, &rcu_free_list);
+            if (dp_vs_match_acl_enable) {
+                rcu_list_add(&l->rcu, &rcu_free_list);
+            } else {
+                rte_free(l);
+            }
+            return 0;
         }
     }
     return 0;
@@ -814,7 +821,18 @@ static void dpvs_svc_match_rcu_free(void *data)
     }
 }
 
+static void dpvs_svc_match_init(void *data)
+{
+    dp_vs_match_acl_enable = 1;
+}
+
 static struct dpvs_lcore_job idle_job[] = {
+    {
+        .name = "match_acl",
+        .func = dpvs_svc_match_init,
+        .data = NULL,
+        .type = LCORE_JOB_INIT,
+    },
     {
         .name = "match_acl",
         .func = dpvs_svc_match_build_job,
@@ -862,7 +880,7 @@ int dp_vs_svc_match_init(void)
         for (i = 1; i < DPVS_SVC_MAX; i++) {
             rte_ring_enqueue(dpvs_svc_idxq[cid], (void*)i);
         }
-        size = sizeof(struct dp_vs_service*) * DPVS_SVC_MAX * DPVS_MAX_LCORE;
+        size = sizeof(struct dp_vs_service*) * DPVS_SVC_MAX;
         dpvs_svcs[cid] = rte_malloc(NULL, size, RTE_CACHE_LINE_SIZE);
         if (!dpvs_svcs[cid]) {
             RTE_LOG(ERR, IPVS, "fail to alloc dpvs_svcs\n");
