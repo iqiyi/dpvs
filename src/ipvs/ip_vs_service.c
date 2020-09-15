@@ -1049,6 +1049,8 @@ static int dp_vs_dests_copy_percore_stats(struct dp_vs_get_dests *master_dests,
     if (master_dests->num_dests != slave_dests->num_dests)
         return EDPVS_INVAL;
     for (i = 0; i < master_dests->num_dests; i++) {
+        master_dests->entrytable[i].max_conn += slave_dests->entrytable[i].max_conn;
+        master_dests->entrytable[i].min_conn += slave_dests->entrytable[i].min_conn;
         master_dests->entrytable[i].actconns += slave_dests->entrytable[i].actconns;
         master_dests->entrytable[i].inactconns += slave_dests->entrytable[i].inactconns;
         master_dests->entrytable[i].persistconns += slave_dests->entrytable[i].persistconns;

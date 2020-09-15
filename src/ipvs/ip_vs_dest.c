@@ -52,19 +52,28 @@ static void __dp_vs_dest_update(struct dp_vs_service *svc,
                                 struct dp_vs_dest_conf *udest)
 {
     int conn_flags;
+    uint8_t num_lcores;
 
+    netif_get_slave_lcores(&num_lcores, NULL);
     rte_atomic16_set(&dest->weight, udest->weight);
     conn_flags = udest->conn_flags | DPVS_CONN_F_INACTIVE;
-
     rte_atomic16_set(&dest->conn_flags, conn_flags);
-
 
     dp_vs_dest_set_avail(dest);
 
     if (udest->max_conn == 0 || udest->max_conn > dest->max_conn)
         dest->flags &= ~DPVS_DEST_F_OVERLOAD;
-    dest->max_conn = udest->max_conn;
-    dest->min_conn = udest->min_conn;
+    if (rte_lcore_id() != rte_get_master_lcore()) {
+        dest->max_conn = udest->max_conn / num_lcores;
+        dest->min_conn = udest->min_conn / num_lcores;
+    } else {
+        /*
+            Ensure that the sum of rs's max_conn in all lcores is equal to the configured max_conn,
+            to prevent the operation of modifying rs from keepalived when reloading.
+        */
+        dest->max_conn = udest->max_conn % num_lcores;
+        dest->min_conn = udest->min_conn % num_lcores;
+    }
 }
 
 
