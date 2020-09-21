@@ -33,11 +33,6 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
         ! promisc_mode
         ! kni_name                dpdk0.kni
     }
@@ -51,11 +46,6 @@ netif_defs {
         tx {
             queue_number        8
             descriptor_number   1024
-        }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
         }
         ! promisc_mode
         ! kni_name                dpdk1.kni
@@ -72,11 +62,6 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
         ! promisc_mode
         ! kni_name                dpdk2.kni
     }
@@ -90,11 +75,6 @@ netif_defs {
         tx {
             queue_number        8
             descriptor_number   1024
-        }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
         }
         ! promisc_mode
         ! kni_name                dpdk3.kni
@@ -370,5 +350,6 @@ ipvs_defs {
 
 ! sa_pool config
 sa_pool {
-    pool_hash_size   16
+    pool_hash_size  16
+    flow_enable     on
 }

@@ -78,7 +78,6 @@ struct dp_vs_conn_stats {
     rte_atomic64_t      outbytes;
 } __rte_cache_aligned;
 
-struct dp_vs_fdir_filt;
 struct dp_vs_proto;
 
 struct dp_vs_conn {
