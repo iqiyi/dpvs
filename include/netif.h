@@ -193,9 +193,6 @@ struct netif_ops {
     int (*op_stop)(struct netif_port *dev);
     int (*op_xmit)(struct rte_mbuf *m, struct netif_port *dev);
     int (*op_set_mc_list)(struct netif_port *dev);
-    int (*op_filter_supported)(struct netif_port *dev, enum rte_filter_type fltype);
-    int (*op_set_fdir_filt)(struct netif_port *dev, enum rte_filter_op op,
-                            const struct rte_eth_fdir_filter *filt);
     int (*op_get_queue)(struct netif_port *dev, lcoreid_t cid, queueid_t *qid);
     int (*op_get_link)(struct netif_port *dev, struct rte_eth_link *link);
     int (*op_get_promisc)(struct netif_port *dev, bool *promisc);
@@ -279,10 +276,6 @@ int netif_register_pkt(struct pkt_type *pt);
 int netif_unregister_pkt(struct pkt_type *pt);
 
 /**************************** port API ******************************/
-int netif_fdir_filter_set(struct netif_port *port, enum rte_filter_op opcode,
-                          const struct rte_eth_fdir_filter *fdir_flt);
-void netif_mask_fdir_filter(int af, const struct netif_port *port,
-                            struct rte_eth_fdir_filter *filt);
 struct netif_port* netif_port_get(portid_t id);
 /* port_conf can be NULL for default port configure */
 int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *len);
@@ -338,7 +331,5 @@ static inline uint16_t dpvs_rte_eth_dev_count(void)
     return rte_eth_dev_count_avail();
 #endif
 }
-
-extern bool dp_vs_fdir_filter_enable;
 
 #endif /* __DPVS_NETIF_H__ */

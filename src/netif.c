@@ -38,6 +38,7 @@
 #include "parser/parser.h"
 #include "neigh.h"
 #include "scheduler.h"
+#include "netif_flow.h"
 
 #include <rte_arp.h>
 #include <netinet/in.h>
@@ -99,10 +100,6 @@ struct port_conf_stream {
     int tx_queue_nb;
     int tx_desc_nb;
 
-    enum rte_fdir_mode fdir_mode;
-    enum rte_fdir_pballoc_type fdir_pballoc;
-    enum rte_fdir_status_mode fdir_status;
-
     bool promisc_mode;
 
     struct list_head port_list_node;
@@ -157,8 +154,6 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 
 /* function declarations */
 static void kni_lcore_loop(void *dummy);
-
-bool dp_vs_fdir_filter_enable = true;
 
 bool is_lcore_id_valid(lcoreid_t cid)
 {
@@ -274,9 +269,6 @@ static void device_handler(vector_t tokens)
 
     port_cfg->promisc_mode = false;
     strncpy(port_cfg->rss, "tcp", sizeof(port_cfg->rss));
-    port_cfg->fdir_mode = RTE_FDIR_MODE_PERFECT;
-    port_cfg->fdir_pballoc = RTE_FDIR_PBALLOC_64K;
-    port_cfg->fdir_status = RTE_FDIR_REPORT_STATUS;
 
     list_add(&port_cfg->port_list_node, &port_list);
 }
@@ -388,120 +380,6 @@ static void tx_desc_nb_handler(vector_t tokens)
                 current_device->name, desc_nb);
         current_device->tx_desc_nb = desc_nb;
     }
-
-    FREE_PTR(str);
-}
-
-static void fdir_mode_handler(vector_t tokens)
-{
-    char *mode, *str = set_value(tokens);
-    struct port_conf_stream *current_device = list_entry(port_list.next,
-            struct port_conf_stream, port_list_node);
-    bool use_default = false;
-    assert(str);
-
-    mode = strlwr(str);
-
-    if (!strncmp(mode, "none", sizeof("none")))
-        current_device->fdir_mode = RTE_FDIR_MODE_NONE;
-    else if (!strncmp(mode, "signature", sizeof("signature")))
-        current_device->fdir_mode = RTE_FDIR_MODE_SIGNATURE;
-    else if (!strncmp(mode, "perfect", sizeof("perfect")))
-        current_device->fdir_mode = RTE_FDIR_MODE_PERFECT;
-    else if (!strncmp(mode, "perfect_mac_vlan", sizeof("perfect_mac_vlan")))
-        current_device->fdir_mode = RTE_FDIR_MODE_PERFECT_MAC_VLAN;
-    else if (!strncmp(mode, "perfect_tunnel", sizeof("perfect_tunnel")))
-        current_device->fdir_mode = RTE_FDIR_MODE_PERFECT_TUNNEL;
-    else {
-        use_default = true;
-        current_device->fdir_mode = RTE_FDIR_MODE_PERFECT;
-    }
-
-    if (use_default)
-        RTE_LOG(WARNING, NETIF, "invalid %s:fdir_mode '%s', "
-                "use default 'perfect'\n", current_device->name, mode);
-    else
-        RTE_LOG(INFO, NETIF, "%s:fdir_mode = %s\n", current_device->name, mode);
-
-    FREE_PTR(str);
-}
-
-static void fdir_pballoc_handler(vector_t tokens)
-{
-    char *pballoc, *str = set_value(tokens);
-    struct port_conf_stream *current_device = list_entry(port_list.next,
-            struct port_conf_stream, port_list_node);
-    bool use_default = false;
-    assert(str);
-
-    pballoc = strlwr(str);
-
-    if (!strncmp(pballoc, "64k", sizeof("64k")))
-        current_device->fdir_pballoc = RTE_FDIR_PBALLOC_64K;
-    else if (!strncmp(pballoc, "128k", sizeof("128k")))
-        current_device->fdir_pballoc = RTE_FDIR_PBALLOC_128K;
-    else if (!strncmp(pballoc, "256k", sizeof("256k")))
-        current_device->fdir_pballoc = RTE_FDIR_PBALLOC_256K;
-    else {
-        use_default = true;
-        current_device->fdir_pballoc = RTE_FDIR_PBALLOC_64K;
-    }
-
-    if (use_default)
-        RTE_LOG(WARNING, NETIF, "invalid %s:fdir_pballoc '%s', "
-                "use default '64k'\n", current_device->name, pballoc);
-    else
-        RTE_LOG(INFO, NETIF, "%s:fdir_pballoc = %s\n",
-                current_device->name, pballoc);
-
-    FREE_PTR(str);
-}
-
-static void fdir_status_handler(vector_t tokens)
-{
-    char *status, *str = set_value(tokens);
-    struct port_conf_stream *current_device = list_entry(port_list.next,
-            struct port_conf_stream, port_list_node);
-    bool use_default = false;
-    assert(str);
-
-    status = strlwr(str);
-
-    if (!strncmp(status, "close", sizeof("close")))
-        current_device->fdir_status = RTE_FDIR_NO_REPORT_STATUS;
-    else if (!strncmp(status, "matched", sizeof("matched")))
-        current_device->fdir_status = RTE_FDIR_REPORT_STATUS;
-    else if (!strncmp(status, "always", sizeof("always")))
-        current_device->fdir_status = RTE_FDIR_REPORT_STATUS_ALWAYS;
-    else {
-        use_default = true;
-        current_device->fdir_status = RTE_FDIR_REPORT_STATUS;
-    }
-
-    if (use_default)
-        RTE_LOG(WARNING, NETIF, "invalid %s:fdir_status '%s', "
-                "use default 'matched'\n", current_device->name, status);
-    else
-        RTE_LOG(INFO, NETIF, "%s:fdir_status = %s\n",
-                current_device->name, status);
-
-    FREE_PTR(str);
-}
-
-static void fdir_filter_handler(vector_t tokens)
-{
-    char *str = set_value(tokens);
-
-    assert(str);
-
-    if (strcasecmp(str, "on") == 0)
-        dp_vs_fdir_filter_enable = true;
-    else if (strcasecmp(str, "off") == 0)
-        dp_vs_fdir_filter_enable = false;
-    else
-        RTE_LOG(WARNING, IPVS, "invalid fdir:filter %s\n", str);
-
-    RTE_LOG(INFO, IPVS, "fdir:filter = %s\n", dp_vs_fdir_filter_enable ? "on" : "off");
 
     FREE_PTR(str);
 }
@@ -960,13 +838,6 @@ void install_netif_keywords(void)
     install_sublevel();
     install_keyword("queue_number", tx_queue_number_handler, KW_TYPE_INIT);
     install_keyword("descriptor_number", tx_desc_nb_handler, KW_TYPE_INIT);
-    install_sublevel_end();
-    install_keyword("fdir", NULL, KW_TYPE_INIT);
-    install_sublevel();
-    install_keyword("mode", fdir_mode_handler, KW_TYPE_INIT);
-    install_keyword("pballoc", fdir_pballoc_handler, KW_TYPE_INIT);
-    install_keyword("status", fdir_status_handler, KW_TYPE_INIT);
-    install_keyword("filter", fdir_filter_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
     install_keyword("mtu", custom_mtu_handler,KW_TYPE_INIT);
@@ -3043,46 +2914,6 @@ static int bond_set_mc_list(struct netif_port *dev)
     return err;
 }
 
-static int bond_filter_supported(struct netif_port *dev, enum rte_filter_type fltype)
-{
-    int i, err = EDPVS_NOTSUPP;
-    struct netif_port *slave;
-
-    if (dev->type != PORT_TYPE_BOND_MASTER)
-        return EDPVS_INVAL;
-
-    for (i = 0; i < dev->bond->master.slave_nb; i++) {
-        slave = dev->bond->master.slaves[i];
-        err = rte_eth_dev_filter_supported(slave->id, fltype);
-        if (err < 0)
-            return err;
-    }
-
-    return err;
-}
-
-static int bond_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
-                              const struct rte_eth_fdir_filter *filt)
-{
-    int i, err;
-    struct netif_port *slave;
-
-    if (dev->type != PORT_TYPE_BOND_MASTER)
-        return EDPVS_INVAL;
-
-    for (i = 0; i < dev->bond->master.slave_nb; i++) {
-        slave = dev->bond->master.slaves[i];
-        err = netif_fdir_filter_set(slave, op, filt);
-        if (err != EDPVS_OK) {
-            RTE_LOG(WARNING, NETIF, "%s: fail to set %s's fdir filter - %d\n",
-                    __func__, slave->name, err);
-            return err;
-        }
-    }
-
-    return EDPVS_OK;
-}
-
 static int dpdk_set_mc_list(struct netif_port *dev)
 {
     struct ether_addr addrs[NETIF_MAX_HWADDR];
@@ -3111,92 +2942,12 @@ static int dpdk_set_mc_list(struct netif_port *dev)
     return EDPVS_OK;
 }
 
-static int dpdk_filter_supported(struct netif_port *dev, enum rte_filter_type fltype)
-{
-    return rte_eth_dev_filter_supported(dev->id, fltype);
-}
-
-void netif_mask_fdir_filter(int af, const struct netif_port *port,
-                            struct rte_eth_fdir_filter *filt)
-{
-    struct rte_eth_fdir_info fdir_info;
-    const struct rte_eth_fdir_masks *fmask;
-    union rte_eth_fdir_flow *flow = &filt->input.flow;
-
-    /* There exists a defect here. If the netif_port 'port' is not PORT_TYPE_GENERAL,
-       mask fdir_filter of the port would fail. The correct way to accomplish the
-       function is to register this method for all device types. Considering the flow
-       is not changed after masking, we just skip netif_ports other than physical ones. */
-    if (port->type != PORT_TYPE_GENERAL)
-        return;
-
-    if (rte_eth_dev_filter_ctrl(port->id, RTE_ETH_FILTER_FDIR,
-                RTE_ETH_FILTER_INFO, &fdir_info) < 0) {
-        RTE_LOG(DEBUG, NETIF, "%s: Fail to fetch fdir info of %s !\n",
-                __func__, port->name);
-        return;
-    }
-    fmask = &fdir_info.mask;
-
-    /* ipv4 flow */
-    if (af == AF_INET) {
-        flow->ip4_flow.src_ip &= fmask->ipv4_mask.src_ip;
-        flow->ip4_flow.dst_ip &= fmask->ipv4_mask.dst_ip;
-        flow->ip4_flow.tos &= fmask->ipv4_mask.tos;
-        flow->ip4_flow.ttl &= fmask->ipv4_mask.ttl;
-        flow->ip4_flow.proto &= fmask->ipv4_mask.proto;
-        flow->tcp4_flow.src_port &= fmask->src_port_mask;
-        flow->tcp4_flow.dst_port &= fmask->dst_port_mask;
-        return;
-    }
-
-    /* ipv6 flow */
-    if (af == AF_INET6) {
-        flow->ipv6_flow.src_ip[0] &= fmask->ipv6_mask.src_ip[0];
-        flow->ipv6_flow.src_ip[1] &= fmask->ipv6_mask.src_ip[1];
-        flow->ipv6_flow.src_ip[2] &= fmask->ipv6_mask.src_ip[2];
-        flow->ipv6_flow.src_ip[3] &= fmask->ipv6_mask.src_ip[3];
-        flow->ipv6_flow.dst_ip[0] &= fmask->ipv6_mask.dst_ip[0];
-        flow->ipv6_flow.dst_ip[1] &= fmask->ipv6_mask.dst_ip[1];
-        flow->ipv6_flow.dst_ip[2] &= fmask->ipv6_mask.dst_ip[2];
-        flow->ipv6_flow.dst_ip[3] &= fmask->ipv6_mask.dst_ip[3];
-        flow->ipv6_flow.tc &= fmask->ipv6_mask.tc;
-        flow->ipv6_flow.proto &= fmask->ipv6_mask.proto;
-        flow->ipv6_flow.hop_limits &= fmask->ipv6_mask.hop_limits;
-        flow->tcp6_flow.src_port &= fmask->src_port_mask;
-        flow->tcp6_flow.dst_port &= fmask->dst_port_mask;
-        return;
-    }
-}
-
-static int dpdk_set_fdir_filt(struct netif_port *dev, enum rte_filter_op op,
-                              const struct rte_eth_fdir_filter *filt)
-{
-    int ret;
-
-    rte_rwlock_write_lock(&dev->dev_lock);
-    ret = rte_eth_dev_filter_ctrl(dev->id,
-            RTE_ETH_FILTER_FDIR, op, (void *)filt);
-    rte_rwlock_write_unlock(&dev->dev_lock);
-    if (ret < 0) {
-        RTE_LOG(WARNING, NETIF, "%s: fdir filt set failed for %s -- %s(%d)\n!",
-                __func__, dev->name, rte_strerror(-ret), ret);
-        return EDPVS_DPDKAPIFAIL;
-    }
-
-    return EDPVS_OK;
-}
-
 static struct netif_ops dpdk_netif_ops = {
     .op_set_mc_list      = dpdk_set_mc_list,
-    .op_set_fdir_filt    = dpdk_set_fdir_filt,
-    .op_filter_supported = dpdk_filter_supported,
 };
 
 static struct netif_ops bond_netif_ops = {
     .op_set_mc_list      = bond_set_mc_list,
-    .op_set_fdir_filt    = bond_set_fdir_filt,
-    .op_filter_supported = bond_filter_supported,
 };
 
 static inline void setup_dev_of_flags(struct netif_port *port)
@@ -3414,17 +3165,6 @@ int netif_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
     return EDPVS_OK;
 }
 
-int netif_fdir_filter_set(struct netif_port *port, enum rte_filter_op opcode,
-                          const struct rte_eth_fdir_filter *fdir_flt)
-{
-    assert(port && port->netif_ops);
-
-    if (!port->netif_ops->op_set_fdir_filt)
-        return EDPVS_NOTSUPP;
-
-    return port->netif_ops->op_set_fdir_filt(port, opcode, fdir_flt);
-}
-
 int netif_port_conf_get(struct netif_port *port, struct rte_eth_conf *eth_conf)
 {
 
@@ -3472,33 +3212,6 @@ static inline void port_mtu_set(struct netif_port *port)
 
     rte_eth_dev_set_mtu((uint8_t)port->id,port->mtu);
 
-}
-
-/*
- * fdir mask must be set according to configured slave lcore number
- * */
-inline static int netif_port_fdir_dstport_mask_set(struct netif_port *port)
-{
-    uint8_t slave_nb;
-    int shift;
-
-    netif_get_slave_lcores(&slave_nb, NULL);
-    for (shift = 0; (0x1 << shift) < slave_nb; shift++)
-        ;
-    if (shift >= 16) {
-        RTE_LOG(ERR, NETIF, "%s: %s's fdir dst_port_mask init failed\n",
-                __func__, port->name);
-        return EDPVS_NOTSUPP;
-    }
-#if RTE_VERSION >= 0x10040010
-    port->dev_conf.fdir_conf.mask.dst_port_mask = htons(~((~0x0) << shift));
-#else
-    port->dev_conf.fdir_conf.mask.dst_port_mask = ~((~0x0) << shift);
-#endif
-
-    RTE_LOG(INFO, NETIF, "%s:dst_port_mask=%0x\n", port->name,
-            port->dev_conf.fdir_conf.mask.dst_port_mask);
-    return EDPVS_OK;
 }
 
 static int rss_resolve_proc(char *rss)
@@ -3600,11 +3313,7 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
             port->dev_conf.rx_adv_conf.rss_conf.rss_hf |= rss_resolve_proc(rss);
         }
 
-        port->dev_conf.fdir_conf.mode = cfg_stream->fdir_mode;
-        port->dev_conf.fdir_conf.pballoc = cfg_stream->fdir_pballoc;
-        port->dev_conf.fdir_conf.status = cfg_stream->fdir_status;
         port->mtu = cfg_stream->mtu;
-
         if (cfg_stream->rx_queue_nb > 0 && port->nrxq > cfg_stream->rx_queue_nb) {
             RTE_LOG(WARNING, NETIF, "%s: rx-queues(%d) configured in workers != "
                     "rx-queues(%d) configured in device, setup %d rx-queues for %s\n",
@@ -3708,17 +3417,6 @@ static int add_bond_slaves(struct netif_port *port)
     return EDPVS_OK;
 }
 
-/* flush FDIR filters for all physical dpdk ports */
-static int fdir_filter_flush(const struct netif_port *port)
-{
-    if (!port || port->type != PORT_TYPE_GENERAL)
-        return EDPVS_OK;
-    if (rte_eth_dev_filter_ctrl(port->id, RTE_ETH_FILTER_FDIR,
-                RTE_ETH_FILTER_FLUSH, NULL) < 0)
-        return EDPVS_DPDKAPIFAIL;
-    return EDPVS_OK;
-}
-
 /*
  * Note: Invoke the function after port is allocated and lcores are configured.
  */
@@ -3751,11 +3449,14 @@ int netif_port_start(struct netif_port *port)
     }
 
     // device configure
+<<<<<<< HEAD
     if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
     if ((ret = rte_eth_dev_set_mtu(port->id,port->mtu)) != EDPVS_OK)
         return ret;
 
+=======
+>>>>>>> sapool: replace flow director with rte_flow
     if (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
         port->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_IPV4_CKSUM;
     if (port->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD)
@@ -3869,10 +3570,10 @@ int netif_port_start(struct netif_port *port)
         }
     }
 
-    /* flush FDIR filters */
-    ret = fdir_filter_flush(port);
+    /* flush rte_flows */
+    ret = netif_flow_flush(port);
     if (ret != EDPVS_OK) {
-        RTE_LOG(WARNING, NETIF, "fail to flush FDIR filters for device %s\n", port->name);
+        RTE_LOG(WARNING, NETIF, "fail to flush rte_flows on device %s\n", port->name);
         return ret;
     }
 
@@ -4044,35 +3745,6 @@ static struct rte_eth_conf default_port_conf = {
     .txmode = {
         .mq_mode = ETH_MQ_TX_NONE,
     },
-    .fdir_conf = {
-        .mode    = RTE_FDIR_MODE_PERFECT,
-        .pballoc = RTE_FDIR_PBALLOC_64K,
-        .status  = RTE_FDIR_REPORT_STATUS/*_ALWAYS*/,
-        .mask    = {
-            .vlan_tci_mask      = 0x0,
-            .ipv4_mask          = {
-                .src_ip         = 0x00000000,
-                .dst_ip         = 0xFFFFFFFF,
-            },
-            .ipv6_mask          = {
-                .src_ip         = { 0, 0, 0, 0 },
-                .dst_ip         = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF },
-            },
-            .src_port_mask      = 0x0000,
-
-            /* to be changed according to slave lcore number in use */
-            .dst_port_mask      = 0x00F8,
-
-            .mac_addr_byte_mask = 0x00,
-            .tunnel_type_mask   = 0,
-            .tunnel_id_mask     = 0,
-        },
-        .drop_queue             = 127,
-        .flex_conf              = {
-            .nb_payloads        = 0,
-            .nb_flexmasks       = 0,
-        },
-    },
 };
 
 int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *len)
@@ -4113,30 +3785,6 @@ int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *
         }
         strncat(buf, tbuf1, *len - strlen(buf) - 1);
     }
-
-    memset(tbuf1, 0, sizeof(tbuf1));
-    snprintf(tbuf1, sizeof(tbuf1),
-            "fdir ipv4 mask: src 0x%08x dst 0x%08x\n"
-            "fdir ipv6 mask: src 0x%08x:%08x:%08x:%08x dst 0x%08x:%08x:%08x:%08x\n"
-            "fdir port mask: src 0x%04x dst 0x%04x\n",
-            port_conf->fdir_conf.mask.ipv4_mask.src_ip,
-            port_conf->fdir_conf.mask.ipv4_mask.dst_ip,
-            port_conf->fdir_conf.mask.ipv6_mask.src_ip[0],
-            port_conf->fdir_conf.mask.ipv6_mask.src_ip[1],
-            port_conf->fdir_conf.mask.ipv6_mask.src_ip[2],
-            port_conf->fdir_conf.mask.ipv6_mask.src_ip[3],
-            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[0],
-            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[1],
-            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[2],
-            port_conf->fdir_conf.mask.ipv6_mask.dst_ip[3],
-            port_conf->fdir_conf.mask.src_port_mask,
-            port_conf->fdir_conf.mask.dst_port_mask
-            );
-    if (*len - strlen(buf) - 1 < strlen(tbuf1)) {
-        RTE_LOG(WARNING, NETIF, "[%s] no enough buf\n", __func__);
-        return EDPVS_INVAL;
-    }
-    strncat(buf, tbuf1, *len - strlen(buf) - 1);
 
     *len = strlen(buf);
     return EDPVS_OK;
