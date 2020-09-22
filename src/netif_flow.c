@@ -132,7 +132,7 @@ static int netif_flow_create(struct netif_port *dev,
         if (unlikely(flows->size < slave_nb || !flows->handlers))
             return EDPVS_INVAL;
         for (i = 0; i < slave_nb; i++) {
-            err = __netif_flow_create(dev, attr, pattern, actions, &flows->handlers[i]);
+            err = __netif_flow_create(dev->bond->master.slaves[i], attr, pattern, actions, &flows->handlers[i]);
             if (err != EDPVS_OK) {
                 while (--i >= 0)
                     __netif_flow_destroy(&flows->handlers[i]);
@@ -153,7 +153,7 @@ static int netif_flow_destroy(netif_flow_handler_param_t *flows)
 {
     int i, err, ret = EDPVS_OK;
 
-    if (unlikely(!flows || flows->flow_num >= flows->size || !flows->handlers))
+    if (unlikely(!flows || flows->flow_num > flows->size || !flows->handlers))
         return EDPVS_INVAL;
 
     for (i = 0; i < flows->flow_num; i++) {
@@ -197,9 +197,17 @@ int netif_flow_flush(struct netif_port *dev)
     if (unlikely(!dev))
         return EDPVS_INVAL;
 
+    if (dev->type == PORT_TYPE_VLAN) {
+        struct vlan_dev_priv *vlan = netif_priv(dev);
+        if (unlikely(!vlan || !vlan->real_dev))
+            return EDPVS_INVAL;
+        dev = vlan->real_dev;
+    }
+
     if (dev->type == PORT_TYPE_GENERAL) {
         if (__netif_flow_flush(dev) != EDPVS_OK)
             return EDPVS_RESOURCE;
+        return EDPVS_OK;
     }
 
     if (dev->type == PORT_TYPE_BOND_MASTER) {
@@ -207,7 +215,7 @@ int netif_flow_flush(struct netif_port *dev)
         err = EDPVS_OK;
         slave_nb = dev->bond->master.slave_nb;
         for (i = 0; i < slave_nb; i++) {
-            if (__netif_flow_flush(dev) != EDPVS_OK)
+            if (__netif_flow_flush(dev->bond->master.slaves[i]) != EDPVS_OK)
                 err = EDPVS_RESOURCE;
         }
         return err;
@@ -233,7 +241,7 @@ int netif_sapool_flow_add(struct netif_port *dev, lcoreid_t cid,
         .priority = NETIF_FLOW_PRIO_SAPOOL,
         .ingress  = 1,
         .egress   = 0,
-        .transfer = 0,
+        //.transfer = 0,
     };
     struct rte_flow_item pattern[SAPOOL_PATTERN_NUM];
     struct rte_flow_action action[SAPOOL_ACTION_NUM];
@@ -255,9 +263,6 @@ int netif_sapool_flow_add(struct netif_port *dev, lcoreid_t cid,
     memset(pattern, 0, sizeof(pattern));
     memset(action, 0, sizeof(action));
 
-    /* create pattern stack */
-    pattern[0].type = RTE_FLOW_ITEM_TYPE_ETH;
-
     /* create action stack */
     err = netif_get_queue(dev, cid, &queue_id);
     if (unlikely(err != EDPVS_OK))
@@ -268,6 +273,8 @@ int netif_sapool_flow_add(struct netif_port *dev, lcoreid_t cid,
     action[1].type = RTE_FLOW_ACTION_TYPE_END;
 
     /* create pattern stack */
+    pattern[0].type = RTE_FLOW_ITEM_TYPE_ETH;
+
     if (af == AF_INET) {
         memset(&ip_spec, 0, sizeof(struct rte_flow_item_ipv4));
         memset(&ip_mask, 0, sizeof(struct rte_flow_item_ipv4));
@@ -288,6 +295,7 @@ int netif_sapool_flow_add(struct netif_port *dev, lcoreid_t cid,
         return EDPVS_INVAL;
     }
     memset(&tcp_spec, 0, sizeof(struct rte_flow_item_tcp));
+    memset(&tcp_mask, 0, sizeof(struct rte_flow_item_tcp));
     tcp_spec.hdr.dst_port = port_base;
     tcp_mask.hdr.dst_port = port_mask;
     pattern[2].type = RTE_FLOW_ITEM_TYPE_TCP;
@@ -315,6 +323,7 @@ int netif_sapool_flow_add(struct netif_port *dev, lcoreid_t cid,
     }
 
     memset(&udp_spec, 0, sizeof(struct rte_flow_item_udp));
+    memset(&udp_mask, 0, sizeof(struct rte_flow_item_udp));
     udp_spec.hdr.dst_port = port_base;
     udp_mask.hdr.dst_port = port_mask;
     pattern[2].type = RTE_FLOW_ITEM_TYPE_UDP;
@@ -365,7 +374,7 @@ int netif_sapool_flow_del(struct netif_port *dev, lcoreid_t cid,
                 ntohs(port_base), ntohs(port_base), ntohs(port_mask));
     } else {
         flows->flow_num = 0;
-        RTE_LOG(INFO, FLOW, "%s: deleting sapool flow failed: %s ip %s port %d(0x%04X) mask 0x%04X\n",
+        RTE_LOG(INFO, FLOW, "%s: deleting sapool flow succeed: %s ip %s port %d(0x%04X) mask 0x%04X\n",
                 __func__, dev->name, inet_ntop(af, addr, ipbuf, sizeof(ipbuf)) ? : "::",
                 ntohs(port_base), ntohs(port_base), ntohs(port_mask));
     }
