@@ -865,6 +865,111 @@ rs_virtualhost_handler(const vector_t *strvec)
 	rs->virtualhost = set_value(strvec);
 }
 static void
+rs_vxlan_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	real_server_t *rs = LIST_TAIL_DATA(vs->rs);
+	memset(&rs->vxlan, 0, sizeof(rs->vxlan));
+    rs->vxlan.rport = htons(VXLAN_DEFAULT_PORT);
+    vxlan_tunnel_set_auto_local(&rs->vxlan, 1);
+    vxlan_tunnel_set_arp_resolve(&rs->vxlan, 1);
+}
+
+static void
+rs_vxlan_end_handler(void)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	real_server_t *rs = LIST_TAIL_DATA(vs->rs);
+	if (!vxlan_tunnel_enabled(&rs->vxlan)) {
+		memset(&rs->vxlan, 0, sizeof(rs->vxlan));
+		return;
+	}
+}
+static void
+rs_vxlan_local_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	real_server_t *rs = LIST_TAIL_DATA(vs->rs);
+	uint32_t ip = 0;
+
+	if (inet_pton(AF_INET, strvec_slot(strvec, 1), &ip) <= 0) {
+		report_config_error(CONFIG_GENERAL_ERROR, "vxlan local ipv4 addr %s invalid", strvec_slot(strvec, 1));
+		return;
+	}
+	rs->vxlan.local = ip;
+    vxlan_tunnel_set_auto_local(&rs->vxlan, 0);
+}
+static void
+rs_vxlan_remote_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	real_server_t *rs = LIST_TAIL_DATA(vs->rs);
+	uint32_t ip = 0;
+
+	if (inet_pton(AF_INET, strvec_slot(strvec, 1), &ip) <= 0) {
+		report_config_error(CONFIG_GENERAL_ERROR, "vxlan remote ipv4 addr %s invalid", strvec_slot(strvec, 1));
+		return;
+	}
+	rs->vxlan.remote = ip;
+}
+static void
+rs_vxlan_rport_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	real_server_t *rs = LIST_TAIL_DATA(vs->rs);
+	uint32_t port = 0;
+
+	if (!read_unsigned_strvec(strvec, 1, &port, 0, 65535, true)) {
+		report_config_error(CONFIG_GENERAL_ERROR, "vxlan remote port %s is outside range 0-65535", strvec_slot(strvec, 1));
+		return;
+	}
+	rs->vxlan.rport = port;
+	rs->vxlan.rport = htons(rs->vxlan.rport);
+}
+static void
+rs_vxlan_vni_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	real_server_t *rs = LIST_TAIL_DATA(vs->rs);
+	uint32_t vni = 0;
+
+	if (!read_unsigned_strvec(strvec, 1, &vni, 0, 0xffffff, true)) {
+		report_config_error(CONFIG_GENERAL_ERROR, "vxlan vni %s is outside range 0-%d", strvec_slot(strvec, 1), 0xffffff);
+		return;
+	}
+	rs->vxlan.vni = htonl(vni);
+}
+static void
+rs_vxlan_mac_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	real_server_t *rs = LIST_TAIL_DATA(vs->rs);
+	uint32_t tmp[6];
+	const uint8_t* mac_str = strvec_slot(strvec, 1);
+	int i = 0;
+
+	if (sscanf(mac_str, "%x:%x:%x:%x:%x:%x",
+			   &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4], &tmp[5]) == 6) {
+		for (i = 0; i < 6; i++) {
+			rs->vxlan.dmac[i] = tmp[i];
+		}
+	} else if (sscanf(mac_str, "%x.%x.%x", &tmp[0], &tmp[1], &tmp[2]) == 3) {
+		for (i = 0; i < 6; i++) {
+			rs->vxlan.dmac[i] = tmp[i / 2] >> (8 * ((i + 1) % 2));
+		}
+	} else {
+		report_config_error(CONFIG_GENERAL_ERROR, "vxlan mac %s err", strvec_slot(strvec, 1));
+	}
+    vxlan_tunnel_set_arp_resolve(&rs->vxlan, 0);
+}
+static void
+rs_vxlan_bind_vni_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	real_server_t *rs = LIST_TAIL_DATA(vs->rs);
+	rs->vxlan.flags |= DPVS_VXLAN_BIND_VNI;
+}
+static void
 vs_alpha_handler(__attribute__((unused)) const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -1202,6 +1307,16 @@ init_check_keywords(bool active)
 	install_keyword("delay_loop", &rs_delay_handler);
 	install_keyword("smtp_alert", &rs_smtp_alert_handler);
 	install_keyword("virtualhost", &rs_virtualhost_handler);
+	install_keyword("vxlan", &rs_vxlan_handler);
+	install_sublevel();
+	install_sublevel_end_handler(&rs_vxlan_end_handler);
+	install_keyword("local", &rs_vxlan_local_handler);
+	install_keyword("remote", &rs_vxlan_remote_handler);
+	install_keyword("rport", &rs_vxlan_rport_handler);
+	install_keyword("vni", &rs_vxlan_vni_handler);
+	install_keyword("mac", &rs_vxlan_mac_handler);
+	install_keyword("bind_vni", &rs_vxlan_bind_vni_handler);
+	install_sublevel_end();
 
 	install_sublevel_end_handler(&rs_end_handler);
 

@@ -182,6 +182,7 @@ struct ip_vs_dest_user {
 	/* thresholds for active connections */
 	__u32		u_threshold;	/* upper threshold */
 	__u32		l_threshold;	/* lower threshold */
+    struct vxlan_tunnel vxlan;
 };
 
 struct ip_vs_laddr_user {
@@ -277,6 +278,7 @@ struct ip_vs_dest_entry {
 
 	/* statistics */
 	struct ip_vs_stats_user stats;
+    struct vxlan_tunnel vxlan;
 };
 
 struct ip_vs_laddr_entry {

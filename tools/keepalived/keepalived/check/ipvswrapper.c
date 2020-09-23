@@ -806,6 +806,7 @@ ipvs_set_drule(int cmd, ipvs_dest_t *drule, real_server_t * rs)
 	drule->tun_flags = rs->tun_flags;
 #endif
 #endif
+    drule->user.vxlan = rs->vxlan;
 }
 
 int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry)

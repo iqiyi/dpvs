@@ -24,6 +24,7 @@
 #include "conf/match.h"
 #include "conf/stats.h"
 #include "conf/dest.h"
+#include "conf/vxlan.h"
 #include "conf/sockopts.h"
 
 #define DP_VS_SCHEDNAME_MAXLEN      16

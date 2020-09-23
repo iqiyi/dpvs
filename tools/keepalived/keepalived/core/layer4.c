@@ -25,6 +25,7 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <netinet/in.h>
 
 #include "layer4.h"
 #include "logger.h"
@@ -44,6 +45,16 @@ socket_bind_connect(int fd, conn_opts_t *co)
 	struct sockaddr_storage *addr = &co->dst;
 	struct sockaddr_storage *bind_addr = &co->bindto;
 
+	if (co->free_bind) {
+		if (setsockopt(fd, SOL_IP, IP_TRANSPARENT, (void *)&co->free_bind, sizeof(int)) < 0) {
+			log_message(LOG_ERR, "Can't setsockopt transparent: %s", strerror(errno));
+			return connect_error;
+		}
+		if (setsockopt(fd, SOL_IP, IP_FREEBIND, (void *)&co->free_bind, sizeof(int)) < 0) {
+			log_message(LOG_ERR, "Can't setsockopt free_bind: %s", strerror(errno));
+			return connect_error;
+		}
+	}
 	optlen = sizeof(opt);
 	if (getsockopt(fd, SOL_SOCKET, SO_TYPE, (void *) &opt, &optlen) < 0) {
 		log_message(LOG_ERR, "Can't get socket type: %s", strerror(errno));

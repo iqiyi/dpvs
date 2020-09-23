@@ -327,6 +327,20 @@ co_fwmark_handler(const vector_t *strvec)
 }
 #endif
 
+/* "free_bind" keyword */
+static void
+co_free_bind_handler(const vector_t *strvec)
+{
+	conn_opts_t *co = CHECKER_GET_CO();
+	int free_bind;
+
+	if (!read_int_strvec(strvec, 1, &free_bind, INT_MIN, INT_MAX, true)) {
+		report_config_error(CONFIG_GENERAL_ERROR, "Invalid free_bind value '%s'", strvec_slot(strvec, 1));
+		return;
+	}
+	co->free_bind = free_bind;
+}
+
 static void
 retry_handler(const vector_t *strvec)
 {
@@ -427,6 +441,7 @@ install_checker_common_keywords(bool connection_keywords)
 #ifdef _WITH_SO_MARK_
 		install_keyword("fwmark", &co_fwmark_handler);
 #endif
+		install_keyword("free_bind", &co_free_bind_handler);
 	}
 	install_keyword("retry", &retry_handler);
 	install_keyword("delay_before_retry", &delay_before_retry_handler);

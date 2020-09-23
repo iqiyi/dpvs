@@ -19,6 +19,7 @@
 #define __DPVS_DEST_CONF_H__
 
 #include "conf/service.h"
+#include "conf/vxlan.h"
 
 /* must consistent with IP_VS_CONN_F_XXX (libipvs-2.6/ip_vs.h) */
 enum dpvs_fwd_mode {
@@ -51,6 +52,7 @@ struct dp_vs_dest_conf {
     /* thresholds for active connections */
     uint32_t           max_conn;    /* upper threshold */
     uint32_t           min_conn;    /* lower threshold */
+    struct vxlan_tunnel vxlan;
 };
 
 struct dp_vs_dest_entry {
@@ -69,6 +71,7 @@ struct dp_vs_dest_entry {
 
     /* statistics */
     struct dp_vs_stats stats;
+    struct vxlan_tunnel vxlan;
 };
 
 struct dp_vs_get_dests {
@@ -103,6 +106,7 @@ struct dp_vs_dest_user {
 
     uint32_t        max_conn;
     uint32_t        min_conn;
+    struct vxlan_tunnel vxlan;
 };
 
 #endif /* __DPVS_DEST_CONF_H__ */

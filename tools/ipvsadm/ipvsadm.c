@@ -202,6 +202,7 @@ static const char* optnames[] = {
 	"hash-target",
 	"cpu",
 	"expire-quiescent",
+	"vxlan",
 };
 
 /*
@@ -214,47 +215,47 @@ static const char* optnames[] = {
  */
 static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 {
-/*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe laddr blst syn ifname sockpair hashtag cpu expire-quiescent*/
+/*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe laddr blst syn ifname sockpair hashtag cpu expire-quiescent vxlan*/
 /*ADD*/
-    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' '},
+    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' ', 'x'},
 /*EDIT*/
-    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' '},
+    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' ', 'x'},
 /*DEL*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*FLUSH*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*LIST*/
-    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x' ,' ' ,'x', ' ', 'x'},
+    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x' ,' ' ,'x', ' ', 'x', 'x'},
 /*ADDSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', ' '},
 /*DELSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', ' '},
 /*EDITSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', ' '},
 /*TIMEOUT*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*STARTD*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*STOPD*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*RESTORE*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*SAVE*/
-    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*ZERO*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*ADDLADDR*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x', 'x'},
 /*DELLADDR*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x', 'x'},
 /*GETLADDR*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', ' ', 'x'},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', ' ', 'x', 'x'},
 /*ADDBLKLST*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*DELBLKLST*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*GETBLKLST*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 };
 
 /* printing format flags */
@@ -310,6 +311,7 @@ enum {
 	TAG_SOCKPAIR,
 	TAG_CPU,
 	TAG_CONN_EXPIRE_QUIESCENT,
+	TAG_VXLAN,
 };
 
 /* various parsing helpers & parsing functions */
@@ -331,9 +333,9 @@ static int parse_sockpair(char *buf, ipvs_sockpair_t *sockpair);
 static int parse_match_snat(const char *buf, ipvs_service_t *svc);
 
 /* check the options based on the commands_v_options table */
-static void generic_opt_check(int command, unsigned int options);
+static void generic_opt_check(int command, unsigned long options);
 static void set_command(int *cmd, const int newcmd);
-static void set_option(unsigned int *options, unsigned int option);
+static void set_option(unsigned long *options, unsigned long option);
 
 static void tryhelp_exit(const char *program, const int exit_status);
 static void usage_exit(const char *program, const int exit_status);
@@ -357,6 +359,7 @@ static int list_all_blklsts(void);
 
 static int process_options(int argc, char **argv, int reading_stdin);
 
+static int parse_vxlan(const char *args, struct vxlan_tunnel *vxlan);
 
 int main(int argc, char **argv)
 {
@@ -388,7 +391,7 @@ int main(int argc, char **argv)
 
 static int
 parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
-	      unsigned int *options, unsigned int *format)
+	      unsigned long *options, unsigned int *format)
 {
 	int c, parse;
 	poptContext context;
@@ -477,6 +480,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
 		{ "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
 		{ "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
+		{ "vxlan", '\0', POPT_ARG_STRING, &optarg, TAG_VXLAN, NULL, NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
 
@@ -831,6 +835,15 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			ce->svc.user.flags = ce->svc.user.flags | IP_VS_CONN_F_EXPIRE_QUIESCENT;
 			break;
 			}
+		case TAG_VXLAN:
+			{
+			set_option(options, OPT_VXLAN);
+			if (parse_vxlan(optarg, &ce->dest.user.vxlan)) {
+				fail(2, "invalid vxlan option `%s'",
+						poptBadOption(context, POPT_BADOPTION_NOALIAS));
+			}
+			}
+			break;
 		default:
 			fail(2, "invalid option `%s'",
 			     poptBadOption(context, POPT_BADOPTION_NOALIAS));
@@ -895,7 +908,7 @@ static int restore_table(int argc, char **argv, int reading_stdin)
 static int process_options(int argc, char **argv, int reading_stdin)
 {
 	struct ipvs_command_entry ce;
-	unsigned int options = OPT_NONE;
+	unsigned long options = OPT_NONE;
 	unsigned int format = FMT_NONE;
 	int result = 0;
 
@@ -959,10 +972,10 @@ static int process_options(int argc, char **argv, int reading_stdin)
 
 		if (options & OPT_CONNECTION)
             if (options & OPT_SOCKPAIR)
-                list_conn_sockpair(options & OPT_PERSISTENTCONN,
+                list_conn_sockpair(!!(options & OPT_PERSISTENTCONN),
 						&ce.sockpair, format);
             else
-                list_conn(options & OPT_PERSISTENTCONN, format);
+                list_conn(!!(options & OPT_PERSISTENTCONN), format);
 		else if (options & OPT_SERVICE)
 			list_service(&ce.svc, format, ce.cid);
 		else if (options & OPT_TIMEOUT)
@@ -1371,8 +1384,82 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
     return 0;
 }
 
+/*
+ * Get vxlan from the argument.
+ * comma separated parameters list.
+ * example:
+ *      local=1.1.1.1,remote=1.1.1.2,rport=4789,vni=1234,mac=00:11:22:33:44:55
+ */
+static int
+parse_vxlan(const char *args, struct vxlan_tunnel *vxlan)
+{
+    char *key = NULL;
+    char *val = NULL;
+    char *sp = NULL;
+    char buf[256];
+    memset(vxlan, 0, sizeof(*vxlan));
+    strncpy(buf, args, 255);
+    vxlan->rport = htons(VXLAN_DEFAULT_PORT);
+    vxlan_tunnel_set_auto_local(vxlan, 1);
+    vxlan_tunnel_set_arp_resolve(vxlan, 1);
+
+    key = strtok_r(buf, ",", &sp);
+    do {
+        val = strchr(key, '=');
+        if (!val) {
+            return -1;
+        }
+        *val = '\0';
+        val++;
+
+        if (!strcmp(key, "local")) {
+            vxlan_tunnel_set_auto_local(vxlan, 0);
+            inet_pton(AF_INET, val, &vxlan->local);
+        } else if (!strcmp(key, "remote")) {
+            inet_pton(AF_INET, val, &vxlan->remote);
+        } else if (!strcmp(key, "rport")) {
+            int64_t port = strtoul(val, NULL, 10);
+            if (port < 0 || port > 65535) {
+                return -1;
+            }
+            vxlan->rport = (uint16_t)port;
+            vxlan->rport = htons(vxlan->rport);
+        } else if (!strcmp(key, "vni")) {
+            int64_t vni = strtoul(val, NULL, 10);
+            if (vni < 0 || vni >= (1 << 24)) {
+                return -1;
+            }
+            vxlan->vni = (uint32_t)vni;
+            vxlan->vni = htonl(vxlan->vni);
+        } else if (!strcmp(key, "mac")) {
+            uint32_t tmp[6];
+            int i = 0;
+            vxlan_tunnel_set_arp_resolve(vxlan, 0);
+            if (sscanf(val, "%x:%x:%x:%x:%x:%x",
+                        &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4], &tmp[5]) == 6) {
+                for (i = 0; i < 6; i++) {
+                    vxlan->dmac[i] = tmp[i];
+                }
+            } else if (sscanf(val, "%x.%x.%x", &tmp[0], &tmp[1], &tmp[2]) == 3) {
+                for (i = 0; i < 6; i++) {
+                    vxlan->dmac[i] = tmp[i / 2] >> (8 * ((i + 1) % 2));
+                }
+            } else {
+                return -1;
+            }
+        } else {
+            return -1;
+        }
+    } while ((key = strtok_r(NULL, ",", &sp)));
+    if (!vxlan->remote || !vxlan->vni ||
+        !memcmp(vxlan->dmac, "\0\0\0\0\0\0", ETHER_ADDR_LEN)) {
+        return -1;
+    }
+    return 0;
+}
+
 static void
-generic_opt_check(int command, unsigned int options)
+generic_opt_check(int command, unsigned long options)
 {
 	int i, j;
 	int last = 0, count = 0;
@@ -1423,7 +1510,7 @@ set_command(int *cmd, const int newcmd)
 }
 
 static void
-set_option(unsigned int *options, unsigned int option)
+set_option(unsigned long *options, unsigned long option)
 {
 	if (*options & option)
 		fail(2, "multiple '%s' options specified", opt2name(option));
@@ -1541,7 +1628,8 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --match        -H MATCH             select service by MATCH 'af,proto,srange,drange,iif,oif', af should be defined if no range defined\n"
 		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
 		"  --cpu            cid                choose cid to show\n"
-		"  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n",
+		"  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
+		"  --vxlan           VXLAN             vxlan tunnel local=1.1.1.1,remote=1.1.1.2,rport=4789,vni=1234,mac=00:11:22:33:44:55, remote vni mac MUST be set\n",
 		DEF_SCHED);
 
 	exit(exit_status);
@@ -1786,6 +1874,36 @@ static void print_title(unsigned int format)
 		       "  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn\n");
 }
 
+static void print_vxlan(char *buf, int len, struct vxlan_tunnel *vxlan, uint32_t format)
+{
+    int n = 0;
+    buf[0] = '\0';
+    if (!vxlan_tunnel_enabled(vxlan)) {
+        return;
+    }
+    char local_str[32] = "";
+    char remote_str[32] = "";
+    inet_ntop(AF_INET, &vxlan->local, local_str, 31);
+    inet_ntop(AF_INET, &vxlan->remote, remote_str, 31);
+    if (format & FMT_RULE) {
+        n += snprintf(buf + n, len - n, "--vxlan ");
+        if (!vxlan_tunnel_auto_local(vxlan)) {
+            n += snprintf(buf + n, len - n, "local=%s,", local_str);
+        }
+        n += snprintf(buf + n, len - n, "remote=%s,rport=%u,vni=%u",
+                remote_str, ntohs(vxlan->rport), ntohl(vxlan->vni));
+        if (!vxlan_tunnel_arp_resolve(vxlan)) {
+            n += snprintf(buf + n, len - n, ",mac=%02x:%02x:%02x:%02x:%02x:%02x",
+                    vxlan->dmac[0], vxlan->dmac[1], vxlan->dmac[2],
+                    vxlan->dmac[3], vxlan->dmac[4], vxlan->dmac[5]);
+        }
+    } else {
+        snprintf(buf, len, "%s-%s:%u-%u-%02x:%02x:%02x:%02x:%02x:%02x",
+                local_str, remote_str, ntohs(vxlan->rport), ntohl(vxlan->vni),
+                vxlan->dmac[0], vxlan->dmac[1], vxlan->dmac[2],
+                vxlan->dmac[3], vxlan->dmac[4], vxlan->dmac[5]);
+    }
+}
 
 static void
 print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid)
@@ -1963,6 +2081,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 
 	for (i = 0; i < d->user.num_dests; i++) {
 		char *dname;
+        char vxlan_str[256];
 		ipvs_dest_entry_t *e = &d->user.entrytable[i];
 
 		if (!(dname = addrport_to_anyname(e->af, &(e->nf_addr), ntohs(e->user.port),
@@ -1970,12 +2089,13 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 			fprintf(stderr, "addrport_to_anyname fails\n");
 			exit(1);
 		}
+        print_vxlan(vxlan_str, 255, &e->user.vxlan, format);
 		if (!(format & FMT_RULE) && (se->af != AF_INET6))
 			dname[28] = '\0';
 
 		if (format & FMT_RULE) {
-			printf("-a %s -r %s %s -w %d\n", svc_name, dname,
-			       fwd_switch(e->user.conn_flags), e->user.weight);
+			printf("-a %s -r %s %s -w %d %s\n", svc_name, dname,
+			       fwd_switch(e->user.conn_flags), e->user.weight, vxlan_str);
 		} else if (format & FMT_STATS) {
 			printf("  -> %-28s", dname);
 			print_largenum(e->stats.conns, format);
@@ -1983,7 +2103,7 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 			print_largenum(e->stats.outpkts, format);
 			print_largenum(e->stats.inbytes, format);
 			print_largenum(e->stats.outbytes, format);
-			printf("\n");
+			printf(" %s\n", vxlan_str);
 		} else if (format & FMT_RATE) {
 			printf("  -> %-28s %8u %8u %8u", dname,
 			       e->stats.cps,
@@ -1991,19 +2111,22 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format, lcoreid_t cid
 			       e->stats.outpps);
 			print_largenum(e->stats.inbps, format);
 			print_largenum(e->stats.outbps, format);
-			printf("\n");
+			printf(" %s\n", vxlan_str);
 		} else if (format & FMT_THRESHOLDS) {
-			printf("  -> %-28s %-10u %-10u %-10u %-10u\n", dname,
+			printf("  -> %-28s %-10u %-10u %-10u %-10u %s\n", dname,
 			       e->user.u_threshold, e->user.l_threshold,
-			       e->user.activeconns, e->user.inactconns);
+			       e->user.activeconns, e->user.inactconns,
+                   vxlan_str);
 		} else if (format & FMT_PERSISTENTCONN) {
-			printf("  -> %-28s %-9u %-11u %-10u %-10u\n", dname,
+			printf("  -> %-28s %-9u %-11u %-10u %-10u %s\n", dname,
 			       e->user.weight, e->user.persistconns,
-			       e->user.activeconns, e->user.inactconns);
+			       e->user.activeconns, e->user.inactconns,
+                   vxlan_str);
 		} else
-			printf("  -> %-28s %-7s %-6d %-10u %-10u\n",
+			printf("  -> %-28s %-7s %-6d %-10u %-10u %s\n",
 			       dname, fwd_name(e->user.conn_flags),
-			       e->user.weight, e->user.activeconns, e->user.inactconns);
+			       e->user.weight, e->user.activeconns, e->user.inactconns,
+                   vxlan_str);
 		free(dname);
 	}
 	free(d);

@@ -24,6 +24,7 @@
 #include "ipvs/sched.h"
 #include "ipvs/laddr.h"
 #include "ipvs/conn.h"
+#include "vxlan.h"
 
 /*
  * Trash for destinations
@@ -31,17 +32,16 @@
 
 struct list_head dp_vs_dest_trash = LIST_HEAD_INIT(dp_vs_dest_trash);
 
-struct dp_vs_dest *dp_vs_dest_lookup(int af,
-                                     struct dp_vs_service *svc,
-                                     const union inet_addr *daddr,
-                                     uint16_t dport)
+static struct dp_vs_dest *dp_vs_dest_lookup(struct dp_vs_service *svc,
+                            const struct dp_vs_dest_conf *udest)
 {
     struct dp_vs_dest *dest;
 
     list_for_each_entry(dest, &svc->dests, n_list){
-        if ((dest->af == af)
-            && inet_addr_equal(af, &dest->addr, daddr)
-            && (dest->port == dport))
+        if ((dest->af == udest->af)
+            && inet_addr_equal(udest->af, &dest->addr, &udest->addr)
+            && (dest->port == udest->port)
+            && dest->vxlan.vni == udest->vxlan.vni)
             return dest;
     }
     return NULL;
@@ -108,6 +108,7 @@ int dp_vs_dest_new(struct dp_vs_service *svc,
     dp_vs_service_bind(dest, svc);
 
     __dp_vs_dest_update(svc, dest, udest);
+    dest->vxlan = udest->vxlan;
 
     *dest_p = dest;
     return EDPVS_OK;
@@ -117,8 +118,6 @@ int
 dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 {
     struct dp_vs_dest *dest;
-    union inet_addr daddr;
-    uint16_t dport = udest->port;
     int ret;
 
     if (udest->weight < 0) {
@@ -132,12 +131,10 @@ dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
         return EDPVS_NOTSUPP;
     }
 
-    daddr = udest->addr;
-
     /*
      * Check if the dest already exists in the list
      */
-    dest = dp_vs_dest_lookup(udest->af, svc, &daddr, dport);
+    dest = dp_vs_dest_lookup(svc, udest);
 
     if (dest != NULL) {
         RTE_LOG(DEBUG, SERVICE, "%s: dest already exists.\n", __func__);
@@ -152,6 +149,11 @@ dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
         return ret;
     }
 
+    if (vxlan_add_dest(svc, dest) != EDPVS_OK) {
+        dp_vs_dest_put(dest);
+        RTE_LOG(DEBUG, SERVICE, "%s: dest vxlan cfg err.\n", __func__);
+        return EDPVS_INVAL;
+    }
     list_add(&dest->n_list, &svc->dests);
     svc->weight += udest->weight;
     svc->num_dests++;
@@ -167,8 +169,6 @@ int
 dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 {
     struct dp_vs_dest *dest;
-    union inet_addr daddr;
-    uint16_t dport = udest->port;
     uint32_t old_weight;
 
     if (udest->weight < 0) {
@@ -182,12 +182,10 @@ dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
         return EDPVS_INVAL;
     }
 
-    daddr = udest->addr;
-
     /*
      *  Lookup the destination list
      */
-    dest = dp_vs_dest_lookup(udest->af, svc, &daddr, dport);
+    dest = dp_vs_dest_lookup(svc, udest);
 
     if (dest == NULL) {
         RTE_LOG(DEBUG, SERVICE,"%s(): dest doesn't exist\n", __func__);
@@ -197,6 +195,10 @@ dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /* Save old weight */
     old_weight = rte_atomic16_read(&dest->weight);
 
+    if (vxlan_update_dest(svc, dest, udest) != EDPVS_OK) {
+        RTE_LOG(DEBUG, SERVICE, "%s: dest vxlan cfg err.\n", __func__);
+        return EDPVS_INVAL;
+    }
     __dp_vs_dest_update(svc, dest, udest);
 
     /* Update service weight */
@@ -263,14 +265,14 @@ int
 dp_vs_dest_del(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 {
     struct dp_vs_dest *dest;
-    uint16_t dport = udest->port;
 
-    dest = dp_vs_dest_lookup(udest->af, svc, &udest->addr, dport);
+    dest = dp_vs_dest_lookup(svc, udest);
 
     if (dest == NULL) {
         RTE_LOG(DEBUG, SERVICE,"%s(): destination not found!\n", __func__);
         return EDPVS_NOTEXIST;
     }
+    vxlan_del_dest(svc, dest);
 
     /*
      *      Unlink dest from the service
@@ -309,6 +311,7 @@ int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
         entry.actconns = rte_atomic32_read(&dest->actconns);
         entry.inactconns = rte_atomic32_read(&dest->inactconns);
         entry.persistconns = rte_atomic32_read(&dest->persistconns);
+        entry.vxlan = dest->vxlan;
         ret = dp_vs_stats_add(&(entry.stats), &dest->stats);
         if (ret != EDPVS_OK)
             break;

@@ -40,6 +40,8 @@
 #include "neigh.h"
 #include "scheduler.h"
 #include "srss.h"
+#include "ipvs/conn.h"
+#include "vxlan.h"
 
 #include <rte_arp.h>
 #include <netinet/in.h>
@@ -2790,6 +2792,7 @@ static void kni_egress(struct netif_port *port)
             txflags = NETIF_TX_FLAG_PUSH;
         else
             txflags = 0;
+        dpvs_health_check_vxlan_encap(kni_pkts_burst[i], port);
         if (unlikely(netif_xmit(kni_pkts_burst[i], port, txflags) != EDPVS_OK)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
             RTE_LOG(INFO, NETIF, "%s: fail to transmit kni packet", __func__);
@@ -2834,8 +2837,10 @@ static void kni_ingress_process(void)
         if (nb_rb == 0)
             continue;
         lcore_stats[cid].ipackets += nb_rb;
-        for (i = 0; i < nb_rb; i++)
+        for (i = 0; i < nb_rb; i++) {
+            dpvs_health_check_vni_bind(mbufs[i]);
             lcore_stats[cid].ibytes += mbufs[i]->pkt_len;
+        }
         pkt_num = rte_kni_tx_burst(dev->kni.kni, mbufs, nb_rb);
 
         if (unlikely(pkt_num < nb_rb)) {

@@ -872,6 +872,7 @@ static void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
     udest->weight     = udest_compat->weight;
     udest->max_conn   = udest_compat->max_conn;
     udest->min_conn   = udest_compat->min_conn;
+    udest->vxlan      = udest_compat->vxlan;
 }
 
 static int gratuitous_arp_send_vip(struct in_addr *vip)

@@ -29,5 +29,6 @@
 #include "conf/ip_tunnel.h"
 #include "conf/service.h"
 #include "conf/dest.h"
+#include "conf/vxlan.h"
 
 #endif

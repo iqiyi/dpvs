@@ -49,6 +49,7 @@ typedef struct _conn_opts {
 #ifdef _WITH_SO_MARK_
 	unsigned int			fwmark; /* to mark packets going out of the socket using SO_MARK */
 #endif
+	int free_bind;
 } conn_opts_t;
 
 /* Prototypes defs */

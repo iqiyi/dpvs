@@ -149,7 +149,7 @@ static int tunnel_bind_dev(struct netif_port *dev)
     return mtu;
 }
 
-static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
+struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
                                         const struct ip_tunnel_ops *ops,
                                         const struct ip_tunnel_param *par)
 {
@@ -252,7 +252,7 @@ static int tunnel_change(struct netif_port *dev,
     return EDPVS_OK;
 }
 
-static int tunnel_destroy(struct ip_tunnel_tab *tab, struct netif_port *dev)
+int tunnel_destroy(struct ip_tunnel_tab *tab, struct netif_port *dev)
 {
     struct ip_tunnel *tnl = netif_priv(dev);
     assert(dev && dev->type == PORT_TYPE_TUNNEL);
@@ -644,8 +644,13 @@ int ip_tunnel_init(void)
     if ((err = gre_init()) != EDPVS_OK)
         goto gre_fail;
 
+    if ((err = vxlan_init()) != EDPVS_OK)
+        goto vxlan_fail;
+
     return EDPVS_OK;
 
+vxlan_fail:
+    gre_term();
 gre_fail:
     ipip_term();
 ipip_fail:
@@ -663,6 +668,10 @@ int ip_tunnel_term(void)
         return err;
 
     err = gre_term();
+    if (err != EDPVS_OK)
+        return err;
+
+    err = vxlan_term();
     if (err != EDPVS_OK)
         return err;
 

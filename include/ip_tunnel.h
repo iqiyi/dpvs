@@ -101,11 +101,18 @@ int ip_tunnel_pull_header(struct rte_mbuf *mbuf, int hlen, __be16 in_proto);
 int ip_tunnel_get_link(struct netif_port *dev, struct rte_eth_link *link);
 int ip_tunnel_get_stats(struct netif_port *dev, struct rte_eth_stats *stats);
 int ip_tunnel_get_promisc(struct netif_port *dev, bool *promisc);
+struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
+                                        const struct ip_tunnel_ops *ops,
+                                        const struct ip_tunnel_param *par);
+int tunnel_destroy(struct ip_tunnel_tab *tab, struct netif_port *dev);
 
 int ipip_init(void);
 int ipip_term(void);
 
 int gre_init(void);
 int gre_term(void);
+
+int vxlan_init(void);
+int vxlan_term(void);
 
 #endif /* __DPVS_TUNNEL_H__ */

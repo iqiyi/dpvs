@@ -35,6 +35,7 @@
 #include "ctrl.h"
 #include "conf/conn.h"
 #include "sys_time.h"
+#include "vxlan.h"
 
 #define DPVS_CONN_TBL_BITS          20
 #define DPVS_CONN_TBL_SIZE          (1 << DPVS_CONN_TBL_BITS)
@@ -382,6 +383,9 @@ static int dp_vs_conn_bind_dest(struct dp_vs_conn *conn,
         break;
     default:
         return EDPVS_NOTSUPP;
+    }
+    if (vxlan_tunnel_enabled(&dest->vxlan)) {
+        conn->packet_xmit = dp_vs_xmit_vxlan;
     }
 
     conn->dest = dest;

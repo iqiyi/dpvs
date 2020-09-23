@@ -103,6 +103,7 @@ typedef struct _real_server {
 #ifdef _WITH_BFD_
 	list				tracked_bfds;	/* list of bfd_checker_t */
 #endif
+    struct vxlan_tunnel vxlan;
 } real_server_t;
 
 /* local ip address group definition */

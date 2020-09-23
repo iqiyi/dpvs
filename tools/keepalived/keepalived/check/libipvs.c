@@ -99,7 +99,9 @@ typedef struct dp_vs_service_entry_app {
 	X->conn_flags       = Y->user.conn_flags; 		\
 	X->weight           = Y->user.weight; 			\
 	X->max_conn         = Y->user.u_threshold; 		\
-	X->min_conn         = Y->user.l_threshold;}
+	X->min_conn         = Y->user.l_threshold;\
+	X->vxlan            = Y->user.vxlan;\
+}
 
 // DPRS_2_IPRS(ip_vs_dest_entry_app, dp_vs_dest_entry)
 #define DPRS_2_IPRS(X, Y) {					\
@@ -113,6 +115,7 @@ typedef struct dp_vs_service_entry_app {
 	X->user.activeconns      = Y->actconns;			\
 	X->user.inactconns       = Y->inactconns;			\
 	X->user.persistconns     = Y->persistconns;			\
+	X->user.vxlan            = Y->vxlan;			\
 	memcpy(&X->stats, &Y->stats, sizeof(X->stats));}
 
 static void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_service_t *rule)
@@ -192,7 +195,7 @@ int ipvs_update_service(ipvs_service_t *svc)
 	return dpvs_setsockopt(DPVS_SO_SET_EDIT, &dpvs_svc, sizeof(dpvs_svc));
 }
 
-int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
+int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned long options)
 {
 	ipvs_service_entry_t *entry;
 	ipvs_service_t app;
@@ -259,7 +262,7 @@ int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options)
 
 int ipvs_update_service_synproxy(ipvs_service_t *svc , int enable)
 {
-	unsigned int options = OPT_NONE;
+	unsigned long options = OPT_NONE;
 
 	options |= OPT_SYNPROXY;
 

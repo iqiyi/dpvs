@@ -23,6 +23,7 @@
 
 #include "conf/common.h"
 #include "list.h"
+#include "conf/vxlan.h"
 #include "dpdk.h"
 
 struct dp_vs_dest {
@@ -61,6 +62,7 @@ struct dp_vs_dest {
     union inet_addr     vaddr;      /* virtual IP address */
     unsigned            conn_timeout; /* conn timeout copied from svc*/
     unsigned            limit_proportion; /* limit copied from svc*/
+    struct vxlan_tunnel vxlan;
 } __rte_cache_aligned;
 
 static inline bool
@@ -104,9 +106,6 @@ dp_vs_dest_is_valid(struct dp_vs_dest *dest)
 
 int dp_vs_dest_new(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
                                               struct dp_vs_dest **dest_p);
-
-struct dp_vs_dest *dp_vs_dest_lookup(int af, struct dp_vs_service *svc,
-                                     const union inet_addr *daddr, uint16_t dport);
 
 int dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 

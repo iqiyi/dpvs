@@ -57,7 +57,8 @@ vsge_iseq(const virtual_server_group_entry_t *vsge_a, const virtual_server_group
 static bool __attribute((pure))
 rs_iseq(const real_server_t *rs_a, const real_server_t *rs_b)
 {
-	return sockstorage_equal(&rs_a->addr, &rs_b->addr);
+	return sockstorage_equal(&rs_a->addr, &rs_b->addr) &&
+            rs_a->vxlan.vni == rs_b->vxlan.vni;
 }
 #endif
 
@@ -965,7 +966,8 @@ clear_diff_rs(virtual_server_t *old_vs, virtual_server_t *new_vs, list old_check
 			    rs->tun_flags != new_rs->tun_flags ||
 #endif
 #endif
-			    rs->forwarding_method != new_rs->forwarding_method)
+			    rs->forwarding_method != new_rs->forwarding_method ||
+                memcmp(&rs->vxlan, &new_rs->vxlan, sizeof(rs->vxlan)))
 				ipvs_cmd(LVS_CMD_EDIT_DEST, new_vs, new_rs);
 		}
 	}

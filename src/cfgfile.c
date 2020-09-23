@@ -35,6 +35,7 @@
 #include "ipvs/proto_icmp.h"
 #include "ipvs/synproxy.h"
 #include "scheduler.h"
+#include "vxlan.h"
 
 typedef void (*sighandler_t)(int);
 
@@ -64,6 +65,7 @@ static vector_t install_keywords(void)
 
     install_global_keywords();
 
+    install_vxlan_keywords();
     install_netif_keywords();
     install_timer_keywords();
     install_neighbor_keywords();
