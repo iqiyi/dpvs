@@ -22,6 +22,9 @@
 
 #define RTE_LOGTYPE_FLOW RTE_LOGTYPE_USER1
 
+/* uncomment the macro if rte_flow pmd driver is not thread-safe. */
+// #define CONFIG_DEV_FLOW_LOCK
+
 /* sapool pattern stack: ETH | IP | TCP/UDP | END */
 #define SAPOOL_PATTERN_NUM  4
 /* sapool action stack: QUEUE | END */
@@ -38,6 +41,20 @@ typedef enum {
     // more ...
 } netif_flow_type_prio_t;
 
+static inline void netif_flow_lock(struct netif_port *dev)
+{
+#ifdef CONFIG_DEV_FLOW_LOCK
+    rte_rwlock_write_lock(&dev->dev_lock);
+#endif
+}
+
+static inline void netif_flow_unlock(struct netif_port *dev)
+{
+#ifdef CONFIG_DEV_FLOW_LOCK
+    rte_rwlock_write_unlock(&dev->dev_lock);
+#endif
+}
+
 /*
  * Create a rte_flow on a physical port.
  */
@@ -53,13 +70,16 @@ static inline int __netif_flow_create(struct netif_port *dev,
                 dev->type != PORT_TYPE_BOND_SLAVE)))
         return EDPVS_INVAL;
 
+    netif_flow_lock(dev);
     if (rte_flow_validate(dev->id, attr, pattern, actions, &flow_error)) {
+        netif_flow_unlock(dev);
         RTE_LOG(WARNING, FLOW, "rte_flow_validate on %s failed -- %d, %s\n",
                 dev->name, flow_error.type, flow_error.message);
         return EDPVS_DPDKAPIFAIL;
     }
 
     flow->handler = rte_flow_create(dev->id, attr, pattern, actions, &flow_error);
+    netif_flow_unlock(dev);
     if (!flow->handler) {
         flow->pid = 0;
         RTE_LOG(WARNING, FLOW, "rte_flow_create on %s failed -- %d, %s\n",
@@ -87,11 +107,14 @@ static int __netif_flow_destroy(struct netif_flow_handler *flow)
                     dev->type != PORT_TYPE_BOND_SLAVE)))
         return EDPVS_INVAL;
 
+    netif_flow_lock(dev);
     if (rte_flow_destroy(flow->pid, (struct rte_flow *)flow->handler, &flow_error)) {
         RTE_LOG(WARNING, FLOW, "rte_flow_destroy on %s failed -- %d, %s\n",
                 dev->name, flow_error.type, flow_error.message);
+        netif_flow_unlock(dev);
         return EDPVS_DPDKAPIFAIL;
     }
+    netif_flow_unlock(dev);
 
     return EDPVS_OK;
 }
