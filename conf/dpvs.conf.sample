@@ -22,6 +22,7 @@ global_defs {
 netif_defs {
     <init> pktpool_size     1048575
     <init> pktpool_cache    256
+    <init> fdir_mode        perfect
 
     <init> device dpdk0 {
         rx {
