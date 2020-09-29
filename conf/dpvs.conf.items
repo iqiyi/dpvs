@@ -22,6 +22,7 @@ global_defs {
 netif_defs {
     <init> pktpool_size     2097151 <65535, 1023-134217728>
     <init> pktpool_cache    256     <256, 32-8192>
+    <init> fdir_mode        perfect <perfect, perfect|signature> # only for ixgbe
 
     <init> device dpdk0 {
         rx {
