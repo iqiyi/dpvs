@@ -170,7 +170,7 @@ static int sa_pool_add_filter(struct inet_ifaddr *ifa, struct sa_pool *ap,
         return EDPVS_OK;
 
     err = netif_sapool_flow_add(ifa->idev->dev, cid, ifa->af, &ifa->addr,
-            flow->port_base, flow->mask, &flow_handlers);
+            flow->port_base, htons(flow->mask), &flow_handlers);
     ap->flow_num = flow_handlers.flow_num;
 
     return err;
@@ -191,7 +191,7 @@ static int sa_pool_del_filter(struct inet_ifaddr *ifa, struct sa_pool *ap,
         return EDPVS_OK;
 
     return netif_sapool_flow_del(ifa->idev->dev, cid, ifa->af, &ifa->addr,
-            flow->port_base, flow->mask, &flow_handlers);
+            flow->port_base, htons(flow->mask), &flow_handlers);
 }
 
 int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
