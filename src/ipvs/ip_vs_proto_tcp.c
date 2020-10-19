@@ -713,7 +713,7 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
 
     /* add toa to first data packet */
     if (ntohl(th->ack_seq) == conn->fnat_seq.fdata_seq
-            && !th->syn && !th->rst && !th->fin)
+            && !th->syn && !th->rst /*&& !th->fin*/)
         tcp_in_add_toa(conn, mbuf, th);
 
     tcp_in_adjust_seq(conn, th);
