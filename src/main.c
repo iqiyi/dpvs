@@ -15,7 +15,15 @@
  * GNU General Public License for more details.
  *
  */
+
+/*
+ * '_GNU_SOURCE' has been defined in newer DPDK's makefile
+ * (e.g., 18.11) but not in order DPDK (e.g., 17.11).
+ */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
+
 #include <pthread.h>
 #include <assert.h>
 #include <getopt.h>

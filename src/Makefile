@@ -34,8 +34,8 @@ DATE_STRING := $(shell date +%Y.%m.%d.%H:%M:%S)
 # same path of THIS Makefile
 SRCDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-include $(SRCDIR)/config.mk
 include $(SRCDIR)/dpdk.mk
+include $(SRCDIR)/config.mk
 
 INCDIRS += -I $(SRCDIR)/../include
 
@@ -67,12 +67,12 @@ OBJS := $(patsubst %.c,%.o,$(OBJS))
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	@$(CC) $(CFLAGS) $^ -o $@
 	@echo "  $(notdir $@)"
+	$(Q)$(CC) $(CFLAGS) $^ -o $@
 
 %.o: %.c
-	@$(CC) -c $(CFLAGS) $< -o $@
 	@echo "  $(notdir $@)"
+	$(Q)$(CC) -c $(CFLAGS) $< -o $@
 
 clean:
 	find $(SRCDIR) -name '*.o' | xargs rm -f
