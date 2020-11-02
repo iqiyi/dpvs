@@ -96,11 +96,11 @@ struct toa_stats_entry toa_stats[] = {
 unsigned int is_ro_addr(unsigned long addr)
 {
     unsigned int level;
-    unsigned int ro_enable = 0;
+    unsigned int ro_enable = 1;
     pte_t *pte = lookup_address(addr, &level);
-    if (pte->pte &~ _PAGE_RW)
+    if (pte->pte & _PAGE_RW)
     {
-            ro_enable = 1;
+            ro_enable = 0;
     }
     
     return ro_enable;
@@ -111,7 +111,8 @@ void set_addr_rw(unsigned long addr)
     unsigned int level;
     pte_t *pte = lookup_address(addr, &level);
 
-    if (pte->pte &~ _PAGE_RW) pte->pte |= _PAGE_RW;
+    pte->pte |= _PAGE_RW;
+    smp_wmb();
 }
 
 void set_addr_ro(unsigned long addr)
@@ -119,7 +120,7 @@ void set_addr_ro(unsigned long addr)
     unsigned int level;
     pte_t *pte = lookup_address(addr, &level);
 
-    pte->pte = pte->pte &~_PAGE_RW;
+    pte->pte &= ~_PAGE_RW;
 }
 
 DEFINE_TOA_STAT(struct toa_stat_mib, ext_stats);
