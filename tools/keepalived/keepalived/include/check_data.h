@@ -309,6 +309,11 @@ static inline bool quorum_equal(const notify_script_t *quorum1,
                          !strcmp((X)->iifname, (Y)->iifname)                            &&\
                          !strcmp((X)->oifname, (Y)->oifname))
 
+#define RS_ISEQ(X,Y)	(sockstorage_equal(&(X)->addr,&(Y)->addr) &&	\
+                            (X)->iweight   == (Y)->iweight) &&    \
+                            (X)->l_threshold == (Y)->l_threshold &&   \
+                            (X)->u_threshold == (Y)->u_threshold
+
 #ifndef IP_VS_SVC_F_SCHED_MH_PORT
 #define IP_VS_SVC_F_SCHED_MH_PORT IP_VS_SVC_F_SCHED_SH_PORT
 #endif
