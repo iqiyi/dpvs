@@ -35,6 +35,7 @@
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
 #include "ipvs/redirect.h"
+#include "parser/parser.h"
 
 /*
  * o ICMP tuple
@@ -278,6 +279,21 @@ static int icmp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
     conn->state = DPVS_ICMP_S_NORMAL;
     conn->timeout.tv_sec = icmp_timeouts[conn->state];
     return EDPVS_OK;
+}
+
+int dp_vs_icmp_srss_fdir = 0;
+
+static void icmp_srss_fdir_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    assert(str);
+    dp_vs_icmp_srss_fdir = atoi(str);
+    FREE_PTR(str);
+}
+
+void install_proto_icmp_keywords(void)
+{
+    install_keyword("icmp_srss_fdir", icmp_srss_fdir_handler, KW_TYPE_NORMAL);
 }
 
 struct dp_vs_proto dp_vs_proto_icmp = {

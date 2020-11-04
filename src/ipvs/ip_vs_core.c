@@ -35,8 +35,10 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/blklst.h"
 #include "ipvs/proto_udp.h"
+#include "ipvs/proto_icmp.h"
 #include "route6.h"
 #include "ipvs/redirect.h"
+#include "srss.h"
 
 static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
                                    struct dp_vs_iphdr *iph)
@@ -645,6 +647,39 @@ static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
         return __xmit_inbound_icmp6(mbuf, prot, conn);
 }
 
+static int dp_vs_icmp_inner_fdir(struct rte_mbuf *mbuf, const struct dp_vs_iphdr *iph, lcoreid_t *peer_cid)
+{
+    struct udp_hdr *uh = NULL;
+    struct udp_hdr _udph;
+    /* for now, only tcp/udp fdir rule is added */
+    if (iph->proto == IPPROTO_TCP || iph->proto == IPPROTO_UDP) {
+        /* only src_port & dst_port are needed, and they are at same position */
+        uh = mbuf_header_pointer(mbuf, iph->len, sizeof(_udph), &_udph);
+        if (unlikely(!uh))
+            return EDPVS_NOTEXIST;
+
+        struct netif_port* port = netif_port_get(mbuf->port);
+        if (unlikely(!port))
+            return EDPVS_NOTEXIST;
+         /* should swap src & dst */
+        struct srss_flow flow = {
+            .af = AF_INET,
+            .proto = iph->proto,
+            .saddr = iph->daddr,
+            .daddr = iph->saddr,
+            .sport = uh->dst_port,
+            .dport = uh->src_port,
+        };
+        uint32_t qid = 0;
+        if (dpvs_srss_fdir_get(port, &flow, &qid) == EDPVS_OK) {
+            if (netif_get_lcore(port, qid, peer_cid) == EDPVS_OK) {
+                return EDPVS_OK;
+            }
+        }
+    }
+    return EDPVS_NOTEXIST;
+}
+
 /* return verdict INET_XXX */
 static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
 {
@@ -710,13 +745,33 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
         return INET_DROP;
     dp_vs_fill_iphdr(AF_INET, mbuf, &dciph);
 
-    conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true, &drop, &peer_cid);
+    /* rfc792 stipulates that an ICMP Error should embed 64bits of the IP payload
+     * tcp packet may be truncated to 8 bytes
+     */
+    if (ciph->next_proto_id == IPPROTO_TCP) {
+        struct {
+            uint16_t source;
+            uint16_t dest;
+            uint32_t pad;
+        } _th, *th;
+        th = mbuf_header_pointer(mbuf, dciph.len, sizeof(_th), &_th);
+        if (!th) {
+            conn = NULL;
+        } else {
+            conn = dp_vs_conn_get(dciph.af, dciph.proto,
+                    &dciph.saddr, &dciph.daddr, th->source, th->dest, &dir, true);
+        }
+    } else {
+        conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true, &drop, &peer_cid);
+    }
 
     /*
      * The connection is not locally found, however the redirect is found so
      * forward the packet to the remote redirect owner core.
      */
-    if (cid != peer_cid) {
+    if (cid != peer_cid ||
+        (!conn && dp_vs_icmp_srss_fdir &&
+        dp_vs_icmp_inner_fdir(mbuf, &dciph, &peer_cid) == EDPVS_OK && peer_cid != cid)) {
         /* recover mbuf.data_off to outer Ether header */
         rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr) + off);
 
