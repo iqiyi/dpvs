@@ -38,6 +38,7 @@
 #include "parser/parser.h"
 #include "neigh.h"
 #include "scheduler.h"
+#include "srss.h"
 
 #include <rte_arp.h>
 #include <netinet/in.h>
@@ -77,6 +78,8 @@ static portid_t bond_pid_end = -1; // not inclusive
 static portid_t port_id_end = 0;
 
 static uint16_t g_nports;
+
+static int netif_sfilter_enable = 0;
 
 #define NETIF_BOND_MODE_DEF     BONDING_MODE_ROUND_ROBIN
 
@@ -245,6 +248,14 @@ static void pktpool_cache_handler(vector_t tokens)
         netif_pktpool_mbuf_cache = cache_size;
     }
 
+    FREE_PTR(str);
+}
+
+static void sfilter_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    assert(str);
+    netif_sfilter_enable = atoi(str);
     FREE_PTR(str);
 }
 
@@ -856,6 +867,7 @@ void install_netif_keywords(void)
     install_keyword_root("netif_defs", netif_defs_handler);
     install_keyword("pktpool_size", pktpool_size_handler, KW_TYPE_INIT);
     install_keyword("pktpool_cache", pktpool_cache_handler, KW_TYPE_INIT);
+    install_keyword("sfilter", sfilter_handler, KW_TYPE_INIT);
     install_keyword("device", device_handler, KW_TYPE_INIT);
     install_sublevel();
     install_keyword("rx", NULL, KW_TYPE_INIT);
@@ -3340,6 +3352,7 @@ int netif_fdir_filter_set(struct netif_port *port, enum rte_filter_op opcode,
     if (!port->netif_ops->op_set_fdir_filt)
         return EDPVS_NOTSUPP;
 
+    dpvs_dev_sfilter_ctrl(port, RTE_ETH_FILTER_FDIR, opcode, (void*)fdir_flt);
     return port->netif_ops->op_set_fdir_filt(port, opcode, fdir_flt);
 }
 
@@ -3624,6 +3637,8 @@ static int fdir_filter_flush(const struct netif_port *port)
 {
     if (!port || port->type != PORT_TYPE_GENERAL)
         return EDPVS_OK;
+    dpvs_dev_sfilter_ctrl((void*)port, RTE_ETH_FILTER_FDIR,
+                           RTE_ETH_FILTER_FLUSH, NULL);
     if (rte_eth_dev_filter_ctrl(port->id, RTE_ETH_FILTER_FDIR,
                 RTE_ETH_FILTER_FLUSH, NULL) < 0)
         return EDPVS_DPDKAPIFAIL;
@@ -3783,6 +3798,14 @@ int netif_port_start(struct netif_port *port)
     if (ret != EDPVS_OK) {
         RTE_LOG(WARNING, NETIF, "fail to flush FDIR filters for device %s\n", port->name);
         return ret;
+    }
+
+    if (netif_sfilter_enable) {
+        ret = dpvs_dev_srss_init(port);
+        if (ret != EDPVS_OK) {
+            RTE_LOG(WARNING, NETIF, "fail to init software rss for device %s\n", port->name);
+            return ret;
+        }
     }
 
     return EDPVS_OK;
