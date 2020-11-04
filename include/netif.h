@@ -47,6 +47,10 @@ enum {
     NETIF_PORT_FLAG_NO_ARP                  = (0x1<<12),
 };
 
+enum {
+    NETIF_TX_FLAG_PUSH                      = (0x1<<0),
+};
+
 /* max tx/rx queue number for each nic */
 #define NETIF_MAX_QUEUES            16
 /* max nic number used in the program */
@@ -80,7 +84,6 @@ struct netif_queue_conf
     uint16_t kni_len;
     struct rx_partner *isol_rxq;
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
-    struct rte_mbuf *kni_mbufs[NETIF_MAX_PKT_BURST];
 } __rte_cache_aligned;
 
 /*
@@ -255,8 +258,8 @@ struct netif_port {
 } __rte_cache_aligned;
 
 /**************************** lcore API *******************************/
-int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
-int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
+int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags);
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags);
 int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf);
 int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);

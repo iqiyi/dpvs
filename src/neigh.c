@@ -444,7 +444,7 @@ void neigh_send_mbuf_cach(struct neighbour_entry *neighbour)
         list_del(&mbuf->neigh_mbuf_list);
         m = mbuf->m;
         neigh_fill_mac(neighbour, m, NULL, neighbour->port);
-        netif_xmit(m, neighbour->port);
+        netif_xmit(m, neighbour->port, 0);
         neighbour->que_num--;
         dpvs_mempool_put(neigh_mempool, mbuf);
     }
@@ -523,7 +523,7 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
         m->l2_len = sizeof(struct ether_hdr);
         m->l3_len = sizeof(struct arp_hdr);
 
-        netif_xmit(m, port);
+        netif_xmit(m, port, 0);
         return EDPVS_OK;
 
     } else if (arp->arp_op == htons(ARP_OP_REPLY)) {
@@ -597,7 +597,7 @@ static int neigh_send_arp(struct netif_port *port, uint32_t src_ip, uint32_t dst
     dump_arp_hdr("send", arp, port->id);
 #endif
 
-    netif_xmit(m, port);
+    netif_xmit(m, port, 0);
     return EDPVS_OK;
 }
 
@@ -639,11 +639,11 @@ int neigh_output(int af, union inet_addr *nexhop,
     unsigned int hashkey;
 
     if (port->flag & NETIF_PORT_FLAG_NO_ARP)
-        return netif_xmit(m, port);
+        return netif_xmit(m, port, 0);
 
     if (af == AF_INET6 && ipv6_addr_is_multicast((struct in6_addr *)nexhop)) {
         neigh_fill_mac(NULL, m, (struct in6_addr *)nexhop, port);
-        return netif_xmit(m, port);
+        return netif_xmit(m, port, 0);
     }
 
 #ifdef CONFIG_DPVS_NEIGH_DEBUG
@@ -689,7 +689,7 @@ int neigh_output(int af, union inet_addr *nexhop,
         case DPVS_NUD_S_PROBE:
         case DPVS_NUD_S_DELAY:
             neigh_fill_mac(neighbour, m, NULL, port);
-            netif_xmit(m, neighbour->port);
+            netif_xmit(m, neighbour->port, 0);
 
             if (neighbour->state == DPVS_NUD_S_PROBE) {
                 neigh_state_confirm(neighbour);

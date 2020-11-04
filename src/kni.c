@@ -381,6 +381,7 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
                          rte_socket_id(), RING_F_SC_DEQ);
     if (unlikely(!rb)) {
         RTE_LOG(ERR, KNI, "[%s] Failed to create kni rx ring.\n", __func__);
+        rte_kni_release(kni);
         return EDPVS_DPDKAPIFAIL;
     }
 

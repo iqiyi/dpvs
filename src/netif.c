@@ -143,6 +143,11 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 
 #define NETIF_CTRL_BUFFER_LEN     4096
 
+/* function declarations */
+static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev);
+static void kni_lcore_loop(void *dummy);
+
+
 lcoreid_t g_master_lcore_id;
 /* By default g_kni_lcore_id is 0 and it indicates KNI core is not configured. */
 lcoreid_t g_kni_lcore_id = 0;
@@ -997,7 +1002,7 @@ __rte_unused static void pkt_send_back(struct rte_mbuf *mbuf, struct netif_port 
     ether_addr_copy(&ehdr->s_addr, &eaddr);
     ether_addr_copy(&ehdr->d_addr, &ehdr->s_addr);
     ether_addr_copy(&eaddr, &ehdr->d_addr);
-    netif_xmit(mbuf, port);
+    netif_xmit(mbuf, port, 0);
 }
 #endif
 
@@ -1085,12 +1090,6 @@ static struct pkt_type *pkt_type_get(uint16_t type, struct netif_port *port)
     }
     return NULL;
 }
-
-/*************************** function declared for kni ********************************************/
-static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev,
-                        struct netif_queue_conf *qconf);
-static void kni_send2kern_loop(uint8_t port_id, struct netif_queue_conf *qconf);
-
 
 /****************************************** lcore  conf ********************************************/
 /* per-lcore statistics */
@@ -1998,14 +1997,13 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
 
     dev = netif_port_get(pid);
     if (dev && (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI)) {
-        for (; i<txq->len; i++) {
+        for (; i < txq->len; i++) {
             if (NULL == (mbuf_copied = mbuf_copy(txq->mbufs[i],
                 pktmbuf_pool[dev->socket])))
                 RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n", __func__);
             else
-                kni_ingress(mbuf_copied, dev, txq);
+                kni_ingress(mbuf_copied, dev);
         }
-        kni_send2kern_loop(pid, txq);
     }
 
     ntx = rte_eth_tx_burst(pid, txq->id, txq->mbufs, txq->len);
@@ -2052,7 +2050,7 @@ static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
         //RTE_LOG(DEBUG, NETIF, "Xmit master packet on Slave lcore%u %s\n",
         //        rte_lcore_id(), data->dev->name);
         //fflush(stdout);
-        return netif_xmit(data->mbuf, data->dev);
+        return netif_xmit(data->mbuf, data->dev, 0);
     }
 
     return EDPVS_INVAL;
@@ -2108,7 +2106,7 @@ static inline int validate_xmit_mbuf(struct rte_mbuf *mbuf,
     return err;
 }
 
-int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
 {
     lcoreid_t cid;
     int pid, qindex;
@@ -2183,8 +2181,8 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     txq->mbufs[txq->len] = mbuf;
     txq->len++;
 
-    /* kni lcore needs to send packets ASAP, otherwise packets will be buffered for a while. */
-    if (unlikely(is_kni_lcore(cid))) {
+    /* Push the buffered packets to network immediately if tx flag `NETIF_TX_FLAG_PUSH` set. */
+    if (unlikely(flags & NETIF_TX_FLAG_PUSH)) {
         netif_tx_burst(cid, pid, qindex);
         txq->len = 0;
     }
@@ -2192,7 +2190,7 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     return EDPVS_OK;
 }
 
-int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
+int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
 {
     int ret = EDPVS_OK;
     uint16_t mbuf_refcnt;
@@ -2216,7 +2214,7 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
             return ret;
     }
 
-    return netif_hard_xmit(mbuf, dev);
+    return netif_hard_xmit(mbuf, dev, flags);
 }
 
 static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
@@ -2271,7 +2269,7 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
 
     if (NULL == pt) {
         if (!forward2kni)
-            kni_ingress(mbuf, dev, qconf);
+            kni_ingress(mbuf, dev);
         else
             rte_pktmbuf_free(mbuf);
         return EDPVS_OK;
@@ -2332,7 +2330,7 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
 
         if (likely(NULL != rte_pktmbuf_prepend(mbuf,
             (mbuf->data_off - data_off)))) {
-                kni_ingress(mbuf, dev, qconf);
+                kni_ingress(mbuf, dev);
         } else {
             rte_pktmbuf_free(mbuf);
         }
@@ -2404,7 +2402,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
         if (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) {
             if (likely(NULL != (mbuf_copied = mbuf_copy(mbuf,
                                 pktmbuf_pool[dev->socket]))))
-                kni_ingress(mbuf_copied, dev, qconf);
+                kni_ingress(mbuf_copied, dev);
             else
                 RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n",
                         __func__);
@@ -2491,7 +2489,6 @@ static void lcore_job_recv_fwd(void *arg)
             lcore_stats_burst(&lcore_stats[cid], qconf->len);
 
             lcore_process_packets(qconf, qconf->mbufs, cid, qconf->len, 0);
-            kni_send2kern_loop(pid, qconf);
         }
     }
 }
@@ -2535,9 +2532,6 @@ static void lcore_job_timer_manage(void *args)
         tm_manager_time[cid] = now;
     }
 }
-
-static void kni_process_on_master(void *dummy);
-static void kni_lcore_loop(void *dummy);
 
 #define NETIF_JOB_MAX   6
 struct dpvs_lcore_job_array {
@@ -2611,16 +2605,13 @@ static void netif_lcore_init(void)
     if (g_kni_lcore_id == 0) {
         netif_jobs[5].role = LCORE_ROLE_MASTER;
         snprintf(netif_jobs[5].job.name, sizeof(netif_jobs[5].job.name) - 1, "%s", "kni_master_proc");
-        netif_jobs[5].job.func = kni_process_on_master;
-        netif_jobs[5].job.data = NULL;
-        netif_jobs[5].job.type = LCORE_JOB_LOOP;
     } else {
         netif_jobs[5].role = LCORE_ROLE_KNI_WORKER;
         snprintf(netif_jobs[5].job.name, sizeof(netif_jobs[5].job.name) - 1, "%s", "kni_loop");
-        netif_jobs[5].job.func = kni_lcore_loop;
-        netif_jobs[5].job.data = NULL;
-        netif_jobs[5].job.type = LCORE_JOB_LOOP;
     }
+    netif_jobs[5].job.func = kni_lcore_loop;
+    netif_jobs[5].job.data = NULL;
+    netif_jobs[5].job.type = LCORE_JOB_LOOP;
 
     for (ii = 0; ii < NETIF_JOB_MAX; ii++) {
         res = dpvs_lcore_job_register(&netif_jobs[ii].job, netif_jobs[ii].role);
@@ -2644,7 +2635,6 @@ static inline void netif_lcore_cleanup(void)
 }
 
 /********************************************** kni *************************************************/
-static rte_spinlock_t kni_lock;
 
 /* always update bond port macaddr and its KNI macaddr together */
 static int update_bond_macaddr(struct netif_port *port)
@@ -2675,69 +2665,27 @@ static inline void free_mbufs(struct rte_mbuf **pkts, unsigned num)
     }
 }
 
-static inline void kni_ingress_pkts_redirect(struct netif_port *dev,
-                                             struct netif_queue_conf *qconf)
+static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
-    unsigned pkt_num;
+    if (!kni_dev_exist(dev))
+        goto freepkt;
 
-    if (g_kni_lcore_id) {
-        pkt_num = rte_ring_enqueue_burst(dev->kni.rx_ring, (void *)qconf->kni_mbufs,
-                                         qconf->kni_len, NULL);
-    } else {
-        rte_spinlock_lock(&kni_lock);
-        pkt_num = rte_kni_tx_burst(dev->kni.kni, qconf->kni_mbufs, qconf->kni_len);
-        rte_spinlock_unlock(&kni_lock);
-    }
+    // TODO: Use `rte_ring_enqueue_bulk` for better performance.
+    if (unlikely(rte_ring_enqueue(dev->kni.rx_ring, (void *)mbuf) != 0))
+        goto freepkt;
+    return;
 
-    if (unlikely(pkt_num < qconf->kni_len)) {
-        RTE_LOG(WARNING, NETIF, "%s: fail to send pkts to kni\n", __func__);
-        free_mbufs(&(qconf->kni_mbufs[pkt_num]), qconf->kni_len - pkt_num);
-    }
-    qconf->kni_len = 0;
+freepkt:
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+    RTE_LOG(INFO, NETIF, "%s: fail to enqueue packet to kni rx_ring\n", __func__);
+#endif
+    rte_pktmbuf_free(mbuf);
 }
 
-static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev,
-                        struct netif_queue_conf *qconf)
-{
-    if (!kni_dev_exist(dev)) {
-        rte_pktmbuf_free(mbuf);
-        return;
-    }
-
-    if (likely(qconf->kni_len < NETIF_MAX_PKT_BURST)) {
-        qconf->kni_mbufs[qconf->kni_len] = mbuf;
-        qconf->kni_len++;
-    } else {
-        rte_pktmbuf_free(mbuf);
-    }
-
-    /* VLAN device cannot be scheduled by kni_send2kern_loop */
-    if ((dev->type == PORT_TYPE_VLAN && qconf->kni_len > 0) ||
-        unlikely(qconf->kni_len == NETIF_MAX_PKT_BURST)) {
-            kni_ingress_pkts_redirect(dev, qconf);
-    }
-}
-
-static void kni_send2kern_loop(uint8_t port_id, struct netif_queue_conf *qconf)
-{
-    struct netif_port *dev;
-
-    dev = netif_port_get(port_id);
-
-    if (qconf->kni_len > 0) {
-        if (kni_dev_exist(dev)) {
-            kni_ingress_pkts_redirect(dev, qconf);
-        } else {
-            RTE_LOG(WARNING, NETIF, "kni of dev: %s does not exist.\n", dev->name);
-            free_mbufs(qconf->kni_mbufs, qconf->kni_len);
-            qconf->kni_len = 0;
-        }
-    }
-}
-
-static void kni_send2port_loop(struct netif_port *port)
+static void kni_egress(struct netif_port *port)
 {
     unsigned i, npkts;
+    int txflags;
     struct rte_mbuf *kni_pkts_burst[NETIF_MAX_PKT_BURST];
 
     if (!kni_dev_exist(port))
@@ -2749,8 +2697,17 @@ static void kni_send2port_loop(struct netif_port *port)
         return;
     }
 
-    for (i = 0; i < npkts; i++)
-        netif_xmit(kni_pkts_burst[i], port);
+    for (i = 0; i < npkts; i++) {
+        if (unlikely(i == npkts - 1))
+            txflags = NETIF_TX_FLAG_PUSH;
+        else
+            txflags = 0;
+        if (unlikely(netif_xmit(kni_pkts_burst[i], port, txflags) != EDPVS_OK)) {
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+            RTE_LOG(INFO, NETIF, "%s: fail to transmit kni packet", __func__);
+#endif
+        }
+    }
 }
 
 static void kni_egress_process(void)
@@ -2764,15 +2721,8 @@ static void kni_egress_process(void)
             continue;
 
         kni_handle_request(dev);
-        kni_send2port_loop(dev);
+        kni_egress(dev);
     }
-}
-
-void kni_process_on_master(void *dummy)
-{
-    /* Skip master core process for KNI if KNI lcore is configured. */
-    if (g_kni_lcore_id == 0)
-        kni_egress_process();
 }
 
 /*
@@ -2782,9 +2732,9 @@ static void kni_ingress_process(void)
 {
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     struct netif_port *dev;
-    uint16_t nb_rb;
-    uint16_t pkt_num;
+    uint16_t i, nb_rb, pkt_num;
     portid_t id;
+    lcoreid_t cid = rte_lcore_id();
 
     for (id = 0; id < g_nports; id++) {
         dev = netif_port_get(id);
@@ -2795,14 +2745,19 @@ static void kni_ingress_process(void)
                                        NETIF_MAX_PKT_BURST, NULL);
         if (nb_rb == 0)
             continue;
+        lcore_stats[cid].ipackets += nb_rb;
+        for (i = 0; i < nb_rb; i++)
+            lcore_stats[cid].ibytes += mbufs[i]->pkt_len;
         pkt_num = rte_kni_tx_burst(dev->kni.kni, mbufs, nb_rb);
 
         if (unlikely(pkt_num < nb_rb)) {
-        #ifdef CONFIG_DPVS_NETIF_DEBUG
+#ifdef CONFIG_DPVS_NETIF_DEBUG
             RTE_LOG(INFO, NETIF,
-                    "%s: fail to send pkts to kni from kni rte ring\n", __func__);
-        #endif
+                    "%s: fail to send to kni inteface %d pkts from kni rx_ring\n",
+                    __func__, nb_rb - pkt_num);
+#endif
             free_mbufs(&(mbufs[pkt_num]), nb_rb - pkt_num);
+            lcore_stats[cid].dropped += (nb_rb - pkt_num);
         }
         nb_rb = 0;
     }
