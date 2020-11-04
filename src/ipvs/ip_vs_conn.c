@@ -63,6 +63,7 @@ static int conn_init_timeout = DPVS_CONN_INIT_TIMEOUT_DEF;
 static bool conn_expire_quiescent_template = false;
 
 bool dp_vs_redirect_disable = true;
+bool dp_vs_redirect_poll = false;
 
 /*
  * per-lcore dp_vs_conn{} hash table.
@@ -1936,6 +1937,24 @@ static void conn_redirect_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
+static void conn_redirect_poll_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+
+    assert(str);
+
+    if (strcasecmp(str, "on") == 0)
+        dp_vs_redirect_poll  = true;
+    else if (strcasecmp(str, "off") == 0)
+        dp_vs_redirect_poll  = false;
+    else
+        RTE_LOG(WARNING, IPVS, "invalid conn:redirect %s\n", str);
+
+    RTE_LOG(INFO, IPVS, "conn:redirect = %s\n", dp_vs_redirect_poll ? "off" : "on");
+
+    FREE_PTR(str);
+}
+
 void ipvs_conn_keyword_value_init(void)
 {
     if (dpvs_state_get() == DPVS_STATE_INIT) {
@@ -1958,6 +1977,7 @@ void install_ipvs_conn_keywords(void)
     install_keyword("expire_quiescent_template", conn_expire_quiscent_template_handler,
             KW_TYPE_NORMAL);
     install_keyword("redirect", conn_redirect_handler, KW_TYPE_INIT);
+    install_keyword("redirect_poll", conn_redirect_poll_handler, KW_TYPE_INIT);
     install_xmit_keywords();
     install_sublevel_end();
 }

@@ -344,5 +344,6 @@ int dp_vs_conn_pool_size(void);
 int dp_vs_conn_pool_cache_size(void);
 
 extern bool dp_vs_redirect_disable;
+extern bool dp_vs_redirect_poll;
 
 #endif /* __DPVS_CONN_H__ */

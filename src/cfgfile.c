@@ -32,6 +32,7 @@
 #include "ipvs/conn.h"
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
+#include "ipvs/proto_icmp.h"
 #include "ipvs/synproxy.h"
 #include "scheduler.h"
 
@@ -86,6 +87,11 @@ static vector_t install_keywords(void)
     install_keyword("udp", NULL, KW_TYPE_NORMAL);
     install_sublevel();
     install_proto_udp_keywords();
+    install_sublevel_end();
+
+    install_keyword("icmp", NULL, KW_TYPE_NORMAL);
+    install_sublevel();
+    install_proto_icmp_keywords();
     install_sublevel_end();
 
     install_ipv6_keywords();

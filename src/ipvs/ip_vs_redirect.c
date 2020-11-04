@@ -249,7 +249,7 @@ void dp_vs_redirect_ring_proc(struct netif_queue_conf *qconf, lcoreid_t cid)
     uint16_t nb_rb;
     lcoreid_t peer_cid;
 
-    if (dp_vs_redirect_disable) {
+    if (dp_vs_redirect_disable && !dp_vs_redirect_poll) {
         return;
     }
 
@@ -400,7 +400,7 @@ int dp_vs_redirects_init(void)
 {
     int err;
 
-    if (dp_vs_redirect_disable) {
+    if (dp_vs_redirect_disable && !dp_vs_redirect_poll) {
         return EDPVS_OK;
     }
 
@@ -414,7 +414,7 @@ int dp_vs_redirects_init(void)
 
 int dp_vs_redirects_term(void)
 {
-    if (dp_vs_redirect_disable) {
+    if (dp_vs_redirect_disable && !dp_vs_redirect_poll) {
         return EDPVS_OK;
     }
 

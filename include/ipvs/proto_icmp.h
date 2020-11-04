@@ -21,4 +21,7 @@ enum {
     DPVS_ICMP_S_LAST
 };
 
+int dp_vs_icmp_srss_fdir;
+void install_proto_icmp_keywords(void);
+
 #endif
