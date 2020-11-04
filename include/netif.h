@@ -249,6 +249,7 @@ struct netif_port {
     struct vlan_info        *vlan_info;                 /* VLANs info for real device */
     struct netif_tc         tc;                         /* traffic control */
     struct netif_ops        *netif_ops;
+    void                    *sfilter;                   /* software fdir */
 } __rte_cache_aligned;
 
 /**************************** lcore API *******************************/
