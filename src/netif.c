@@ -1084,7 +1084,7 @@ static void kni_send2kern_loop(uint8_t port_id, struct netif_queue_conf *qconf);
 
 /****************************************** lcore  conf ********************************************/
 /* per-lcore statistics */
-static struct netif_lcore_stats lcore_stats[DPVS_MAX_LCORE];
+static struct netif_lcore_stats lcore_stats[DPVS_MAX_LCORE] = {};
 /* per-lcore isolated reception queues */
 static struct list_head isol_rxq_tab[DPVS_MAX_LCORE];
 
@@ -1120,7 +1120,8 @@ int dpvs_wait_lcores(void)
     do {
         sched_yield();
         for (i = 0; i < DPVS_MAX_LCORE; i++) {
-            if (is_lcore_id_fwd(i) && loop[i] == lcore_stats[i].lcore_loop) {
+            if (is_lcore_id_fwd(i) && loop[i] &&
+                loop[i] == lcore_stats[i].lcore_loop) {
                 break;
             }
         }
