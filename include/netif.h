@@ -303,8 +303,8 @@ int netif_port_register(struct netif_port *dev);
 int netif_port_unregister(struct netif_port *dev);
 
 /************************** module API *****************************/
-int netif_virtual_devices_add(void);
-int netif_init(const struct rte_eth_conf *conf);
+int netif_vdevs_add(void);
+int netif_init(void);
 int netif_term(void); /* netif layer cleanup */
 int netif_ctrl_init(void); /* netif ctrl plane init */
 int netif_ctrl_term(void); /* netif ctrl plane cleanup */

@@ -4003,7 +4003,7 @@ static char *find_conf_kni_name(portid_t id)
 }
 
 /* Allocate and register all DPDK ports available */
-inline static void netif_port_init(const struct rte_eth_conf *conf)
+inline static void netif_port_init(void)
 {
     int nports, nports_cfg;
     portid_t pid;
@@ -4024,9 +4024,7 @@ inline static void netif_port_init(const struct rte_eth_conf *conf)
     port_tab_init();
     port_ntab_init();
 
-    if (!conf)
-        conf = &default_port_conf;
-    this_eth_conf = *conf;
+    this_eth_conf = default_port_conf;
 
     rte_kni_init(NETIF_MAX_KNI);
     kni_init();
@@ -4092,7 +4090,7 @@ static int obtain_dpdk_bond_name(char *dst, const char *ori, size_t size)
  * netif_virtual_devices_add must be called before lcore_init and port_init, so calling the
  * function immediately after cfgfile_init is recommended.
  */
-int netif_virtual_devices_add(void)
+int netif_vdevs_add(void)
 {
     portid_t pid;
     int socket_id;
@@ -4177,13 +4175,12 @@ int netif_virtual_devices_add(void)
     return EDPVS_OK;
 }
 
-int netif_init(const struct rte_eth_conf *conf)
+int netif_init(void)
 {
     netif_pktmbuf_pool_init();
     netif_arp_ring_init();
     netif_pkt_type_tab_init();
-    // use default port conf if conf=NULL
-    netif_port_init(conf);
+    netif_port_init();
     netif_lcore_init();
     return EDPVS_OK;
 }
