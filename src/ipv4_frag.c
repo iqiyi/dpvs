@@ -365,7 +365,12 @@ static void ipv4_frag_job(void *arg)
     return;
 }
 
-static struct dpvs_lcore_job frag_job;
+static struct dpvs_lcore_job frag_job = {
+    .name = "ipv4_frag",
+    .type = LCORE_JOB_SLOW,
+    .func = ipv4_frag_job,
+    .skip_loops = IP4_FRAG_FREE_DEATH_ROW_INTERVAL,
+};
 
 int ipv4_frag_init(void)
 {
@@ -410,11 +415,6 @@ int ipv4_frag_init(void)
         }
     }
 
-    snprintf(frag_job.name, sizeof(frag_job.name) - 1, "%s", "ipv4_frag");
-    frag_job.func = ipv4_frag_job;
-    frag_job.data = NULL;
-    frag_job.type = LCORE_JOB_SLOW;
-    frag_job.skip_loops = IP4_FRAG_FREE_DEATH_ROW_INTERVAL;
     err = dpvs_lcore_job_register(&frag_job, LCORE_ROLE_FWD_WORKER);
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IP4FRAG, "fail to register loop job.\n");

@@ -136,9 +136,9 @@ static void sig_callback(int sig)
 }
 
 static struct dpvs_lcore_job reload_job = {
-    .func = try_reload,
-    .data = NULL,
+    .name = "cfgfile_reload",
     .type = LCORE_JOB_LOOP,
+    .func = try_reload,
 };
 
 int cfgfile_init(void)
@@ -171,7 +171,6 @@ int cfgfile_init(void)
     SET_RELOAD;
     try_reload(NULL);
 
-    snprintf(reload_job.name, sizeof(reload_job.name), "%s", "cfgfile_reload");
     ret = dpvs_lcore_job_register(&reload_job, LCORE_ROLE_MASTER);
     if (ret != EDPVS_OK) {
         RTE_LOG(ERR, CFG_FILE, "%s: fail to register cfgfile_reload job\n", __func__);

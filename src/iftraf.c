@@ -1104,9 +1104,9 @@ static struct dpvs_sockopts iftraf_sockopts = {
 };
 
 static struct dpvs_lcore_job iftraf_job = {
-    .func = iftraf_process_ring,
-    .data = NULL,
+    .name = "iftraf_ring_proc",
     .type = LCORE_JOB_LOOP,
+    .func = iftraf_process_ring,
 };
 
 int iftraf_init(void)
@@ -1119,7 +1119,6 @@ int iftraf_init(void)
 
     iftraf_sorted_list_init();
 
-    snprintf(iftraf_job.name, sizeof(iftraf_job.name), "%s", "iftraf_ring_proc");
     if ((err = dpvs_lcore_job_register(&iftraf_job, LCORE_ROLE_MASTER)) != EDPVS_OK)
         return err;
 
