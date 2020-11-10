@@ -1087,7 +1087,7 @@ $ echo 1024 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugep
 
 ## Build DPVS on Ubuntu
 
-> may need install dependencies, like `openssl`, `popt` and `numactl`, e.g., ` apt-get install libpopt-dev libssl-dev libnuma-dev` (Ubuntu).
+> may need install dependencies, like `openssl`, `popt` and `numactl`, e.g., ` apt-get install libpopt-dev libssl-dev libnuma-dev` (Ubuntu). Also note that certain CPU flags must be enabled such as `SSSE3`
 
 ## Launch DPVS on Ubuntu
 
