@@ -213,6 +213,17 @@ worker_defs {
         }
     }
 
+    !<init> worker   cpu9 {
+    !    type        kni
+    !    cpu_id      9
+    !    port        dpdk0 {
+    !        tx_queue_ids     8
+    !    }
+    !    port        dpdk1 {
+    !        tx_queue_ids     8
+    !    }
+    !}
+
 }
 
 ! timer config

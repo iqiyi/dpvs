@@ -21,6 +21,7 @@
 #include "list.h"
 #include "dpdk.h"
 #include "inetaddr.h"
+#include "global_data.h"
 #include "timer.h"
 #include "tc/tc.h"
 
@@ -44,6 +45,10 @@ enum {
     NETIF_PORT_FLAG_TC_EGRESS               = (0x1<<10),
     NETIF_PORT_FLAG_TC_INGRESS              = (0x1<<11),
     NETIF_PORT_FLAG_NO_ARP                  = (0x1<<12),
+};
+
+enum {
+    NETIF_TX_FLAG_PUSH                      = (0x1<<0),
 };
 
 /* max tx/rx queue number for each nic */
@@ -79,7 +84,6 @@ struct netif_queue_conf
     uint16_t kni_len;
     struct rx_partner *isol_rxq;
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
-    struct rte_mbuf *kni_mbufs[NETIF_MAX_PKT_BURST];
 } __rte_cache_aligned;
 
 /*
@@ -104,6 +108,7 @@ struct netif_port_conf
 struct netif_lcore_conf
 {
     lcoreid_t id;
+    enum dpvs_lcore_role_type type;
     /* nic number of this lcore to process */
     int nports;
     /* port list of this lcore to process */
@@ -167,6 +172,7 @@ struct netif_kni {
     struct ether_addr addr;
     struct dpvs_timer kni_rtnl_timer;
     int kni_rtnl_fd;
+    struct rte_ring *rx_ring;
 } __rte_cache_aligned;
 
 union netif_bond {
@@ -252,8 +258,8 @@ struct netif_port {
 } __rte_cache_aligned;
 
 /**************************** lcore API *******************************/
-int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
-int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
+int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags);
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags);
 int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf);
 int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
@@ -264,7 +270,7 @@ void netif_update_worker_loop_cnt(void);
 int netif_register_master_xmit_msg(void);
 int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);
 bool is_lcore_id_valid(lcoreid_t cid);
-bool netif_lcore_is_idle(lcoreid_t cid);
+bool netif_lcore_is_fwd_worker(lcoreid_t cid);
 void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
                            lcoreid_t cid, uint16_t count, bool pkts_from_ring);
 

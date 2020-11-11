@@ -143,7 +143,14 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 
 #define NETIF_CTRL_BUFFER_LEN     4096
 
+/* function declarations */
+static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev);
+static void kni_lcore_loop(void *dummy);
+
+
 lcoreid_t g_master_lcore_id;
+/* By default g_kni_lcore_id is 0 and it indicates KNI core is not configured. */
+lcoreid_t g_kni_lcore_id = 0;
 static uint8_t g_slave_lcore_num;
 static uint8_t g_isol_rx_lcore_num;
 static uint64_t g_slave_lcore_mask;
@@ -157,6 +164,7 @@ bool is_lcore_id_valid(lcoreid_t cid)
         return false;
 
     return ((cid == rte_get_master_lcore()) ||
+            (cid == g_kni_lcore_id) ||
             (g_slave_lcore_mask & (1L << cid)) ||
             (g_isol_rx_lcore_mask & (1L << cid)));
 }
@@ -664,7 +672,8 @@ static void worker_type_handler(vector_t tokens)
             struct worker_conf_stream, worker_list_node);
 
     assert(str);
-    if (!strcmp(str, "master") || !strcmp(str, "slave")) {
+    if (!strcmp(str, "master") || !strcmp(str, "slave")
+        || !strcmp(str, "kni")) {
         RTE_LOG(INFO, NETIF, "%s:type = %s\n", current_worker->name, str);
         strncpy(current_worker->type, str, sizeof(current_worker->type));
     } else {
@@ -692,6 +701,9 @@ static void cpu_id_handler(vector_t tokens)
         cpu_id = atoi(str);
         RTE_LOG(INFO, NETIF, "%s:cpu_id = %d\n", current_worker->name, cpu_id);
         current_worker->cpu_id = cpu_id;
+
+        if (!strcmp(current_worker->type, "kni"))
+            g_kni_lcore_id = cpu_id;
     }
 
     FREE_PTR(str);
@@ -712,8 +724,11 @@ static void worker_port_handler(vector_t tokens)
         return;
     }
 
-    for (ii = 0; ii < NETIF_MAX_QUEUES; ii++)
+    for (ii = 0; ii < NETIF_MAX_QUEUES; ii++) {
+        queue_cfg->tx_queues[ii] = NETIF_MAX_QUEUES;
+        queue_cfg->rx_queues[ii] = NETIF_MAX_QUEUES;
         queue_cfg->isol_rxq_lcore_ids[ii] = NETIF_LCORE_ID_INVALID;
+    }
     queue_cfg->isol_rxq_ring_sz = NETIF_ISOL_RXQ_RING_SZ_DEF;
 
     str = VECTOR_SLOT(tokens, 1);
@@ -987,7 +1002,7 @@ __rte_unused static void pkt_send_back(struct rte_mbuf *mbuf, struct netif_port 
     ether_addr_copy(&ehdr->s_addr, &eaddr);
     ether_addr_copy(&ehdr->d_addr, &ehdr->s_addr);
     ether_addr_copy(&eaddr, &ehdr->d_addr);
-    netif_xmit(mbuf, port);
+    netif_xmit(mbuf, port, 0);
 }
 #endif
 
@@ -1076,12 +1091,6 @@ static struct pkt_type *pkt_type_get(uint16_t type, struct netif_port *port)
     return NULL;
 }
 
-/*************************** function declared for kni ********************************************/
-static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev,
-                        struct netif_queue_conf *qconf);
-static void kni_send2kern_loop(uint8_t port_id, struct netif_queue_conf *qconf);
-
-
 /****************************************** lcore  conf ********************************************/
 /* per-lcore statistics */
 static struct netif_lcore_stats lcore_stats[DPVS_MAX_LCORE];
@@ -1116,20 +1125,25 @@ static void isol_rxq_del(struct rx_partner *isol_rxq, bool force);
 static void config_lcores(struct list_head *worker_list)
 {
     int ii, tk;
-    int cpu_id_min, cpu_left;
+    int cpu_id_min, cpu_left, cpu_cnt;
     lcoreid_t id = 0;
     portid_t pid;
     struct netif_port *port;
     struct queue_conf_stream *queue;
-    struct worker_conf_stream *worker, *worker_min;
+    struct worker_conf_stream *worker, *worker_next, *worker_min;
 
-    cpu_left = list_elems(worker_list);
-    list_for_each_entry(worker, worker_list, worker_list_node) {
-        if (strcmp(worker->type, "slave")) {
+    memset(lcore_conf, 0, sizeof(lcore_conf));
+
+    cpu_cnt = cpu_left = list_elems(worker_list);
+    list_for_each_entry_safe(worker, worker_next, worker_list, worker_list_node) {
+        if (!strcmp(worker->type, "master")) {
             list_move_tail(&worker->worker_list_node, worker_list);
             cpu_left--;
         }
+        if (--cpu_cnt == 0)
+            break;
     }
+
     while (cpu_left > 0) {
         cpu_id_min = DPVS_MAX_LCORE;
         worker_min = NULL;
@@ -1147,6 +1161,13 @@ static void config_lcores(struct list_head *worker_list)
 
         tk = 0;
         lcore_conf[id].id = worker_min->cpu_id;
+        if (!strncmp(worker_min->type, "slave", sizeof("slave")))
+            lcore_conf[id].type = LCORE_ROLE_FWD_WORKER;
+        else if (!strncmp(worker_min->type, "kni", sizeof("kni")))
+            lcore_conf[id].type = LCORE_ROLE_KNI_WORKER;
+        else
+            lcore_conf[id].type = LCORE_ROLE_IDLE;
+
         list_for_each_entry_reverse(queue, &worker_min->port_list, queue_list_node) {
             port = netif_port_get_by_name(queue->port_name);
             if (port)
@@ -1155,7 +1176,8 @@ static void config_lcores(struct list_head *worker_list)
                 pid = NETIF_PORT_ID_INVALID;
             lcore_conf[id].pqs[tk].id = pid;
 
-            for (ii = 0; queue->rx_queues[ii] != NETIF_MAX_QUEUES; ii++) {
+            for (ii = 0; queue->rx_queues[ii] != NETIF_MAX_QUEUES && ii < NETIF_MAX_QUEUES;
+                 ii++) {
                 lcore_conf[id].pqs[tk].rxqs[ii].id = queue->rx_queues[ii];
                 if (queue->isol_rxq_lcore_ids[ii] != NETIF_LCORE_ID_INVALID) {
                     if (isol_rxq_add(queue->isol_rxq_lcore_ids[ii],
@@ -1175,7 +1197,8 @@ static void config_lcores(struct list_head *worker_list)
             }
             lcore_conf[id].pqs[tk].nrxq = ii;
 
-            for (ii = 0; queue->tx_queues[ii] != NETIF_MAX_QUEUES; ii++)
+            for (ii = 0; queue->tx_queues[ii] != NETIF_MAX_QUEUES && ii < NETIF_MAX_QUEUES;
+                 ii++)
                 lcore_conf[id].pqs[tk].txqs[ii].id = queue->tx_queues[ii];
             lcore_conf[id].pqs[tk].ntxq = ii;
             tk++;
@@ -1191,13 +1214,6 @@ static void config_lcores(struct list_head *worker_list)
 /* fast searching tables */
 lcoreid_t lcore2index[DPVS_MAX_LCORE+1];
 portid_t port2index[DPVS_MAX_LCORE][NETIF_MAX_PORTS];
-
-bool netif_lcore_is_idle(lcoreid_t cid)
-{
-    if (cid > DPVS_MAX_LCORE)
-        return true;
-    return (lcore_conf[lcore2index[cid]].nports == 0) ? true : false;
-}
 
 static void lcore_index_init(void)
 {
@@ -1254,8 +1270,12 @@ void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask)
     uint8_t slave_lcore_nb = 0;
 
     while (lcore_conf[i].nports > 0) {
-        slave_lcore_nb++;
-        slave_lcore_mask |= (1L << lcore_conf[i].id);
+        /* LCORE_ROLE_KNI_WORKER should be excluded,
+         * as ports is configured for KNI core. */
+        if (lcore_conf[i].type == LCORE_ROLE_FWD_WORKER) {
+            slave_lcore_nb++;
+            slave_lcore_mask |= (1L << lcore_conf[i].id);
+        }
         i++;
     }
 
@@ -1319,7 +1339,7 @@ static void lcore_role_init(void)
     while (lcore_conf[i].nports > 0) {
         cid = lcore_conf[i].id;
         assert(g_lcore_role[cid] == LCORE_ROLE_IDLE);
-        g_lcore_role[cid] = LCORE_ROLE_FWD_WORKER;
+        g_lcore_role[cid] = lcore_conf[i].type;
         i++;
     }
 
@@ -1428,6 +1448,8 @@ static int check_lcore_conf(int lcores, const struct netif_lcore_conf *lcore_con
             for (k = 0; k < lcore_conf[i].pqs[j].nrxq; k++) {
                 qid = lcore_conf[i].pqs[j].rxqs[k].id;
                 if (LCONFCHK_MARK == mark.pqs[pid].rxqs[qid].id) {
+                    RTE_LOG(ERR, NETIF, "rx qid: %d for cid: %d is already used.",
+                            qid, lcore_conf[i].id);
                     return LCONFCHK_REPEATED_RX_QUEUE_ID;
                 } else
                     mark.pqs[pid].rxqs[qid].id = LCONFCHK_MARK;
@@ -1435,6 +1457,8 @@ static int check_lcore_conf(int lcores, const struct netif_lcore_conf *lcore_con
             for (k = 0; k <lcore_conf[i].pqs[j].ntxq; k++) {
                 qid = lcore_conf[i].pqs[j].txqs[k].id;
                 if (LCONFCHK_MARK == mark.pqs[pid].txqs[qid].id) {
+                    RTE_LOG(ERR, NETIF, "tx qid: %d for cid: %d is already used.",
+                            qid, lcore_conf[i].id);
                     return LCONFCHK_REPEATED_TX_QUEUE_ID;
                 } else
                     mark.pqs[pid].txqs[qid].id = LCONFCHK_MARK;
@@ -1609,6 +1633,22 @@ inline static bool is_isol_rxq_lcore(lcoreid_t cid)
     assert(cid < DPVS_MAX_LCORE);
 
     return !list_empty(&isol_rxq_tab[cid]);
+}
+
+inline static bool is_kni_lcore(lcoreid_t cid)
+{
+    assert(cid < DPVS_MAX_LCORE);
+
+    return g_kni_lcore_id == cid;
+}
+
+bool netif_lcore_is_fwd_worker(lcoreid_t cid)
+{
+    if (cid > DPVS_MAX_LCORE)
+        return false;
+
+    return (lcore_conf[lcore2index[cid]].type  ==
+            LCORE_ROLE_FWD_WORKER) ? true : false;
 }
 
 static inline uint16_t netif_rx_burst(portid_t pid, struct netif_queue_conf *qconf)
@@ -1957,14 +1997,13 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
 
     dev = netif_port_get(pid);
     if (dev && (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI)) {
-        for (; i<txq->len; i++) {
+        for (; i < txq->len; i++) {
             if (NULL == (mbuf_copied = mbuf_copy(txq->mbufs[i],
                 pktmbuf_pool[dev->socket])))
                 RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n", __func__);
             else
-                kni_ingress(mbuf_copied, dev, txq);
+                kni_ingress(mbuf_copied, dev);
         }
-        kni_send2kern_loop(pid, txq);
     }
 
     ntx = rte_eth_tx_burst(pid, txq->id, txq->mbufs, txq->len);
@@ -1984,8 +2023,8 @@ static inline lcoreid_t get_master_xmit_lcore(void)
     static int i = 0;
     lcoreid_t cid;
 
-    if (lcore_conf[i].nports > 0) {
-        cid = lcore_conf[i].id;
+    cid = lcore_conf[i].id;
+    if (netif_lcore_is_fwd_worker(cid)) {
         i++;
     } else {
         cid = lcore_conf[0].id;
@@ -2011,7 +2050,7 @@ static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
         //RTE_LOG(DEBUG, NETIF, "Xmit master packet on Slave lcore%u %s\n",
         //        rte_lcore_id(), data->dev->name);
         //fflush(stdout);
-        return netif_xmit(data->mbuf, data->dev);
+        return netif_xmit(data->mbuf, data->dev, 0);
     }
 
     return EDPVS_INVAL;
@@ -2067,7 +2106,7 @@ static inline int validate_xmit_mbuf(struct rte_mbuf *mbuf,
     return err;
 }
 
-int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
 {
     lcoreid_t cid;
     int pid, qindex;
@@ -2132,6 +2171,7 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     //RTE_LOG(DEBUG, NETIF, "tx-queue hash(%x) = %d\n", ((uint32_t)mbuf->buf_physaddr) >> 8, qindex);
     txq = &lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].txqs[qindex];
 
+    /* Date plane traffic should be buffered for NETIF_MAX_PKT_BURST pkts to transmit. */
     if (unlikely(txq->len == NETIF_MAX_PKT_BURST)) {
         netif_tx_burst(cid, pid, qindex);
         txq->len = 0;
@@ -2140,10 +2180,17 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     lcore_stats[cid].obytes += mbuf->pkt_len;
     txq->mbufs[txq->len] = mbuf;
     txq->len++;
+
+    /* Push the buffered packets to network immediately if tx flag `NETIF_TX_FLAG_PUSH` set. */
+    if (unlikely(flags & NETIF_TX_FLAG_PUSH)) {
+        netif_tx_burst(cid, pid, qindex);
+        txq->len = 0;
+    }
+
     return EDPVS_OK;
 }
 
-int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
+int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
 {
     int ret = EDPVS_OK;
     uint16_t mbuf_refcnt;
@@ -2167,7 +2214,7 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
             return ret;
     }
 
-    return netif_hard_xmit(mbuf, dev);
+    return netif_hard_xmit(mbuf, dev, flags);
 }
 
 static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
@@ -2222,7 +2269,7 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
 
     if (NULL == pt) {
         if (!forward2kni)
-            kni_ingress(mbuf, dev, qconf);
+            kni_ingress(mbuf, dev);
         else
             rte_pktmbuf_free(mbuf);
         return EDPVS_OK;
@@ -2283,7 +2330,7 @@ static inline int netif_deliver_mbuf(struct rte_mbuf *mbuf,
 
         if (likely(NULL != rte_pktmbuf_prepend(mbuf,
             (mbuf->data_off - data_off)))) {
-                kni_ingress(mbuf, dev, qconf);
+                kni_ingress(mbuf, dev);
         } else {
             rte_pktmbuf_free(mbuf);
         }
@@ -2355,7 +2402,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
         if (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) {
             if (likely(NULL != (mbuf_copied = mbuf_copy(mbuf,
                                 pktmbuf_pool[dev->socket]))))
-                kni_ingress(mbuf_copied, dev, qconf);
+                kni_ingress(mbuf_copied, dev);
             else
                 RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n",
                         __func__);
@@ -2442,7 +2489,6 @@ static void lcore_job_recv_fwd(void *arg)
             lcore_stats_burst(&lcore_stats[cid], qconf->len);
 
             lcore_process_packets(qconf, qconf->mbufs, cid, qconf->len, 0);
-            kni_send2kern_loop(pid, qconf);
         }
     }
 }
@@ -2486,8 +2532,6 @@ static void lcore_job_timer_manage(void *args)
         tm_manager_time[cid] = now;
     }
 }
-
-static void kni_process_on_master(void *dummy);
 
 #define NETIF_JOB_MAX   6
 struct dpvs_lcore_job_array {
@@ -2558,9 +2602,14 @@ static void netif_lcore_init(void)
     netif_jobs[4].job.data = NULL;
     netif_jobs[4].job.type = LCORE_JOB_LOOP;
 
-    netif_jobs[5].role = LCORE_ROLE_MASTER;
-    snprintf(netif_jobs[5].job.name, sizeof(netif_jobs[5].job.name) - 1, "%s", "kni_master_proc");
-    netif_jobs[5].job.func = kni_process_on_master;
+    if (g_kni_lcore_id == 0) {
+        netif_jobs[5].role = LCORE_ROLE_MASTER;
+        snprintf(netif_jobs[5].job.name, sizeof(netif_jobs[5].job.name) - 1, "%s", "kni_master_proc");
+    } else {
+        netif_jobs[5].role = LCORE_ROLE_KNI_WORKER;
+        snprintf(netif_jobs[5].job.name, sizeof(netif_jobs[5].job.name) - 1, "%s", "kni_loop");
+    }
+    netif_jobs[5].job.func = kni_lcore_loop;
     netif_jobs[5].job.data = NULL;
     netif_jobs[5].job.type = LCORE_JOB_LOOP;
 
@@ -2586,7 +2635,6 @@ static inline void netif_lcore_cleanup(void)
 }
 
 /********************************************** kni *************************************************/
-static rte_spinlock_t kni_lock;
 
 /* always update bond port macaddr and its KNI macaddr together */
 static int update_bond_macaddr(struct netif_port *port)
@@ -2617,66 +2665,27 @@ static inline void free_mbufs(struct rte_mbuf **pkts, unsigned num)
     }
 }
 
-static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev,
-                        struct netif_queue_conf *qconf)
+static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
-    unsigned pkt_num;
+    if (!kni_dev_exist(dev))
+        goto freepkt;
 
-    if (!kni_dev_exist(dev)) {
-        rte_pktmbuf_free(mbuf);
-        return;
-    }
+    // TODO: Use `rte_ring_enqueue_bulk` for better performance.
+    if (unlikely(rte_ring_enqueue(dev->kni.rx_ring, (void *)mbuf) != 0))
+        goto freepkt;
+    return;
 
-    if (likely(qconf->kni_len < NETIF_MAX_PKT_BURST)) {
-        qconf->kni_mbufs[qconf->kni_len] = mbuf;
-        qconf->kni_len++;
-    } else {
-        rte_pktmbuf_free(mbuf);
-    }
-
-    /* VLAN device cannot be scheduled by kni_send2kern_loop */
-    if ((dev->type == PORT_TYPE_VLAN && qconf->kni_len > 0) ||
-        unlikely(qconf->kni_len == NETIF_MAX_PKT_BURST)) {
-        rte_spinlock_lock(&kni_lock);
-        pkt_num = rte_kni_tx_burst(dev->kni.kni, qconf->kni_mbufs, qconf->kni_len);
-        rte_spinlock_unlock(&kni_lock);
-
-        if (unlikely(pkt_num < qconf->kni_len)) {
-            RTE_LOG(WARNING, NETIF, "%s: fail to send pkts to kni\n", __func__);
-            free_mbufs(&(qconf->kni_mbufs[pkt_num]), qconf->kni_len - pkt_num);
-        }
-
-        qconf->kni_len = 0;
-    }
+freepkt:
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+    RTE_LOG(INFO, NETIF, "%s: fail to enqueue packet to kni rx_ring\n", __func__);
+#endif
+    rte_pktmbuf_free(mbuf);
 }
 
-static void kni_send2kern_loop(uint8_t port_id, struct netif_queue_conf *qconf)
-{
-    struct netif_port *dev;
-    unsigned pkt_num;
-
-    dev = netif_port_get(port_id);
-
-    if (qconf->kni_len > 0) {
-        if (kni_dev_exist(dev)) {
-            rte_spinlock_lock(&kni_lock);
-            pkt_num = rte_kni_tx_burst(dev->kni.kni, qconf->kni_mbufs, qconf->kni_len);
-            rte_spinlock_unlock(&kni_lock);
-        } else {
-            pkt_num = 0;
-        }
-
-        if (unlikely(pkt_num < qconf->kni_len)) {
-            RTE_LOG(WARNING, NETIF, "%s: fail to send pkts to kni\n", __func__);
-            free_mbufs(&(qconf->kni_mbufs[pkt_num]), qconf->kni_len - pkt_num);
-        }
-        qconf->kni_len = 0;
-    }
-}
-
-static void kni_send2port_loop(struct netif_port *port)
+static void kni_egress(struct netif_port *port)
 {
     unsigned i, npkts;
+    int txflags;
     struct rte_mbuf *kni_pkts_burst[NETIF_MAX_PKT_BURST];
 
     if (!kni_dev_exist(port))
@@ -2688,11 +2697,20 @@ static void kni_send2port_loop(struct netif_port *port)
         return;
     }
 
-    for (i = 0; i < npkts; i++)
-        netif_xmit(kni_pkts_burst[i], port);
+    for (i = 0; i < npkts; i++) {
+        if (unlikely(i == npkts - 1))
+            txflags = NETIF_TX_FLAG_PUSH;
+        else
+            txflags = 0;
+        if (unlikely(netif_xmit(kni_pkts_burst[i], port, txflags) != EDPVS_OK)) {
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+            RTE_LOG(INFO, NETIF, "%s: fail to transmit kni packet", __func__);
+#endif
+        }
+    }
 }
 
-static void kni_process_on_master(void *dummy)
+static void kni_egress_process(void)
 {
     struct netif_port *dev;
     portid_t id;
@@ -2703,8 +2721,55 @@ static void kni_process_on_master(void *dummy)
             continue;
 
         kni_handle_request(dev);
-        kni_send2port_loop(dev);
+        kni_egress(dev);
     }
+}
+
+/*
+ * KNI rx rte_ring use mode as multi-producers and the single-consumer.
+ */
+static void kni_ingress_process(void)
+{
+    struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
+    struct netif_port *dev;
+    uint16_t i, nb_rb, pkt_num;
+    portid_t id;
+    lcoreid_t cid = rte_lcore_id();
+
+    for (id = 0; id < g_nports; id++) {
+        dev = netif_port_get(id);
+        if (!dev || !kni_dev_exist(dev))
+            continue;
+
+        nb_rb = rte_ring_dequeue_burst(dev->kni.rx_ring, (void**)mbufs,
+                                       NETIF_MAX_PKT_BURST, NULL);
+        if (nb_rb == 0)
+            continue;
+        lcore_stats[cid].ipackets += nb_rb;
+        for (i = 0; i < nb_rb; i++)
+            lcore_stats[cid].ibytes += mbufs[i]->pkt_len;
+        pkt_num = rte_kni_tx_burst(dev->kni.kni, mbufs, nb_rb);
+
+        if (unlikely(pkt_num < nb_rb)) {
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+            RTE_LOG(INFO, NETIF,
+                    "%s: fail to send to kni inteface %d pkts from kni rx_ring\n",
+                    __func__, nb_rb - pkt_num);
+#endif
+            free_mbufs(&(mbufs[pkt_num]), nb_rb - pkt_num);
+            lcore_stats[cid].dropped += (nb_rb - pkt_num);
+        }
+        nb_rb = 0;
+    }
+}
+
+/*
+ * Use separate core to convey kni traffic if KNI lcore worker is configued.
+ */
+void kni_lcore_loop(void *dummy)
+{
+    kni_ingress_process();
+    kni_egress_process();
 }
 
 /********************************************* port *************************************************/
@@ -4210,6 +4275,7 @@ static int get_lcore_mask(void **out, size_t *out_len)
         return EDPVS_NOMEM;
 
     get->master_lcore_id = g_master_lcore_id;
+    get->kni_lcore_id = g_kni_lcore_id;
     get->slave_lcore_num = g_slave_lcore_num;
     get->slave_lcore_mask = g_slave_lcore_mask;
     get->isol_rx_lcore_num = g_isol_rx_lcore_num;
@@ -4350,7 +4416,7 @@ static int get_lcore_stats(lcoreid_t cid, void **out, size_t *out_len)
     if (unlikely(!get))
         return EDPVS_NOMEM;
 
-    if (is_isol_rxq_lcore(cid)) {
+    if (is_isol_rxq_lcore(cid) || is_kni_lcore(cid)) {
         /* use write lock to ensure data safety */
         memcpy(&stats, &lcore_stats[cid], sizeof(stats));
     } else {

@@ -129,6 +129,19 @@ worker_defs {
             tx_queue_ids     3
         }
     }
+
+    ! kni worker config, optional
+    ! if not configure, kni packets are processed on master lcore
+    <init> worker cpu5 {
+        type    kni
+        cpu_id  5
+        port dpdk0 {
+            tx_queue_ids 6
+        }
+        port dpdk1 {
+            tx_queue_ids 4
+        }
+    }
 }
 
 ! timer config

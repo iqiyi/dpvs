@@ -103,7 +103,7 @@ static int vlan_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     mbuf->port = vlan->real_dev->id;
     len = mbuf->pkt_len;
 
-    err = netif_xmit(mbuf, vlan->real_dev);
+    err = netif_xmit(mbuf, vlan->real_dev, 0);
 
     if (likely(err == EDPVS_OK)) {
         this_vlan_stats(vlan).tx_packets++;

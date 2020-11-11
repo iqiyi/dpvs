@@ -40,6 +40,7 @@ const char *dpvs_lcore_role_str(dpvs_lcore_role_t role)
         [LCORE_ROLE_MASTER]        = "lcre_role_master",
         [LCORE_ROLE_FWD_WORKER]    = "lcre_role_fwd_worker",
         [LCORE_ROLE_ISOLRX_WORKER] = "lcre_role_isolrx_worker",
+        [LCORE_ROLE_KNI_WORKER]    = "lcore_role_kni_worker",
         [LCORE_ROLE_MAX]           = "lcre_role_null"
     };
 

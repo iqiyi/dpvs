@@ -746,7 +746,7 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
     memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct ether_addr));
     memcpy(&eth->d_addr, &ethaddr, sizeof(struct ether_addr));
 
-    if (unlikely(EDPVS_OK != (ret = netif_xmit(mbuf, dev)))) {
+    if (unlikely(EDPVS_OK != (ret = netif_xmit(mbuf, dev, 0)))) {
         RTE_LOG(ERR, IPVS, "%s: netif_xmit failed -- %s\n",
                 __func__, dpvs_strerror(ret));
     /* should not set verdict to INET_DROP since netif_xmit
