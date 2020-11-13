@@ -4393,12 +4393,6 @@ static inline int lcore_stats_msg_term(void)
     return EDPVS_OK;
 }
 
-void netif_update_master_loop_cnt(void)
-{
-    lcoreid_t cid = rte_get_master_lcore();
-    lcore_stats[cid].lcore_loop++;
-}
-
 void netif_update_worker_loop_cnt(void)
 {
     lcore_stats[rte_lcore_id()].lcore_loop++;
