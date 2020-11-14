@@ -277,6 +277,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
 /************************** protocol API *****************************/
 int netif_register_pkt(struct pkt_type *pt);
 int netif_unregister_pkt(struct pkt_type *pt);
+int dpvs_wait_lcores(void);
 
 /**************************** port API ******************************/
 int netif_fdir_filter_set(struct netif_port *port, enum rte_filter_op opcode,
