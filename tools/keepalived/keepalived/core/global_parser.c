@@ -1780,6 +1780,12 @@ random_seed_handler(const vector_t *strvec)
 	set_random_seed(val);
 }
 
+static void
+proxy_protocol_handler(const vector_t *strvec)
+{
+	global_data->proxy_protocol = 1;
+}
+
 void
 init_global_keywords(bool global_active)
 {
@@ -1958,4 +1964,5 @@ init_global_keywords(bool global_active)
 #endif
 	install_keyword("umask", &umask_handler);
 	install_keyword("random_seed", &random_seed_handler);
+	install_keyword("proxy_protocol", &proxy_protocol_handler);
 }

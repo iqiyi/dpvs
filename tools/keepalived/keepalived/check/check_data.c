@@ -457,6 +457,7 @@ dump_vs(FILE *fp, const void *data)
 	conf_write(fp, "   alive = %d", vs->alive);
 	conf_write(fp, "   quorum_state_up = %d", vs->quorum_state_up);
 	conf_write(fp, "   reloaded = %d", vs->reloaded);
+	conf_write(fp, "   proxy_protocol = %d", vs->proxy_protocol);
 
 	dump_list(fp, vs->rs);
 }

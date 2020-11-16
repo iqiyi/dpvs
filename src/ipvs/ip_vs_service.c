@@ -518,6 +518,7 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
     svc->bps = u->bps;
     svc->limit_proportion = u->limit_proportion;
     svc->netmask = u->netmask;
+    svc->proxy_protocol = u->proxy_protocol;
     if (!is_empty_match(&u->match)) {
         svc->match = rte_zmalloc(NULL, sizeof(struct dp_vs_match),
                                  RTE_CACHE_LINE_SIZE);
@@ -590,6 +591,7 @@ static int dp_vs_service_edit(struct dp_vs_service *svc, struct dp_vs_service_co
     svc->netmask = u->netmask;
     svc->bps = u->bps;
     svc->limit_proportion = u->limit_proportion;
+    svc->proxy_protocol = u->proxy_protocol;
 
     old_sched = svc->scheduler;
     if (sched != old_sched) {
@@ -845,6 +847,7 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
     conf->netmask = user->netmask;
     conf->bps = user->bps;
     conf->limit_proportion = user->limit_proportion;
+    conf->proxy_protocol = user->proxy_protocol;
 
     if (user->flags & DP_VS_SVC_F_MATCH) {
         err = dp_vs_match_parse(user->srange, user->drange,

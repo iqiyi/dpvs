@@ -268,6 +268,7 @@ typedef struct _data {
 	unsigned			vrrp_startup_delay;
 	bool				log_unknown_vrids;
 #endif
+	unsigned			proxy_protocol;
 } data_t;
 
 /* Global vars exported */

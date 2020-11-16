@@ -1467,6 +1467,55 @@ http_response_thread(thread_ref_t thread)
 	return 0;
 }
 
+int
+http_request_fill_pphdr(char *str_request, int max_len,
+                        struct sockaddr_storage *saddr, struct sockaddr_storage *daddr)
+{
+    char   str_pphdr[64] = {0};
+    int    pphdrlen = 0;
+    struct proxy_hdr_v2 *pphdr = (struct proxy_hdr_v2 *)str_pphdr;
+
+    int af = daddr->ss_family;
+    if (af != AF_INET && af != AF_INET6) {
+        return 0;
+    }
+
+    memcpy(pphdr->sig, PROXY_PROTO_V2_SIGNATURE, sizeof(PROXY_PROTO_V2_SIGNATURE) - 1);
+    pphdr->ver = 2;     /* 2:v2 */
+    pphdr->cmd = 1;     /* 0:LOCAL, 1:PROXY */
+    pphdr->af  = (af == AF_INET ? 1 : 2);/* 0:AF_UNIX, 1:AF_INET, 2:AF_INET6, 3:AF_UNIX */
+    pphdr->proto = 1;   /* 0:UNSPEC, 1:STREAM, 2:DGRAM */
+
+    if (af == AF_INET6) {
+        struct proxy_addr_ipv6 *ppaddr = (struct proxy_addr_ipv6 *)(pphdr + 1);
+        struct sockaddr_in6 *saddr6 = (struct sockaddr_in6 *)saddr;
+        struct sockaddr_in6 *daddr6 = (struct sockaddr_in6 *)daddr;
+
+        pphdr->addrlen = htons(sizeof(struct proxy_addr_ipv6));
+        memcpy(ppaddr->src_addr, &saddr6->sin6_addr, 16);
+        memcpy(ppaddr->src_addr, &daddr6->sin6_addr, 16);
+        ppaddr->src_port = saddr6->sin6_port;
+        ppaddr->dst_port = daddr6->sin6_port;
+    } else {
+        struct proxy_addr_ipv4 *ppaddr = (struct proxy_addr_ipv4 *)(pphdr + 1);
+        struct sockaddr_in *saddr4 = (struct sockaddr_in *)saddr;
+        struct sockaddr_in *daddr4 = (struct sockaddr_in *)daddr;
+
+        pphdr->addrlen = htons(sizeof(struct proxy_addr_ipv4));
+        ppaddr->src_addr = saddr4->sin_addr.s_addr;
+        ppaddr->dst_addr = daddr4->sin_addr.s_addr;
+        ppaddr->src_port = saddr4->sin_port;
+        ppaddr->dst_port = daddr4->sin_port;
+    }
+
+    pphdrlen = sizeof(struct proxy_hdr_v2) + ntohs(pphdr->addrlen);
+    if ((pphdrlen + 1) > max_len)
+        return 0;
+
+    memcpy(str_request, str_pphdr, pphdrlen);
+    return pphdrlen;
+}
+
 /* remote Web server is connected, send it the get url query.  */
 static int
 http_request_thread(thread_ref_t thread)
@@ -1482,6 +1531,7 @@ http_request_thread(thread_ref_t thread)
 	char *str_request;
 	url_t *fetched_url;
 	int ret = 0;
+    int datalen = 0;
 
 	/* Handle write timeout */
 	if (thread->type == THREAD_WRITE_TIMEOUT)
@@ -1514,8 +1564,14 @@ http_request_thread(thread_ref_t thread)
 			 ntohs(inet_sockaddrport(addr)));
 	}
 
+    if (checker->vs->proxy_protocol) {
+        datalen = http_request_fill_pphdr(str_request, GET_BUFFER_LENGTH,
+                &checker->co->bindto, &checker->co->dst);
+    }
+
 		/* if literal ipv6 address, use ipv6 template, see RFC 2732 */
-	snprintf(str_request, GET_BUFFER_LENGTH, (addr->ss_family == AF_INET6 && !vhost) ? request_template_ipv6 : request_template,
+	datalen += snprintf(str_request + datalen, GET_BUFFER_LENGTH - datalen,
+            (addr->ss_family == AF_INET6 && !vhost) ? request_template_ipv6 : request_template,
 			fetched_url->path,
 			http_get_check->http_protocol == HTTP_PROTOCOL_1_1 ? 1 : 0,
 			http_get_check->http_protocol == HTTP_PROTOCOL_1_0C || http_get_check->http_protocol == HTTP_PROTOCOL_1_1 ? "Connection: close\r\n" : "",
@@ -1525,9 +1581,9 @@ http_request_thread(thread_ref_t thread)
 
 	/* Send the GET request to remote Web server */
 	if (http_get_check->proto == PROTO_SSL)
-		ret = ssl_send_request(req->ssl, str_request, (int)strlen(str_request));
+		ret = ssl_send_request(req->ssl, str_request, datalen);
 	else
-		ret = (send(thread->u.f.fd, str_request, strlen(str_request), 0) != -1);
+		ret = (send(thread->u.f.fd, str_request, datalen, 0) != -1);
 
 	FREE(str_request);
 

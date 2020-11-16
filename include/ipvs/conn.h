@@ -56,6 +56,7 @@ struct dp_vs_conn_param {
     uint16_t            vport;
     uint16_t            ct_dport; /* RS port for template connection */
     bool                outwall;
+    bool                proxy_protocol;
 };
 
 struct conn_tuple_hash {
@@ -159,6 +160,8 @@ struct dp_vs_conn {
 
     /* flag for gfwip */
     bool outwall;
+    /* flag for proxy_protocol_v2*/
+    bool proxy_protocol;
 
 } __rte_cache_aligned;
 
@@ -335,7 +338,7 @@ dp_vs_conn_clear_redirect_hashed(struct dp_vs_conn *conn)
 {
     conn->flags &= ~DPVS_CONN_F_REDIRECT_HASHED;
 }
-
+ 
 uint32_t dp_vs_conn_hashkey(int af,
     const union inet_addr *saddr, uint16_t sport,
     const union inet_addr *daddr, uint16_t dport,

@@ -269,6 +269,7 @@ init_global_data(data_t * data, data_t *prev_global_data, bool copy_unchangeable
 				data->smtp_helo_name = STRDUP(data->local_name);
 		}
 	}
+    data->proxy_protocol = 0;
 
 	/* Check that there aren't conflicts with the notify FIFOs */
 #ifdef _WITH_VRRP_
@@ -660,4 +661,5 @@ dump_global_data(FILE *fp, data_t * data)
 	if (global_data->log_unknown_vrids)
 		conf_write(fp, " log_unknown_vrids");
 #endif
+	conf_write(fp, " proxy_protocol %s", global_data->proxy_protocol ? "enabled" : "disabled");
 }
