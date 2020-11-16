@@ -44,6 +44,7 @@ enum {
     DPVS_CONN_F_SYNPROXY         = 0x8000,
     DPVS_CONN_F_TEMPLATE         = 0x1000,
     DPVS_CONN_F_NOFASTXMIT       = 0x2000,
+    DPVS_CONN_F_ONE_PACKET       = 0x0400,
 };
 
 struct dp_vs_conn_param {
