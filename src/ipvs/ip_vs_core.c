@@ -283,9 +283,9 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     struct dp_vs_dest *dest;
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
-    param.proxy_protocol = false;
 
     assert(svc && iph && mbuf);
+    param.proxy_protocol = false;
 
     ports = mbuf_header_pointer(mbuf, iph->len, sizeof(_ports), _ports);
     if (!ports)

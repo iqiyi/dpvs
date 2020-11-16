@@ -44,7 +44,6 @@ enum {
     DPVS_CONN_F_SYNPROXY         = 0x8000,
     DPVS_CONN_F_TEMPLATE         = 0x1000,
     DPVS_CONN_F_NOFASTXMIT       = 0x2000,
-    DPVS_CONN_F_WITH_PPHDR       = 0x0400,  /* proxy_protocol_v2 head flag */
 };
 
 struct dp_vs_conn_param {
@@ -339,24 +338,6 @@ dp_vs_conn_clear_redirect_hashed(struct dp_vs_conn *conn)
     conn->flags &= ~DPVS_CONN_F_REDIRECT_HASHED;
 }
  
-static inline bool
-dp_vs_conn_is_with_pphdr(struct dp_vs_conn *conn)
-{
-    return (conn->flags & DPVS_CONN_F_WITH_PPHDR) ? true : false;
-}
-
-static inline void
-dp_vs_conn_set_with_pphdr(struct dp_vs_conn *conn)
-{
-    conn->flags |= DPVS_CONN_F_WITH_PPHDR;
-}
-
-static inline void
-dp_vs_conn_clear_with_pphdr(struct dp_vs_conn *conn)
-{
-    conn->flags &= ~DPVS_CONN_F_WITH_PPHDR;
-}
-
 uint32_t dp_vs_conn_hashkey(int af,
     const union inet_addr *saddr, uint16_t sport,
     const union inet_addr *daddr, uint16_t dport,
