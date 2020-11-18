@@ -66,6 +66,20 @@ int dpvs_scheduler_term(void)
     return EDPVS_OK;
 }
 
+void dpvs_lcore_job_init(struct dpvs_lcore_job *job, char *name,
+                         dpvs_lcore_job_t type, job_pt func,
+                         uint32_t skip_loops)
+{
+    if (!job) {
+        return;
+    }
+
+    job->type = type;
+    job->func = func;
+    job->skip_loops = skip_loops;
+    snprintf(job->name, sizeof(job->name) - 1, "%s", name);
+}
+
 int dpvs_lcore_job_register(struct dpvs_lcore_job *lcore_job, dpvs_lcore_role_t role)
 {
     struct dpvs_lcore_job *cur;

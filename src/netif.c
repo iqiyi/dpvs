@@ -2534,14 +2534,47 @@ static void lcore_job_timer_manage(void *args)
 }
 
 #define NETIF_JOB_MAX   6
-struct dpvs_lcore_job_array {
-    struct dpvs_lcore_job job;
-    dpvs_lcore_role_t role;
-} netif_jobs[NETIF_JOB_MAX];
+
+static struct dpvs_lcore_job_array netif_jobs[NETIF_JOB_MAX] = {
+    [0] = {
+        .role = LCORE_ROLE_FWD_WORKER,
+        .job.name = "recv_fwd",
+        .job.type = LCORE_JOB_LOOP,
+        .job.func = lcore_job_recv_fwd,
+    },
+
+    [1] = {
+        .role = LCORE_ROLE_FWD_WORKER,
+        .job.name = "xmit",
+        .job.type = LCORE_JOB_LOOP,
+        .job.func = lcore_job_xmit,
+    },
+
+    [2] = {
+        .role = LCORE_ROLE_FWD_WORKER,
+        .job.name = "timer_manage",
+        .job.type = LCORE_JOB_LOOP,
+        .job.func = lcore_job_timer_manage,
+    },
+
+    [3] = {
+        .role = LCORE_ROLE_ISOLRX_WORKER,
+        .job.name = "isol_pkt_rcv",
+        .job.type = LCORE_JOB_LOOP,
+        .job.func = recv_on_isol_lcore,
+    },
+
+    [4] = {
+        .role = LCORE_ROLE_MASTER,
+        .job.name = "timer_manage",
+        .job.type = LCORE_JOB_LOOP,
+        .job.func = lcore_job_timer_manage,
+    },
+};
 
 static void netif_lcore_init(void)
 {
-    int ii, res;
+    int i, res;
     lcoreid_t cid;
 
     timer_sched_interval_us = dpvs_timer_sched_interval_get();
@@ -2572,52 +2605,21 @@ static void netif_lcore_init(void)
     lcore_role_init();
 
     /* register lcore jobs*/
-    netif_jobs[0].role = LCORE_ROLE_FWD_WORKER;
-    snprintf(netif_jobs[0].job.name, sizeof(netif_jobs[0].job.name) - 1, "%s", "recv_fwd");
-    netif_jobs[0].job.func = lcore_job_recv_fwd;
-    netif_jobs[0].job.data = NULL;
-    netif_jobs[0].job.type = LCORE_JOB_LOOP;
-
-    netif_jobs[1].role = LCORE_ROLE_FWD_WORKER;
-    snprintf(netif_jobs[1].job.name, sizeof(netif_jobs[1].job.name) - 1, "%s", "xmit");
-    netif_jobs[1].job.func = lcore_job_xmit;
-    netif_jobs[1].job.data = NULL;
-    netif_jobs[1].job.type = LCORE_JOB_LOOP;
-
-    netif_jobs[2].role = LCORE_ROLE_FWD_WORKER;
-    snprintf(netif_jobs[2].job.name, sizeof(netif_jobs[2].job.name) - 1, "%s", "timer_manage");
-    netif_jobs[2].job.func = lcore_job_timer_manage;
-    netif_jobs[2].job.data = NULL;
-    netif_jobs[2].job.type = LCORE_JOB_LOOP;
-
-    netif_jobs[3].role = LCORE_ROLE_ISOLRX_WORKER;
-    snprintf(netif_jobs[3].job.name, sizeof(netif_jobs[3].job.name) - 1, "%s", "isol_pkt_rcv");
-    netif_jobs[3].job.func = recv_on_isol_lcore;
-    netif_jobs[3].job.data = NULL;
-    netif_jobs[3].job.type = LCORE_JOB_LOOP;
-
-    netif_jobs[4].role = LCORE_ROLE_MASTER;
-    snprintf(netif_jobs[4].job.name, sizeof(netif_jobs[4].job.name) - 1, "%s", "timer_manage");
-    netif_jobs[4].job.func = lcore_job_timer_manage;
-    netif_jobs[4].job.data = NULL;
-    netif_jobs[4].job.type = LCORE_JOB_LOOP;
-
     if (g_kni_lcore_id == 0) {
         netif_jobs[5].role = LCORE_ROLE_MASTER;
-        snprintf(netif_jobs[5].job.name, sizeof(netif_jobs[5].job.name) - 1, "%s", "kni_master_proc");
+        dpvs_lcore_job_init(&netif_jobs[5].job, "kni_master_proc",
+                            LCORE_JOB_LOOP, kni_lcore_loop, 0);
     } else {
         netif_jobs[5].role = LCORE_ROLE_KNI_WORKER;
-        snprintf(netif_jobs[5].job.name, sizeof(netif_jobs[5].job.name) - 1, "%s", "kni_loop");
+        dpvs_lcore_job_init(&netif_jobs[5].job, "kni_loop",
+                            LCORE_JOB_LOOP, kni_lcore_loop, 0);
     }
-    netif_jobs[5].job.func = kni_lcore_loop;
-    netif_jobs[5].job.data = NULL;
-    netif_jobs[5].job.type = LCORE_JOB_LOOP;
 
-    for (ii = 0; ii < NETIF_JOB_MAX; ii++) {
-        res = dpvs_lcore_job_register(&netif_jobs[ii].job, netif_jobs[ii].role);
+    for (i = 0; i < NELEMS(netif_jobs); i++) {
+        res = dpvs_lcore_job_register(&netif_jobs[i].job, netif_jobs[i].role);
         if (res < 0) {
             rte_exit(EXIT_FAILURE, "%s: fail to register lcore job '%s', exiting ...\n",
-                    __func__, netif_jobs[ii].job.name);
+                    __func__, netif_jobs[i].job.name);
             break;
         }
     }
@@ -2625,12 +2627,12 @@ static void netif_lcore_init(void)
 
 static inline void netif_lcore_cleanup(void)
 {
-    int ii;
+    int i;
 
-    for (ii = 0; ii < NETIF_JOB_MAX; ii++) {
-        if (dpvs_lcore_job_unregister(&netif_jobs[ii].job, netif_jobs[ii].role) < 0)
+    for (i = 0; i < NELEMS(netif_jobs); i++) {
+        if (dpvs_lcore_job_unregister(&netif_jobs[i].job, netif_jobs[i].role) < 0)
             RTE_LOG(WARNING, NETIF, "%s: fail to unregister lcore job '%s'\n",
-                    __func__, netif_jobs[ii].job.name);
+                    __func__, netif_jobs[i].job.name);
     }
 }
 
