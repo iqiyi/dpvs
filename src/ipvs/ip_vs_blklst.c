@@ -216,8 +216,10 @@ void dp_vs_blklst_flush(struct dp_vs_service *svc)
 
     for (hash = 0; hash < DPVS_BLKLST_TAB_SIZE; hash++) {
         list_for_each_entry_safe(entry, next, &this_blklst_tab[hash], list) {
-            if (entry->af == svc->af &&
-                    inet_addr_equal(svc->af, &entry->vaddr, &svc->addr))
+            if (entry->af == svc->af
+                && entry->vport == svc->port
+                && entry->proto == svc->proto
+                && inet_addr_equal(svc->af, &entry->vaddr, &svc->addr))
                 dp_vs_blklst_del(svc->af, entry->proto, &entry->vaddr,
                                  entry->vport, &entry->blklst);
         }
