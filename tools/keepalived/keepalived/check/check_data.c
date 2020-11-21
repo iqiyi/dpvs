@@ -442,16 +442,18 @@ dump_vs(FILE *fp, const void *data)
 	conf_write(fp, " SYN proxy is %s", vs->syn_proxy ? "ON" : "OFF");
 	conf_write(fp, " expire_quiescent_conn is %s", vs->expire_quiescent_conn ? "ON" : "OFF");
 
-	switch (vs->hash_target) {
-	case IP_VS_SVC_F_SIP_HASH:
-		conf_write(fp, "   hash target = sip");
-		break;
-	case IP_VS_SVC_F_QID_HASH:
-		conf_write(fp, "   hash target = quicid");
-		break;
-	default:
-		conf_write(fp, "   hash target not support");
-		break;
+	if (vs->hash_target) {
+	        switch (vs->hash_target) {
+	        case IP_VS_SVC_F_SIP_HASH:
+		        conf_write(fp, "   hash target = sip");
+		        break;
+	        case IP_VS_SVC_F_QID_HASH:
+		        conf_write(fp, "   hash target = quicid");
+		        break;
+	        default:
+		        conf_write(fp, "   hash target not support");
+		        break;
+	        }
 	}
 
 	conf_write(fp, "   alive = %d", vs->alive);
