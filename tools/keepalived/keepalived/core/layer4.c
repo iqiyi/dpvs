@@ -50,10 +50,9 @@ socket_bind_connect(int fd, conn_opts_t *co)
 		return connect_error;
 	}
 	if (opt == SOCK_STREAM) {
-		/* free the tcp port after closing the socket descriptor, but
-		 * allow time for a proper shutdown. */
+		/* free the tcp port after closing the socket descriptor */
 		li.l_onoff = 1;
-		li.l_linger = 5;
+		li.l_linger = 0;
 		if (setsockopt(fd, SOL_SOCKET, SO_LINGER, (char *) &li, sizeof (struct linger)))
 			log_message(LOG_INFO, "Failed to set SO_LINGER for socket %d - errno %d (%m)", fd, errno);
 	}
