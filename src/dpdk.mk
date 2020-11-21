@@ -25,8 +25,6 @@ DPDKDIR := $(RTE_SDK)/$(RTE_TARGET)
 
 INCDIRS += -I $(DPDKDIR)/include
 
-include $(RTE_SDK)/mk/rte.vars.mk
-
 CFLAGS += -include $(DPDKDIR)/include/rte_config.h
 
 LIBS += -L $(DPDKDIR)/lib
