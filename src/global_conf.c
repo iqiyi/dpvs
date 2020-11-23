@@ -33,9 +33,10 @@ static void log_current_time(void)
 
 static int set_log_level(char *log_level)
 {
-    if (!log_level)
+    if (!log_level) {
         rte_log_set_global_level(RTE_LOG_DEBUG);
-    else if (!strncmp(log_level, "EMERG", strlen("EMERG")))
+        rte_log_set_level_regexp("user[0-9]", RTE_LOG_DEBUG);
+    } else if (!strncmp(log_level, "EMERG", strlen("EMERG")))
         rte_log_set_global_level(RTE_LOG_EMERG);
     else if (!strncmp(log_level, "ALERT", strlen("ALERT")))
         rte_log_set_global_level(RTE_LOG_ALERT);
@@ -49,9 +50,10 @@ static int set_log_level(char *log_level)
         rte_log_set_global_level(RTE_LOG_NOTICE);
     else if (!strncmp(log_level, "INFO", strlen("INFO")))
         rte_log_set_global_level(RTE_LOG_INFO);
-    else if (!strncmp(log_level, "DEBUG", strlen("DEBUG")))
+    else if (!strncmp(log_level, "DEBUG", strlen("DEBUG"))) {
         rte_log_set_global_level(RTE_LOG_DEBUG);
-    else {
+        rte_log_set_level_regexp("user[0-9]", RTE_LOG_DEBUG);
+    } else {
         RTE_LOG(WARNING, CFG_FILE, "%s: illegal log level: %s\n",
                 __func__, log_level);
         return EDPVS_INVAL;
