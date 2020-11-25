@@ -2361,6 +2361,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
                       lcoreid_t cid, uint16_t count, bool pkts_from_ring)
 {
     int i, t;
+    int pkt_len = 0;
     struct ether_hdr *eth_hdr;
     struct rte_mbuf *mbuf_copied = NULL;
 
@@ -2372,6 +2373,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
     for (i = 0; i < count; i++) {
         struct rte_mbuf *mbuf = mbufs[i];
         struct netif_port *dev = netif_port_get(mbuf->port);
+        pkt_len = mbuf->pkt_len;
 
         if (unlikely(!dev)) {
             rte_pktmbuf_free(mbuf);
@@ -2442,7 +2444,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
                            (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) ? true:false,
                            cid, pkts_from_ring);
 
-        lcore_stats[cid].ibytes += mbuf->pkt_len;
+        lcore_stats[cid].ibytes += pkt_len;
         lcore_stats[cid].ipackets++;
     }
 }
