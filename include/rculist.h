@@ -4,18 +4,59 @@
 #include <rte_atomic.h>
 #include "list.h"
 #define __rcu
-#define WRITE_ONCE(a, b) (a) = (b)
 #define rcu_assign_pointer(a, b) do {\
     rte_wmb();\
     WRITE_ONCE(a, b);\
 } while (0)
 #define __list_add_valid(...) 1
-#define READ_ONCE(a) (a)
-#define rcu_dereference_raw(p) \
-({ \
-    typeof(p) ________p1 = READ_ONCE(p); \
-    ((typeof(*p) *)(________p1)); \
+#define __READ_ONCE(x)\
+({\
+    union { typeof(x) __val; char __c[1]; } __u;\
+    __read_once_size(&(x), __u.__c, sizeof(x));\
+    __u.__val;\
 })
+#define READ_ONCE(x) __READ_ONCE(x)
+#define rcu_dereference_raw(p)\
+({\
+    typeof(p) ________p1 = READ_ONCE(p);\
+    ((typeof(*p) *)(________p1));\
+})
+#define WRITE_ONCE(x, val)\
+({\
+    union { typeof(x) __val; char __c[1]; } __u =\
+        { .__val = (typeof(x)) (val) };\
+    __write_once_size(&(x), __u.__c, sizeof(x));\
+    __u.__val;\
+})
+
+#define barrier rte_mb
+static __always_inline void __read_once_size(const volatile void *p, void *res, int size)
+{
+    switch (size) {
+    case 1: *(__u8 *)res = *(volatile __u8 *)p; break;
+    case 2: *(__u16 *)res = *(volatile __u16 *)p; break;
+    case 4: *(__u32 *)res = *(volatile __u32 *)p; break;
+    case 8: *(__u64 *)res = *(volatile __u64 *)p; break;
+    default:
+        barrier();
+        __builtin_memcpy((void *)res, (const void *)p, size);
+        barrier();
+    }
+}
+
+static __always_inline void __write_once_size(volatile void *p, void *res, int size)
+{
+    switch (size) {
+    case 1: *(volatile __u8 *)p = *(__u8 *)res; break;
+    case 2: *(volatile __u16 *)p = *(__u16 *)res; break;
+    case 4: *(volatile __u32 *)p = *(__u32 *)res; break;
+    case 8: *(volatile __u64 *)p = *(__u64 *)res; break;
+    default:
+        barrier();
+        __builtin_memcpy((void *)p, (const void *)res, size);
+        barrier();
+    }
+}
 
 /*
  * Why is there no list_empty_rcu()?  Because list_empty() serves this
