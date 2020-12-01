@@ -131,6 +131,18 @@ typedef struct _blklst_addr_group {
 	list range;
 } blklst_addr_group;
 
+/* whitelist ip group*/
+typedef struct _whtlst_addr_entry {
+    struct sockaddr_storage addr;
+    uint32_t range;
+} whtlst_addr_entry;
+
+typedef struct _whtlst_addr_group {
+    char *gname;
+    list addr_ip;
+    list range;
+} whtlst_addr_group;
+
 typedef struct _tunnel_entry {
 	struct sockaddr_storage remote;
 	struct sockaddr_storage local;
@@ -237,6 +249,7 @@ typedef struct _virtual_server {
 	unsigned hash_target;
 	char 	*local_addr_gname; 	/*local ip address group name*/
 	char 	*blklst_addr_gname; 	/*black list ip group name*/	
+	char 	*whtlst_addr_gname; 	/*white list ip group name*/	
 	char 	*vip_bind_dev; 		/*the interface name, vip bindto*/
 } virtual_server_t;
 
@@ -253,6 +266,7 @@ typedef struct _check_data {
 	unsigned			num_smtp_alert;
 	list laddr_group;
 	list blklst_group;
+    list whtlst_group;
 	list tunnel_group;
 } check_data_t;
 
@@ -348,6 +362,9 @@ extern void set_rsgroup(char *);
 extern void dump_check_data(FILE *, check_data_t *);
 extern void alloc_blklst_group(char *);
 extern void alloc_blklst_entry(const vector_t *);
+extern void alloc_whtlst_group(char *);
+extern void alloc_whtlst_entry(const vector_t *);
+
 
 extern void alloc_tunnel_entry(char *name);
 extern void alloc_tunnel(char *gname);

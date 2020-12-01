@@ -84,4 +84,4 @@ struct ip_vs_conn_array {
     ipvs_conn_entry_t array[0];
 } __attribute__((__packed__));
 
-#endif /* __DPVS_BLKLST_CONF_H__ */
+#endif /* __DPVS_CONN_CONF_H__ */

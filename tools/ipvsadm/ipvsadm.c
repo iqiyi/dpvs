@@ -144,7 +144,10 @@
 #define CMD_ADDBLKLST		(CMD_NONE+18)
 #define CMD_DELBLKLST		(CMD_NONE+19)
 #define CMD_GETBLKLST		(CMD_NONE+20)
-#define CMD_MAX			CMD_GETBLKLST
+#define CMD_ADDWHTLST		(CMD_NONE+21)
+#define CMD_DELWHTLST		(CMD_NONE+22)
+#define CMD_GETWHTLST		(CMD_NONE+23)
+#define CMD_MAX			CMD_GETWHTLST
 #define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
 
 static const char* cmdnames[] = {
@@ -168,6 +171,9 @@ static const char* cmdnames[] = {
 	"add-blklst",
 	"del-blklst",
 	"get-blklst",
+	"add-whtlst",
+	"del-whtlst",
+	"get-whtlst",
 };
 
 static const char* optnames[] = {
@@ -196,12 +202,14 @@ static const char* optnames[] = {
 	"pe" ,
 	"local-address" ,
 	"blklst-address",
+	"whtlst-address",
 	"synproxy" ,
 	"ifname" ,
 	"sockpair" ,
 	"hash-target",
 	"cpu",
 	"expire-quiescent",
+	"wlst",
 };
 
 /*
@@ -214,47 +222,53 @@ static const char* optnames[] = {
  */
 static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 {
-/*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe laddr blst syn ifname sockpair hashtag cpu expire-quiescent*/
+/*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe laddr blst syn ifname sockpair hashtag cpu expire-quiescent wlst*/
 /*ADD*/
-    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' '},
+    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' ', 'x'},
 /*EDIT*/
-    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' '},
+    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', ' ', 'x' ,'x' ,' ', 'x', ' ', 'x'},
 /*DEL*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*FLUSH*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*LIST*/
-    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x' ,' ' ,'x', ' ', 'x'},
+    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x' ,' ' ,'x', ' ', 'x', 'x'},
 /*ADDSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*DELSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*EDITSRV*/
-    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*TIMEOUT*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*STARTD*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*STOPD*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*RESTORE*/
-    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*SAVE*/
-    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*ZERO*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*ADDLADDR*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x', 'x'},
 /*DELLADDR*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x', '+' ,'x' ,'x', 'x', 'x', 'x'},
 /*GETLADDR*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', ' ', 'x'},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', ' ', 'x', 'x'},
 /*ADDBLKLST*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*DELBLKLST*/
-    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 /*GETBLKLST*/
-    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x'},
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
+/*ADDWHTLST*/
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', '+'},
+/*DELWHTLST*/
+    {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', '+'},
+/*GETWHTLST*/
+    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 };
 
 /* printing format flags */
@@ -286,6 +300,7 @@ struct ipvs_command_entry {
 	ipvs_daemon_t		daemon;
 	ipvs_laddr_t		laddr;
 	ipvs_blklst_t		blklst;
+	ipvs_whtlst_t		whtlst;
 	ipvs_sockpair_t		sockpair;
 	lcoreid_t		cid;
 };
@@ -354,6 +369,9 @@ static int list_all_laddrs(lcoreid_t cid);
 static void list_blklsts_print_title(void);
 static int list_blklst(int af, const union nf_inet_addr *addr, uint16_t port, uint16_t protocol);
 static int list_all_blklsts(void);
+static void list_whtlsts_print_title(void);
+static int list_whtlst(int af, const union nf_inet_addr *addr, uint16_t port, uint16_t protocol);
+static int list_all_whtlsts(void);
 
 static int process_options(int argc, char **argv, int reading_stdin);
 
@@ -419,6 +437,9 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "add-blklst", 'U', POPT_ARG_NONE, NULL, 'U', NULL, NULL },
 		{ "del-blklst", 'V', POPT_ARG_NONE, NULL, 'V', NULL, NULL },
 		{ "get-blklst", 'B', POPT_ARG_NONE, NULL, 'B', NULL, NULL },
+		{ "add-whtlst", 'O', POPT_ARG_NONE, NULL, 'O', NULL, NULL },
+		{ "del-whtlst", 'Y', POPT_ARG_NONE, NULL, 'Y', NULL, NULL },
+		{ "get-whtlst", 'W', POPT_ARG_NONE, NULL, 'W', NULL, NULL },
 		{ "tcp-service", 't', POPT_ARG_STRING, &optarg, 't',
 		  NULL, NULL },
 		{ "udp-service", 'u', POPT_ARG_STRING, &optarg, 'u',
@@ -471,6 +492,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		  NULL, NULL },
 		{ "laddr", 'z', POPT_ARG_STRING, &optarg, 'z', NULL, NULL },
 		{ "blklst", 'k', POPT_ARG_STRING, &optarg, 'k', NULL, NULL },
+		{ "whtlst", '2', POPT_ARG_STRING, &optarg, '2', NULL, NULL },
 		{ "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
 		{ "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
@@ -563,6 +585,15 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		break;
 	case 'B':
 		set_command(&ce->cmd, CMD_GETBLKLST);
+		break;
+	case 'O':
+		set_command(&ce->cmd, CMD_ADDWHTLST);
+		break;
+	case 'Y':
+		set_command(&ce->cmd, CMD_DELWHTLST);
+		break;
+	case 'W':
+		set_command(&ce->cmd, CMD_GETWHTLST);
 		break;
 	default:
 		tryhelp_exit(argv[0], -1);
@@ -779,6 +810,19 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			ce->blklst.af = nsvc.af;
 			ce->blklst.addr = nsvc.nf_addr;
 			ce->blklst.__addr_v4 = nsvc.nf_addr.ip;
+			break;
+
+			}
+		case '2':
+			{
+			ipvs_service_t		nsvc;
+			set_option(options,OPT_WHTLST_ADDRESS);
+			parse = parse_service(optarg, &nsvc);
+			if (!(parse & SERVICE_ADDR))
+				fail(2, "illegal whitelist address");
+			ce->whtlst.af = nsvc.af;
+			ce->whtlst.addr = nsvc.nf_addr;
+			ce->whtlst.__addr_v4 = nsvc.nf_addr.ip;
 			break;
 
 			}
@@ -1055,6 +1099,23 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		}
 		else
 			result = list_all_blklsts();
+		break;
+
+	case CMD_ADDWHTLST:
+		result = ipvs_add_whtlst(&ce.svc , &ce.whtlst);
+		break;
+
+	case CMD_DELWHTLST:
+		result = ipvs_del_whtlst(&ce.svc , &ce.whtlst);
+		break;
+
+	case CMD_GETWHTLST:
+		if(options & OPT_SERVICE) {
+			list_whtlsts_print_title();
+			result = list_whtlst(ce.svc.af, &ce.svc.nf_addr, ce.svc.user.port, ce.svc.user.protocol);
+		}
+		else
+			result = list_all_whtlsts();
 		break;
 	}
 	if (result)
@@ -1459,6 +1520,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  %s -P|Q -t|u|q|f service-address -z local-address\n"
 		"  %s -G -t|u|q|f service-address \n"
 		"  %s -U|V -t|u|q|f service-address -k blacklist-address\n"
+		"  %s -O|Y -t|u|q|f service-address -2 whitelist-address\n"
 		"  %s -a|e -t|u|q|f service-address -r server-address [options]\n"
 		"  %s -d -t|u|q|f service-address -r server-address\n"
 		"  %s -L|l [options]\n"
@@ -1468,7 +1530,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  %s --stop-daemon state\n"
 		"  %s -h\n\n",
 		program, program, program,
-		program, program, program,
+		program, program, program, program,
 		program, program, program, program, program,
 		program, program, program, program, program);
 
@@ -1486,6 +1548,9 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --add-blklst      -U        add blacklist address\n"
 		"  --del-blklst      -V        del blacklist address\n"
 		"  --get-blklst      -B        get blacklist address\n"
+        "  --add-whtlst      -O        add whitelist address\n"
+        "  --del-whtlst      -Y        del whitelist address\n"
+        "  --get-whtlst      -W        get whitelist address\n"
 		"  --save            -S        save rules to stdout\n"
 		"  --add-server      -a        add real server with options\n"
 		"  --edit-server     -e        edit real server with options\n"
@@ -2199,6 +2264,81 @@ static int list_all_blklsts(void)
 	list_blklsts_print_title();
 	for (i = 0; i < get->user.num_services; i++)
 		list_blklst(get->user.entrytable[i].af, &get->user.entrytable[i].nf_addr,
+				get->user.entrytable[i].user.port, get->user.entrytable[i].user.protocol);
+	free(get);
+	return 0;
+}
+
+static void list_whtlsts_print_title(void)
+{
+	printf("%-20s %-8s %-20s\n" ,
+	    "VIP:VPORT" ,
+		"PROTO" ,
+		"WHITELIST");
+}
+
+static void print_service_and_whtlsts(struct dp_vs_whtlst_conf *whtlst)
+{
+	char vip[64], bip[64], port[8], proto[8];
+	const char *pattern = (whtlst->af == AF_INET ?
+			"%s:%-8s %-8s %-20s\n" : "[%s]:%-8s %-8s %-20s\n");
+
+	switch (whtlst->proto) {
+		case IPPROTO_TCP:
+			snprintf(proto, sizeof(proto), "%s", "TCP");
+			break;
+		case IPPROTO_UDP:
+			snprintf(proto, sizeof(proto), "%s", "UDP");
+			break;
+		case IPPROTO_ICMP:
+			snprintf(proto, sizeof(proto), "%s", "ICMP");
+			break;
+		case IPPROTO_ICMPV6:
+			snprintf(proto, sizeof(proto), "%s", "IMCPv6");
+			break;
+		default:
+			break;
+	}
+
+	snprintf(port, sizeof(port), "%u", ntohs(whtlst->vport));
+
+	printf(pattern, inet_ntop(whtlst->af, (const void *)&whtlst->vaddr, vip, sizeof(vip)),
+			port, proto, inet_ntop(whtlst->af, (const void *)&whtlst->whtlst, bip, sizeof(bip)));
+}
+static int list_whtlst(int af, const union nf_inet_addr *addr, uint16_t port, uint16_t protocol)
+{
+	int i;
+	struct dp_vs_whtlst_conf_array *get;
+
+	if (!(get = ipvs_get_whtlsts())) {
+		fprintf(stderr, "%s\n", ipvs_strerror(errno));
+		return -1;
+	}
+
+	for (i = 0; i < get->naddr; i++) {
+		if (inet_addr_equal(af, addr,(const union nf_inet_addr *) &get->whtlsts[i].vaddr) &&
+				port == get->whtlsts[i].vport && protocol == get->whtlsts[i].proto) {
+			print_service_and_whtlsts(&get->whtlsts[i]);
+		}
+	}
+	free(get);
+
+	return 0;
+}
+
+static int list_all_whtlsts(void)
+{
+	struct ip_vs_get_services_app *get;
+	int i;
+
+	if (!(get = ipvs_get_services(0))) {
+		fprintf(stderr, "%s\n", ipvs_strerror(errno));
+		exit(1);
+	}
+
+	list_whtlsts_print_title();
+	for (i = 0; i < get->user.num_services; i++)
+		list_whtlst(get->user.entrytable[i].af, &get->user.entrytable[i].nf_addr,
 				get->user.entrytable[i].user.port, get->user.entrytable[i].user.protocol);
 	free(get);
 	return 0;

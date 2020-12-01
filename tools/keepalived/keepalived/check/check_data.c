@@ -98,6 +98,78 @@ dump_ssl(FILE *fp)
 		conf_write(fp, " Key file : %s", ssl->keyfile);
 }
 
+/* whitelist IP address group facility functions */
+static void
+free_whtlst_group(void *data)
+{
+    whtlst_addr_group *whtlst_group = data;
+    FREE_PTR(whtlst_group->gname);
+    free_list(&whtlst_group->addr_ip);
+    free_list(&whtlst_group->range);
+    FREE(whtlst_group);
+}
+static void
+dump_whtlst_group(FILE *fp, const void *data)
+{
+    const whtlst_addr_group *whtlst_group = data;
+
+    conf_write(fp, " whitelist IP address group = %s", whtlst_group->gname);
+    dump_list(fp, whtlst_group->addr_ip);
+    dump_list(fp, whtlst_group->range);
+}
+static void
+free_whtlst_entry(void *data)
+{
+    FREE(data);
+}
+static void
+dump_whtlst_entry(FILE *fp, const void *data)
+{
+    const whtlst_addr_entry *whtlst_entry = data;
+
+    if (whtlst_entry->range)
+        conf_write(fp, "   IP Range = %s-%d"
+                , inet_sockaddrtos(&whtlst_entry->addr)
+                , whtlst_entry->range);
+    else
+        conf_write(fp, "   IP = %s"
+                , inet_sockaddrtos(&whtlst_entry->addr));
+}
+void
+alloc_whtlst_group(char *gname)
+{
+    int size = strlen(gname);
+    whtlst_addr_group *new;
+
+    new = (whtlst_addr_group *) MALLOC(sizeof (whtlst_addr_group));
+    new->gname = (char *) MALLOC(size + 1);
+    memcpy(new->gname, gname, size);
+    new->addr_ip = alloc_list(free_whtlst_entry, dump_whtlst_entry);
+    new->range = alloc_list(free_whtlst_entry, dump_whtlst_entry);
+
+    list_add(check_data->whtlst_group, new);
+}
+void
+alloc_whtlst_entry(const vector_t *strvec)
+{
+    whtlst_addr_group *whtlst_group = LIST_TAIL_DATA(check_data->whtlst_group);
+    whtlst_addr_entry *new;
+
+    new = (whtlst_addr_entry *) MALLOC(sizeof (whtlst_addr_entry));
+
+    inet_stor(vector_slot(strvec, 0), &new->range);
+	if (new->range == UINT32_MAX)
+		new->range = 0;
+    inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
+
+    if (!new->range)
+        list_add(whtlst_group->addr_ip, new);
+    else if ( (0 < new->range) && (new->range < 255) )
+        list_add(whtlst_group->range, new);
+    else
+        log_message(LOG_INFO, "invalid: whitelist IP address range %d", new->range);
+}
+
 /* Virtual server group facility functions */
 static void
 free_vsg(void *data)
@@ -271,6 +343,7 @@ free_vs(void *data)
 	free_notify_script(&vs->notify_quorum_down);
 	FREE_PTR(vs->local_addr_gname);
 	FREE_PTR(vs->blklst_addr_gname);
+    FREE_PTR(vs->whtlst_addr_gname);
 	FREE_PTR(vs->vip_bind_dev);
 	FREE(vs);
 }
@@ -531,6 +604,7 @@ alloc_vs(const char *param1, const char *param2)
 	new->expire_quiescent_conn = false;
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
+    new->whtlst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;
 	new->hash_target = 0;
 	new->bps = 0;
@@ -974,6 +1048,7 @@ alloc_check_data(void)
 #endif
 	new->laddr_group = alloc_list(free_laddr_group, dump_laddr_group);
 	new->blklst_group = alloc_list(free_blklst_group, dump_blklst_group);
+    new->whtlst_group = alloc_list(free_whtlst_group, dump_whtlst_group);
 	new->tunnel_group = alloc_list(free_tunnel_group, dump_tunnel_group);
 
 	return new;
