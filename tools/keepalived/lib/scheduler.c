@@ -616,6 +616,7 @@ thread_event_cancel(const thread_t *thread_cp)
 	rb_erase(&event->n, &m->io_events);
 	if (event == m->current_event)
 		m->current_event = NULL;
+	thread_events_resize(m, -1);
 	FREE(thread->event);
 	return 0;
 }
@@ -1641,15 +1642,15 @@ thread_fetch_next_queue(thread_master_t *m)
 
 	assert(m != NULL);
 
-	/* If there is event process it first. */
-	if (m->event.next != &m->event)
-		return &m->event;
-
-	/* If there are ready threads process them */
-	if (m->ready.next != &m->ready)
-		return &m->ready;
-
 	do {
+		/* If there is event process it first. */
+		if (m->event.next != &m->event)
+			return &m->event;
+
+		/* If there are ready threads process them */
+		if (m->ready.next != &m->ready)
+			return &m->ready;
+
 #ifdef _WITH_SNMP_
 		if (snmp_running)
 			snmp_epoll_info(m);
@@ -1762,10 +1763,6 @@ thread_fetch_next_queue(thread_master_t *m)
 
 		/* Update current time */
 		set_time_now();
-
-		/* If there is a ready thread, return it. */
-		if (m->ready.next != &m->ready)
-			return &m->ready;
 	} while (true);
 }
 
