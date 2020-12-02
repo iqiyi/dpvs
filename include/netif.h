@@ -259,6 +259,8 @@ struct netif_port {
 } __rte_cache_aligned;
 
 /**************************** lcore API *******************************/
+struct flow4;
+int netif_master_local_out4(struct rte_mbuf *mbuf, struct flow4 *fl4);
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags);
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags);
 int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf);

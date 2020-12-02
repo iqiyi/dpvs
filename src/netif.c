@@ -32,6 +32,7 @@
 #include "ctrl.h"
 #include "list.h"
 #include "kni.h"
+#include "flow.h"
 #include <rte_version.h>
 #include "conf/netif.h"
 #include "timer.h"
@@ -2066,9 +2067,17 @@ static inline lcoreid_t get_master_xmit_lcore(void)
     return cid;
 }
 
+enum {
+    MASTER_XMIT_NETIF = 0,
+    MASTER_XMIT_LOCAL_OUT4,
+};
 struct master_xmit_msg_data {
     struct rte_mbuf *mbuf;
-    struct netif_port *dev;
+    int type;
+    union {
+        struct netif_port *dev;
+        struct flow4 fl4;
+    };
 };
 
 static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
@@ -2082,7 +2091,17 @@ static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
         //RTE_LOG(DEBUG, NETIF, "Xmit master packet on Slave lcore%u %s\n",
         //        rte_lcore_id(), data->dev->name);
         //fflush(stdout);
-        return netif_xmit(data->mbuf, data->dev, 0);
+        switch (data->type) {
+        case MASTER_XMIT_NETIF:
+            return netif_xmit(data->mbuf, data->dev, 0);
+            break;
+        case MASTER_XMIT_LOCAL_OUT4:
+            ipv4_xmit(data->mbuf, &data->fl4);
+            break;
+        default:
+            rte_pktmbuf_free(data->mbuf);
+            break;
+        }
     }
 
     return EDPVS_INVAL;
@@ -2138,6 +2157,40 @@ static inline int validate_xmit_mbuf(struct rte_mbuf *mbuf,
     return err;
 }
 
+/* send packet via msg is not good,
+ * but master has no ability to send/receive ARP,
+ * anyway, netif_hard_xmit use msg in master */
+/* mbuf header should at l4 header && no ip option */
+int netif_master_local_out4(struct rte_mbuf *mbuf, struct flow4 *fl4)
+{
+    int ret = EDPVS_OK;
+    lcoreid_t cid = rte_lcore_id();
+    assert(rte_get_master_lcore() == cid);
+    struct dpvs_msg *msg;
+    struct master_xmit_msg_data msg_data;
+
+    lcore_stats[cid].opackets++;
+    lcore_stats[cid].obytes += mbuf->pkt_len;
+
+    msg_data.mbuf = mbuf;
+    msg_data.type = MASTER_XMIT_LOCAL_OUT4;
+    msg_data.fl4 = *fl4;
+    msg = msg_make(MSG_TYPE_MASTER_XMIT, 0, DPVS_MSG_UNICAST, rte_get_master_lcore(),
+            sizeof(struct master_xmit_msg_data), &msg_data);
+    if (unlikely(NULL == msg)) {
+        rte_pktmbuf_free(mbuf);
+        return EDPVS_NOMEM;
+    }
+
+    cid = get_master_xmit_lcore();
+    if (unlikely(ret = msg_send(msg, cid, DPVS_MSG_F_ASYNC, NULL))) {
+        RTE_LOG(WARNING, NETIF, "[%s] Send master_xmit_msg(%d) failed\n", __func__, cid);
+        rte_pktmbuf_free(mbuf);
+    }
+    msg_destroy(&msg);
+    return ret;
+}
+
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
 {
     lcoreid_t cid;
@@ -2172,6 +2225,7 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
         lcore_stats[cid].obytes += mbuf->pkt_len;
 
         msg_data.mbuf = mbuf;
+        msg_data.type = MASTER_XMIT_NETIF;
         msg_data.dev = dev;
         msg = msg_make(MSG_TYPE_MASTER_XMIT, 0, DPVS_MSG_UNICAST, rte_get_master_lcore(),
                 sizeof(struct master_xmit_msg_data), &msg_data);
