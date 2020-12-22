@@ -1188,7 +1188,6 @@ clear_diff_whtlst(virtual_server_t * old_vs)
 {
     whtlst_addr_group *old;
     whtlst_addr_group *new;
-
     /*
      *  If old vs  didn't own whitelist address group,
      * then do nothing and return
@@ -1266,7 +1265,7 @@ clear_diff_services(list old_checkers_queue)
 			/* perform blacklist address diff */
 			if (!clear_diff_blklst(vs))
 				return;
-            /* perform whitelist address diff */
+			/* perform whitelist address diff */
 			if (!clear_diff_whtlst(vs))
 				return;
 

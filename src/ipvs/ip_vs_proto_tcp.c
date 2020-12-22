@@ -645,7 +645,7 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
         return NULL;
     }
 
-    if (!dp_vs_whtlst_allow(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
         *drop = true;
         return NULL;
     }

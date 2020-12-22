@@ -19,19 +19,19 @@
 #define __DPVS_WHTLST_H__
 #include "conf/common.h"
 #include "ipvs/service.h"
-#include "timer.h"
 
 struct whtlst_entry {
     struct list_head    list;
+    int                 af;
     union inet_addr     vaddr;
     uint16_t            vport;
     uint8_t             proto;
     union inet_addr     whtlst;
 };
 
-struct whtlst_entry *dp_vs_whtlst_lookup(uint8_t proto, const union inet_addr *vaddr,
+struct whtlst_entry *dp_vs_whtlst_lookup(int af, uint8_t proto, const union inet_addr *vaddr,
                                          uint16_t vport, const union inet_addr *whtlst);
-bool dp_vs_whtlst_allow(uint8_t proto, const union inet_addr *vaddr,
+bool dp_vs_whtlst_allow(int af, uint8_t proto, const union inet_addr *vaddr,
                         uint16_t vport, const union inet_addr *whtlst);
 void dp_vs_whtlst_flush(struct dp_vs_service *svc);
 

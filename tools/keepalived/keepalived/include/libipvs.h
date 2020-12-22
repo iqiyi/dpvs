@@ -43,7 +43,7 @@
 #define OPT_HASHTAG                0x10000000
 #define OPT_CPU                    0x20000000
 #define OPT_EXPIRE_QUIESCENT_CONN  0x40000000
-#define OPT_WHTLST_ADDRESS  0x80000000
+#define OPT_WHTLST_ADDRESS         0x80000000
 #define NUMBER_OF_OPT                   33
 
 #define MINIMUM_IPVS_VERSION_MAJOR      1

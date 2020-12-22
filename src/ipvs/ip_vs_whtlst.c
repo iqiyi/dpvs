@@ -56,7 +56,7 @@ static inline uint32_t whtlst_hashkey(const uint8_t proto, const union inet_addr
                 + dp_vs_whtlst_rnd) & DPVS_WHTLST_TAB_MASK;
 }
 
-struct whtlst_entry *dp_vs_whtlst_lookup(uint8_t proto, const union inet_addr *vaddr,
+struct whtlst_entry *dp_vs_whtlst_lookup(int af, uint8_t proto, const union inet_addr *vaddr,
                                          uint16_t vport, const union inet_addr *whtlst)
 {
     unsigned hashkey;
@@ -64,16 +64,16 @@ struct whtlst_entry *dp_vs_whtlst_lookup(uint8_t proto, const union inet_addr *v
 
     hashkey = whtlst_hashkey(proto, vaddr, vport);
     list_for_each_entry(whtlst_node, &this_whtlst_tab[hashkey], list){
-        if (whtlst_node->vaddr.in.s_addr == vaddr->in.s_addr &&
-            whtlst_node->whtlst.in.s_addr == whtlst->in.s_addr &&
-            whtlst_node->proto == proto &&
-            whtlst_node->vport == vport)
+        if (whtlst_node->af == af && whtlst_node->proto == proto &&
+            whtlst_node->vport == vport &&
+			inet_addr_equal(af, &whtlst_node->vaddr, vaddr) &&
+			inet_addr_equal(af, &whtlst_node->whtlst, whtlst))
             return whtlst_node;
     }
     return NULL;
 }
 
-bool dp_vs_whtlst_allow(uint8_t proto, const union inet_addr *vaddr,
+bool dp_vs_whtlst_allow(int af, uint8_t proto, const union inet_addr *vaddr,
                         uint16_t vport, const union inet_addr *whtlst)
 {
     unsigned hashkey;
@@ -84,24 +84,23 @@ bool dp_vs_whtlst_allow(uint8_t proto, const union inet_addr *vaddr,
     if (&this_whtlst_tab[hashkey] == NULL || list_empty(&this_whtlst_tab[hashkey])) {
         return true;
     }
-
     list_for_each_entry(whtlst_node, &this_whtlst_tab[hashkey], list){
-        if (whtlst_node->vaddr.in.s_addr == vaddr->in.s_addr &&
-            whtlst_node->whtlst.in.s_addr == whtlst->in.s_addr &&
-            whtlst_node->proto == proto &&
-            whtlst_node->vport == vport)
+        if (whtlst_node->af == af && whtlst_node->proto == proto &&
+            whtlst_node->vport == vport &&
+			inet_addr_equal(af, &whtlst_node->vaddr, vaddr) &&
+			inet_addr_equal(af, &whtlst_node->whtlst, whtlst))
             return true;
     }
 
     return false;
 }
 
-static int dp_vs_whtlst_add_lcore(uint8_t proto, const union inet_addr *vaddr,
+static int dp_vs_whtlst_add_lcore(int af, uint8_t proto, const union inet_addr *vaddr,
                                   uint16_t vport, const union inet_addr *whtlst)
 {
     unsigned hashkey;
     struct whtlst_entry *new, *whtlst_node;
-    whtlst_node = dp_vs_whtlst_lookup(proto, vaddr, vport, whtlst);
+    whtlst_node = dp_vs_whtlst_lookup(af, proto, vaddr, vport, whtlst);
     if (whtlst_node) {
         return EDPVS_EXIST;
     }
@@ -109,25 +108,26 @@ static int dp_vs_whtlst_add_lcore(uint8_t proto, const union inet_addr *vaddr,
     hashkey = whtlst_hashkey(proto, vaddr, vport);
 
     new = rte_zmalloc("new_whtlst_entry", sizeof(struct whtlst_entry), 0);
-    if (new == NULL)
+    if (unlikely(new == NULL))
         return EDPVS_NOMEM;
 
-    memcpy(&new->vaddr, vaddr,sizeof(union inet_addr));
+    new->af     = af;
     new->vport   = vport;
     new->proto  = proto;
-    memcpy(&new->whtlst, whtlst,sizeof(union inet_addr));
+    memcpy(&new->vaddr, vaddr, sizeof(union inet_addr));
+    memcpy(&new->whtlst, whtlst, sizeof(union inet_addr));
     list_add(&new->list, &this_whtlst_tab[hashkey]);
     rte_atomic32_inc(&this_num_whtlsts);
 
     return EDPVS_OK;
 }
 
-static int dp_vs_whtlst_del_lcore(uint8_t proto, const union inet_addr *vaddr,
+static int dp_vs_whtlst_del_lcore(int af, uint8_t proto, const union inet_addr *vaddr,
                                   uint16_t vport, const union inet_addr *whtlst)
 {
     struct whtlst_entry *whtlst_node;
 
-    whtlst_node = dp_vs_whtlst_lookup(proto, vaddr, vport, whtlst);
+    whtlst_node = dp_vs_whtlst_lookup(af, proto, vaddr, vport, whtlst);
     if (whtlst_node != NULL) {
         list_del(&whtlst_node->list);
         rte_free(whtlst_node);
@@ -137,7 +137,13 @@ static int dp_vs_whtlst_del_lcore(uint8_t proto, const union inet_addr *vaddr,
     return EDPVS_NOTEXIST;
 }
 
-static int dp_vs_whtlst_add(uint8_t proto, const union inet_addr *vaddr,
+static uint32_t whtlst_msg_seq(void)
+{
+    static uint32_t counter = 0;
+	return counter++;
+}
+
+static int dp_vs_whtlst_add(int af, uint8_t proto, const union inet_addr *vaddr,
                             uint16_t vport, const union inet_addr *whtlst)
 {
     lcoreid_t cid = rte_lcore_id();
@@ -151,24 +157,25 @@ static int dp_vs_whtlst_add(uint8_t proto, const union inet_addr *vaddr,
     }
 
     memset(&cf, 0, sizeof(struct dp_vs_whtlst_conf));
-    memcpy(&(cf.vaddr), vaddr,sizeof(union inet_addr));
+    memcpy(&(cf.vaddr), vaddr, sizeof(union inet_addr));
     memcpy(&(cf.whtlst), whtlst, sizeof(union inet_addr));
+    cf.af    = af;
     cf.vport = vport;
     cf.proto = proto;
 
     /*set whtlst ip on master lcore*/
-    err = dp_vs_whtlst_add_lcore(proto, vaddr, vport, whtlst);
+    err = dp_vs_whtlst_add_lcore(af, proto, vaddr, vport, whtlst);
     if (err) {
         RTE_LOG(INFO, SERVICE, "[%s] fail to set whtlst ip\n", __func__);
         return err;
     }
 
     /*set whtlst ip on all slave lcores*/
-    msg = msg_make(MSG_TYPE_WHTLST_ADD, 0, DPVS_MSG_MULTICAST,
+    msg = msg_make(MSG_TYPE_WHTLST_ADD, whtlst_msg_seq(), DPVS_MSG_MULTICAST,
                    cid, sizeof(struct dp_vs_whtlst_conf), &cf);
     if (!msg)
         return EDPVS_NOMEM;
-    err = multicast_msg_send(msg, 0, NULL);
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK) {
         msg_destroy(&msg);
         RTE_LOG(INFO, SERVICE, "[%s] fail to send multicast message\n", __func__);
@@ -179,7 +186,7 @@ static int dp_vs_whtlst_add(uint8_t proto, const union inet_addr *vaddr,
     return EDPVS_OK;
 }
 
-static int dp_vs_whtlst_del(uint8_t proto, const union inet_addr *vaddr,
+static int dp_vs_whtlst_del(int af, uint8_t proto, const union inet_addr *vaddr,
                             uint16_t vport, const union inet_addr *whtlst)
 {
     lcoreid_t cid = rte_lcore_id();
@@ -193,13 +200,14 @@ static int dp_vs_whtlst_del(uint8_t proto, const union inet_addr *vaddr,
     }
 
     memset(&cf, 0, sizeof(struct dp_vs_whtlst_conf));
-    memcpy(&(cf.vaddr), vaddr,sizeof(union inet_addr));
+    memcpy(&(cf.vaddr), vaddr, sizeof(union inet_addr));
     memcpy(&(cf.whtlst), whtlst, sizeof(union inet_addr));
+    cf.af    = af;
     cf.vport = vport;
     cf.proto = proto;
 
     /*del whtlst ip on master lcores*/
-    err = dp_vs_whtlst_del_lcore(proto, vaddr, vport, whtlst);
+    err = dp_vs_whtlst_del_lcore(af, proto, vaddr, vport, whtlst);
     if (err) {
         RTE_LOG(INFO, SERVICE, "[%s] fail to del whtlst ip\n", __func__);
         return err;
@@ -210,7 +218,7 @@ static int dp_vs_whtlst_del(uint8_t proto, const union inet_addr *vaddr,
                    cid, sizeof(struct dp_vs_whtlst_conf), &cf);
     if (!msg)
         return EDPVS_NOMEM;
-    err = multicast_msg_send(msg, 0, NULL);
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK) {
         RTE_LOG(INFO, SERVICE, "[%s] fail to send multicast message\n", __func__);
         return err;
@@ -227,8 +235,8 @@ void  dp_vs_whtlst_flush(struct dp_vs_service *svc)
 
     for (hash = 0; hash < DPVS_WHTLST_TAB_SIZE; hash++) {
         list_for_each_entry_safe(entry, next, &this_whtlst_tab[hash], list) {
-            if (entry->vaddr.in.s_addr == svc->addr.in.s_addr)
-                dp_vs_whtlst_del(entry->proto, &entry->vaddr,
+            if (entry->af == svc->af && inet_addr_equal(svc->af, &entry->vaddr, &svc->addr))
+                dp_vs_whtlst_del(svc->af, entry->proto, &entry->vaddr,
                                  entry->vport, &entry->whtlst);
         }
     }
@@ -242,7 +250,7 @@ static void dp_vs_whtlst_flush_all(void)
 
     for (hash = 0; hash < DPVS_WHTLST_TAB_SIZE; hash++) {
         list_for_each_entry_safe(entry, next, &this_whtlst_tab[hash], list) {
-            dp_vs_whtlst_del(entry->proto, &entry->vaddr,
+            dp_vs_whtlst_del(entry->af, entry->proto, &entry->vaddr,
                              entry->vport, &entry->whtlst);
         }
     }
@@ -262,11 +270,13 @@ static int whtlst_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     switch (opt) {
     case SOCKOPT_SET_WHTLST_ADD:
-        err = dp_vs_whtlst_add(whtlst_conf->proto, &whtlst_conf->vaddr,
+        err = dp_vs_whtlst_add(whtlst_conf->af,
+						       whtlst_conf->proto, &whtlst_conf->vaddr,
                                whtlst_conf->vport, &whtlst_conf->whtlst);
         break;
     case SOCKOPT_SET_WHTLST_DEL:
-        err = dp_vs_whtlst_del(whtlst_conf->proto, &whtlst_conf->vaddr,
+        err = dp_vs_whtlst_del(whtlst_conf->af,
+						       whtlst_conf->proto, &whtlst_conf->vaddr,
                                whtlst_conf->vport, &whtlst_conf->whtlst);
         break;
     default:
@@ -277,11 +287,11 @@ static int whtlst_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     return err;
 }
 
-static void whtlst_fill_conf(int af, struct dp_vs_whtlst_conf *cf,
+static void whtlst_fill_conf(struct dp_vs_whtlst_conf *cf,
                             const struct whtlst_entry *entry)
 {
     memset(cf, 0 ,sizeof(*cf));
-    cf->af = af;
+    cf->af = entry->af;
     cf->vaddr = entry->vaddr;
     cf->whtlst = entry->whtlst;
     cf->proto = entry->proto;
@@ -299,7 +309,7 @@ static int whtlst_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     naddr = rte_atomic32_read(&this_num_whtlsts);
     *outsize = sizeof(struct dp_vs_whtlst_conf_array) +
                naddr * sizeof(struct dp_vs_whtlst_conf);
-    *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
+    *out = rte_calloc(NULL, 1, *outsize, 0);
     if (!(*out))
         return EDPVS_NOMEM;
     array = *out;
@@ -309,7 +319,7 @@ static int whtlst_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         list_for_each_entry(entry, &this_whtlst_tab[hash], list) {
             if (off >= naddr)
                 break;
-            whtlst_fill_conf(AF_INET, &array->whtlsts[off++], entry);
+            whtlst_fill_conf(&array->whtlsts[off++], entry);
         }
     }
 
@@ -323,16 +333,16 @@ static int whtlst_msg_process(bool add, struct dpvs_msg *msg)
     int err;
     assert(msg);
 
-    if (msg->len != sizeof(struct dp_vs_whtlst_conf)){
+    if (msg->len != sizeof(struct dp_vs_whtlst_conf)) {
         RTE_LOG(ERR, SERVICE, "%s: bad message.\n", __func__);
         return EDPVS_INVAL;
     }
 
     cf = (struct dp_vs_whtlst_conf *)msg->data;
     if (add)
-        err = dp_vs_whtlst_add_lcore(cf->proto, &cf->vaddr, cf->vport, &cf->whtlst);
+        err = dp_vs_whtlst_add_lcore(cf->af, cf->proto, &cf->vaddr, cf->vport, &cf->whtlst);
     else
-        err = dp_vs_whtlst_del_lcore(cf->proto, &cf->vaddr, cf->vport, &cf->whtlst);
+        err = dp_vs_whtlst_del_lcore(cf->af, cf->proto, &cf->vaddr, cf->vport, &cf->whtlst);
     if (err != EDPVS_OK)
         RTE_LOG(ERR, SERVICE, "%s: fail to %s whtlst: %s.\n",
                 __func__, add ? "add" : "del", dpvs_strerror(err));
@@ -364,10 +374,10 @@ static int whtlst_lcore_init(void *args)
 {
     int i;
     if (!rte_lcore_is_enabled(rte_lcore_id()))
-    return EDPVS_DISABLED;
-    this_whtlst_tab = rte_malloc_socket(NULL,
+        return EDPVS_DISABLED;
+    this_whtlst_tab = rte_malloc(NULL,
                         sizeof(struct list_head) * DPVS_WHTLST_TAB_SIZE,
-                        RTE_CACHE_LINE_SIZE, rte_socket_id());
+                        RTE_CACHE_LINE_SIZE);
     if (!this_whtlst_tab)
         return EDPVS_NOMEM;
 
@@ -389,6 +399,37 @@ static int whtlst_lcore_term(void *args)
        this_whtlst_tab = NULL;
     }
     return EDPVS_OK;
+}
+
+static int whtlst_unregister_msg_cb(void)
+{
+    struct dpvs_msg_type msg_type;
+	int err;
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_WHTLST_ADD;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = whtlst_add_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to unregister msg.\n", __func__);
+        return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_WHTLST_DEL;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = whtlst_del_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to unregister msg.\n", __func__);
+        return err;
+    }
+	return EDPVS_OK;
 }
 
 int dp_vs_whtlst_init(void)
@@ -432,8 +473,10 @@ int dp_vs_whtlst_init(void)
         return err;
     }
 
-    if ((err = sockopt_register(&whtlst_sockopts)) != EDPVS_OK)
+    if ((err = sockopt_register(&whtlst_sockopts)) != EDPVS_OK) {
+		whtlst_unregister_msg_cb();
         return err;
+	}
     dp_vs_whtlst_rnd = (uint32_t)random();
 
     return EDPVS_OK;
@@ -443,6 +486,9 @@ int dp_vs_whtlst_term(void)
 {
     int err;
     lcoreid_t cid;
+
+    if ((err = whtlst_unregister_msg_cb()) != EDPVS_OK)
+		return err;
 
     if ((err = sockopt_unregister(&whtlst_sockopts)) != EDPVS_OK)
         return err;

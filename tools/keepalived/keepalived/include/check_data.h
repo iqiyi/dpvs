@@ -266,7 +266,7 @@ typedef struct _check_data {
 	unsigned			num_smtp_alert;
 	list laddr_group;
 	list blklst_group;
-    list whtlst_group;
+	list whtlst_group;
 	list tunnel_group;
 } check_data_t;
 

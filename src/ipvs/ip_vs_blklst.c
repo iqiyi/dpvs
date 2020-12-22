@@ -87,7 +87,7 @@ static int dp_vs_blklst_add_lcore(int af, uint8_t proto, const union inet_addr *
     hashkey = blklst_hashkey(vaddr, blklst);
 
     new = rte_zmalloc("new_blklst_entry", sizeof(struct blklst_entry), 0);
-    if (new == NULL)
+    if (unlikely(new == NULL))
         return EDPVS_NOMEM;
 
     new->af    = af;

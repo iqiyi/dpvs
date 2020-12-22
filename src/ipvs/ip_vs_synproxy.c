@@ -707,7 +707,7 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         }
 
         /* drop packet if not in whitelist */
-        if (!dp_vs_whtlst_allow(iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+        if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
             goto syn_rcv_out;
         }
     } else {

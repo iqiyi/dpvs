@@ -202,14 +202,13 @@ static const char* optnames[] = {
 	"pe" ,
 	"local-address" ,
 	"blklst-address",
-	"whtlst-address",
 	"synproxy" ,
 	"ifname" ,
 	"sockpair" ,
 	"hash-target",
 	"cpu",
 	"expire-quiescent",
-	"wlst",
+	"whtlst-address",
 };
 
 /*

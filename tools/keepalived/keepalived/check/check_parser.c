@@ -1226,7 +1226,7 @@ init_check_keywords(bool active)
 	install_sublevel_end();
 	install_keyword("laddr_group_name", &laddr_gname_handler);
 	install_keyword("daddr_group_name", &blklst_gname_handler);
-    install_keyword("waddr_group_name", &whtlst_gname_handler);
+	install_keyword("waddr_group_name", &whtlst_gname_handler);
 	install_keyword("syn_proxy", &syn_proxy_handler);
 	install_keyword("expire_quiescent_conn", &expire_quiescent_handler);
 	install_keyword("vip_bind_dev", &bind_dev_handler);

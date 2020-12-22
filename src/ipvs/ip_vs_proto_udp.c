@@ -213,8 +213,8 @@ udp_conn_lookup(struct dp_vs_proto *proto,
         return NULL;
     }
 
-    if (!dp_vs_whtlst_allow(iph->proto, &iph->daddr, uh->dst_port,
-                            &iph->saddr)) {
+    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, 
+							uh->dst_port, &iph->saddr)) {
         *drop = true;
         return NULL;
     }

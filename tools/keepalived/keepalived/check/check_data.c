@@ -158,8 +158,8 @@ alloc_whtlst_entry(const vector_t *strvec)
     new = (whtlst_addr_entry *) MALLOC(sizeof (whtlst_addr_entry));
 
     inet_stor(vector_slot(strvec, 0), &new->range);
-	if (new->range == UINT32_MAX)
-		new->range = 0;
+    if (new->range == UINT32_MAX)
+        new->range = 0;
     inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
 
     if (!new->range)
@@ -174,231 +174,230 @@ alloc_whtlst_entry(const vector_t *strvec)
 static void
 free_vsg(void *data)
 {
-	virtual_server_group_t *vsg = data;
-	FREE_PTR(vsg->gname);
-	free_list(&vsg->addr_range);
-	free_list(&vsg->vfwmark);
-	FREE(vsg);
+    virtual_server_group_t *vsg = data;
+    FREE_PTR(vsg->gname);
+    free_list(&vsg->addr_range);
+    free_list(&vsg->vfwmark);
+    FREE(vsg);
 }
 
 static void
 dump_vsg(FILE *fp, const void *data)
 {
-	const virtual_server_group_t *vsg = data;
+    const virtual_server_group_t *vsg = data;
 
-	conf_write(fp, " ------< Virtual server group >------");
-	conf_write(fp, " Virtual Server Group = %s", vsg->gname);
-	dump_list(fp, vsg->addr_range);
-	dump_list(fp, vsg->vfwmark);
+    conf_write(fp, " ------< Virtual server group >------");
+    conf_write(fp, " Virtual Server Group = %s", vsg->gname);
+    dump_list(fp, vsg->addr_range);
+    dump_list(fp, vsg->vfwmark);
 }
 
 static void
 free_vsg_entry(void *data)
 {
-	FREE(data);
+    FREE(data);
 }
 
 static void
 dump_vsg_entry(FILE *fp, const void *data)
 {
-	const virtual_server_group_entry_t *vsg_entry = data;
-	uint16_t start;
+    const virtual_server_group_entry_t *vsg_entry = data;
+    uint16_t start;
 
-	if (vsg_entry->is_fwmark) {
-		conf_write(fp, "   FWMARK = %u", vsg_entry->vfwmark);
-		conf_write(fp, "   Alive: %u IPv4, %u IPv6",
-				vsg_entry->fwm4_alive, vsg_entry->fwm6_alive);
-	} else {
-		if (vsg_entry->range) {
-			start = vsg_entry->addr.ss_family == AF_INET ?
-				  ntohl(((const struct sockaddr_in*)&vsg_entry->addr)->sin_addr.s_addr) & 0xFF :
-				  ntohs(((const struct sockaddr_in6*)&vsg_entry->addr)->sin6_addr.s6_addr16[7]);
-			conf_write(fp,
-				    vsg_entry->addr.ss_family == AF_INET ?
-					"   VIP Range = %s-%u, VPORT = %d" :
-					"   VIP Range = %s-%x, VPORT = %d",
-				    inet_sockaddrtos(&vsg_entry->addr),
-				    start + vsg_entry->range,
-				    ntohs(inet_sockaddrport(&vsg_entry->addr)));
-		} else
-			conf_write(fp, "   VIP = %s, VPORT = %d"
-					    , inet_sockaddrtos(&vsg_entry->addr)
-					    , ntohs(inet_sockaddrport(&vsg_entry->addr)));
-		conf_write(fp, "     Alive: %u tcp, %u udp, %u sctp",
-			    vsg_entry->tcp_alive, vsg_entry->udp_alive, vsg_entry->sctp_alive);
-	}
-	conf_write(fp, "     reloaded = %s", vsg_entry->reloaded ? "True" : "False");
+    if (vsg_entry->is_fwmark) {
+        conf_write(fp, "   FWMARK = %u", vsg_entry->vfwmark);
+        conf_write(fp, "   Alive: %u IPv4, %u IPv6",
+        vsg_entry->fwm4_alive, vsg_entry->fwm6_alive);
+    } else {
+        if (vsg_entry->range) {
+            start = vsg_entry->addr.ss_family == AF_INET ?
+                ntohl(((const struct sockaddr_in*)&vsg_entry->addr)->sin_addr.s_addr) & 0xFF :
+                ntohs(((const struct sockaddr_in6*)&vsg_entry->addr)->sin6_addr.s6_addr16[7]);
+            conf_write(fp,
+                vsg_entry->addr.ss_family == AF_INET ?
+                "   VIP Range = %s-%u, VPORT = %d" :
+                "   VIP Range = %s-%x, VPORT = %d",
+                inet_sockaddrtos(&vsg_entry->addr),
+                start + vsg_entry->range,
+                ntohs(inet_sockaddrport(&vsg_entry->addr)));
+        } else
+            conf_write(fp, "   VIP = %s, VPORT = %d"
+                , inet_sockaddrtos(&vsg_entry->addr)
+                , ntohs(inet_sockaddrport(&vsg_entry->addr)));
+
+        conf_write(fp, "     Alive: %u tcp, %u udp, %u sctp",
+            vsg_entry->tcp_alive, vsg_entry->udp_alive, vsg_entry->sctp_alive);
+    }
+    conf_write(fp, "     reloaded = %s", vsg_entry->reloaded ? "True" : "False");
 }
 
 void
 alloc_vsg(const char *gname)
 {
-	virtual_server_group_t *new;
+    virtual_server_group_t *new;
 
-	new = (virtual_server_group_t *) MALLOC(sizeof(virtual_server_group_t));
-	new->gname = STRDUP(gname);
-	new->addr_range = alloc_list(free_vsg_entry, dump_vsg_entry);
-	new->vfwmark = alloc_list(free_vsg_entry, dump_vsg_entry);
+    new = (virtual_server_group_t *) MALLOC(sizeof(virtual_server_group_t));
+    new->gname = STRDUP(gname);
+    new->addr_range = alloc_list(free_vsg_entry, dump_vsg_entry);
+    new->vfwmark = alloc_list(free_vsg_entry, dump_vsg_entry);
 
-	list_add(check_data->vs_group, new);
+    list_add(check_data->vs_group, new);
 }
 
 void
 alloc_vsg_entry(const vector_t *strvec)
 {
-	virtual_server_group_t *vsg = LIST_TAIL_DATA(check_data->vs_group);
-	virtual_server_group_entry_t *new;
-	virtual_server_group_entry_t *old;
-	uint32_t start;
-	element e;
-	const char *port_str;
-	uint32_t range;
-	unsigned fwmark;
+    virtual_server_group_t *vsg = LIST_TAIL_DATA(check_data->vs_group);
+    virtual_server_group_entry_t *new;
+    virtual_server_group_entry_t *old;
+    uint32_t start;
+    element e;
+    const char *port_str;
+    uint32_t range;
+    unsigned fwmark;
 
-	new = (virtual_server_group_entry_t *) MALLOC(sizeof(virtual_server_group_entry_t));
+    new = (virtual_server_group_entry_t *) MALLOC(sizeof(virtual_server_group_entry_t));
+   
+    if (!strcmp(strvec_slot(strvec, 0), "fwmark")) {
+        if (!read_unsigned_strvec(strvec, 1, &fwmark, 0, UINT32_MAX, true)) {
+            report_config_error(CONFIG_GENERAL_ERROR, "(%s): fwmark '%s' must be in [0, %u] - ignoring", vsg->gname, strvec_slot(strvec, 1), UINT32_MAX);
+            FREE(new);
+            return;
+        }
+        new->vfwmark = fwmark;
+        new->is_fwmark = true;
+        list_add(vsg->vfwmark, new);
+    } else {
+        if (!inet_stor(strvec_slot(strvec, 0), &range)) {
+            FREE(new);
+            return;
+        }
+        new->range = (uint32_t)range;
 
-	if (!strcmp(strvec_slot(strvec, 0), "fwmark")) {
-		if (!read_unsigned_strvec(strvec, 1, &fwmark, 0, UINT32_MAX, true)) {
-			report_config_error(CONFIG_GENERAL_ERROR, "(%s): fwmark '%s' must be in [0, %u] - ignoring", vsg->gname, strvec_slot(strvec, 1), UINT32_MAX);
-			FREE(new);
-			return;
-		}
-		new->vfwmark = fwmark;
-		new->is_fwmark = true;
-		list_add(vsg->vfwmark, new);
-	} else {
-		if (!inet_stor(strvec_slot(strvec, 0), &range)) {
-			FREE(new);
-			return;
-		}
-		new->range = (uint32_t)range;
+        if (vector_size(strvec) >= 2) {
+            /* Don't pass a port number of 0. This was added v2.0.7 to support legacy
+             * configuration since previously having no port wasn't allowed. */
+            port_str = strvec_slot(strvec, 1);
+            if (!port_str[strspn(port_str, "0")])
+                port_str = NULL;
+        }
+        else
+            port_str = NULL;
 
-		if (vector_size(strvec) >= 2) {
-			/* Don't pass a port number of 0. This was added v2.0.7 to support legacy
-			 * configuration since previously having no port wasn't allowed. */
-			port_str = strvec_slot(strvec, 1);
-			if (!port_str[strspn(port_str, "0")])
-				port_str = NULL;
-		}
-		else
-			port_str = NULL;
-
-		if (inet_stosockaddr(strvec_slot(strvec, 0), port_str, &new->addr)) {
-			report_config_error(CONFIG_GENERAL_ERROR, "Invalid virtual server group IP address%s %s%s%s - skipping", strvec_slot(strvec, 0),
-						port_str ? "/port" : "", port_str ? "/" : "", port_str ? port_str : "");
-			FREE(new);
-			return;
-		}
+        if (inet_stosockaddr(strvec_slot(strvec, 0), port_str, &new->addr)) {
+            report_config_error(CONFIG_GENERAL_ERROR, "Invalid virtual server group IP address%s %s%s%s - skipping", strvec_slot(strvec, 0),
+            port_str ? "/port" : "", port_str ? "/" : "", port_str ? port_str : "");
+            FREE(new);
+           return;
+        }
 #ifndef LIBIPVS_USE_NL
-		if (new->addr.ss_family != AF_INET) {
-			report_config_error(CONFIG_GENERAL_ERROR, "IPVS does not support IPv6 in this build - skipping %s", strvec_slot(strvec, 0));
-			FREE(new);
-			return;
-		}
+        if (new->addr.ss_family != AF_INET) {
+            report_config_error(CONFIG_GENERAL_ERROR, "IPVS does not support IPv6 in this build - skipping %s", strvec_slot(strvec, 0));
+            FREE(new);
+            return;
+        }
 #endif
+        /* Ensure the address family matches any previously configured addresses */
+        if (!LIST_ISEMPTY(vsg->addr_range)) {
+            e = LIST_HEAD(vsg->addr_range);
+            old = ELEMENT_DATA(e);
+            if (old->addr.ss_family != new->addr.ss_family) {
+                report_config_error(CONFIG_GENERAL_ERROR, "Cannot mix IPv4 and IPv6 in virtual server group - %s", vsg->gname);
+                FREE(new);
+                return;
+            }
+        }
 
-		/* Ensure the address family matches any previously configured addresses */
-		if (!LIST_ISEMPTY(vsg->addr_range)) {
-			e = LIST_HEAD(vsg->addr_range);
-			old = ELEMENT_DATA(e);
-			if (old->addr.ss_family != new->addr.ss_family) {
-				report_config_error(CONFIG_GENERAL_ERROR, "Cannot mix IPv4 and IPv6 in virtual server group - %s", vsg->gname);
-				FREE(new);
-				return;
-			}
-		}
+        /* If no range specified, new->range == UINT32_MAX */
+        if (new->range == UINT32_MAX)
+            new->range = 0;
+        else {
+            if (new->addr.ss_family == AF_INET)
+                start = ntohl(((struct sockaddr_in *)&new->addr)->sin_addr.s_addr) & 0xFF;
+            else
+                start = ntohs(((struct sockaddr_in6 *)&new->addr)->sin6_addr.s6_addr16[7]);
 
-		/* If no range specified, new->range == UINT32_MAX */
-		if (new->range == UINT32_MAX)
-			new->range = 0;
-		else {
-			if (new->addr.ss_family == AF_INET)
-				start = ntohl(((struct sockaddr_in *)&new->addr)->sin_addr.s_addr) & 0xFF;
-			else
-				start = ntohs(((struct sockaddr_in6 *)&new->addr)->sin6_addr.s6_addr16[7]);
-
-			if (start >= new->range) {
-				report_config_error(CONFIG_GENERAL_ERROR, "Address range end is not greater than address range start - %s - skipping", strvec_slot(strvec, 0));
-				FREE(new);
-				return;
-			}
-			new->range -= start;
-		}
-
-		new->is_fwmark = false;
-		list_add(vsg->addr_range, new);
-	}
+            if (start >= new->range) {
+                report_config_error(CONFIG_GENERAL_ERROR, "Address range end is not greater than address range start - %s - skipping", strvec_slot(strvec, 0));
+                FREE(new);
+                return;
+            }
+            new->range -= start;
+        }
+        new->is_fwmark = false;
+        list_add(vsg->addr_range, new);
+    }
 }
 
 /* Virtual server facility functions */
 static void
 free_vs(void *data)
 {
-	virtual_server_t *vs = data;
-	FREE_CONST_PTR(vs->vsgname);
-	FREE_CONST_PTR(vs->virtualhost);
-	FREE_PTR(vs->s_svr);
-	free_list(&vs->rs);
-	free_notify_script(&vs->notify_quorum_up);
-	free_notify_script(&vs->notify_quorum_down);
-	FREE_PTR(vs->local_addr_gname);
-	FREE_PTR(vs->blklst_addr_gname);
+    virtual_server_t *vs = data;
+    FREE_CONST_PTR(vs->vsgname);
+    FREE_CONST_PTR(vs->virtualhost);
+    FREE_PTR(vs->s_svr);
+    free_list(&vs->rs);
+    free_notify_script(&vs->notify_quorum_up);
+    free_notify_script(&vs->notify_quorum_down);
+    FREE_PTR(vs->local_addr_gname);
+    FREE_PTR(vs->blklst_addr_gname);
     FREE_PTR(vs->whtlst_addr_gname);
-	FREE_PTR(vs->vip_bind_dev);
-	FREE(vs);
+    FREE_PTR(vs->vip_bind_dev);
+    FREE(vs);
 }
 
 static void
 dump_forwarding_method(FILE *fp, const char *prefix, const real_server_t *rs)
 {
-	const char *fwd_method = "forwarding method = ";
+    const char *fwd_method = "forwarding method = ";
 #ifdef _HAVE_IPVS_TUN_TYPE_
-	const char *csum_str = "";
-	const char *tun_type = "TUN, type = ";
+    const char *csum_str = "";
+    const char *tun_type = "TUN, type = ";
 #endif
 
-	switch (rs->forwarding_method) {
-	case IP_VS_CONN_F_MASQ:
-		conf_write(fp, "   %s%sNAT", prefix, fwd_method);
-		break;
-	case IP_VS_CONN_F_DROUTE:
-		conf_write(fp, "   %s%sDR", prefix, fwd_method);
-		break;
-	case IP_VS_CONN_F_TUNNEL:
+    switch (rs->forwarding_method) {
+	    case IP_VS_CONN_F_MASQ:
+		    conf_write(fp, "   %s%sNAT", prefix, fwd_method);
+		    break;
+	    case IP_VS_CONN_F_DROUTE:
+		    conf_write(fp, "   %s%sDR", prefix, fwd_method);
+		    break;
+	    case IP_VS_CONN_F_TUNNEL:
 #ifdef _HAVE_IPVS_TUN_TYPE_
-		if (rs->tun_type == IP_VS_CONN_F_TUNNEL_TYPE_IPIP)
-			conf_write(fp, "   %s%s%sIPIP", prefix, fwd_method, tun_type);
-		else {
+            if (rs->tun_type == IP_VS_CONN_F_TUNNEL_TYPE_IPIP)
+                conf_write(fp, "   %s%s%sIPIP", prefix, fwd_method, tun_type);
+            else {
 #ifdef _HAVE_IPVS_TUN_CSUM_
-			csum_str = rs->tun_flags == IP_VS_TUNNEL_ENCAP_FLAG_NOCSUM ? ", no checksum" :
-				   rs->tun_flags == IP_VS_TUNNEL_ENCAP_FLAG_CSUM ? ", checksum" :
-				   rs->tun_flags == IP_VS_TUNNEL_ENCAP_FLAG_REMCSUM ? ", remote checksum" :
-				   ", unknown checksum type";
+                csum_str = rs->tun_flags == IP_VS_TUNNEL_ENCAP_FLAG_NOCSUM ? ", no checksum" :
+                    rs->tun_flags == IP_VS_TUNNEL_ENCAP_FLAG_CSUM ? ", checksum" :
+                    rs->tun_flags == IP_VS_TUNNEL_ENCAP_FLAG_REMCSUM ? ", remote checksum" :
+                    ", unknown checksum type";
 #endif
-			if (rs->tun_type == IP_VS_CONN_F_TUNNEL_TYPE_GUE)
-				conf_write(fp, "   %s%sGUE, port = %u%s", fwd_method, tun_type, ntohs(rs->tun_port), csum_str);
+            if (rs->tun_type == IP_VS_CONN_F_TUNNEL_TYPE_GUE)
+                conf_write(fp, "   %s%sGUE, port = %u%s", fwd_method, tun_type, ntohs(rs->tun_port), csum_str);
 #ifdef _HAVE_IPVS_TUN_GRE_
-			else if (rs->tun_type == IP_VS_CONN_F_TUNNEL_TYPE_GRE)
-				conf_write(fp, "   %s%sGRE%s", fwd_method, tun_type, csum_str);
+            else if (rs->tun_type == IP_VS_CONN_F_TUNNEL_TYPE_GRE)
+                conf_write(fp, "   %s%sGRE%s", fwd_method, tun_type, csum_str);
 #endif
-		}
+            }
 #else
-		conf_write(fp, "   %s%sTUN", prefix, fwd_method);
+            conf_write(fp, "   %s%sTUN", prefix, fwd_method);
 #endif
-		break;
-	case IP_VS_CONN_F_FULLNAT:
-		conf_write(fp, "default forwarding method = FNAT");
-		break;
-	case IP_VS_CONN_F_SNAT:
-		conf_write(fp, "default forwarding method = SNAT");
-		break;
-	}
+            break;
+        case IP_VS_CONN_F_FULLNAT:
+            conf_write(fp, "default forwarding method = FNAT");
+            break;
+        case IP_VS_CONN_F_SNAT:
+            conf_write(fp, "default forwarding method = SNAT");
+            break;
+    }
 }
 
 static void
 dump_vs(FILE *fp, const void *data)
 {
-	const virtual_server_t *vs = data;
+    const virtual_server_t *vs = data;
 
 	conf_write(fp, " ------< Virtual server >------");
 	if (vs->vsgname)
