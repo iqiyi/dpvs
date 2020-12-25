@@ -1,25 +1,43 @@
 #!/bin/sh -
 # program: dpvs
-# Jun 16, 2020
-#
-#####################################
-# Deprecate version v1.8.2, v1.8.4
-#####################################
+# Dec 24, 2020
 #
 # # Features
 # ----------
-# - Support per-service established timeout for udp.
-# - Expire quiescent connections for udp and tcp with per-service config.
+# - Dpvs: Configurable kni worker type.
+# - Dpvs: Support mh(megalev hash) scheduling.
+# - Dpvs: Udp one-packet forwarding.
+# - Dpvs: Dpdk-pdump for package capture.
+# - Dpvs: Support examination of eal memory(ring/seg/zone/pool) usage.
+# - Dpvs: Sapool memory optimization.
+# - Dpvs: Support ENA driver on AWS
+# - Dpvs: Some code refactorings, including sockopt definitions, jobs initializations, main function, etc.
+# - Update some documents.
+# - Delete some useless codes.
 # 
 # # Bugfix
 # --------
-# - Fix problem that keepalived supports only 1k realservers at max.
-# - Fix dpvs crash problem caused by "dpip addr" command.
-# - Fix laddr display problem of slave workers.
-# - Remove auto generated keepalived make files.
-
+# - Dpvs: Fix lcore packet statistics loss problem on isol_rx_lcore.
+# - Dpvs: Fix per-lcore mulitcast address initialization problem.
+# - Dpvs: Fix ifa::tstemp timer problem when updating ifa entry.
+# - Dpvs: Fix ifa adding fail problem by reusing expired ifa.
+# - Dpvs: Fix memory leak problem when mbuf is invalid.
+# - Dpvs: Fix problem that rs cannot get client's real ip for some short tcp connections.
+# - Dpvs: Fix unnecessary memory waste caused by incorrect setting of rte_mempool size.
+# - Dpvs: Fix connection limitation problem caused by incorrect rs connection statistics.
+# - Dpvs: Fix illegal instruction problem by using the same RTE_MACHINE and cpu CFLAGS as dpdk.
+# - Dpvs: Fix mismatch problem when deleting blacklist addresses.
+# - Dpvs: Fix problem that mbuf may be used after released.
+# - Keepalived: Conhash scheduler performance optimization.
+# - Keepalived: Use correct return value for netlink_route.
+# - Keepalived: Fix compile error with kernel 3.11 and above.
+# - Keepalived: Fix too many open file descriptor problem for tcp_check health check.
+# - Keepailved: Fix epoll_wait error after keepalived running for a long time.
+# - Ipvsadm: Fix compile warnings of format-overflow and restrict.
+# - Ipvsadm: Fix `ipvsadm -ln` show null error.
+# - Toa: Fix problem when getting/setting pte writable flag.
 
 export VERSION=1.8
-export RELEASE=5
+export RELEASE=7
 
 echo $VERSION-$RELEASE
