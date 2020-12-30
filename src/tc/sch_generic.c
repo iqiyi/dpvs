@@ -52,7 +52,7 @@ static inline int sch_dequeue_xmit(struct Qsch *sch, int *npkt)
     if (unlikely(!mbuf))
         return 0;
 
-    netif_hard_xmit(mbuf, netif_port_get(mbuf->port), 0);
+    netif_hard_xmit(mbuf, netif_port_get(mbuf->port));
     return sch_qlen(sch);
 }
 

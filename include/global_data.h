@@ -19,7 +19,11 @@
 #ifndef __GLOBAL_DATA_H__
 #define __GLOBAL_DATA_H__
 
+#include <rte_per_lcore.h>
 #include "conf/common.h"
+
+RTE_DECLARE_PER_LCORE(uint32_t, g_dpvs_poll_tick);
+#define this_poll_tick (RTE_PER_LCORE(g_dpvs_poll_tick))
 
 typedef enum dpvs_lcore_role_type {
     LCORE_ROLE_IDLE,
