@@ -19,6 +19,8 @@
 #include <rte_cycles.h>
 #include "global_data.h"
 
+RTE_DEFINE_PER_LCORE(uint32_t, g_dpvs_poll_tick);
+
 uint64_t g_cycles_per_sec;
 dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
 int g_lcore_index[DPVS_MAX_LCORE];
