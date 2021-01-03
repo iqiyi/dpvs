@@ -39,6 +39,11 @@ netif_defs {
         }
         ! promisc_mode
         kni_name                dpdk0.kni
+        kni_isolate             on
+        kni_ipaddress {
+            ipv4                192.168.0.2
+            ipv6                0000:0000:0000:0000:0000:FFFF:C0A8:0002
+        }
     }
 }
 

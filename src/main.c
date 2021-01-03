@@ -38,6 +38,7 @@
 #include "ipv4.h"
 #include "neigh.h"
 #include "sa_pool.h"
+#include "kni.h"
 #include "ipvs/ipvs.h"
 #include "cfgfile.h"
 #include "ip_tunnel.h"
@@ -87,6 +88,8 @@ extern int log_slave_init(void);
                     inet_init,           inet_term),            \
         DPVS_MODULE(MODULE_SA_POOL,     "sa_pool",              \
                     sa_pool_init,        sa_pool_term),         \
+        DPVS_MODULE(MODULE_KNI_FDIR,    "kni_fdir",             \
+                    kni_fdir_init,       NULL),                 \
         DPVS_MODULE(MODULE_IP_TUNNEL,   "tunnel",               \
                     ip_tunnel_init,      ip_tunnel_term),       \
         DPVS_MODULE(MODULE_VS,          "ipvs",                 \
