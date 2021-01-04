@@ -46,6 +46,7 @@
 #include "iftraf.h"
 #include "eal_mem.h"
 #include "scheduler.h"
+#include "pdump.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
@@ -69,6 +70,8 @@ extern int log_slave_init(void);
                     global_data_init,    global_data_term),     \
         DPVS_MODULE(MODULE_CFG,         "config file",          \
                     cfgfile_init,        cfgfile_term),         \
+        DPVS_MODULE(MODULE_PDUMP,        "pdump",               \
+                    pdump_init,          pdump_term),           \
         DPVS_MODULE(MODULE_NETIF_VDEV,  "vdevs",                \
                     netif_vdevs_add,     NULL),                 \
         DPVS_MODULE(MODULE_TIMER,       "timer",                \
@@ -292,16 +295,6 @@ int main(int argc, char *argv[])
 
     rte_timer_subsystem_init();
 
-#ifdef CONFIG_DPVS_PDUMP
-    if (g_dpvs_pdump) {
-        /* initialize packet capture framework */
-        err = rte_pdump_init(NULL);
-        if (err < 0) {
-            rte_exit(EXIT_FAILURE, "Fail to init dpdk pdump framework\n");
-        }
-    }
-#endif
-
     modules_init();
 
     /* config and start all available dpdk ports */
@@ -341,14 +334,6 @@ int main(int argc, char *argv[])
 end:
     dpvs_state_set(DPVS_STATE_FINISH);
     modules_term();
-
-#ifdef CONFIG_DPVS_PDUMP
-    if (g_dpvs_pdump) {
-        if ((err = rte_pdump_uninit()) != 0) {
-            RTE_LOG(ERR, DPVS, "Fail to uninitialize dpdk pdump framework.\n");
-        }
-    }
-#endif
 
     pidfile_rm(DPVS_PIDFILE);
 
