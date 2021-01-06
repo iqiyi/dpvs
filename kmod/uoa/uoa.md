@@ -80,6 +80,12 @@ Can we use private protocol, instead of IP option ?
 
 We may use a private `IPPROTO_XXX` protocol to encaplate UDP ? Looks like `IP+UOA+UDP`, simmilar with the idea of tunnel. But it may lead to firewall issues, note UDP/TCP are most popular, friendly to firewall or other middle box, but new protocol may not. And the new encaplation may have MTU issues for all packets. Another way is `IP+UDP+UOA+payload`, but it's difficult to identify the UOA and application payload.
 
+#### **Why support private protocol then ?**
+
+Currently, we have supported private protocol. It's because that we found not all l3-switch support IPv4 options, or even if support, there's speed limitation like 300pps. The reason from provider is the switch HW (chips) do not handle IP options, just have to drop the whole packet, or pass the packets with option to CPU for process, with a limited speed which is too poor to accept. On the other hand, the switch can "support" unkown IP protocol, we can forward this kind of packets.
+
+Uoa private protocol (`opp` mode) supports IPv4/IPv6/Nat64, while the IP option (`ipo` mode) supports IPv4 only.
+ 
 --------------------------------
 
 Lei Chen `<raychen@qiyi.com>`, Mar 2018.

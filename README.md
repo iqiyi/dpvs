@@ -76,7 +76,7 @@ $ tar xf dpdk-18.11.2.tar.xz
 
 There are some patches for DPDK to support extra features needed by DPVS. Apply them if needed. For example, there's a patch for DPDK `kni` driver for hardware multicast, apply it if you are to launch `ospfd` on `kni` device.
 
-> Assuming we are in DPVS root dir and dpdk-stable-18.11.2 is under it, please note it's not mandatory, just for convenience.
+> Assuming we are in DPVS root directory and dpdk-stable-18.11.2 is under it, please note it's not mandatory, just for convenience.
 
 ```
 $ cd <path-of-dpvs>
@@ -185,14 +185,14 @@ $ ./dpip link show
 
 If you see this message. Well done, `DPVS` is working with NIC `dpdk0`!
 
-> Don't worry if you see this error,
+>Don't worry if you see this error:
 ```
 EAL: Error - exiting with code: 1
   Cause: ports in DPDK RTE (2) != ports in dpvs.conf(1)
 ```
-It means the NIC used by DPVS is not match `/etc/dpvs.conf`. Please use `dpdk-devbind` to adjust the NIC number or modify `dpvs.conf`. We'll improve this part to make DPVS more "clever" to avoid modify config file when NIC count is not match.
+>It means the NIC used by DPVS do not match `/etc/dpvs.conf`. Please use `dpdk-devbind` to adjust the NIC number or modify `dpvs.conf`. We'll improve this part to make DPVS more "clever" to avoid modify config file when NIC count do not match.
 
-What config does `dpvs.conf` support and how to config them? Well, `DPVS` maintains a config item file `conf/dpvs.conf.items` which lists all supported config entries and corresponding feasible values.
+What config items does `dpvs.conf` support and how to configure them? Well, `DPVS` maintains a config item file `conf/dpvs.conf.items` which lists all supported config entries and corresponding feasible values.
 
 ## Test Full-NAT (FNAT) Load Balancer
 
