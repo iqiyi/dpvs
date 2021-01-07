@@ -59,7 +59,7 @@ Network devices using DPDK-compatible driver
 0000:06:00.1 'Ethernet Controller 10-Gigabit X540-AT2' drv=igb_uio unused=uio_pci_generic
 ```
 
-For *one-arm*, only one DPDK intreface needed, and you can refer [conf/dpvs.conf.single-nic.sample](../conf/dpvs.conf.single-nic.sample).
+For *one-arm*, only one DPDK intreface is needed, and you can refer [conf/dpvs.conf.single-nic.sample](../conf/dpvs.conf.single-nic.sample).
 
 <a id='kni'/>
 

@@ -26,7 +26,7 @@ Major features of `DPVS` including:
 * *NAT64* forwarding in FNAT mode for quick IPv6 adaptation without application changes.
 * Different *schedule algorithms* like RR, WLC, WRR, MH(Maglev Hashing), Conhash(Consistent Hashing) etc.
 * User-space *Lite IP stack* (IPv4/IPv6, Routing, ARP, Neighbor, ICMP ...).
-* Support *KNI*, *VLAN*, *Bonding*, *Tunnelling* for different IDC environment.
+* Support *KNI*, *VLAN*, *Bonding*, *Tunneling* for different IDC environment.
 * Security aspect, support *TCP syn-proxy*, *Conn-Limit*, *black-list*.
 * QoS: *Traffic Control*.
 
