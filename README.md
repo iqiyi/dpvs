@@ -224,7 +224,7 @@ client $ curl 192.168.100.100
 Your ip:port : 192.168.100.3:56890
 ```
 
-## Configure Tutorial
+## Tutorial Docs
 
 More configure examples can be found in the [Tutorial Document](./doc/tutorial.md). Including,
 
@@ -237,6 +237,8 @@ More configure examples can be found in the [Tutorial Document](./doc/tutorial.m
 * `UOA` module to get real UDP client IP/port in `FNAT`.
 * ... and more ...
 
+We also listed some frequently asked questions in the [FAQ Document](./doc/faq.md). It may helps when you run into problems with DPVS.
+
 # Performance Test
 
 Our test shows the forwarding speed (pps) of DPVS is several times than LVS and as good as Google's [Maglev](https://research.google.com/pubs/pub44824.html).
@@ -245,7 +247,22 @@ Our test shows the forwarding speed (pps) of DPVS is several times than LVS and 
 
 # License
 
-Please see the [License](./LICENSE.md) file.
+Please see the [License](./LICENSE.md) file for details.
+
+# Contributing
+
+Please see the [CONTRIBUTING](./CONTRIBUTING.md) file for details.
+
+# Community
+
+Currently, DPVS has been widely accepted by dozens of community cooperators, who have successfully used and contributed a lot to DPVS. We just list some of them alphabetically as below.
+
+|[**CMSoft**](http://cmsoft.10086.cn/)      | ![cmsoft](./pic/community/cmsoft.png)  |
+| ----------------------------------------- | -------------------------------------- |
+|[**IQiYi**](https://www.iqiyi.com/)        | ![iqiyi](./pic/community/iqiyi.png)    |
+|[**NetEase**](https://www.163yun.com/)     | ![netease](./pic/community/netease.png)|
+|[**Shopee**](https://shopee.com/)          | ![shopee](./pic/community/shopee.png)  |
+|[**Xiaomi**](https://www.mi.com/)          | ![todo](./pic/community/todo.png)      |
 
 # Contact Us
 
