@@ -24,7 +24,7 @@ Major features of `DPVS` including:
 * *L4 Load Balancer*, including FNAT, DR, Tunnel, DNAT modes, etc.
 * *SNAT* mode for Internet access from internal network.
 * *NAT64* forwarding in FNAT mode for quick IPv6 adaptation without application changes.
-* Different *schedule algorithms* like RR, WLC, WRR, MH, Conhash etc.
+* Different *schedule algorithms* like RR, WLC, WRR, MH(Maglev Hashing), Conhash(Consistent Hashing) etc.
 * User-space *Lite IP stack* (IPv4/IPv6, Routing, ARP, Neighbor, ICMP ...).
 * Support *KNI*, *VLAN*, *Bonding*, *Tunnelling* for different IDC environment.
 * Security aspect, support *TCP syn-proxy*, *Conn-Limit*, *black-list*.
@@ -63,7 +63,7 @@ Well, let's start from DPDK then.
 
 ## DPDK setup.
 
-Currently, `dpdk-stable-18.11.2` is recommended for `DPVS`. `dpdk-stable-17.11.2` and `dpdk-stable-17.11.6` are supported until the lifetime ending of DPVS v1.8.
+Currently, `dpdk-stable-18.11.2` is recommended for `DPVS`. `dpdk-stable-17.11.2` and `dpdk-stable-17.11.6` are supported until the lifecycle end of DPVS v1.8.
 
 > You can skip this section if experienced with DPDK, and refer the [link](http://dpdk.org/doc/guides/linux_gsg/index.html) for details.
 
@@ -115,7 +115,7 @@ $ mkdir /mnt/huge
 $ mount -t hugetlbfs nodev /mnt/huge
 ```
 
-Install kernel modules and bind NIC with `igb_uio` driver. Quick start uses only one NIC, normally we use 2 for FNAT cluster, even 4 for bonding mode. Assuming `eth0` will be used for DPVS/DPDK, and another standalone Linux NIC for debug, for example, `eth1`.
+Install kernel modules and bind NIC with `igb_uio` driver. Quick start uses only one NIC, normally we use 2 for FNAT cluster, even 4 for bonding mode. For example, suppose the NIC we would use to run DPVS is eth0, in the meantime, we still keep another standalone NIC eth1 for debugging.
 
 ```bash
 $ modprobe uio
@@ -129,7 +129,9 @@ $ ifconfig eth0 down  # assuming eth0 is 0000:06:00.0
 $ ./usertools/dpdk-devbind.py -b igb_uio 0000:06:00.0
 ```
 
-`dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver like `ixgbe`. You can also use `lspci` or `ethtool -i eth0` to check the NIC PCI bus-id. Please see [DPDK site](http://www.dpdk.org) for details.
+> Note that a kernel parameter `carrier` is added to `rte_kni.ko` since [DPDK v18.11](https://elixir.bootlin.com/dpdk/v18.11/source/kernel/linux/kni/kni_misc.c), and the default value for it is "off".  We need to load `rte_kni.ko` with the extra parameter `carrier=on` to make KNI devices work properly.
+
+`dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver like `ixgbe`. You can also use `lspci` or `ethtool -i eth0` to check the NIC PCI bus-id. Please refer to [DPDK site](http://www.dpdk.org) for more details.
 
 > Note: PMD of Mellanox NIC is built on top of libibverbs using the Raw Ethernet Accelerated Verbs AP. It doesn't rely on UIO/VFIO driver. Thus, Mellanox NICs should not bind the `igb_uio` driver. Refer to [Mellanox DPDK](https://community.mellanox.com/s/article/mellanox-dpdk) for details.
 
@@ -146,7 +148,7 @@ $ make # or "make -j40" to speed up.
 $ make install
 ```
 
-> Build dependencies may be needed, such as `automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`. You can install the missing dependencies using the package manager of the system, e.g., `yum install popt-devel` (CentOS).
+> Build dependencies may be needed, such as `automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`. You can install the missing dependencies by using the package manager of the system, e.g., `yum install popt-devel` (CentOS).
 
 Output files are installed to `dpvs/bin`.
 
@@ -190,7 +192,7 @@ If you see this message. Well done, `DPVS` is working with NIC `dpdk0`!
 EAL: Error - exiting with code: 1
   Cause: ports in DPDK RTE (2) != ports in dpvs.conf(1)
 ```
->It means the NIC used by DPVS do not match `/etc/dpvs.conf`. Please use `dpdk-devbind` to adjust the NIC number or modify `dpvs.conf`. We'll improve this part to make DPVS more "clever" to avoid modify config file when NIC count do not match.
+>It means the NIC count of DPVS does not match `/etc/dpvs.conf`. Please use `dpdk-devbind` to adjust the NIC number or modify `dpvs.conf`. We'll improve this part to make DPVS more "clever" to avoid modify config file when NIC count does not match.
 
 What config items does `dpvs.conf` support and how to configure them? Well, `DPVS` maintains a config item file `conf/dpvs.conf.items` which lists all supported config entries and corresponding feasible values.
 
@@ -237,7 +239,7 @@ More configure examples can be found in the [Tutorial Document](./doc/tutorial.m
 * `UOA` module to get real UDP client IP/port in `FNAT`.
 * ... and more ...
 
-We also listed some frequently asked questions in the [FAQ Document](./doc/faq.md). It may helps when you run into problems with DPVS.
+We also listed some frequently asked questions in the [FAQ Document](./doc/faq.md). It may help when you run into problems with DPVS.
 
 # Performance Test
 
@@ -247,11 +249,11 @@ Our test shows the forwarding speed (pps) of DPVS is several times than LVS and 
 
 # License
 
-Please see the [License](./LICENSE.md) file for details.
+Please refer to the [License](./LICENSE.md) file for details.
 
 # Contributing
 
-Please see the [CONTRIBUTING](./CONTRIBUTING.md) file for details.
+Please refer to the [CONTRIBUTING](./CONTRIBUTING.md) file for details.
 
 # Community
 
@@ -266,7 +268,7 @@ Currently, DPVS has been widely accepted by dozens of community cooperators, who
 
 # Contact Us
 
-`DPVS` is developing by [iQiYi](https://www.iqiyi.com) *QLB* team since April 2016 and now open-sourced. It's already widely used in iQiYi IDC for L4 load balancer and SNAT clusters, and we plan to replace all our LVS clusters with DPVS. We are very happy that **more people can get involved** in this project. Welcome to try, report issues and submit pull requests. And please feel free to contact us through **Github** or **Email**.
+`DPVS` is developed by [iQiYi](https://www.iqiyi.com) *QLB* team since April 2016. It's widely used in iQiYi IDC for L4 load balancer and SNAT clusters, and we have already replaced nearly all our LVS clusters with DPVS. We open-sourced DPVS at October 2017, and are excited to see that **more people can get involved** in this project. Welcome to try, report issues and submit pull requests. And please feel free to contact us through **Github** or **Email**.
 
 * github: `https://github.com/iqiyi/dpvs`
 * email: `iig_cloud_qlb # qiyi.com` (Please remove the white-spaces and replace `#` with `@`).

@@ -25,15 +25,15 @@ DPVS Tutorial
   - [Debug with Log](#debug-with-log)
   - [Packet Capture and Tcpdump](#packet-capture)
 
-> To compile and launch DPVS, pls check [README.md](../README.md) for this project.
+> To compile and launch DPVS, please check [README.md](../README.md) for this project.
 
 <a id='term'/>
 
 # Terminology
 
-About the concepts of *Full-NAT* (`FNAT`), `DR`, `Tunnel`, `toa`, `OSPF`/`ECMP` and `keepalived`, pls refer [LVS](http://www.linuxvirtualserver.org) and [Alibaba/LVS](https://github.com/alibaba/LVS/tree/master/docs).
+About the concepts of *Full-NAT* (`FNAT`), `DR`, `Tunnel`, `TOA`, `OSPF`/`ECMP` and `keepalived`, please refer [LVS](http://www.linuxvirtualserver.org) and [Alibaba/LVS](https://github.com/alibaba/LVS/tree/master/docs).
 
-Note `DPVS` supports `FNAT`, `DR`, `Tunnel`, `NAT`, `SNAT` forwarding modes, and each mode can be configured as `one-arm` or `two-arm` topology, with or without `OSFP/ECMP`/`keepalived`. There're too many combinations, I cannot list all the examples here. Let's just give some popular working models used in our daily work.
+Note that `DPVS` supports `FNAT`, `DR`, `Tunnel`, `NAT`, `SNAT` forwarding modes, and each mode can be configured as `one-arm` or `two-arm` topology, with or without `OSFP/ECMP`/`keepalived`. There're too many combinations, I cannot list all the examples here. Let's just give some popular working models used in our daily work.
 
 <a id='one-two-arm'/>
 
@@ -48,7 +48,7 @@ On the other hand, *one-arm* means all clients and servers are in same side of `
 To make things easier, we do not consider virtual devices for now. Thus, *two-arm* topology need
 
 * two DPDK interfaces loaded with PMD driver(i.e. igb_uio), and
-* `/etc/dpvs.conf` should also be configured with two interfaces. Pls refer the file [conf/dpvs.conf.sample](../conf/dpvs.conf.sample).
+* `/etc/dpvs.conf` should also be configured with two interfaces. Please refer the file [conf/dpvs.conf.sample](../conf/dpvs.conf.sample).
 
 ```
 $ dpdk-devbind --status
@@ -73,7 +73,7 @@ Considering `DPDK` application manages the networking interface completely (exce
 
 ![kni](pics/kni.png)
 
-Note, `keepalived` is modified by `DPVS` project to support some specific parameters. The codes is resident in [tools/keepalived](../tools/keepalived) and the executable is `bin/keepalived`. And `ospfd`/`sshd` is the standard version.
+It should not that `keepalived` is modified by `DPVS` project to support some specific parameters. The codes is resident in [tools/keepalived](../tools/keepalived) and the executable file is `bin/keepalived`. And `ospfd`/`sshd` is the standard version.
 
 Let's start from *Full-NAT* example first, it's not the easiest but really popular.
 
@@ -167,7 +167,7 @@ Your ip:port : 10.0.0.48:37177
 
 `LIP` or *Local-IP* is needed for FNAT translation, clients' *CIP:cport* will be replaced with *LIP:lport*, while *VIP:vport* will be translated to RS's *RIP:rport*. That's why the mode called "Full-NAT" I think.
 
-Pls use `ipvsadm --add-laddr` to set `LIP` instead of `dpip addr add ...`. Because the both *ipvs* and *inet* module need `LIP` address, and *sapool* option will be set automatically.
+Please use `ipvsadm --add-laddr` to set `LIP` instead of `dpip addr add ...`. Because the both *ipvs* and *inet* module need `LIP` address, and *sapool* option will be set automatically.
 
 Another tip is you can use `dpip addr add 10.0.0.100/16 dev dpdk1` to set VIP and WAN route simultaneously. But let's use two commands to make it clear.
 
@@ -237,7 +237,7 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 
 Then, the `zebra/ospfd` part. Firstly, run the OSPF protocol between `DPVS` server and wan-side L3-switch, with the "inter-connection network" (here is `172.10.0.2/30`). For `DPVS`, we set the inter-connection IP on `dpdk1.kni`.
 
-> Assuming `quagga` package is installed, if not, pls use 'yum' (CentOS) or 'apt-get' (Ubuntu) to install it. After installed, you should have `zebra` and `ospfd`, as well as their config files.
+> Assuming `quagga` package is installed, if not, please use 'yum' (CentOS) or 'apt-get' (Ubuntu) to install it. After installed, you should have `zebra` and `ospfd`, as well as their config files.
 
 ```bash
 $ ip link set dpdk1.kni up
@@ -302,7 +302,7 @@ network 172.10.0.0/30 area 0.0.0.0 # announce inter-connection network
 network 123.1.2.3/32 area 0.0.0.0  # announce VIP
 ```
 
-Considering the VIP's route is configured on KNI interface, an alternative way to publish VIP is to let ospfd redistribute the connected routes matching VIP. In this way, you need not modify the `ospfd.conf` file and reolad ospfd when you want to add more VIPs.
+Considering the VIP's route is configured on KNI interface, an alternative way to publish VIP is to let ospfd redistribute the connected routes that match VIP. In this way, you don't need to modify the `ospfd.conf` file and reolad `ospfd` every time when you want to add more VIPs.
 
 ```bash
 $ cat /etc/quagga/ospfd.conf               # may installed to other path
@@ -327,7 +327,7 @@ network 172.10.0.0/30 area 0.0.0.0         # announce inter-connection network
 redistribute connected route-map ecmp      # redistribute VIPs in route-map "ecmp", route-map is not mandatory but advised
 ```
 
-Note `OSPF` must also be configured on l3-switch. This Tutorial is not about OSPF's configuration, so no more things about switch here.
+Note that `OSPF` must also be configured on l3-switch. This Tutorial is not about OSPF's configuration, so no more things about switch here.
 
 Now start `zebra` and `ospfd`:
 
@@ -342,7 +342,7 @@ Hopefully (if `OSPF` works), the VIP is accessible by client:
 client: curl 123.1.2.3
 ```
 
-> There exists other solutions to acheive the OSPF-cluster model the like. For example, OSPF and quagga can be replaced with BGP and [bird](https://bird.network.cz/), respectively. If you are interested, pls refer to related docs or consult the network administrator.
+> There exists other solutions to acheive the OSPF-cluster model and the like. For example, OSPF and quagga can be replaced with BGP and [bird](https://bird.network.cz/), respectively. If you are interested, please refer to related docs or consult the network administrator.
 
 <a id='fnat-keepalive'/>
 
@@ -491,7 +491,7 @@ client$ curl 192.168.100.254
 Your ip:port : 192.168.100.146:42394
 ```
 
-> We just explain how DPVS works with keepalived, and not verify if the master/backup feature provided by keepalived works. Pls refer LVS docs if needed.
+> We just explain how DPVS works with keepalived, and not verify if the master/backup feature provided by keepalived works. Please refer LVS docs if needed.
 
 <a id='dr'/>
 
@@ -550,7 +550,7 @@ client$ curl 192.168.100.254
 Your ip:port : 192.168.100.46:13862
 ```
 
-> DR mode for two-arm is similar with [two-arm FNAT](#simple-fnat), pls change the forwarding mode by `ipvsadm -g`, and you need NOT config `LIP`. Configuration of `RS`es are the same with one-arm.
+> DR mode for two-arm is similar with [two-arm FNAT](#simple-fnat), please change the forwarding mode by `ipvsadm -g`, and you need NOT config `LIP`. Configuration of `RS`es are the same with one-arm.
 
 <a id='tunnel'/>
 
@@ -1000,7 +1000,7 @@ It should note that the redirect forwarding may harm performance to a certain de
 
 ## Bonding Device
 
-For Bonding device, both `DPVS` and connected Switch/Router need to set the Bonding interfaces with *same* Bonding mode. Note `DPVS` just supports bonding mode 0 and 4 for now. To enable Bonding device on `DPVS`, pls refer [conf/dpvs.bond.conf.sample](../conf/dpvs.bond.conf.sample). Each Bonding device needs one or more DPDK Physical devices (`dpdk0`, ...) to work as it's slaves.
+For Bonding device, both `DPVS` and connected Switch/Router need to set the Bonding interfaces with *same* Bonding mode. Note that `DPVS` just supports bonding mode 0 and 4 for now. To enable Bonding device on `DPVS`, please refer [conf/dpvs.bond.conf.sample](../conf/dpvs.bond.conf.sample). Each Bonding device needs one or more DPDK Physical devices (`dpdk0`, ...) to work as its slaves.
 
 <a id='vdev-vlan'/>
 
@@ -1008,7 +1008,7 @@ For Bonding device, both `DPVS` and connected Switch/Router need to set the Bond
 
 To use *VLAN* device, you can use `dpip` tool, *VLAN* device can be created based on real DPDK Physical device (e.g., `dpdk0`, `dpdk1`) or Bonding device (e.g., `bond0`). But cannot create VLAN device on VLAN device.
 
-This is the VLAN example, pls check `dpip vlan help` for more info.
+This is the VLAN example, please check `dpip vlan help` for more info.
 
 ```bash
 $ dpip vlan add dpdk0.100 link dpdk0 proto 802.1q id 100
@@ -1051,11 +1051,11 @@ tunnel_group tunnel_gre {
 }
 ```
 
-Pls also check `dpip tunnel help` for details.
+Please also check `dpip tunnel help` for details.
 
-> Pls Note, by using Tunnel
+> Notes:
 > 1. RSS schedule all packets to same queue/CPU since underlay source IP may the same.
->    If one lcore's `sa_pool` get full, `sa_miss` happens. This is not a problem for some NICs which support inner RSS for tunnelling.
+>    If one lcore's `sa_pool` gets full, `sa_miss` happens. This is not a problem for some NICs which support inner RSS for tunnelling.
 > 2. `fdir`/`rss` won't works well on tunnel deivce, do not use tunnel for FNAT.
 
 <a id='vdev-kni'/>
@@ -1090,10 +1090,10 @@ rs$ cat /proc/net/uoa_stats
 12866352 317136864        0  3637127 341266254  3628560        0
 ```
 
-Statistics are supported for debug purpose. Note `recvfrom(2)` is kept untouched, it will still return the source IP/port in packets, means the IP/port modified or translated by `DPVS` in UDP `FNAT` mode.
-It's useful to send the data back by socket. Pls note UDP socket is connect-less, one `socket-fd` can be used to communicate with different peers.
+Statistics are supported for debug purpose. Note that `recvfrom(2)` is kept untouched, it will still return the source IP/port in packets, means the IP/port modified or translated by `DPVS` in UDP `FNAT` mode.
+It's useful to send the data back by socket. Please note UDP socket is connect-less, one `socket-fd` can be used to communicate with different peers.
 
-Actually, we use private IP option to implement `UOA` at first, and later we add another implementation with private protocol, pls check the details in [uoa.md](../kmod/uoa/uoa.md).
+Actually, we use private IP option to implement `UOA` at first, and later we add another implementation with private protocol, please check the details in [uoa.md](../kmod/uoa/uoa.md).
 
 <a id='Ubuntu16.04'/>
 
@@ -1108,7 +1108,7 @@ $ cd dpdk-stable-17.05.2/
 $ sed -i "s/pci_intx_mask_supported(dev)/pci_intx_mask_supported(dev)||true/g" lib/librte_eal/linuxapp/igb_uio/igb_uio.c
 ```
 
-Now to set up DPDK hugepage,for more messages ( single-node system) pls refer the [link](http://dpdk.org/doc/guides/linux_gsg/sys_reqs.html).
+Now to set up DPDK hugepage,for more messages ( single-node system) please refer the [link](http://dpdk.org/doc/guides/linux_gsg/sys_reqs.html).
 
 ```bash
 $ # for single node machine
@@ -1117,7 +1117,7 @@ $ echo 1024 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugep
 
 2. **Build DPVS on Ubuntu**
 
-> may need install dependencies, like `openssl`, `popt` and `numactl`, e.g., ` apt-get install libpopt-dev libssl-dev libnuma-dev` (Ubuntu). Also note that certain CPU flags must be enabled such as `SSSE3`.
+> may need to install dependencies, like `openssl`, `popt` and `numactl`, e.g., ` apt-get install libpopt-dev libssl-dev libnuma-dev` (Ubuntu). Also note that certain CPU flags must be enabled such as `SSSE3`.
 
 3. **Launch DPVS on Ubuntu**
 
@@ -1127,7 +1127,7 @@ Now, `dpvs.conf` must be put at `/etc/dpvs.conf`, just copy it from `conf/dpvs.c
 $ cp conf/dpvs.conf.single-nic.sample /etc/dpvs.conf
 ```
 
-The NIC for Ubuntu may not support flow-director(fdir),for that case ,pls use 'single worker',may decrease conn_pool_size .
+The NIC for Ubuntu may not support flow-director(fdir),for that case ,please use 'single worker',may decrease conn_pool_size .
 
 ```bash
 queue_number        1
@@ -1155,7 +1155,7 @@ worker_defs {
 
 # Debug DPVS
 
-When `DPVS` is not working as expected, pls consider the following debug solutions, listed with the order from easy to hard.
+When `DPVS` is not working as expected, please consider the following debug solutions, listed with the order from easy to hard.
 
 * Enable more logs.
 * Packet capture analysis.
@@ -1283,7 +1283,7 @@ rtt min/avg/max/mdev = 0.039/0.039/0.039/0.000 ms
 nginx 192.168.88.15
 ```
 
-Check tcpdump output then, it shows that ICMP host ping packets, and the whoe HTTP flow are captured by `tcpdump` working on interface `dpdk0.kni`. Notes that both inbound and outbound packets are captured.
+Check tcpdump output then, it shows that ICMP host ping packets, and the whole HTTP flow are captured by `tcpdump` working on interface `dpdk0.kni`. Note that both inbound and outbound packets are captured.
 
 ```bash
 $ tcpdump -i dpdk0.kni -nn ip and net 192.168.88

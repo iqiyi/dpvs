@@ -82,7 +82,7 @@ We may use a private `IPPROTO_XXX` protocol to encaplate UDP ? Looks like `IP+UO
 
 #### **Why support private protocol then ?**
 
-Currently, we have supported private protocol. It's because that we found not all l3-switch support IPv4 options, or even if support, there's speed limitation like 300pps. The reason from provider is the switch HW (chips) do not handle IP options, just have to drop the whole packet, or pass the packets with option to CPU for process, with a limited speed which is too poor to accept. On the other hand, the switch can "support" unkown IP protocol, we can forward this kind of packets.
+Currently, we have supported private protocol. The reason is that we found not all l3-switches support IPv4 options, or there exists a strict speed limitation such as 300pps. The reason from provider is the switch cannot handle IP options with hardware(chips), and the switch in this case just has to drop the whole packet, or pass the packets with IP options to CPU for process with a very limited speed. On the other hand, the switch can "support" unkown IP protocol, thus we can wrap UDP source address into a private protocol and forward it to backends. The packets carrying UOA private protocol typically have the structure of "ETHER|IP/IPv6|UOA|UDP/...".
 
 Uoa private protocol (`opp` mode) supports IPv4/IPv6/Nat64, while the IP option (`ipo` mode) supports IPv4 only.
  

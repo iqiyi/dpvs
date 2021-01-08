@@ -4,12 +4,12 @@ This doc should tell you how to achieve best performance by tunning CPU cores on
 
 ### About DPVS Workers
 
-DPVS is a multi-thread DPDK application program. It is based on the "polling" framework, all the threads would get into an infinite loop to process various jobs registered for the thread during the initialization stage. We call each such DPVS thread to be a DPVS Worker. There exists four different DPVS Worker types now.
+DPVS is a multi-thread DPDK application program. It is based on the "polling" framework, all the threads would get into an infinite loop to process various jobs registered for the thread during the initialization stage. We call each such DPVS thread a DPVS Worker. There exists four different DPVS Worker types now.
 
 * **Master Worker**:  the worker in charge of all jobs from the control plane;
 * **Forwarding Worker**: the data plane workers in charge of packet receiving, processing, forwarding and all other jobs in data plane;
 * **Isolate Recieving Worker**: the optional workers used to take the responsibility of *Forwarding Worker* to receive packets to reduce NIC packets imiss.
-* **KNI Worker**: an optional worker used to do kni related jobs to avoid performance disturb caused by work loads of *Master/Forwarding Worker*.
+* **KNI Worker**: an optional worker used to do kni related jobs to avoid performance disturbance caused by work loads of *Master/Forwarding Worker*.
 
 As all other DPDK applications, each DPVS Worker is bound to a distinct CPU core to avoid they interfere with each other. By default, the first N CPUs of the system are bound with DPVS Workers. The performance may not good enough when many other work loads are scheduled into these CPUs by the system. For example, CPU0, the first CPU core in the system, is generally a lot busier than other CPU cores, because many processes, interrupts, and kernel threads run on it by default. The following of this doc would tell you how to alleviate/offload irrelative work load on DPVS Workers.
 
