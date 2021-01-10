@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2018 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -13,9 +13,9 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
-/**
+
+/*
  * flow for IPv4/IPv6 route lookup.
  * Linux Kernel is referred.
  *

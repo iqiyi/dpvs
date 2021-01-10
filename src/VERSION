@@ -1,6 +1,6 @@
 #!/bin/sh -
 # program: dpvs
-# Dec 24, 2020
+# Jan 7, 2021
 #
 # # Features
 # ----------
@@ -38,6 +38,6 @@
 # - Toa: Fix problem when getting/setting pte writable flag.
 
 export VERSION=1.8
-export RELEASE=7
+export RELEASE=8
 
 echo $VERSION-$RELEASE

@@ -4,13 +4,14 @@ This doc should tell you how to achieve best performance by tunning CPU cores on
 
 ### About DPVS Workers
 
-DPVS is a multi-thread DPDK application program. It is based on the "polling" framework, all the threads would get into an infinite loop to process various jobs registered for the thread during the initialization stage. We call each such DPVS thread to be a DPVS Worker. There exists three different DPVS  Worker types now.
+DPVS is a multi-thread DPDK application program. It is based on the "polling" framework, all the threads would get into an infinite loop to process various jobs registered for the thread during the initialization stage. We call each such DPVS thread a DPVS Worker. There exists four different DPVS Worker types now.
 
-* **Master Worker**:  in charge of all the jobs from the control plane;
-* **Forwarding Worker**: the data plane worker in charge of packet receiving, processing, forwarding and all other jobs in the data plane;
-* **Isolate Recieving Worker**: an optional  worker used to take the responsibility of Forwarding Worker to receive packets to reduce NIC packets imiss.
+* **Master Worker**:  the worker in charge of all jobs from the control plane;
+* **Forwarding Worker**: the data plane workers in charge of packet receiving, processing, forwarding and all other jobs in data plane;
+* **Isolate Recieving Worker**: the optional workers used to take the responsibility of *Forwarding Worker* to receive packets to reduce NIC packets imiss.
+* **KNI Worker**: an optional worker used to do kni related jobs to avoid performance disturbance caused by work loads of *Master/Forwarding Worker*.
 
-As all other DPDK applications, each DPVS Worker is bound to a distinct CPU core to avoid they interfere with each other. By default, the first N CPUs of the system are bound with DPVS Workers. The performance may not good enough when many other work load are scheduled into these CPUs  by the system. For example, CPU0, the first CPU core in the system, is generally a lot busier than other CPU cores, because many processes, interrupts, and kernel threads run on it by default. The following of this doc would tell you how to alleviate/offload irrelative work load on DPVS Workers.
+As all other DPDK applications, each DPVS Worker is bound to a distinct CPU core to avoid they interfere with each other. By default, the first N CPUs of the system are bound with DPVS Workers. The performance may not good enough when many other work loads are scheduled into these CPUs by the system. For example, CPU0, the first CPU core in the system, is generally a lot busier than other CPU cores, because many processes, interrupts, and kernel threads run on it by default. The following of this doc would tell you how to alleviate/offload irrelative work load on DPVS Workers.
 
 ### When do you need to consider this performance tuning?
 
@@ -55,7 +56,7 @@ Generally speaking, we may follow some practical rules below to choose the CPU c
 
 * Avoid using the first CPU core, including both HT(Hyper-Threading) CPU cores of the first physical CPU core.
 * Turn off  HT(Hyper-Threading) CPUs in the system if possible.
-* Do not use boot HT CPU cores from one physical CPU, unless the workers are the "forwarding worker" and "isolate receiving worker" couples.
+* Do not use both HT CPU cores from one physical CPU, unless the workers are the "forwarding worker" and "isolate receiving worker" couples.
 
 You can get the CPU layout of your system by the script provided by DPDK `cpu_layout.py `, example as shown below. 
 
@@ -82,7 +83,7 @@ Core 11 [8]         [18]
 Core 12 [9]         [19] 
 ```
 
-There are 20 HT CPU cores, which is derived from 10 physical CPU cores in my system.  Following examples are based on this environment.
+There are 20 CPU cores, and HT is turned off in my system.  Following examples are based on this environment.
 
 **Example #1: Run DPVS with 1 master worker and 4 forwarding worker**
 
@@ -90,7 +91,7 @@ There are 20 HT CPU cores, which is derived from 10 physical CPU cores in my sys
 
 * Forwarding Worker:    Cpu2 - Cpu5 
 
-* Boot Option Cpu List: Cpu1 - Cpu5, Cpu11 - Cpu15
+* Boot Option Cpu List: Cpu1 - Cpu5
 
 Use DPDK EAL common option `--lcore` to map System CPU ID to DPVS Worker ID. Boot DPVS with the command:
 
@@ -184,17 +185,16 @@ KiB Swap:  4194300 total,  4194300 free,        0 used. 16183592 avail Mem
 
 - Master Worker:                Cpu3
 - Forwarding Worker:            Cpu1, Cpu2, Cpu4, Cpu5
-- Isolate Receiving Worker:     Cpu11, Cpu12, Cpu14, Cpu15
-
-- Boot Option Cpu List:         Cpu1 - Cpu5, Cpu11 - Cpu15
+- Isolate Receiving Worker:     Cpu11, Cpu12, Cpu13, Cpu14
+- Boot Option Cpu List:         Cpu1 - Cpu5, Cpu11 - Cpu14
 
 In this case, we change the Master Worker to the 3rd Worker(Worker ID is 2), just to explain how to specify DPVS Master Worker to any DPVS Worker as we want. Use DPDK EAL common option `--master-lcore` to specify the Master Worker ID, use DPDK EAL common option `--lcore` to map System CPU ID to DPVS Worker ID. Boot DPVS with the command:
 
 ```
-./bin/dpvs  -- --lcores 0@1,1@2,2@3,3@4,4@5,5@11,6@12,7@14,8@15 --master-lcore 2
+./bin/dpvs  -- --lcores 0@1,1@2,2@3,3@4,4@5,5@11,6@12,7@13,8@14 --master-lcore 2
 ```
 
-> The above command indicates DPVS to map the system's Cpu1-Cpu5,Cpu11,Cpu12,Cpu14,Cpu15 into DPVS Worker ID 0-8, and use the 2nd worker as DPVS Master Worker, respectively. We skip Cpu13 because it resides in the same physical CPU core as Cpu3, on which the Master Worker is to run.
+> The above command indicates DPVS to map the system's Cpu1-Cpu5,Cpu11-Cpu15 into DPVS Worker ID 0-8, and use the 2nd worker as DPVS Master Worker, respectively.
 
 The DPVS worker configurations for this case shown as below. Note the configurations for the "cpu_id" fields.
 
