@@ -53,11 +53,13 @@ vsge_iseq(const virtual_server_group_entry_t *vsge_a, const virtual_server_group
 	return true;
 }
 
+#if 0
 static bool __attribute((pure))
 rs_iseq(const real_server_t *rs_a, const real_server_t *rs_b)
 {
 	return sockstorage_equal(&rs_a->addr, &rs_b->addr);
 }
+#endif
 
 /* Returns the sum of all alive RS weight in a virtual server. */
 static unsigned long __attribute__ ((pure))
@@ -830,7 +832,7 @@ rs_exist(real_server_t * old_rs, list l)
 		return NULL;
 
 	LIST_FOREACH(l, rs, e) {
-		if (rs_iseq(rs, old_rs))
+		if (RS_ISEQ(rs, old_rs))
 			return rs;
 	}
 
@@ -980,7 +982,7 @@ clear_diff_s_srv(virtual_server_t *old_vs, real_server_t *new_rs)
 	if (!old_rs)
 		return;
 
-	if (new_rs && rs_iseq(old_rs, new_rs)) {
+	if (new_rs && RS_ISEQ(old_rs, new_rs)) {
 		/* which fields are really used on s_svr? */
 		new_rs->alive = old_rs->alive;
 		new_rs->set = old_rs->set;

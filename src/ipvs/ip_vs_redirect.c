@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -314,8 +314,8 @@ static int dp_vs_redirect_table_create(void)
 
     /* allocate the global redirect hash table, per socket? */
     dp_vs_cr_tbl =
-        rte_malloc_socket(NULL, sizeof(struct list_head ) * DPVS_CR_TBL_SIZE,
-                          RTE_CACHE_LINE_SIZE, rte_socket_id());
+        rte_malloc(NULL, sizeof(struct list_head ) * DPVS_CR_TBL_SIZE,
+                          RTE_CACHE_LINE_SIZE);
     if (!dp_vs_cr_tbl) {
         goto cache_free;
     }
@@ -355,13 +355,12 @@ static int dp_vs_redirect_ring_create(void)
     socket_id = rte_socket_id();
 
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
-        if (cid == rte_get_master_lcore() || netif_lcore_is_idle(cid)) {
+        if (!netif_lcore_is_fwd_worker(cid)) {
             continue;
         }
 
         for (peer_cid = 0; peer_cid < DPVS_MAX_LCORE; peer_cid++) {
-            if (netif_lcore_is_idle(peer_cid)
-                || peer_cid == rte_get_master_lcore()
+            if (!netif_lcore_is_fwd_worker(peer_cid)
                 || cid == peer_cid) {
                 continue;
             }

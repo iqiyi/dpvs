@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -755,17 +755,6 @@ out:
     return ret;
 }
 
-
-unsigned dp_vs_get_conn_timeout(struct dp_vs_conn *conn)
-{
-    unsigned conn_timeout;
-    if (conn->dest) {
-        conn_timeout = conn->dest->conn_timeout;
-        return conn_timeout;
-    }
-    return 90;
-}
-
 static int dp_vs_services_flush(lcoreid_t cid)
 {
     int idx;
@@ -1060,6 +1049,8 @@ static int dp_vs_dests_copy_percore_stats(struct dp_vs_get_dests *master_dests,
     if (master_dests->num_dests != slave_dests->num_dests)
         return EDPVS_INVAL;
     for (i = 0; i < master_dests->num_dests; i++) {
+        master_dests->entrytable[i].max_conn += slave_dests->entrytable[i].max_conn;
+        master_dests->entrytable[i].min_conn += slave_dests->entrytable[i].min_conn;
         master_dests->entrytable[i].actconns += slave_dests->entrytable[i].actconns;
         master_dests->entrytable[i].inactconns += slave_dests->entrytable[i].inactconns;
         master_dests->entrytable[i].persistconns += slave_dests->entrytable[i].persistconns;

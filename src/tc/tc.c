@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -367,7 +367,8 @@ int tc_init(void)
 
         snprintf(plname, sizeof(plname), "tc_mbuf_pool_%d", s);
 
-        tc_mbuf_pools[s] = rte_mempool_create(plname, tc_mbuf_pool_size,
+        is_power2(tc_mbuf_pool_size, 1, &tc_mbuf_pool_size);
+        tc_mbuf_pools[s] = rte_mempool_create(plname, tc_mbuf_pool_size - 1,
                                               sizeof(struct tc_mbuf),
                                               tc_mbuf_cache_size,
                                               0, NULL, NULL, NULL, NULL,

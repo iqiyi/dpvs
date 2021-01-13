@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -111,7 +111,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
         ct = dp_vs_ct_in_get(svc->af, iph->proto, &snet, &iph->daddr, 0, ports[1]);
         if (!ct || !dp_vs_check_template(ct)) {
             /* no template found, or the dest of the conn template is not available */
-            dest = svc->scheduler->schedule(svc, mbuf);
+            dest = svc->scheduler->schedule(svc, mbuf, iph);
             if (unlikely(NULL == dest)) {
                 RTE_LOG(WARNING, IPVS, "%s: persist-schedule: no dest found.\n", __func__);
                 return NULL;
@@ -135,7 +135,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
          * fw-mark based service: not support */
         ct = dp_vs_ct_in_get(svc->af, iph->proto, &snet, &iph->daddr, 0, 0);
         if (!ct || !dp_vs_check_template(ct)) {
-            dest = svc->scheduler->schedule(svc, mbuf);
+            dest = svc->scheduler->schedule(svc, mbuf, iph);
             if (unlikely(NULL == dest)) {
                 RTE_LOG(WARNING, IPVS, "%s: persist-schedule: no dest found.\n", __func__);
                 return NULL;
@@ -281,6 +281,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     struct dp_vs_dest *dest;
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
+    uint32_t flags = 0;
 
     assert(svc && iph && mbuf);
 
@@ -292,7 +293,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     if (svc->flags & DP_VS_SVC_F_PERSISTENT)
         return dp_vs_sched_persist(svc, iph,  mbuf, is_synproxy_on);
 
-    dest = svc->scheduler->schedule(svc, mbuf);
+    dest = svc->scheduler->schedule(svc, mbuf, iph);
     if (!dest) {
         RTE_LOG(WARNING, IPVS, "%s: no dest found.\n", __func__);
 #ifdef CONFIG_DPVS_MBUF_DEBUG
@@ -337,8 +338,13 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                               ports[0], ports[1], 0, &param);
     }
 
-    conn = dp_vs_conn_new(mbuf, iph, &param, dest,
-            is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
+    if (is_synproxy_on) {
+        flags |= DPVS_CONN_F_SYNPROXY;
+    }
+    if (svc->flags & DP_VS_SVC_F_ONEPACKET && iph->proto == IPPROTO_UDP) {
+        flags |= DPVS_CONN_F_ONE_PACKET;
+    }
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest, flags);
     if (!conn)
         return NULL;
 
@@ -1005,6 +1011,19 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
             dir = DPVS_CONN_DIR_OUTBOUND;
         else
             dir = DPVS_CONN_DIR_INBOUND;
+    } else {
+        /* assert(conn->dest->svc != NULL); */
+        if (conn->dest && conn->dest->svc &&
+                prot->conn_expire_quiescent &&
+                (conn->dest->svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT)) {
+            if (rte_atomic16_read(&conn->dest->weight) == 0) {
+                RTE_LOG(INFO, IPVS, "%s: the conn is quiescent, expire it right now,"
+                        " and drop the packet!\n", __func__);
+                prot->conn_expire_quiescent(conn);
+                dp_vs_conn_put(conn);
+                return INET_DROP;
+            }
+        }
     }
 
     if (conn->flags & DPVS_CONN_F_SYNPROXY) {

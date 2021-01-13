@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2018 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -14,12 +14,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- */
-/*
+ *
  * Example UDP server to get real client IP/port by UOA.
  *
  * raychen@qiyi.com, Mar 2018, initial.
- * yuwenchao@qiyi.com, Sep 25, add ipv6 support
+ * yuwenchao@qiyi.com, Sep 2019, add ipv6 support
  */
 
 #include <stdio.h>

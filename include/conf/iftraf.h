@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,18 +17,11 @@
  */
 #ifndef __DPVS_IFTRAF_CONF_H__
 #define __DPVS_IFTRAF_CONF_H__
+
 #include <stdint.h>
 #include <linux/if_addr.h>
 #include "inet.h"
-
-enum {
-    /* set */
-    SOCKOPT_SET_IFTRAF_ADD = 6400,
-    SOCKOPT_SET_IFTRAF_DEL,
-
-    /* get */
-    SOCKOPT_GET_IFTRAF_SHOW,
-};
+#include "conf/sockopts.h"
 
 struct dp_vs_iftraf_conf {
     char ifname[IFNAMSIZ];

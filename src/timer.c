@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -34,6 +34,10 @@
 #include "rte_spinlock.h"
 #include "parser/parser.h"
 #include "global_data.h"
+
+#ifdef CONFIG_TIMER_DEBUG
+#include "debug.h"
+#endif
 
 #define DTIMER
 #define RTE_LOGTYPE_DTIMER      RTE_LOGTYPE_USER1
@@ -179,8 +183,8 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
      * and it will never stopped (periodic) or never triggered (one-shut).
      */
     if (unlikely(!timer->delay)) {
-        RTE_LOG(WARNING, DTIMER, "schedule 0 timeout timer.\n");
-        return EDPVS_INVAL;
+        RTE_LOG(INFO, DTIMER, "trigger 0 delay timer at next tick.\n");
+        timer->delay = 1;
     }
 
     /* add to corresponding wheel, from higher level to lower. */
@@ -232,8 +236,9 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
         char trace[8192];
         dpvs_backtrace(trace, sizeof(trace));
         RTE_LOG(WARNING, DTIMER, "[%02d]: invalid timer(%p) handler "
-                "-- handler:%p, priv:%p, trace:\n%s", rte_lcore_id(),
-                timer, timer->handler, timer->priv, trace);
+                "-- name:%s, handler:%p, priv:%p, trace:\n%s",
+                rte_lcore_id(), timer, timer->name, timer->handler,
+                timer->priv, trace);
     }
 #endif
 

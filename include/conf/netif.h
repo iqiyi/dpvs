@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,8 +17,10 @@
  */
 #ifndef __NETIF_CONF_H__
 #define __NETIF_CONF_H__
+
 #include <linux/if_ether.h>
 #include <net/if.h>
+#include "conf/sockopts.h"
 
 #define NETIF_MAX_PORTS     4096
 
@@ -29,34 +31,13 @@
 #define RTE_ETHDEV_QUEUE_STAT_CNTRS     16
 #define NETIF_MAX_BOND_SLAVES           32
 
-typedef uint8_t lcoreid_t;
-typedef uint16_t portid_t;
-typedef uint16_t queueid_t;
-
 /*** end of type from dpdk.h ***/
-
-enum {
-    /* get */
-    SOCKOPT_NETIF_GET_LCORE_MASK = 500,
-    SOCKOPT_NETIF_GET_LCORE_BASIC,
-    SOCKOPT_NETIF_GET_LCORE_STATS,
-    SOCKOPT_NETIF_GET_PORT_LIST,
-    SOCKOPT_NETIF_GET_PORT_BASIC,
-    SOCKOPT_NETIF_GET_PORT_STATS,
-    SOCKOPT_NETIF_GET_PORT_EXT_INFO,
-    SOCKOPT_NETIF_GET_BOND_STATUS,
-    SOCKOPT_NETIF_GET_MAX,
-    /* set */
-    SOCKOPT_NETIF_SET_LCORE = 500,
-    SOCKOPT_NETIF_SET_PORT,
-    SOCKOPT_NETIF_SET_BOND,
-    SOCKOPT_NETIF_SET_MAX,
-};
 
 /* all lcores in use */
 typedef struct netif_lcore_mask_get
 {
     lcoreid_t master_lcore_id;
+    lcoreid_t kni_lcore_id;
     uint8_t slave_lcore_num;
     uint8_t isol_rx_lcore_num;
     uint64_t slave_lcore_mask;

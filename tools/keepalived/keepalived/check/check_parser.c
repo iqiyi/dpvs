@@ -946,7 +946,14 @@ static void
 syn_proxy_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
-	vs->syn_proxy = 1;
+	vs->syn_proxy = true;
+}
+
+static void
+expire_quiescent_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	vs->expire_quiescent_conn = true;
 }
 
 static void
@@ -1142,6 +1149,8 @@ init_check_keywords(bool active)
 	install_keyword("flag-3", &lbflags_handler);
 	install_keyword("sh-port", &lbflags_handler);
 	install_keyword("sh-fallback", &lbflags_handler);
+	install_keyword("mh-port", &lbflags_handler);
+	install_keyword("mh-fallback", &lbflags_handler);
 #endif
 	install_keyword("lb_kind", &forwarding_handler);
 	install_keyword("establish_timeout", &establish_timeout_handler);
@@ -1202,6 +1211,7 @@ init_check_keywords(bool active)
 	install_keyword("laddr_group_name", &laddr_gname_handler);
 	install_keyword("daddr_group_name", &blklst_gname_handler);
 	install_keyword("syn_proxy", &syn_proxy_handler);
+	install_keyword("expire_quiescent_conn", &expire_quiescent_handler);
 	install_keyword("vip_bind_dev", &bind_dev_handler);
 }
 

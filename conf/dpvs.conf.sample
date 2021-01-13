@@ -15,6 +15,7 @@ global_defs {
     log_level   WARNING
     ! log_file    /var/log/dpvs.log
     ! log_async_mode    on
+    ! pdump       off
 }
 
 ! netif config
@@ -211,6 +212,17 @@ worker_defs {
             ! isol_rxq_ring_sz 1048576
         }
     }
+
+    !<init> worker   cpu9 {
+    !    type        kni
+    !    cpu_id      9
+    !    port        dpdk0 {
+    !        tx_queue_ids     8
+    !    }
+    !    port        dpdk1 {
+    !        tx_queue_ids     8
+    !    }
+    !}
 
 }
 

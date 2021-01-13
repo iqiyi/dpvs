@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -25,38 +25,6 @@ struct dp_vs_wrr_mark {
     int mw;         /* maximum weight */
     int di;         /* decreasing interval */
 };
-
-/*
- *    Get the gcd of server weights
- */
-static int gcd(int a, int b)
-{
-    int c;
-
-    while ((c = a % b)) {
-        a = b;
-        b = c;
-    }
-    return b;
-}
-
-static int dp_vs_wrr_gcd_weight(struct dp_vs_service *svc)
-{
-    struct dp_vs_dest *dest;
-    int weight;
-    int g = 0;
-
-    list_for_each_entry(dest, &svc->dests, n_list) {
-        weight = rte_atomic16_read(&dest->weight);
-        if (weight > 0) {
-            if (g > 0)
-                g = gcd(weight, g);
-            else
-                g = weight;
-        }
-    }
-    return g ? g : 1;
-}
 
 /*
  *    Get the maximum weight of the service destinations.
@@ -89,7 +57,7 @@ static int dp_vs_wrr_init_svc(struct dp_vs_service *svc)
     mark->cl = &svc->dests;
     mark->cw = 0;
     mark->mw = dp_vs_wrr_max_weight(svc);
-    mark->di = dp_vs_wrr_gcd_weight(svc);
+    mark->di = dp_vs_gcd_weight(svc);
     svc->sched_data = mark;
 
     return EDPVS_OK;
@@ -112,7 +80,7 @@ static int dp_vs_wrr_update_svc(struct dp_vs_service *svc,
 
     mark->cl = &svc->dests;
     mark->mw = dp_vs_wrr_max_weight(svc);
-    mark->di = dp_vs_wrr_gcd_weight(svc);
+    mark->di = dp_vs_gcd_weight(svc);
     if (mark->cw > mark->mw)
         mark->cw = 0;
     return 0;
@@ -122,7 +90,7 @@ static int dp_vs_wrr_update_svc(struct dp_vs_service *svc,
  * Weighted Round-Robin Scheduling
  */
 static struct dp_vs_dest *dp_vs_wrr_schedule(struct dp_vs_service *svc,
-                                             const struct rte_mbuf *mbuf)
+                    const struct rte_mbuf *mbuf, const struct dp_vs_iphdr *iph __rte_unused)
 {
     struct dp_vs_dest *dest;
     struct dp_vs_wrr_mark *mark = svc->sched_data;

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -61,7 +61,16 @@ static int icmp_echo(struct rte_mbuf *mbuf)
         goto errout;
 
     if (rte_raw_cksum(ich, mbuf->pkt_len) != 0xffff) {
-        RTE_LOG(WARNING, ICMP, "%s: bad checksum\n", __func__);
+        char sbuf[64], dbuf[64];
+        const char *saddr, *daddr;
+
+        saddr = inet_ntop(AF_INET, &iph->src_addr,
+                          sbuf, sizeof(sbuf)) ? sbuf : "::";
+        daddr = inet_ntop(AF_INET, &iph->dst_addr,
+                          dbuf, sizeof(dbuf)) ? dbuf : "::";
+
+        RTE_LOG(WARNING, ICMP, "%s: %s->%s, bad checksum\n",
+                __func__, saddr, daddr);
         goto errout;
     }
 

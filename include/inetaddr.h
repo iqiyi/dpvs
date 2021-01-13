@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -117,7 +117,7 @@ bool inet_chk_mcast_addr(int af, struct netif_port *dev,
 
 void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa);
 
-int idev_add_mcast_init(struct netif_port *dev);
+int idev_add_mcast_init(void *args);
 
 int inet_addr_init(void);
 int inet_addr_term(void);

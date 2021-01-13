@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -21,6 +21,7 @@
 #include "list.h"
 #include "dpdk.h"
 #include "inetaddr.h"
+#include "global_data.h"
 #include "timer.h"
 #include "tc/tc.h"
 
@@ -76,10 +77,8 @@ struct netif_queue_conf
 {
     queueid_t id;
     uint16_t len;
-    uint16_t kni_len;
     struct rx_partner *isol_rxq;
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
-    struct rte_mbuf *kni_mbufs[NETIF_MAX_PKT_BURST];
 } __rte_cache_aligned;
 
 /*
@@ -104,6 +103,7 @@ struct netif_port_conf
 struct netif_lcore_conf
 {
     lcoreid_t id;
+    enum dpvs_lcore_role_type type;
     /* nic number of this lcore to process */
     int nports;
     /* port list of this lcore to process */
@@ -167,6 +167,7 @@ struct netif_kni {
     struct ether_addr addr;
     struct dpvs_timer kni_rtnl_timer;
     int kni_rtnl_fd;
+    struct rte_ring *rx_ring;
 } __rte_cache_aligned;
 
 union netif_bond {
@@ -258,13 +259,12 @@ int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf);
 int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
 void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask);
-void netif_update_master_loop_cnt(void);
 void netif_update_worker_loop_cnt(void);
 // function only for init or termination //
 int netif_register_master_xmit_msg(void);
 int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);
 bool is_lcore_id_valid(lcoreid_t cid);
-bool netif_lcore_is_idle(lcoreid_t cid);
+bool netif_lcore_is_fwd_worker(lcoreid_t cid);
 void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
                            lcoreid_t cid, uint16_t count, bool pkts_from_ring);
 
@@ -303,8 +303,8 @@ int netif_port_register(struct netif_port *dev);
 int netif_port_unregister(struct netif_port *dev);
 
 /************************** module API *****************************/
-int netif_virtual_devices_add(void);
-int netif_init(const struct rte_eth_conf *conf);
+int netif_vdevs_add(void);
+int netif_init(void);
 int netif_term(void); /* netif layer cleanup */
 int netif_ctrl_init(void); /* netif ctrl plane init */
 int netif_ctrl_term(void); /* netif ctrl plane cleanup */
@@ -332,5 +332,7 @@ static inline uint16_t dpvs_rte_eth_dev_count(void)
     return rte_eth_dev_count_avail();
 #endif
 }
+
+extern bool dp_vs_fdir_filter_enable;
 
 #endif /* __DPVS_NETIF_H__ */

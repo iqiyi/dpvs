@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -240,7 +240,7 @@ static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     nips = this_num_ipset;
     *outsize = sizeof(struct dp_vs_ipset_conf_array) + \
                    nips * sizeof(struct dp_vs_ipset_conf);
-    *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
+    *out = rte_calloc(NULL, 1, *outsize, 0);
     if (!(*out))
         return EDPVS_NOMEM;
     array = *out;
@@ -310,8 +310,8 @@ static int ipset_lcore_init(void *arg)
     if (!rte_lcore_is_enabled(rte_lcore_id()))
         return EDPVS_DISABLED;
 
-    if (netif_lcore_is_idle(rte_lcore_id()))
-        return EDPVS_IDLE;
+    if (!netif_lcore_is_fwd_worker(rte_lcore_id()))
+        return EDPVS_NOTSUPP;
 
     for (i = 0; i < IPSET_TAB_SIZE; i++)
         INIT_LIST_HEAD(&this_ipset_table_lcore[i]);
@@ -356,7 +356,7 @@ static int ipset_parse_conf_file(void)
     fseek(g_current_stream, 0, SEEK_SET);
 
     ipset_size = sizeof(struct dp_vs_multi_ipset_conf) + ip_num*sizeof(struct dp_vs_ipset_conf);
-    ips = rte_calloc_socket(NULL, 1, ipset_size, 0, rte_socket_id());
+    ips = rte_calloc(NULL, 1, ipset_size, 0);
     if (ips == NULL) {
         RTE_LOG(WARNING, IPSET, "no memory for ipset conf\n");
         FREE(buf);

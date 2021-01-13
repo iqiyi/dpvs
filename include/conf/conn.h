@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,14 +18,15 @@
 
 #ifndef __DPVS_CONN_CONF_H__
 #define __DPVS_CONN_CONF_H__
+
 #include "list.h"
 #include "inet.h"
+#include "conf/sockopts.h"
 
 /* How many connections returned at most for one sockopt ctrl msg.
  * Decrease it for saving memory, increase it for better performace.
  */
 #define MAX_CTRL_CONN_GET_ENTRIES       1024
-
 
 enum conn_get_flags {
     GET_IPVS_CONN_FLAG_ALL          = 1,
@@ -39,12 +40,6 @@ enum conn_get_result {
     GET_IPVS_CONN_RESL_MORE         = 2,
     GET_IPVS_CONN_RESL_FAIL         = 4,
     GET_IPVS_CONN_RESL_NOTEXIST     = 8,
-};
-
-enum {
-    /* get */
-    SOCKOPT_GET_CONN_ALL = 1000,
-    SOCKOPT_GET_CONN_SPECIFIED,
 };
 
 struct ip_vs_sockpair {

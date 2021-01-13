@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -24,6 +24,7 @@
 #include "conf/match.h"
 #include "conf/stats.h"
 #include "conf/dest.h"
+#include "conf/sockopts.h"
 
 #define DP_VS_SCHEDNAME_MAXLEN      16
 
@@ -106,32 +107,6 @@ struct dp_vs_getinfo {
     unsigned int num_services;
     unsigned int num_lcores;
 };
-
-enum{
-    DPVS_SO_SET_FLUSH = 200,
-    DPVS_SO_SET_ZERO,
-    DPVS_SO_SET_ADD,
-    DPVS_SO_SET_EDIT,
-    DPVS_SO_SET_DEL,
-    DPVS_SO_SET_ADDDEST,
-    DPVS_SO_SET_EDITDEST,
-    DPVS_SO_SET_DELDEST,
-    DPVS_SO_SET_GRATARP,
-};
-
-enum{
-    DPVS_SO_GET_VERSION = 200,
-    DPVS_SO_GET_INFO,
-    DPVS_SO_GET_SERVICES,
-    DPVS_SO_GET_SERVICE,
-    DPVS_SO_GET_DESTS,
-};
-
-
-#define SOCKOPT_SVC_BASE         DPVS_SO_SET_FLUSH
-#define SOCKOPT_SVC_SET_CMD_MAX  DPVS_SO_SET_GRATARP
-#define SOCKOPT_SVC_GET_CMD_MAX  DPVS_SO_GET_DESTS
-#define SOCKOPT_SVC_MAX          299
 
 #define MAX_ARG_LEN    (sizeof(struct dp_vs_service_user) +    \
                          sizeof(struct dp_vs_dest_user))

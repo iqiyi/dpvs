@@ -98,11 +98,7 @@ typedef struct _real_server {
 	uint32_t			activeconns;	/* active connections */
 	uint32_t			inactconns;	/* inactive connections */
 	uint32_t			persistconns;	/* persistent connections */
-#ifndef _WITH_LVS_64BIT_STATS_
 	struct ip_vs_stats_user		stats;
-#else
-	struct ip_vs_stats64		stats;
-#endif
 #endif
 #ifdef _WITH_BFD_
 	list				tracked_bfds;	/* list of bfd_checker_t */
@@ -215,6 +211,8 @@ typedef struct _virtual_server {
 	bool				omega;		/* Omega mode enabled. */
 	bool				inhibit;	/* Set weight to 0 instead of removing
 							 * the service from IPVS topology. */
+	bool				syn_proxy;
+	bool				expire_quiescent_conn;
 	unsigned int			connection_to;	/* connection time-out */
 	unsigned long			delay_loop;	/* Interval between running checker */
 	unsigned long			warmup;		/* max random timeout to start checker */
@@ -230,18 +228,13 @@ typedef struct _virtual_server {
 #if defined(_WITH_SNMP_CHECKER_) && defined(_WITH_LVS_)
 	/* Statistics */
 	time_t				lastupdated;
-#ifndef _WITH_LVS_64BIT_STATS_
 	struct ip_vs_stats_user		stats;
-#else
-	struct ip_vs_stats64		stats;
-#endif
 #endif
 	char 	srange[256];
 	char 	drange[256];
 	char 	iifname[IFNAMSIZ];
 	char 	oifname[IFNAMSIZ];
 	unsigned hash_target;
-	unsigned syn_proxy;
 	char 	*local_addr_gname; 	/*local ip address group name*/
 	char 	*blklst_addr_gname; 	/*black list ip group name*/	
 	char 	*vip_bind_dev; 		/*the interface name, vip bindto*/
@@ -291,16 +284,17 @@ static inline bool quorum_equal(const notify_script_t *quorum1,
 #define VS_ISEQ(X,Y)    (sockstorage_equal(&(X)->addr,&(Y)->addr)                       &&\
                          (X)->vfwmark                 == (Y)->vfwmark                   &&\
                          (X)->service_type            == (Y)->service_type              &&\
-                         (X)->forwarding_method      == (Y)->forwarding_method  &&\
-                         (X)->hash_target             == (Y)->hash_target       &&\
-                         (X)->syn_proxy  == (Y)->syn_proxy                      &&\
-                         quorum_equal((X)->notify_quorum_up, (Y)->notify_quorum_up) &&\
+                         (X)->forwarding_method       == (Y)->forwarding_method         &&\
+                         (X)->hash_target             == (Y)->hash_target               &&\
+                         (X)->syn_proxy               == (Y)->syn_proxy                 &&\
+                         (X)->expire_quiescent_conn   == (Y)->expire_quiescent_conn     &&\
+                         quorum_equal((X)->notify_quorum_up, (Y)->notify_quorum_up)     &&\
                          quorum_equal((X)->notify_quorum_down, (Y)->notify_quorum_down) &&\
                          !strcmp((X)->sched, (Y)->sched)                                &&\
-                         (X)->persistence_timeout  == (Y)->persistence_timeout  &&\
-                         (X)->conn_timeout         == (Y)->conn_timeout  &&\
-                         (X)->bps                  == (Y)->bps                                  &&\
-                         (X)->limit_proportion     == (Y)->limit_proportion          &&\
+                         (X)->persistence_timeout     == (Y)->persistence_timeout       &&\
+                         (X)->conn_timeout            == (Y)->conn_timeout              &&\
+                         (X)->bps                     == (Y)->bps                       &&\
+                         (X)->limit_proportion        == (Y)->limit_proportion          &&\
                          (((X)->vsgname && (Y)->vsgname &&                              \
                            !strcmp((X)->vsgname, (Y)->vsgname)) ||                      \
                           (!(X)->vsgname && !(Y)->vsgname))                             &&\
@@ -314,6 +308,11 @@ static inline bool quorum_equal(const notify_script_t *quorum1,
                          !strcmp((X)->drange, (Y)->drange)                              &&\
                          !strcmp((X)->iifname, (Y)->iifname)                            &&\
                          !strcmp((X)->oifname, (Y)->oifname))
+
+#define RS_ISEQ(X,Y)	(sockstorage_equal(&(X)->addr,&(Y)->addr) &&	\
+                            (X)->iweight   == (Y)->iweight) &&    \
+                            (X)->l_threshold == (Y)->l_threshold &&   \
+                            (X)->u_threshold == (Y)->u_threshold
 
 #ifndef IP_VS_SVC_F_SCHED_MH_PORT
 #define IP_VS_SVC_F_SCHED_MH_PORT IP_VS_SVC_F_SCHED_SH_PORT

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -42,7 +42,7 @@
 
 #define LOG_BUF_MAX_LEN 4096
 
-#define DPVS_LOG_POOL_SIZE_DEF     2097152
+#define DPVS_LOG_POOL_SIZE_DEF     2097151
 #define DPVS_LOG_POOL_SIZE_MIN     65536
 #define DPVS_LOG_CACHE_SIZE_DEF    256
 

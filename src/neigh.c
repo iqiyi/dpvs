@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -387,6 +387,9 @@ struct neighbour_entry *neigh_add_table(int af, const union inet_addr *ipaddr,
     INIT_LIST_HEAD(&new_neighbour->queue_list);
 
     if (!(new_neighbour->flag & NEIGHBOUR_STATIC)) {
+#ifdef CONFIG_TIMER_DEBUG
+        snprintf(new_neighbour->timer.name, sizeof(new_neighbour->timer.name), "%s", "neigh");
+#endif
         dpvs_time_rand_delay(&delay, 200000); /* delay 200ms randomly to avoid timer performance problem */
         dpvs_timer_sched(&new_neighbour->timer, &delay,
                 neighbour_timer_event, new_neighbour, false);
@@ -1098,7 +1101,23 @@ static struct dpvs_sockopts neigh_sockopts = {
 };
 
 #define NEIGH_LCORE_JOB_MAX     2
-static struct dpvs_lcore_job neigh_jobs[NEIGH_LCORE_JOB_MAX];
+
+static struct dpvs_lcore_job_array neigh_jobs[NEIGH_LCORE_JOB_MAX] = {
+    [0] = {
+        .role = LCORE_ROLE_FWD_WORKER,
+        .job.name = "neigh_sync",
+        .job.type = LCORE_JOB_SLOW,
+        .job.func = neigh_process_ring,
+        .job.skip_loops = NEIGH_PROCESS_MAC_RING_INTERVAL,
+    },
+
+    [1] = {
+        .role = LCORE_ROLE_MASTER,
+        .job.name = "neigh_sync",
+        .job.type = LCORE_JOB_LOOP,
+        .job.func = neigh_process_ring,
+    }
+};
 
 static int arp_init(void)
 {
@@ -1121,20 +1140,11 @@ static int arp_init(void)
 
     neigh_ring_init();
 
-    snprintf(neigh_jobs[0].name, sizeof(neigh_jobs[0].name) - 1, "%s", "neigh_sync");
-    neigh_jobs[0].func = neigh_process_ring;
-    neigh_jobs[0].data = NULL;
-    neigh_jobs[0].type = LCORE_JOB_SLOW;
-    neigh_jobs[0].skip_loops = NEIGH_PROCESS_MAC_RING_INTERVAL;
-    if ((err = dpvs_lcore_job_register(&neigh_jobs[0], LCORE_ROLE_FWD_WORKER)) != EDPVS_OK)
-        return err;
-
-    snprintf(neigh_jobs[1].name, sizeof(neigh_jobs[1].name) - 1, "%s", "neigh_sync");
-    neigh_jobs[1].func = neigh_process_ring;
-    neigh_jobs[1].data = NULL;
-    neigh_jobs[1].type = LCORE_JOB_LOOP;
-    if ((err = dpvs_lcore_job_register(&neigh_jobs[1], LCORE_ROLE_MASTER)) != EDPVS_OK)
-        return err;
+    for (i = 0; i < NELEMS(neigh_jobs); i++) {
+        if ((err = dpvs_lcore_job_register(&neigh_jobs[i].job,
+                                           neigh_jobs[i].role)) != EDPVS_OK)
+            return err;
+    }
 
     return EDPVS_OK;
 }
@@ -1182,10 +1192,12 @@ int neigh_init(void)
 
 int neigh_term(void)
 {
+    int i;
+
     unregister_stats_cb();
 
-    dpvs_lcore_job_unregister(&neigh_jobs[0], LCORE_ROLE_FWD_WORKER);
-    dpvs_lcore_job_unregister(&neigh_jobs[1], LCORE_ROLE_MASTER);
+    for (i = 0; i < NELEMS(neigh_jobs); i++)
+        dpvs_lcore_job_unregister(&neigh_jobs[i].job, neigh_jobs[i].role);
 
     return EDPVS_OK;
 }

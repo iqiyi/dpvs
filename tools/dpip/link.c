@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -744,6 +744,14 @@ static int link_show(struct link_param *param)
                     fprintf(stderr, "Fail to get information for Master cpu%d\n",
                             lcores.master_lcore_id);
                     ret = err;
+                }
+                if (lcores.kni_lcore_id) {
+                    err = link_cpu_show(lcores.kni_lcore_id, param);
+                    if (err) {
+                        fprintf(stderr, "Fail to get information for KNI cpu%d\n",
+                                lcores.kni_lcore_id);
+                        ret = err;
+                    }
                 }
 
                 printf("<< Data Plane >>\n");

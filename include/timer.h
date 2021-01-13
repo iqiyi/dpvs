@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -37,6 +37,9 @@ typedef uint32_t dpvs_tick_t;
 
 /* it's internal struct, user should never modify it directly. */
 struct dpvs_timer {
+#ifdef CONFIG_TIMER_DEBUG
+    char name[32];
+#endif
     struct list_head    list;
 
     dpvs_timer_cb_t     handler;

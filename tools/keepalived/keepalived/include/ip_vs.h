@@ -37,7 +37,6 @@
 #define IP_VS_SVC_F_PERSISTENT	0x0001		/* persistent port */
 #define IP_VS_SVC_F_HASHED	0x0002		/* hashed entry */
 #define IP_VS_SVC_F_ONEPACKET	0x0004		/* one-packet scheduling */
-#define IP_VS_CONN_F_SYNPROXY	0x8000		/* synproxy switch flag*/
 #define IP_VS_SVC_F_SCHED1	0x0008		/* scheduler flag 1 */
 #define IP_VS_SVC_F_SCHED2	0x0010		/* scheduler flag 2 */
 #define IP_VS_SVC_F_SCHED3	0x0020		/* scheduler flag 3 */
@@ -48,6 +47,9 @@
 
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK	IP_VS_SVC_F_SCHED1 /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT	IP_VS_SVC_F_SCHED2 /* SH use port */
+
+#define IP_VS_CONN_F_EXPIRE_QUIESCENT	0x4000	/* expire quiescent conns */
+#define IP_VS_CONN_F_SYNPROXY	0x8000		/* synproxy switch flag*/
 
 /* Destination Server Flags */
 #define IP_VS_DEST_F_AVAILABLE	0x0001		/* server is available */
@@ -505,24 +507,7 @@ enum {
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef _WITH_LVS_64BIT_STATS_
-struct ip_vs_stats64 {
-	__u64	conns;		/* connections scheduled */
-	__u64	inpkts;		/* incoming packets */
-	__u64	outpkts;	/* outgoing packets */
-	__u64	inbytes;	/* incoming bytes */
-	__u64	outbytes;	/* outgoing bytes */
-
-	__u64	cps;		/* current connection rate */
-	__u64	inpps;		/* current in packet rate */
-	__u64	outpps;		/* current out packet rate */
-	__u64	inbps;		/* current in byte rate */
-	__u64	outbps;		/* current out byte rate */
-};
-typedef struct ip_vs_stats64 ip_vs_stats_t;
-#else
 typedef struct ip_vs_stats_user ip_vs_stats_t;
-#endif
 
 struct ip_vs_service_app {
 	struct ip_vs_service_user user;

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -117,6 +117,12 @@ static int dp_vs_blklst_del_lcore(int af, uint8_t proto, const union inet_addr *
     return EDPVS_NOTEXIST;
 }
 
+static uint32_t blklst_msg_seq(void)
+{
+    static uint32_t counter = 0;
+    return counter++;
+}
+
 static int dp_vs_blklst_add(int af, uint8_t proto, const union inet_addr *vaddr,
                             uint16_t vport, const union inet_addr *blklst)
 {
@@ -140,12 +146,12 @@ static int dp_vs_blklst_add(int af, uint8_t proto, const union inet_addr *vaddr,
     /*set blklst ip on master lcore*/
     err = dp_vs_blklst_add_lcore(af, proto, vaddr, vport, blklst);
     if (err) {
-        RTE_LOG(INFO, SERVICE, "[%s] fail to set blklst ip\n", __func__);
+        RTE_LOG(INFO, SERVICE, "[%s] fail to set blklst ip -- %s\n", __func__, dpvs_strerror(err));
         return err;
     }
 
     /*set blklst ip on all slave lcores*/
-    msg = msg_make(MSG_TYPE_BLKLST_ADD, 0, DPVS_MSG_MULTICAST,
+    msg = msg_make(MSG_TYPE_BLKLST_ADD, blklst_msg_seq(), DPVS_MSG_MULTICAST,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
     if (unlikely(!msg))
         return EDPVS_NOMEM;
@@ -183,17 +189,18 @@ static int dp_vs_blklst_del(int af, uint8_t proto, const union inet_addr *vaddr,
     /*del blklst ip on master lcores*/
     err = dp_vs_blklst_del_lcore(af, proto, vaddr, vport, blklst);
     if (err) {
-        RTE_LOG(INFO, SERVICE, "%s: fail to del blklst ip\n", __func__);
+        RTE_LOG(INFO, SERVICE, "%s: fail to del blklst ip -- %s\n", __func__, dpvs_strerror(err));
         return err;
     }
 
     /*del blklst ip on all slave lcores*/
-    msg = msg_make(MSG_TYPE_BLKLST_DEL, 0, DPVS_MSG_MULTICAST,
+    msg = msg_make(MSG_TYPE_BLKLST_DEL, blklst_msg_seq(), DPVS_MSG_MULTICAST,
                    cid, sizeof(struct dp_vs_blklst_conf), &cf);
     if (!msg)
         return EDPVS_NOMEM;
     err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK) {
+        msg_destroy(&msg);
         RTE_LOG(INFO, SERVICE, "%s: fail to send multicast message\n", __func__);
         return err;
     }
@@ -209,8 +216,10 @@ void dp_vs_blklst_flush(struct dp_vs_service *svc)
 
     for (hash = 0; hash < DPVS_BLKLST_TAB_SIZE; hash++) {
         list_for_each_entry_safe(entry, next, &this_blklst_tab[hash], list) {
-            if (entry->af == svc->af &&
-                    inet_addr_equal(svc->af, &entry->vaddr, &svc->addr))
+            if (entry->af == svc->af
+                && entry->vport == svc->port
+                && entry->proto == svc->proto
+                && inet_addr_equal(svc->af, &entry->vaddr, &svc->addr))
                 dp_vs_blklst_del(svc->af, entry->proto, &entry->vaddr,
                                  entry->vport, &entry->blklst);
         }
@@ -284,7 +293,7 @@ static int blklst_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     naddr = rte_atomic32_read(&this_num_blklsts);
     *outsize = sizeof(struct dp_vs_blklst_conf_array) +
                naddr * sizeof(struct dp_vs_blklst_conf);
-    *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
+    *out = rte_calloc(NULL, 1, *outsize, 0);
     if (!(*out))
         return EDPVS_NOMEM;
     array = *out;
@@ -350,9 +359,9 @@ static int blklst_lcore_init(void *args)
     int i;
     if (!rte_lcore_is_enabled(rte_lcore_id()))
     return EDPVS_DISABLED;
-    this_blklst_tab = rte_malloc_socket(NULL,
+    this_blklst_tab = rte_malloc(NULL,
                         sizeof(struct list_head) * DPVS_BLKLST_TAB_SIZE,
-                        RTE_CACHE_LINE_SIZE, rte_socket_id());
+                        RTE_CACHE_LINE_SIZE);
     if (!this_blklst_tab)
         return EDPVS_NOMEM;
 

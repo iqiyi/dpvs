@@ -76,8 +76,6 @@
 /* Global variables */
 bool using_ha_suspend;
 
-#define CHECKERS_CHILD_NUM_MAX 1000
-
 /* local variables */
 static const char *check_syslog_ident;
 static bool two_phase_terminate;
@@ -255,32 +253,6 @@ start_checker_termination_thread(__attribute__((unused)) thread_ref_t thread)
 }
 #endif
 
-static void checker_queue_adj(void)
-{
-	unsigned i_checker;
-	unsigned checkers_total = LIST_SIZE(checkers_queue);
-	unsigned checkers_child_all = global_data->checker_queue_num? global_data->checker_queue_num : LIST_SIZE(checkers_queue);
-
-	if (checkers_child_all > CHECKERS_CHILD_NUM_MAX) {
-		unsigned trim_tail = checkers_child_all - CHECKERS_CHILD_NUM_MAX;
-		unsigned trim_head = checkers_total - checkers_child_all;
-
-		for (i_checker=0; i_checker<trim_tail; i_checker++)
-				  free_list_element(checkers_queue, checkers_queue->tail);
-		for (i_checker=0; i_checker<trim_head; i_checker++)
-			free_list_element(checkers_queue, checkers_queue->head);
-		global_data->checker_queue_num = trim_tail;
-
-		start_check_child();
-	} else {
-		unsigned trim_head = checkers_total - checkers_child_all;
-
-		for (i_checker=0; i_checker<trim_head; i_checker++)
-				free_list_element(checkers_queue, checkers_queue->head);
-		global_data->checker_queue_num = checkers_child_all;
-	}
-}
-
 /* Daemon stop sequence */
 static void
 stop_check(int status)
@@ -397,14 +369,10 @@ start_check(list old_checkers_queue, data_t *prev_global_data)
 	/* We can send SMTP messages from here so set the time */
 	set_time_now();
 
-	if (!global_data->checker_queue_num) {
-		/* Initialize IPVS topology */
-		if (!init_services())
-			stop_check(KEEPALIVED_EXIT_FATAL);
-	}
+	/* Initialize IPVS topology */
+	if (!init_services())
+	    stop_check(KEEPALIVED_EXIT_FATAL);
 	
-	checker_queue_adj();
-
 	/* Dump configuration */
 	if (__test_bit(DUMP_CONF_BIT, &debug))
 		dump_data_check(NULL);

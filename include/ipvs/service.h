@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -34,12 +34,15 @@
 #define RTE_LOGTYPE_SERVICE RTE_LOGTYPE_USER3
 #define DP_VS_SVC_F_PERSISTENT      0x0001      /* peristent port */
 #define DP_VS_SVC_F_HASHED          0x0002      /* hashed entry */
-#define DP_VS_SVC_F_SYNPROXY        0x8000      /* synrpoxy flag */
+#define DP_VS_SVC_F_ONEPACKET       0x0004      /* one-packet scheduling */
+#define DP_VS_SVC_F_SCHED1          0x0008      /* scheduler flag 1 */
+#define DP_VS_SVC_F_SCHED2          0x0010      /* scheduler flag 2 */
+#define DP_VS_SVC_F_SCHED3          0x0020      /* scheduler flag 3 */
 
 #define DP_VS_SVC_F_SIP_HASH        0x0100      /* sip hash target */
 #define DP_VS_SVC_F_QID_HASH        0x0200      /* quic cid hash target */
-
 #define DP_VS_SVC_F_MATCH           0x0400      /* snat match */
+#define DP_VS_SVC_F_SYNPROXY        0x8000      /* synrpoxy flag */
 
 /* virtual service */
 struct dp_vs_service {
@@ -111,7 +114,5 @@ void dp_vs_service_put(struct dp_vs_service *svc);
 struct dp_vs_service *dp_vs_vip_lookup(int af, uint16_t protocol,
                                        const union inet_addr *vaddr,
                                        lcoreid_t cid);
-
-unsigned dp_vs_get_conn_timeout(struct dp_vs_conn *conn);
 
 #endif /* __DPVS_SVC_H__ */

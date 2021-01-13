@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -52,6 +52,9 @@ struct dp_vs_proto {
 
     int (*conn_expire)(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn);
+
+    /* expire quiescent connections timely */
+    int (*conn_expire_quiescent)(struct dp_vs_conn *conn);
 
     /* for NAT mode */
     int (*nat_in_handler)(struct dp_vs_proto *proto,

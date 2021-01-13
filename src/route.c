@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -626,7 +626,7 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     *outsize = sizeof(struct dp_vs_route_conf_array) + \
                nroute * sizeof(struct dp_vs_route_conf);
-    *out = rte_calloc_socket(NULL, 1, *outsize, 0, rte_socket_id());
+    *out = rte_calloc(NULL, 1, *outsize, 0);
     if (!(*out))
         return EDPVS_NOMEM;
     array = *out;

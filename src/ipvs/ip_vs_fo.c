@@ -1,4 +1,9 @@
 /*
+ * DPVS is a software load balancer (Virtual Server) based on DPDK.
+ *
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
+ * All Rights Reserved.
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,7 +25,7 @@
 
 /* weighted fail over scheduling */
 static struct dp_vs_dest *dp_vs_fo_schedule(struct dp_vs_service *svc,
-        const struct rte_mbuf *mbuf __rte_unused)
+        const struct rte_mbuf *mbuf __rte_unused, const struct dp_vs_iphdr *iph __rte_unused)
 {
 
     struct dp_vs_dest *dest, *hweight = NULL;

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -387,7 +387,7 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
 
     if (!conf || size < sizeof(struct dp_vs_iftraf_conf) || !out || !outsize)
         return EDPVS_INVAL;
-	cf = conf;
+    cf = conf;
 
     if (cf && strlen(cf->ifname)) {
         port = netif_port_get_by_name(cf->ifname);
@@ -406,7 +406,7 @@ int iftraf_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                iftraf_sorted_list.sorted_list_num * sizeof(struct iftraf_param);
     *out = rte_calloc(NULL, 1, *outsize, RTE_CACHE_LINE_SIZE);
     if (!(*out)) {
-	RTE_LOG(ERR, IFTRAF, "%s: no memory \n", __func__);
+        RTE_LOG(ERR, IFTRAF, "%s: no memory \n", __func__);
         return EDPVS_NOMEM;
     }
 
@@ -505,7 +505,7 @@ static void inline iftraf_tlb_add(struct iftraf_pkt *param)
             entry->daddr.in6.s6_addr32[0],entry->daddr.in6.s6_addr32[1],
             entry->daddr.in6.s6_addr32[2],entry->daddr.in6.s6_addr32[3],
             ntohs(entry->sport), ntohs(entry->dport), param->pkt_len);
-	}
+    }
 
     /* Update record */
     entry->last_write = history_pos;
@@ -903,12 +903,12 @@ static int iftraf_enable_func(void)
         return err;
     }
 
-    iftraf_tbl = rte_malloc_socket(NULL, sizeof(struct list_head) * IFTRAF_TBL_SIZE,
-                    RTE_CACHE_LINE_SIZE, rte_socket_id());
+    iftraf_tbl = rte_malloc(NULL, sizeof(struct list_head) * IFTRAF_TBL_SIZE,
+                    RTE_CACHE_LINE_SIZE);
 
     if (!iftraf_tbl) {
         RTE_LOG(ERR, IFTRAF,
-            "%s: rte_malloc_socket null\n",
+            "%s: rte_malloc null\n",
             __func__);
         goto tbl_fail;
     }
@@ -916,12 +916,12 @@ static int iftraf_enable_func(void)
     for (i = 0; i < IFTRAF_TBL_SIZE; i++)
         INIT_LIST_HEAD(&iftraf_tbl[i]);
 
-    iftraf_iftbl = rte_malloc_socket(NULL, sizeof(struct list_head) * IFTRAF_IFTBL_SIZE,
-                      RTE_CACHE_LINE_SIZE, rte_socket_id());
+    iftraf_iftbl = rte_malloc(NULL, sizeof(struct list_head) * IFTRAF_IFTBL_SIZE,
+                      RTE_CACHE_LINE_SIZE);
 
     if (!iftraf_iftbl) {
         RTE_LOG(ERR, IFTRAF,
-            "%s: rte_malloc_socket null\n",
+            "%s: rte_malloc null\n",
             __func__);
         goto iftbl_fail;
     }
@@ -1104,9 +1104,9 @@ static struct dpvs_sockopts iftraf_sockopts = {
 };
 
 static struct dpvs_lcore_job iftraf_job = {
-    .func = iftraf_process_ring,
-    .data = NULL,
+    .name = "iftraf_ring_proc",
     .type = LCORE_JOB_LOOP,
+    .func = iftraf_process_ring,
 };
 
 int iftraf_init(void)
@@ -1119,7 +1119,6 @@ int iftraf_init(void)
 
     iftraf_sorted_list_init();
 
-    snprintf(iftraf_job.name, sizeof(iftraf_job.name), "%s", "iftraf_ring_proc");
     if ((err = dpvs_lcore_job_register(&iftraf_job, LCORE_ROLE_MASTER)) != EDPVS_OK)
         return err;
 

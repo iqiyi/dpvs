@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -25,20 +25,10 @@
 #define __DPVS_TC_CONF_H__
 
 #include <linux/pkt_sched.h>
+#include "conf/sockopts.h"
 #include "tc/tc.h"
 #include "tc/sch.h"
 #include "tc/cls.h"
-
-typedef enum {
-    /* set */
-    SOCKOPT_TC_ADD = 900,
-    SOCKOPT_TC_DEL,
-    SOCKOPT_TC_CHANGE,
-    SOCKOPT_TC_REPLACE,
-
-    /* get */
-    SOCKOPT_TC_SHOW = 900,
-} tc_oper_t;
 
 typedef enum {
     TC_OBJ_QSCH,

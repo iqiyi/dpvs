@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -36,6 +36,8 @@ typedef enum dpvs_lcore_job_type {
     LCORE_JOB_TYPE_MAX
 } dpvs_lcore_job_t;
 
+typedef void (*job_pt)(void *arg);
+
 struct dpvs_lcore_job
 {
     char name[32];
@@ -49,9 +51,16 @@ struct dpvs_lcore_job
     struct list_head list;
 } __rte_cache_aligned;
 
+struct dpvs_lcore_job_array {
+    struct dpvs_lcore_job job;
+    dpvs_lcore_role_t role;
+};
 
 const char *dpvs_lcore_role_str(dpvs_lcore_role_t role);
 
+void dpvs_lcore_job_init(struct dpvs_lcore_job *job, char *name,
+                         dpvs_lcore_job_t type, job_pt func,
+                         uint32_t skip_loops);
 int dpvs_lcore_job_register(struct dpvs_lcore_job *lcore_job, dpvs_lcore_role_t role);
 int dpvs_lcore_job_unregister(struct dpvs_lcore_job *lcore_job, dpvs_lcore_role_t role);
 int dpvs_lcore_start(int is_master);

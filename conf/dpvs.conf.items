@@ -15,6 +15,7 @@ global_defs {
     log_level         INFO              <none>
     log_file          /var/log/dpvs.log <none>
     <init> log_async_mode    off        <off, on|off>
+    <init> pdump      off               <off, on|off>
 }
 
 ! netif config
@@ -34,6 +35,7 @@ netif_defs {
             descriptor_number   512         <512, 16-8192>
         }
         fdir {
+            <init> filter       on          <on, on/off>
             mode                perfect     <perfect, none|signature|perfect|perfect_mac_vlan|perfect_tunnel>
             pballoc             64k         <64k, 64k|128k|256k>
             status              matched     <matched, close|matched|always>
@@ -125,6 +127,19 @@ worker_defs {
         port        dpdk1 {
             rx_queue_ids     3
             tx_queue_ids     3
+        }
+    }
+
+    ! kni worker config, optional
+    ! if not configure, kni packets are processed on master lcore
+    <init> worker cpu5 {
+        type    kni
+        cpu_id  5
+        port dpdk0 {
+            tx_queue_ids 6
+        }
+        port dpdk1 {
+            tx_queue_ids 4
         }
     }
 }

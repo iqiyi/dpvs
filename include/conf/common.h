@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -23,6 +23,8 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <linux/if_ether.h>
+
+typedef uint32_t sockoptid_t;
 
 #ifndef NELEMS
 #define NELEMS(a)       (sizeof(a) / sizeof((a)[0]))
@@ -75,6 +77,13 @@ typedef uint32_t    __u32;
 typedef uint8_t lcoreid_t;
 #endif
 
+#ifndef portid_t
+typedef uint16_t portid_t;
+#endif
+
+#ifndef queueid_t
+typedef uint16_t queueid_t;
+#endif
 
 #define DPVS_WAIT_WHILE(expr) while(expr){;}
 

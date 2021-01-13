@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -37,6 +37,7 @@ const char *dpvs_lcore_role_str(dpvs_lcore_role_t role)
         [LCORE_ROLE_MASTER]        = "lcre_role_master",
         [LCORE_ROLE_FWD_WORKER]    = "lcre_role_fwd_worker",
         [LCORE_ROLE_ISOLRX_WORKER] = "lcre_role_isolrx_worker",
+        [LCORE_ROLE_KNI_WORKER]    = "lcore_role_kni_worker",
         [LCORE_ROLE_MAX]           = "lcre_role_null"
     };
 
@@ -60,6 +61,20 @@ int dpvs_scheduler_init(void)
 int dpvs_scheduler_term(void)
 {
     return EDPVS_OK;
+}
+
+void dpvs_lcore_job_init(struct dpvs_lcore_job *job, char *name,
+                         dpvs_lcore_job_t type, job_pt func,
+                         uint32_t skip_loops)
+{
+    if (!job) {
+        return;
+    }
+
+    job->type = type;
+    job->func = func;
+    job->skip_loops = skip_loops;
+    snprintf(job->name, sizeof(job->name) - 1, "%s", name);
 }
 
 int dpvs_lcore_job_register(struct dpvs_lcore_job *lcore_job, dpvs_lcore_role_t role)
@@ -160,7 +175,7 @@ static int dpvs_job_loop(void *arg)
     struct dpvs_lcore_job *job;
     lcoreid_t cid = rte_lcore_id();
     dpvs_lcore_role_t role = g_lcore_role[cid];
-    static uint32_t dpvs_job_loop_tick[DPVS_MAX_LCORE] = { 0 };
+    this_poll_tick = 0;
 #ifdef CONFIG_RECORD_BIG_LOOP
     char buf[512];
     uint32_t loop_time, thres_time;
@@ -190,7 +205,7 @@ static int dpvs_job_loop(void *arg)
 #ifdef CONFIG_RECORD_BIG_LOOP
         loop_start = rte_get_timer_cycles();
 #endif
-        ++dpvs_job_loop_tick[cid];
+        ++this_poll_tick;
         netif_update_worker_loop_cnt();
 
         /* do normal job */
@@ -200,7 +215,7 @@ static int dpvs_job_loop(void *arg)
 
         /* do slow job */
         list_for_each_entry(job, &dpvs_lcore_jobs[role][LCORE_JOB_SLOW], list) {
-            if (dpvs_job_loop_tick[cid] % job->skip_loops == 0) {
+            if (this_poll_tick % job->skip_loops == 0) {
                 do_lcore_job(job);
             }
         }
