@@ -1,7 +1,7 @@
 #
 # DPVS is a software load balancer (Virtual Server) based on DPDK.
 #
-# Copyright (C) 2017 iQIYI (www.iqiyi.com).
+# Copyright (C) 2021 iQIYI (www.iqiyi.com).
 # All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or
@@ -24,8 +24,6 @@ RTE_TARGET ?= build
 DPDKDIR := $(RTE_SDK)/$(RTE_TARGET)
 
 INCDIRS += -I $(DPDKDIR)/include
-
-include $(RTE_SDK)/mk/rte.vars.mk
 
 CFLAGS += -include $(DPDKDIR)/include/rte_config.h
 

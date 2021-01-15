@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -103,7 +103,7 @@ static int vlan_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     mbuf->port = vlan->real_dev->id;
     len = mbuf->pkt_len;
 
-    err = netif_xmit(mbuf, vlan->real_dev, 0);
+    err = netif_xmit(mbuf, vlan->real_dev);
 
     if (likely(err == EDPVS_OK)) {
         this_vlan_stats(vlan).tx_packets++;

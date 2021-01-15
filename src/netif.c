@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -1002,7 +1002,7 @@ __rte_unused static void pkt_send_back(struct rte_mbuf *mbuf, struct netif_port 
     ether_addr_copy(&ehdr->s_addr, &eaddr);
     ether_addr_copy(&ehdr->d_addr, &ehdr->s_addr);
     ether_addr_copy(&eaddr, &ehdr->d_addr);
-    netif_xmit(mbuf, port, 0);
+    netif_xmit(mbuf, port);
 }
 #endif
 
@@ -2050,7 +2050,7 @@ static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
         //RTE_LOG(DEBUG, NETIF, "Xmit master packet on Slave lcore%u %s\n",
         //        rte_lcore_id(), data->dev->name);
         //fflush(stdout);
-        return netif_xmit(data->mbuf, data->dev, 0);
+        return netif_xmit(data->mbuf, data->dev);
     }
 
     return EDPVS_INVAL;
@@ -2106,7 +2106,7 @@ static inline int validate_xmit_mbuf(struct rte_mbuf *mbuf,
     return err;
 }
 
-int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     lcoreid_t cid;
     int pid, qindex;
@@ -2171,7 +2171,7 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
     //RTE_LOG(DEBUG, NETIF, "tx-queue hash(%x) = %d\n", ((uint32_t)mbuf->buf_physaddr) >> 8, qindex);
     txq = &lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].txqs[qindex];
 
-    /* Date plane traffic should be buffered for NETIF_MAX_PKT_BURST pkts to transmit. */
+    /* No space left in txq mbufs, transmit cached mbufs immediately */
     if (unlikely(txq->len == NETIF_MAX_PKT_BURST)) {
         netif_tx_burst(cid, pid, qindex);
         txq->len = 0;
@@ -2181,16 +2181,12 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
     txq->mbufs[txq->len] = mbuf;
     txq->len++;
 
-    /* Push the buffered packets to network immediately if tx flag `NETIF_TX_FLAG_PUSH` set. */
-    if (unlikely(flags & NETIF_TX_FLAG_PUSH)) {
-        netif_tx_burst(cid, pid, qindex);
-        txq->len = 0;
-    }
+    /* Cached mbufs transmit later in job `lcore_job_xmit` */
 
     return EDPVS_OK;
 }
 
-int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
+int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     int ret = EDPVS_OK;
     uint16_t mbuf_refcnt;
@@ -2214,7 +2210,7 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
             return ret;
     }
 
-    return netif_hard_xmit(mbuf, dev, flags);
+    return netif_hard_xmit(mbuf, dev);
 }
 
 static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
@@ -2361,6 +2357,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
                       lcoreid_t cid, uint16_t count, bool pkts_from_ring)
 {
     int i, t;
+    int pkt_len = 0;
     struct ether_hdr *eth_hdr;
     struct rte_mbuf *mbuf_copied = NULL;
 
@@ -2372,6 +2369,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
     for (i = 0; i < count; i++) {
         struct rte_mbuf *mbuf = mbufs[i];
         struct netif_port *dev = netif_port_get(mbuf->port);
+        pkt_len = mbuf->pkt_len;
 
         if (unlikely(!dev)) {
             rte_pktmbuf_free(mbuf);
@@ -2442,7 +2440,7 @@ void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbu
                            (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) ? true:false,
                            cid, pkts_from_ring);
 
-        lcore_stats[cid].ibytes += mbuf->pkt_len;
+        lcore_stats[cid].ibytes += pkt_len;
         lcore_stats[cid].ipackets++;
     }
 }
@@ -2687,7 +2685,6 @@ freepkt:
 static void kni_egress(struct netif_port *port)
 {
     unsigned i, npkts;
-    int txflags;
     struct rte_mbuf *kni_pkts_burst[NETIF_MAX_PKT_BURST];
 
     if (!kni_dev_exist(port))
@@ -2700,11 +2697,7 @@ static void kni_egress(struct netif_port *port)
     }
 
     for (i = 0; i < npkts; i++) {
-        if (unlikely(i == npkts - 1))
-            txflags = NETIF_TX_FLAG_PUSH;
-        else
-            txflags = 0;
-        if (unlikely(netif_xmit(kni_pkts_burst[i], port, txflags) != EDPVS_OK)) {
+        if (unlikely(netif_xmit(kni_pkts_burst[i], port) != EDPVS_OK)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
             RTE_LOG(INFO, NETIF, "%s: fail to transmit kni packet", __func__);
 #endif
@@ -2772,6 +2765,11 @@ void kni_lcore_loop(void *dummy)
 {
     kni_ingress_process();
     kni_egress_process();
+
+    /* This is a lazy solution.
+     * `lcore_job_xmit` can be scheduled with an independent job on kni worker instead. */
+    if (g_kni_lcore_id != 0)
+        lcore_job_xmit(NULL);
 }
 
 /********************************************* port *************************************************/

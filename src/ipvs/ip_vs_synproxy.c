@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -752,7 +752,7 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
     memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct ether_addr));
     memcpy(&eth->d_addr, &ethaddr, sizeof(struct ether_addr));
 
-    if (unlikely(EDPVS_OK != (ret = netif_xmit(mbuf, dev, 0)))) {
+    if (unlikely(EDPVS_OK != (ret = netif_xmit(mbuf, dev)))) {
         RTE_LOG(ERR, IPVS, "%s: netif_xmit failed -- %s\n",
                 __func__, dpvs_strerror(ret));
     /* should not set verdict to INET_DROP since netif_xmit
