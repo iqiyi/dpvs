@@ -165,8 +165,8 @@ static int dp_vs_whtlst_add(int af, uint8_t proto, const union inet_addr *vaddr,
 
     /*set whtlst ip on master lcore*/
     err = dp_vs_whtlst_add_lcore(af, proto, vaddr, vport, whtlst);
-    if (err) {
-        RTE_LOG(INFO, SERVICE, "[%s] fail to set whtlst ip\n", __func__);
+    if (err && err != EDPVS_EXIST) {
+        RTE_LOG(ERR, SERVICE, "[%s] fail to set whtlst ip\n", __func__);
         return err;
     }
 
@@ -209,7 +209,6 @@ static int dp_vs_whtlst_del(int af, uint8_t proto, const union inet_addr *vaddr,
     /*del whtlst ip on master lcores*/
     err = dp_vs_whtlst_del_lcore(af, proto, vaddr, vport, whtlst);
     if (err) {
-        RTE_LOG(INFO, SERVICE, "[%s] fail to del whtlst ip\n", __func__);
         return err;
     }
 
@@ -235,7 +234,10 @@ void  dp_vs_whtlst_flush(struct dp_vs_service *svc)
 
     for (hash = 0; hash < DPVS_WHTLST_TAB_SIZE; hash++) {
         list_for_each_entry_safe(entry, next, &this_whtlst_tab[hash], list) {
-            if (entry->af == svc->af && inet_addr_equal(svc->af, &entry->vaddr, &svc->addr))
+            if (entry->af == svc->af
+                && entry->vport == svc->port
+                && entry->proto == svc->proto
+                && inet_addr_equal(svc->af, &entry->vaddr, &svc->addr))
                 dp_vs_whtlst_del(svc->af, entry->proto, &entry->vaddr,
                                  entry->vport, &entry->whtlst);
         }
@@ -339,13 +341,15 @@ static int whtlst_msg_process(bool add, struct dpvs_msg *msg)
     }
 
     cf = (struct dp_vs_whtlst_conf *)msg->data;
-    if (add)
+    if (add) {
         err = dp_vs_whtlst_add_lcore(cf->af, cf->proto, &cf->vaddr, cf->vport, &cf->whtlst);
-    else
+		if (err && err != EDPVS_EXIST) {
+		    RTE_LOG(ERR, SERVICE, "%s: fail to add whtlst: %s.\n", __func__, dpvs_strerror(err));
+		}
+	}
+    else {
         err = dp_vs_whtlst_del_lcore(cf->af, cf->proto, &cf->vaddr, cf->vport, &cf->whtlst);
-    if (err != EDPVS_OK)
-        RTE_LOG(ERR, SERVICE, "%s: fail to %s whtlst: %s.\n",
-                __func__, add ? "add" : "del", dpvs_strerror(err));
+	}
 
     return err;
 }
