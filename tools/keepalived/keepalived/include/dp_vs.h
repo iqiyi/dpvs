@@ -25,6 +25,7 @@
 #include "conf/inetaddr.h"
 #include "conf/laddr.h"
 #include "conf/blklst.h"
+#include "conf/whtlst.h"
 #include "conf/conn.h"
 #include "conf/ip_tunnel.h"
 #include "conf/service.h"
