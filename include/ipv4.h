@@ -187,12 +187,15 @@ static inline uint16_t ip4_udptcp_cksum(struct ipv4_hdr *iph, const void *l4_hdr
 {
     uint16_t csum;
     uint16_t total_length = iph->total_length;
+    uint8_t version_ihl = iph->version_ihl;
 
     iph->total_length = htons(ntohs(total_length) -
             ((iph->version_ihl & 0xf) << 2) + sizeof(struct ipv4_hdr));
+    iph->version_ihl = (version_ihl & 0xf0) | (sizeof(struct ipv4_hdr) >> 2);
     csum = rte_ipv4_udptcp_cksum(iph, l4_hdr);
 
     iph->total_length = total_length;
+    iph->version_ihl = version_ihl;
     return csum;
 }
 
