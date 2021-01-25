@@ -91,7 +91,18 @@ $ ...
 
 ### DPDK build and install
 
-Now build DPDK and export `RTE_SDK` env variable for DPDK app (DPVS).
+1. Using meson-ninja for building DPDK libraries. The `dpdk.mk` checks for presence of libdpdk
+
+```bash
+$ cd dpdk-stable-18.11.11
+$ mkdir [user desired install folder - dpdklib]
+$ mkdir [user desired build folder - dpdkbuild]
+$ meson  -Dprefix=[dpdklib] dpdkbuild
+$ ninja -C dpdkbuild
+$ cd dpdkbuild; ninja install
+```
+
+2. Using Makefile for build DPDK linraries and export `RTE_SDK` env variable for DPDK app (DPVS).
 
 ```bash
 $ cd dpdk-stable-18.11.2/
