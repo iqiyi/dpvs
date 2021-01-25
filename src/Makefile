@@ -34,10 +34,14 @@ DATE_STRING := $(shell date +%Y.%m.%d.%H:%M:%S)
 # same path of THIS Makefile
 SRCDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
+ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
+else
 ifeq ($(RTE_SDK),)
 	$(error "The variable RTE_SDK is not defined.")
 endif
 include $(RTE_SDK)/mk/rte.vars.mk
+LIBS += -lpthread -lnuma
+endif
 
 include $(SRCDIR)/config.mk
 include $(SRCDIR)/dpdk.mk
@@ -62,7 +66,6 @@ else
 	CFLAGS += -rdynamic
 endif
 
-LIBS += -lpthread -lnuma
 
 CFLAGS += $(INCDIRS) $(LIBS)
 
@@ -73,7 +76,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	@echo "  $(notdir $@)"
-	$(Q)$(CC) $(CFLAGS) $^ -o $@
+	$(Q)$(CC) $(CFLAGS) $^ $(LIBS) -o $@
 
 %.o: %.c
 	@echo "  $(notdir $@)"

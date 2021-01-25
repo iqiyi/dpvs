@@ -14,6 +14,12 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
+ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
+
+CFLAGS += -DALLOW_EXPERIMENTAL_API -static $(shell pkg-config --cflags libdpdk)
+LIBS += $(shell pkg-config --libs --static libdpdk)
+
+else
 
 ifeq ($(RTE_SDK),)
 $(error "The variable RTE_SDK is not defined.")
@@ -58,3 +64,4 @@ LIBS += -Wl,--whole-archive -lrte_pmd_mlx5 -Wl,--no-whole-archive
 LIBS += -libverbs -lmlx5 -lmnl
 endif
 
+endif
