@@ -1,0 +1,28 @@
+name: Run
+
+on:
+  push:
+    branches: [master, devel]
+  release:
+    branches: [master]
+    types: [published]
+  schedule:
+    - cron:  '30 3 * * 1'
+  pull_request:
+    branches: [master, devel]
+    types: [labeled]
+
+jobs:
+  run-dpvs:
+    runs-on: self-hosted
+    env:
+      RTE_SDK: /data/dpdk/intel/dpdk-stable-18.11.2
+      RTE_TARGET: x86_64-native-linuxapp-gcc
+    steps:
+    - uses: actions/checkout@v2
+    - name: make
+      run: make -j32
+    - name: install
+      run: make install
+    - name: run-dpvs
+      run: sudo dpvsci $(pwd)/bin/dpvs
