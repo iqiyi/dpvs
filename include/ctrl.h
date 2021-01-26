@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -207,10 +207,12 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_IFA_GET                    22
 #define MSG_TYPE_IFA_SET                    23
 #define MSG_TYPE_IFA_SYNC                   24
+#define MSG_TYPE_WHTLST_ADD                 25
+#define MSG_TYPE_WHTLST_DEL                 26
 
 /* for svc per_core, refer to service.h*/
 enum {
-    MSG_TYPE_SVC_SET_FLUSH = MSG_TYPE_IFA_SYNC + 1,
+    MSG_TYPE_SVC_SET_FLUSH = MSG_TYPE_WHTLST_DEL + 1,
     MSG_TYPE_SVC_SET_ZERO,
     MSG_TYPE_SVC_SET_ADD,
     MSG_TYPE_SVC_SET_EDIT,

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -29,6 +29,7 @@
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
 #include "ipvs/blklst.h"
+#include "ipvs/whtlst.h"
 #include "ipvs/redirect.h"
 #include "parser/parser.h"
 #include "uoa.h"
@@ -208,6 +209,12 @@ udp_conn_lookup(struct dp_vs_proto *proto,
 
     if (dp_vs_blklst_lookup(iph->af, iph->proto, &iph->daddr,
                 uh->dst_port, &iph->saddr)) {
+        *drop = true;
+        return NULL;
+    }
+
+    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, 
+							uh->dst_port, &iph->saddr)) {
         *drop = true;
         return NULL;
     }

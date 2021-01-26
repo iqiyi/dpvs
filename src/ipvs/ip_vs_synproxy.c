@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -29,6 +29,7 @@
 #include "ipvs/proto.h"
 #include "ipvs/proto_tcp.h"
 #include "ipvs/blklst.h"
+#include "ipvs/whtlst.h"
 #include "parser/parser.h"
 
 /* synproxy controll variables */
@@ -702,6 +703,11 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         /* drop packet from blacklist */
         if (dp_vs_blklst_lookup(iph->af, iph->proto, &iph->daddr,
                     th->dest, &iph->saddr)) {
+            goto syn_rcv_out;
+        }
+
+        /* drop packet if not in whitelist */
+        if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
             goto syn_rcv_out;
         }
     } else {

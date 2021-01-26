@@ -85,7 +85,9 @@
 #define IP_VS_SO_SET_DELBLKLST  (IP_VS_BASE_CTL+19)
 #define IP_VS_SO_SET_ADDTUNNEL	 (IP_VS_BASE_CTL+20)
 #define IP_VS_SO_SET_DELTUNNEL	 (IP_VS_BASE_CTL+21)
-#define IP_VS_SO_SET_MAX	IP_VS_SO_SET_DELTUNNEL
+#define IP_VS_SO_SET_ADDWHTLST	 (IP_VS_BASE_CTL+22)
+#define IP_VS_SO_SET_DELWHTLST	 (IP_VS_BASE_CTL+23)
+#define IP_VS_SO_SET_MAX	IP_VS_SO_SET_DELWHTLST
 
 #define IP_VS_SO_GET_VERSION	IP_VS_BASE_CTL
 #define IP_VS_SO_GET_INFO	(IP_VS_BASE_CTL+1)
@@ -192,6 +194,12 @@ struct ip_vs_laddr_user {
 };
 
 struct ip_vs_blklst_user {
+	__be32 			__addr_v4;
+	u_int16_t 		af;
+	union nf_inet_addr 	addr;
+};
+
+struct ip_vs_whtlst_user {
 	__be32 			__addr_v4;
 	u_int16_t 		af;
 	union nf_inet_addr 	addr;
