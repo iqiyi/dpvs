@@ -119,6 +119,7 @@ int ip4_defrag(struct rte_mbuf *mbuf, int user);
 
 uint32_t ip4_select_id(struct ipv4_hdr *iph);
 int ipv4_local_out(struct rte_mbuf *mbuf);
+int ipv4_rcv_fin(struct rte_mbuf *mbuf);
 
 /* helper functions */
 static inline struct ipv4_hdr *ip4_hdr(const struct rte_mbuf *mbuf)

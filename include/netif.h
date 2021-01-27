@@ -312,7 +312,7 @@ int netif_ctrl_term(void); /* netif ctrl plane cleanup */
 void netif_cfgfile_init(void);
 void netif_keyword_value_init(void);
 void install_netif_keywords(void);
-
+void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev);
 
 static inline void *netif_priv(struct netif_port *dev)
 {

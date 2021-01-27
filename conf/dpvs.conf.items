@@ -135,6 +135,7 @@ worker_defs {
     <init> worker cpu5 {
         type    kni
         cpu_id  5
+        icmp_redirect_core
         port dpdk0 {
             tx_queue_ids 6
         }
