@@ -628,7 +628,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
 
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
             mbuf->l3_len = (void *)th - (void *)ip6h;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - mbuf->l3_len;
+            mbuf->l4_len = (th->doff << 2);
             th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, mbuf->l3_len, IPPROTO_TCP);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
@@ -648,7 +648,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         /* compute checksum */
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
             mbuf->l3_len = iphlen;
-            mbuf->l4_len = ntohs(iph->tot_len) - iphlen;
+            mbuf->l4_len = (th->doff << 2);
             th->check = rte_ipv4_phdr_cksum((struct ipv4_hdr*)iph, mbuf->ol_flags);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
@@ -1046,7 +1046,7 @@ static int syn_proxy_build_tcp_rst(int af, struct rte_mbuf *mbuf,
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
             mbuf->l3_len = l3_len;
             mbuf->l4_len = l4_len;
-            th->check = ip4_phdr_cksum((struct ipv4_hdr*)ip4h, mbuf->ol_flags);
+            th->check = rte_ipv4_phdr_cksum((struct ipv4_hdr*)ip4h, mbuf->ol_flags);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return EDPVS_INVPKT;

@@ -173,7 +173,7 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
             dev = conn->out_dev;
         if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
             mbuf->l3_len = iphdrlen;
-            mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) - iphdrlen;
+            mbuf->l4_len = (th->doff << 2);
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
             th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
         } else {
@@ -189,8 +189,8 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         else if (conn->out_dev)
             dev = conn->out_dev;
         if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
-            mbuf->l4_len = ntohs(iph->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
+            mbuf->l4_len = (th->doff << 2);
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
             th->check = rte_ipv4_phdr_cksum(iph, mbuf->ol_flags);
         } else {
