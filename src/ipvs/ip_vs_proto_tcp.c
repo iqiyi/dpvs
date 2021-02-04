@@ -142,7 +142,7 @@ inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
 inline void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th)
 {
     th->check = 0;
-    th->check = ip4_udptcp_cksum(iph, th);
+    th->check = rte_ipv4_udptcp_cksum(iph, th);
 }
 
 /*
@@ -192,7 +192,7 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
             mbuf->l4_len = ntohs(iph->total_length) - iphdrlen;
             mbuf->l3_len = iphdrlen;
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-            th->check = ip4_phdr_cksum(iph, mbuf->ol_flags);
+            th->check = rte_ipv4_phdr_cksum(iph, mbuf->ol_flags);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return EDPVS_INVPKT;
