@@ -78,6 +78,7 @@ typedef struct ip_vs_tunnel_user	ipvs_tunnel_t;
 typedef struct ip_vs_laddr_entry	ipvs_laddr_entry_t;
 typedef struct ip_vs_blklst_entry	ipvs_blklst_entry_t;
 typedef struct ip_vs_whtlst_entry	ipvs_whtlst_entry_t;
+typedef struct ip_vs_stats_user	ip_vs_stats_t;
 
 
 /* init socket and get ipvs info */

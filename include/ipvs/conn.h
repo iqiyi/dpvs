@@ -35,17 +35,20 @@ enum {
     DPVS_CONN_DIR_MAX,
 };
 
-enum {
-    DPVS_CONN_F_HASHED           = 0x0040,
-    DPVS_CONN_F_REDIRECT_HASHED  = 0x0080,
-    DPVS_CONN_F_INACTIVE         = 0x0100,
-    DPVS_CONN_F_IN_TIMER         = 0x0200,
-    DPVS_CONN_F_EXPIRE_QUIESCENT = 0x4000,
-    DPVS_CONN_F_SYNPROXY         = 0x8000,
-    DPVS_CONN_F_TEMPLATE         = 0x1000,
-    DPVS_CONN_F_NOFASTXMIT       = 0x2000,
-    DPVS_CONN_F_ONE_PACKET       = 0x0400,
-};
+/*
+ * DPVS_CONN_F_XXX should always be the same with IP_VS_CONN_F_XXX.
+ */
+/* Conn flags used by both DPVS and Keepalived*/
+#define DPVS_CONN_F_SYNPROXY                IP_VS_CONN_F_SYNPROXY
+#define DPVS_CONN_F_EXPIRE_QUIESCENT        IP_VS_CONN_F_EXPIRE_QUIESCENT
+/* Conn flags used by DPVS only */
+#define DPVS_CONN_F_HASHED                  IP_VS_CONN_F_HASHED
+#define DPVS_CONN_F_INACTIVE                IP_VS_CONN_F_INACTIVE
+#define DPVS_CONN_F_TEMPLATE                IP_VS_CONN_F_TEMPLATE
+#define DPVS_CONN_F_ONE_PACKET              IP_VS_CONN_F_ONE_PACKET
+#define DPVS_CONN_F_IN_TIMER                IP_VS_CONN_F_IN_TIMER
+#define DPVS_CONN_F_REDIRECT_HASHED         IP_VS_CONN_F_REDIRECT_HASHED
+#define DPVS_CONN_F_NOFASTXMIT              IP_VS_CONN_F_NOFASTXMIT
 
 struct dp_vs_conn_param {
     int                 af;
