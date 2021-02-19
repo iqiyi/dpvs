@@ -88,6 +88,7 @@ struct port_conf_stream {
     int rx_queue_nb;
     int rx_desc_nb;
     char rss[32];
+	int mtu;
 
     int tx_queue_nb;
     int tx_desc_nb;
@@ -509,6 +510,28 @@ static void promisc_mode_handler(vector_t tokens)
     current_device->promisc_mode = true;
 }
 
+static void custom_mtu_handler(vector_t tokens)
+{
+	char *str = set_value(tokens);
+    int mtu = 0;
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+
+    assert(str);
+    mtu = atoi(str);
+    if (mtu <= 0 || mtu > NETIF_MAX_ETH_MTU) {
+        RTE_LOG(WARNING, NETIF, "invalid %s:MTU %s, using default %d\n",
+                current_device->name, str, NETIF_DEFAULT_ETH_MTU);
+        current_device->mtu= NETIF_DEFAULT_ETH_MTU;
+    } else {
+        RTE_LOG(INFO, NETIF, "%s:mtu = %d\n",
+                current_device->name, mtu);
+        current_device->mtu = mtu;
+    }
+
+    FREE_PTR(str);
+
+}
 static void kni_name_handler(vector_t tokens)
 {
     char *str = set_value(tokens);
@@ -877,6 +900,7 @@ void install_netif_keywords(void)
     install_keyword("filter", fdir_filter_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
+	install_keyword("mtu", custom_mtu_handler,KW_TYPE_INIT);
     install_keyword("kni_name", kni_name_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("bonding", bonding_handler, KW_TYPE_INIT);
@@ -3516,6 +3540,8 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         port->dev_conf.fdir_conf.mode = cfg_stream->fdir_mode;
         port->dev_conf.fdir_conf.pballoc = cfg_stream->fdir_pballoc;
         port->dev_conf.fdir_conf.status = cfg_stream->fdir_status;
+		if(cfg_stream->mtu != 0)
+            port->mtu = cfg_stream->mtu;
 
         if (cfg_stream->rx_queue_nb > 0 && port->nrxq > cfg_stream->rx_queue_nb) {
             RTE_LOG(WARNING, NETIF, "%s: rx-queues(%d) configured in workers != "
@@ -3662,6 +3688,8 @@ int netif_port_start(struct netif_port *port)
     // device configure
     if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
+    if ((ret = rte_eth_dev_set_mtu(port->id,port->mtu) != EDPVS_OK)
+                return ret;
 
     if (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
         port->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_IPV4_CKSUM;
