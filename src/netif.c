@@ -3409,6 +3409,9 @@ static inline void port_mtu_set(struct netif_port *port)
             mtu = t_mtu;
     }
     port->mtu = mtu;
+
+	rte_eth_dev_set_mtu((uint8_t)port->id,port->mtu);
+
 }
 
 /*

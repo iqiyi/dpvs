@@ -39,6 +39,7 @@ netif_defs {
         }
         ! promisc_mode
         ! kni_name                dpdk0.kni
+        ! mtu			1500
     }
 
     <init> device dpdk2 {
@@ -58,6 +59,7 @@ netif_defs {
         }
         ! promisc_mode
         ! kni_name                dpdk2.kni
+        ! mtu			1500
     }
 
     <init> bonding bond0 {
