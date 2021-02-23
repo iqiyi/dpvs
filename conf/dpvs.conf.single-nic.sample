@@ -37,6 +37,7 @@ netif_defs {
             pballoc             64k
             status              matched
         }
+        ! mtu			1500
         ! promisc_mode
         kni_name                dpdk0.kni
     }
