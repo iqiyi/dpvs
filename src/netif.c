@@ -3695,7 +3695,7 @@ int netif_port_start(struct netif_port *port)
     // device configure
     if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
-    if ((ret = rte_eth_dev_set_mtu(port->id,port->mtu) != EDPVS_OK)
+    if ((ret = rte_eth_dev_set_mtu(port->id,port->mtu)) != EDPVS_OK)
                 return ret;
 
     if (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
