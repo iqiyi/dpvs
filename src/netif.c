@@ -88,7 +88,7 @@ struct port_conf_stream {
     int rx_queue_nb;
     int rx_desc_nb;
     char rss[32];
-	int mtu;
+    int mtu;
 
     int tx_queue_nb;
     int tx_desc_nb;
@@ -269,7 +269,7 @@ static void device_handler(vector_t tokens)
     port_cfg->tx_queue_nb = -1;
     port_cfg->rx_desc_nb = NETIF_NB_RX_DESC_DEF;
     port_cfg->tx_desc_nb = NETIF_NB_TX_DESC_DEF;
-	port_cfg->mtu = NETIF_DEFAULT_ETH_MTU;
+    port_cfg->mtu = NETIF_DEFAULT_ETH_MTU;
 
     port_cfg->promisc_mode = false;
     strncpy(port_cfg->rss, "tcp", sizeof(port_cfg->rss));
@@ -514,7 +514,7 @@ static void promisc_mode_handler(vector_t tokens)
 
 static void custom_mtu_handler(vector_t tokens)
 {
-	char *str = set_value(tokens);
+    char *str = set_value(tokens);
     int mtu = 0;
     struct port_conf_stream *current_device = list_entry(port_list.next,
             struct port_conf_stream, port_list_node);
@@ -902,7 +902,7 @@ void install_netif_keywords(void)
     install_keyword("filter", fdir_filter_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
-	install_keyword("mtu", custom_mtu_handler,KW_TYPE_INIT);
+    install_keyword("mtu", custom_mtu_handler,KW_TYPE_INIT);
     install_keyword("kni_name", kni_name_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("bonding", bonding_handler, KW_TYPE_INIT);
@@ -3412,7 +3412,7 @@ static inline void port_mtu_set(struct netif_port *port)
     }
     port->mtu = mtu;
 
-	rte_eth_dev_set_mtu((uint8_t)port->id,port->mtu);
+    rte_eth_dev_set_mtu((uint8_t)port->id,port->mtu);
 
 }
 
@@ -3565,7 +3565,7 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         /* using default configurations */
         port->rxq_desc_nb = NETIF_NB_RX_DESC_DEF;
         port->txq_desc_nb = NETIF_NB_TX_DESC_DEF;
-		port->mtu = NETIF_DEFAULT_ETH_MTU;
+        port->mtu = NETIF_DEFAULT_ETH_MTU;
     }
 
     if (port->type == PORT_TYPE_BOND_MASTER) {
@@ -3588,11 +3588,11 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         if (cfg_stream) {
             port->rxq_desc_nb = cfg_stream->rx_desc_nb;
             port->txq_desc_nb = cfg_stream->tx_desc_nb;
-			port->mtu = cfg_stream->mtu;
+            port->mtu = cfg_stream->mtu;
         } else {
             port->rxq_desc_nb = NETIF_NB_RX_DESC_DEF;
             port->txq_desc_nb = NETIF_NB_TX_DESC_DEF;
-			port->mtu = NETIF_DEFAULT_ETH_MTU;
+            port->mtu = NETIF_DEFAULT_ETH_MTU;
         }
     }
     /* enable promicuous mode if configured */
@@ -3696,7 +3696,7 @@ int netif_port_start(struct netif_port *port)
     if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
         return ret;
     if ((ret = rte_eth_dev_set_mtu(port->id,port->mtu)) != EDPVS_OK)
-                return ret;
+        return ret;
 
     if (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
         port->dev_conf.txmode.offloads |= DEV_TX_OFFLOAD_IPV4_CKSUM;

@@ -38,9 +38,9 @@ netif_defs {
             pballoc             64k
             status              matched
         }
+        ! mtu                   1500
         ! promisc_mode
         kni_name                dpdk0.kni
-	!mtu			1500
     }
 
     <init> device dpdk1 {
@@ -58,9 +58,9 @@ netif_defs {
             pballoc             64k
             status              matched
         }
+        ! mtu                   1500
         ! promisc_mode
         kni_name                dpdk1.kni
-	! mtu			1500
     }
 
     ! <init> bonding bond0 {
