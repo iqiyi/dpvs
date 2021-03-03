@@ -19,17 +19,20 @@
 #define __DPVS_DEST_CONF_H__
 
 #include "conf/service.h"
+#include "conf/conn.h"
 
-/* must consistent with IP_VS_CONN_F_XXX (libipvs-2.6/ip_vs.h) */
+/*
+ * DPVS_FWD_XXX should always be the same with IP_VS_CONN_F_XXX.
+ */
 enum dpvs_fwd_mode {
-    DPVS_FWD_MASQ           = 0,
-    DPVS_FWD_LOCALNODE      = 1,
-    DPVS_FWD_MODE_TUNNEL    = 2,
-    DPVS_FWD_MODE_DR        = 3,
-    DPVS_FWD_MODE_BYPASS    = 4,
-    DPVS_FWD_MODE_FNAT      = 5,
-    DPVS_FWD_MODE_NAT       = DPVS_FWD_MASQ,
-    DPVS_FWD_MODE_SNAT      = 6,
+	DPVS_FWD_MASQ           = IP_VS_CONN_F_MASQ,
+	DPVS_FWD_LOCALNODE      = IP_VS_CONN_F_LOCALNODE,
+	DPVS_FWD_MODE_TUNNEL    = IP_VS_CONN_F_TUNNEL,
+	DPVS_FWD_MODE_DR        = IP_VS_CONN_F_DROUTE,
+	DPVS_FWD_MODE_BYPASS    = IP_VS_CONN_F_BYPASS,
+	DPVS_FWD_MODE_FNAT      = IP_VS_CONN_F_FULLNAT,
+	DPVS_FWD_MODE_SNAT      = IP_VS_CONN_F_SNAT,
+	DPVS_FWD_MODE_NAT       = DPVS_FWD_MASQ,
 };
 
 enum {

@@ -1,3 +1,5 @@
+![Build](https://github.com/iqiyi/dpvs/workflows/Build/badge.svg)  ![Run](https://github.com/iqiyi/dpvs/workflows/Run/badge.svg)
+
 ![dpvs-logo.png](./pic/DPVS-logo.png)
 
 # Introduction
