@@ -39,7 +39,7 @@ typedef uint32_t            tc_handle_t;
 #define TC
 #define RTE_LOGTYPE_TC      RTE_LOGTYPE_USER1
 
-#define TC_ALIGNTO          64
+#define TC_ALIGNTO          RTE_CACHE_LINE_SIZE
 #define TC_ALIGN(len)       (((len) + TC_ALIGNTO-1) & ~(TC_ALIGNTO-1))
 
 /* need a wrapper to save mbuf list,
@@ -58,7 +58,6 @@ struct tc_mbuf {
 struct netif_tc {
     struct netif_port       *dev;
     struct rte_mempool      *tc_mbuf_pool;
-    rte_rwlock_t            lock;
 
     /*
      * Qsch section
@@ -80,22 +79,20 @@ struct Qsch_ops;
 struct tc_cls_ops;
 
 int tc_init(void);
+int tc_term(void);
 int tc_ctrl_init(void);
+int tc_ctrl_term(void);
 
 int tc_init_dev(struct netif_port *dev);
 int tc_destroy_dev(struct netif_port *dev);
 
 int tc_register_qsch(struct Qsch_ops *ops);
 int tc_unregister_qsch(struct Qsch_ops *ops);
-
 struct Qsch_ops *tc_qsch_ops_lookup(const char *name);
-void tc_qsch_ops_get(struct Qsch_ops *ops);
-void tc_qsch_ops_put(struct Qsch_ops *ops);
 
 int tc_register_cls(struct tc_cls_ops *ops);
 int tc_unregister_cls(struct tc_cls_ops *ops);
-struct tc_cls_ops *tc_cls_ops_get(const char *name);
-void tc_cls_ops_put(struct tc_cls_ops *ops);
+struct tc_cls_ops *tc_cls_ops_lookup(const char *name);
 
 struct rte_mbuf *tc_handle_egress(struct netif_tc *tc,
                                   struct rte_mbuf *mbuf, int *ret);

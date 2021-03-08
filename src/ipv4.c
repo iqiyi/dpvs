@@ -239,9 +239,6 @@ static int ipv4_output_fin2(struct rte_mbuf *mbuf)
     mbuf->packet_type = ETHER_TYPE_IPv4;
     mbuf->l3_len = ip4_hdrlen(mbuf);
 
-    /* reuse @userdata/@udata64 for prio (used by tc:pfifo_fast) */
-    mbuf->udata64 = ((ip4_hdr(mbuf)->type_of_service >> 1) & 15);
-
     err = neigh_output(AF_INET, (union inet_addr *)&nexthop, mbuf, rt->port);
     route4_put(rt);
     return err;

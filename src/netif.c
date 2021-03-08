@@ -47,12 +47,12 @@
 #define NETIF_PKTPOOL_NB_MBUF_DEF   65535
 #define NETIF_PKTPOOL_NB_MBUF_MIN   1023
 #define NETIF_PKTPOOL_NB_MBUF_MAX   134217727
-static int netif_pktpool_nb_mbuf = NETIF_PKTPOOL_NB_MBUF_DEF;
+int netif_pktpool_nb_mbuf = NETIF_PKTPOOL_NB_MBUF_DEF;
 
 #define NETIF_PKTPOOL_MBUF_CACHE_DEF    256
 #define NETIF_PKTPOOL_MBUF_CACHE_MIN    32
 #define NETIF_PKTPOOL_MBUF_CACHE_MAX    8192
-static int netif_pktpool_mbuf_cache = NETIF_PKTPOOL_MBUF_CACHE_DEF;
+int netif_pktpool_mbuf_cache = NETIF_PKTPOOL_MBUF_CACHE_DEF;
 
 #define NETIF_NB_RX_DESC_DEF    256
 #define NETIF_NB_RX_DESC_MIN    16
@@ -146,15 +146,6 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 /* function declarations */
 static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev);
 static void kni_lcore_loop(void *dummy);
-
-
-lcoreid_t g_master_lcore_id;
-/* By default g_kni_lcore_id is 0 and it indicates KNI core is not configured. */
-lcoreid_t g_kni_lcore_id = 0;
-static uint8_t g_slave_lcore_num;
-static uint8_t g_isol_rx_lcore_num;
-static uint64_t g_slave_lcore_mask;
-static uint64_t g_isol_rx_lcore_mask;
 
 bool dp_vs_fdir_filter_enable = true;
 

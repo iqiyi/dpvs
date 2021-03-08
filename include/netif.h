@@ -248,7 +248,7 @@ struct netif_port {
     struct netif_kni        kni;                        /* kni device */
     union netif_bond        *bond;                      /* bonding conf */
     struct vlan_info        *vlan_info;                 /* VLANs info for real device */
-    struct netif_tc         tc;                         /* traffic control */
+    struct netif_tc         tc[DPVS_MAX_LCORE];         /* traffic control */
     struct netif_ops        *netif_ops;
 } __rte_cache_aligned;
 
@@ -321,7 +321,7 @@ static inline void *netif_priv(struct netif_port *dev)
 
 static inline struct netif_tc *netif_tc(struct netif_port *dev)
 {
-    return &dev->tc;
+    return &dev->tc[rte_lcore_id()];
 }
 
 static inline uint16_t dpvs_rte_eth_dev_count(void)
