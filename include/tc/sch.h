@@ -78,6 +78,7 @@ struct Qsch {
     struct list_head        cls_list;   /* classifiers */
     int                     cls_cnt;
     struct hlist_node       hlist;      /* netif_tc.qsch_hash node */
+    struct list_head        list_node;  /* qsch_head list node */
     struct netif_tc         *tc;
     uint32_t                refcnt;
 
@@ -165,6 +166,9 @@ static inline struct rte_mbuf *__qsch_dequeue_head(struct Qsch *sch, struct tc_m
     struct tc_mbuf *tm;
     struct rte_mbuf *mbuf;
 
+    if (list_empty(&q->mbufs))
+        return NULL;
+
     tm = list_first_entry(&q->mbufs, struct tc_mbuf, list);
     if (unlikely(!tm))
         return NULL;
@@ -196,6 +200,9 @@ static inline struct rte_mbuf *qsch_dequeue_head(struct Qsch *sch)
 static inline struct rte_mbuf *qsch_peek_head(struct Qsch *sch)
 {
     struct tc_mbuf *tm;
+
+    if (list_empty(&sch->q.mbufs))
+        return NULL;
 
     tm = list_first_entry(&sch->q.mbufs, struct tc_mbuf, list);
     if (unlikely(!tm))
@@ -268,6 +275,8 @@ void *qsch_shm_get_or_create(struct Qsch *sch, uint32_t len);
 int qsch_shm_put_or_destroy(struct Qsch *sch);
 int qsch_shm_init(void);
 int qsch_shm_term(void);
+int qsch_init(void);
+int qsch_term(void);
 
 #endif /* __DPVS__ */
 

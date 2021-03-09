@@ -26,9 +26,13 @@
 #include "netif.h"
 #include "tc/tc.h"
 #include "tc/sch.h"
+#include "scheduler.h"
 
 /* may configurable in the future. */
 static int dev_tx_weight = 64;
+
+static struct list_head qsch_head[DPVS_MAX_LCORE];
+#define this_qsch_head qsch_head[rte_lcore_id()]
 
 static inline int sch_hash(tc_handle_t handle, int hash_size)
 {
@@ -190,6 +194,8 @@ void qsch_hash_add(struct Qsch *sch, bool invisible)
         hlist_add_head(&sch->hlist, &sch->tc->qsch_hash[hash]);
     }
 
+    list_add_tail(&sch->list_node, &this_qsch_head);
+
     sch->tc->qsch_cnt++;
 
     if (invisible)
@@ -207,6 +213,8 @@ void qsch_hash_del(struct Qsch *sch)
     } else {
         hlist_del_init(&sch->hlist);
     }
+
+    list_del(&sch->list_node);
 
     sch->tc->qsch_cnt--;
 }
@@ -252,4 +260,52 @@ void qsch_do_sched(struct Qsch *sch)
         quota -= npkt;
 
     return;
+}
+
+static void qsch_sched_all(void *dummy)
+{
+    struct Qsch *sch;
+    lcoreid_t cid = rte_lcore_id();
+
+    list_for_each_entry(sch, &qsch_head[cid], list_node) {
+        if (sch->flags & QSCH_F_INGRESS) {
+            if (sch->tc->dev->flag & NETIF_PORT_FLAG_TC_INGRESS)
+                qsch_do_sched(sch);
+        } else {
+            if (sch->tc->dev->flag & NETIF_PORT_FLAG_TC_EGRESS)
+                qsch_do_sched(sch);
+        }
+    }
+}
+
+static struct dpvs_lcore_job qsch_sched_job = {
+    .name = "qsch_sched",
+    .func = qsch_sched_all,
+    .data = NULL,
+    .type = LCORE_JOB_LOOP,
+};
+
+int qsch_init(void)
+{
+    int i, err;
+
+    for (i = 0; i < DPVS_MAX_LCORE; i++)
+        INIT_LIST_HEAD(&qsch_head[i]);
+
+    err = dpvs_lcore_job_register(&qsch_sched_job, LCORE_ROLE_FWD_WORKER);
+    if (err != EDPVS_OK)
+        return err;
+
+    return qsch_shm_init();
+}
+
+int qsch_term(void)
+{
+    int err;
+
+    err = dpvs_lcore_job_unregister(&qsch_sched_job, LCORE_ROLE_FWD_WORKER);
+    if (err != EDPVS_OK)
+        return err;
+
+    return qsch_shm_term();
 }

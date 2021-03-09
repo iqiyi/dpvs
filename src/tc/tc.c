@@ -300,7 +300,7 @@ int tc_init(void)
     int tc_mbuf_pool_size = netif_pktpool_nb_mbuf;
     int tc_mbuf_cache_size = netif_pktpool_mbuf_cache;
 
-    if ((err = qsch_shm_init()) != EDPVS_OK)
+    if ((err = qsch_init()) != EDPVS_OK)
         return err;
 
     /* scheduler */
@@ -350,7 +350,7 @@ int tc_term(void)
         }
     }
 
-    qsch_shm_term();
+    qsch_term();
 
     return EDPVS_OK;
 }
