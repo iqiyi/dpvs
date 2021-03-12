@@ -243,7 +243,7 @@ int dp_vs_redirect_pkt(struct rte_mbuf *mbuf, lcoreid_t peer_cid)
     return INET_STOLEN;
 }
 
-void dp_vs_redirect_ring_proc(struct netif_queue_conf *qconf, lcoreid_t cid)
+void dp_vs_redirect_ring_proc(lcoreid_t cid)
 {
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     uint16_t nb_rb;
@@ -261,7 +261,7 @@ void dp_vs_redirect_ring_proc(struct netif_queue_conf *qconf, lcoreid_t cid)
                                            (void**)mbufs,
                                            NETIF_MAX_PKT_BURST, NULL);
             if (nb_rb > 0) {
-                lcore_process_packets(qconf, mbufs, cid, nb_rb, 1);
+                lcore_process_packets(mbufs, cid, nb_rb, 1);
             }
         }
     }

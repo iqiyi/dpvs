@@ -265,8 +265,10 @@ int netif_register_master_xmit_msg(void);
 int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);
 bool is_lcore_id_valid(lcoreid_t cid);
 bool netif_lcore_is_fwd_worker(lcoreid_t cid);
-void lcore_process_packets(struct netif_queue_conf *qconf, struct rte_mbuf **mbufs,
-                           lcoreid_t cid, uint16_t count, bool pkts_from_ring);
+void lcore_process_packets(struct rte_mbuf **mbufs, lcoreid_t cid,
+                           uint16_t count, bool pkts_from_ring);
+int netif_rcv_mbuf(struct netif_port *dev, lcoreid_t cid,
+        struct rte_mbuf *mbuf, bool pkts_from_ring);
 
 /************************** protocol API *****************************/
 int netif_register_pkt(struct pkt_type *pt);
