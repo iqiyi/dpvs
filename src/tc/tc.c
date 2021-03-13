@@ -108,20 +108,29 @@ int tc_unregister_cls(struct tc_cls_ops *ops)
     return EDPVS_OK;
 }
 
-struct rte_mbuf *tc_handle_egress(struct netif_tc *tc,
-                                  struct rte_mbuf *mbuf, int *ret)
+struct rte_mbuf *tc_hook(struct netif_tc *tc, struct rte_mbuf *mbuf,
+                         tc_hook_type_t type, int *ret)
 {
     int err = EDPVS_OK;
-    struct Qsch *sch, *child_sch = NULL;
+    struct Qsch *sch, *child_sch;
     struct tc_cls *cls;
     struct tc_cls_result cls_res;
     const int max_reclassify_loop = 8;
     int limit = 0;
+    __be16 pkt_type;
 
     assert(tc && mbuf && ret);
+    sch = child_sch = NULL;
 
-    /* start from egress root qsch */
-    sch = tc->qsch;
+    /* start from root qsch */
+    if (type == TC_HOOK_EGRESS) {
+        sch = tc->qsch;
+        pkt_type = rte_cpu_to_be_16(mbuf->packet_type);
+    } else if (type == TC_HOOK_INGRESS) {
+        sch = tc->qsch_ingress;
+        /* mbuf->packet_type was not set by DPVS for ingress */
+        pkt_type = rte_pktmbuf_mtod(mbuf, struct ether_hdr *)->ether_type;
+    }
     if (unlikely(!sch)) {
         *ret = EDPVS_OK;
         return mbuf;
@@ -136,7 +145,7 @@ struct rte_mbuf *tc_handle_egress(struct netif_tc *tc,
      */
 again:
     list_for_each_entry(cls, &sch->cls_list, list) {
-        if (unlikely(mbuf->packet_type != cls->pkt_type &&
+        if (unlikely(cls->pkt_type != pkt_type &&
                      cls->pkt_type != htons(ETH_P_ALL)))
             continue;
 
@@ -185,6 +194,12 @@ again:
     /* this scheduler has no queue (for classify only) ? */
     if (unlikely(!sch->ops->enqueue))
         goto out; /* no need to set @ret */
+
+    if (unlikely((sch->flags & QSCH_F_INGRESS) && type != TC_HOOK_INGRESS) ||
+            (!(sch->flags & QSCH_F_INGRESS) && type != TC_HOOK_EGRESS)) {
+        RTE_LOG(WARNING, TC, "%s: classified to qsch of incorrect type\n", __func__);
+        goto out;
+    }
 
     /* mbuf is always consumed (queued or dropped) */
     err = sch->ops->enqueue(sch, mbuf);

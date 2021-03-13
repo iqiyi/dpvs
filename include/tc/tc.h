@@ -42,6 +42,11 @@ typedef uint32_t            tc_handle_t;
 #define TC_ALIGNTO          RTE_CACHE_LINE_SIZE
 #define TC_ALIGN(len)       (((len) + TC_ALIGNTO-1) & ~(TC_ALIGNTO-1))
 
+typedef enum tc_hook_type {
+    TC_HOOK_EGRESS  = 1,
+    TC_HOOK_INGRESS = 2,
+} tc_hook_type_t;
+
 /* need a wrapper to save mbuf list,
  * since there's no way to link mbuf by it's own elem.
  * (note mbuf.next if used for pkt segments. */
@@ -94,8 +99,8 @@ int tc_register_cls(struct tc_cls_ops *ops);
 int tc_unregister_cls(struct tc_cls_ops *ops);
 struct tc_cls_ops *tc_cls_ops_lookup(const char *name);
 
-struct rte_mbuf *tc_handle_egress(struct netif_tc *tc,
-                                  struct rte_mbuf *mbuf, int *ret);
+struct rte_mbuf *tc_hook(struct netif_tc *tc, struct rte_mbuf *mbuf,
+                         tc_hook_type_t type, int *ret);
 
 static inline int64_t tc_get_ns(void)
 {

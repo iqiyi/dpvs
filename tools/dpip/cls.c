@@ -79,7 +79,7 @@ static void cls_dump_param(const char *ifname, const union tc_param *param,
     printf("cls %s %s dev %s qsch %s pkttype 0x%04x prio %d ",
            cls->kind, tc_handle_itoa(cls->handle, handle, sizeof(handle)),
            ifname, tc_handle_itoa(cls->sch_id, sch_id, sizeof(sch_id)),
-           cls->pkt_type, cls->priority);
+           ntohs(cls->pkt_type), cls->priority);
 
     if (strcmp(cls->kind, "match") == 0) {
         char result[32], patt[256], target[16];
@@ -106,7 +106,7 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
     memset(param, 0, sizeof(*param));
 
     /* default values */
-    param->pkt_type = ETH_P_IP;
+    param->pkt_type = htons(ETH_P_IP);
     param->handle = TC_H_UNSPEC;
     param->sch_id = TC_H_ROOT;
     param->priority = 0;
@@ -124,11 +124,11 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
         } else if (strcmp(CURRARG(cf), "pkttype") == 0) {
             NEXTARG_CHECK(cf, CURRARG(cf));
             if (strcasecmp(CURRARG(cf), "ipv4") == 0)
-                param->pkt_type = ETH_P_IP;
+                param->pkt_type = htons(ETH_P_IP);
             else if (strcasecmp(CURRARG(cf), "ipv6") == 0)
-                param->pkt_type = ETH_P_IPV6;
+                param->pkt_type = htons(ETH_P_IPV6);
             else if (strcasecmp(CURRARG(cf), "vlan") == 0)
-                param->pkt_type = ETH_P_8021Q;
+                param->pkt_type = htons(ETH_P_8021Q);
             else {
                 fprintf(stderr, "pkttype not support\n");
                 return EDPVS_INVAL;

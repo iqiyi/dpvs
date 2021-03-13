@@ -50,7 +50,11 @@ static inline int sch_dequeue_xmit(struct Qsch *sch, int *npkt)
     if (unlikely(!mbuf))
         return 0;
 
-    netif_hard_xmit(mbuf, netif_port_get(mbuf->port));
+    if (sch->flags & QSCH_F_INGRESS)
+        netif_rcv_mbuf(sch->tc->dev, rte_lcore_id(), mbuf, false);
+    else
+        netif_hard_xmit(mbuf, sch->tc->dev);
+
     return sch->q.qlen;
 }
 

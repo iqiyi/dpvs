@@ -2199,8 +2199,8 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     assert((mbuf_refcnt >= 1) && (mbuf_refcnt <= 64));
 
     if (dev->flag & NETIF_PORT_FLAG_TC_EGRESS) {
-        mbuf = tc_handle_egress(netif_tc(dev), mbuf, &ret);
-        if (likely(!mbuf))
+        mbuf = tc_hook(netif_tc(dev), mbuf, TC_HOOK_EGRESS, &ret);
+        if (!mbuf)
             return ret;
     }
 
@@ -2240,6 +2240,7 @@ int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf)
 static int netif_deliver_mbuf(struct netif_port *dev, lcoreid_t cid,
                   struct rte_mbuf *mbuf, bool pkts_from_ring)
 {
+    int ret = EDPVS_OK;
     struct ether_hdr *eth_hdr;
 
     assert(mbuf->port <= NETIF_MAX_PORTS);
@@ -2265,8 +2266,9 @@ static int netif_deliver_mbuf(struct netif_port *dev, lcoreid_t cid,
     }
 
     if (!pkts_from_ring && (dev->flag & NETIF_PORT_FLAG_TC_INGRESS)) {
-        // TODO
-        // TC INGRESS HOOK
+        mbuf = tc_hook(netif_tc(dev), mbuf, TC_HOOK_INGRESS, &ret);
+        if (!mbuf)
+            return ret;
     }
 
     return netif_rcv_mbuf(dev, cid, mbuf, pkts_from_ring);
