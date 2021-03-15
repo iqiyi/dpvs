@@ -4228,6 +4228,11 @@ int netif_init(void)
     netif_pkt_type_tab_init();
     netif_port_init();
     netif_lcore_init();
+
+    g_master_lcore_id = rte_get_master_lcore();
+    netif_get_slave_lcores(&g_slave_lcore_num, &g_slave_lcore_mask);
+    netif_get_isol_rx_lcores(&g_isol_rx_lcore_num, &g_isol_rx_lcore_mask);
+
     return EDPVS_OK;
 }
 
@@ -5165,10 +5170,6 @@ struct dpvs_sockopts netif_sockopt = {
 int netif_ctrl_init(void)
 {
     int err;
-
-    g_master_lcore_id = rte_get_master_lcore();
-    netif_get_slave_lcores(&g_slave_lcore_num, &g_slave_lcore_mask);
-    netif_get_isol_rx_lcores(&g_isol_rx_lcore_num, &g_isol_rx_lcore_mask);
 
     if ((err = sockopt_register(&netif_sockopt)) != EDPVS_OK)
         return err;
