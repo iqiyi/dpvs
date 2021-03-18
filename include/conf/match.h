@@ -58,6 +58,10 @@ static inline int parse_match(const char *pattern, uint8_t *proto,
             *proto = IPPROTO_TCP;
         } else if (strcmp(tok, "udp") == 0) {
             *proto = IPPROTO_UDP;
+        } else if (strcmp(tok, "icmp") == 0) {
+            *proto = IPPROTO_ICMP;
+        } else if (strcmp(tok, "icmp6") == 0) {
+            *proto = IPPROTO_ICMPV6;
         } else if (strncmp(tok, "from=", strlen("from=")) == 0) {
             tok += strlen("from=");
 

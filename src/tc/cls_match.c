@@ -124,12 +124,11 @@ l2parse:
                 goto done;
         }
 
-        if (!ipv6_addr_any(&m->srange.max_addr.in6)) {
-            if (ipv6_addr_cmp_u128(&ip6h->ip6_dst, &m->srange.min_addr.in6) < 0 ||
-                    ipv6_addr_cmp_u128(&ip6h->ip6_dst, &m->srange.max_addr.in6) > 0)
+        if (!ipv6_addr_any(&m->drange.max_addr.in6)) {
+            if (ipv6_addr_cmp_u128(&ip6h->ip6_dst, &m->drange.min_addr.in6) < 0 ||
+                    ipv6_addr_cmp_u128(&ip6h->ip6_dst, &m->drange.max_addr.in6) > 0)
                 goto done;
         }
-        break;
 
         l4_proto = ip6h->ip6_nxt;
         offset = ip6_skip_exthdr(mbuf, offset + sizeof(struct ip6_hdr), &l4_proto);
@@ -137,6 +136,7 @@ l2parse:
             err = TC_ACT_SHOT;
             goto done;
         }
+        break;
 
     case ETH_P_8021Q:
         veh = (struct vlan_ethhdr *)eh;
