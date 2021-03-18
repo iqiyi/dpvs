@@ -117,19 +117,21 @@ struct rte_mbuf *tc_hook(struct netif_tc *tc, struct rte_mbuf *mbuf,
     struct tc_cls_result cls_res;
     const int max_reclassify_loop = 8;
     int limit = 0;
+    uint32_t flags;
     __be16 pkt_type;
 
     assert(tc && mbuf && ret);
     sch = child_sch = NULL;
+    flags = (type == TC_HOOK_INGRESS) ? QSCH_F_INGRESS : 0;
 
     /* start from root qsch */
-    if (type == TC_HOOK_EGRESS) {
-        sch = tc->qsch;
-        pkt_type = rte_cpu_to_be_16(mbuf->packet_type);
-    } else if (type == TC_HOOK_INGRESS) {
+    if (flags & QSCH_F_INGRESS) {
         sch = tc->qsch_ingress;
         /* mbuf->packet_type was not set by DPVS for ingress */
         pkt_type = rte_pktmbuf_mtod(mbuf, struct ether_hdr *)->ether_type;
+    } else {
+        sch = tc->qsch;
+        pkt_type = rte_cpu_to_be_16(mbuf->packet_type);
     }
     if (unlikely(!sch)) {
         *ret = EDPVS_OK;
@@ -147,6 +149,9 @@ again:
     list_for_each_entry(cls, &sch->cls_list, list) {
         if (unlikely(cls->pkt_type != pkt_type &&
                      cls->pkt_type != htons(ETH_P_ALL)))
+            continue;
+
+        if ((cls->sch->flags & QSCH_F_INGRESS) ^ flags)
             continue;
 
         err = cls->ops->classify(cls, mbuf, &cls_res);
