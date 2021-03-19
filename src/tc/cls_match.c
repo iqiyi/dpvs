@@ -204,8 +204,8 @@ done:
         char cls_id[16], qsch_id[16];
 
         if (ip6h) {
-            inet_ntop(AF_INET6, &ip6h->saddr, sip, sizeof(sip));
-            inet_ntop(AF_INET6, &ip6h->daddr, dip, sizeof(dip));
+            inet_ntop(AF_INET6, &ip6h->ip6_src, sip, sizeof(sip));
+            inet_ntop(AF_INET6, &ip6h->ip6_dst, dip, sizeof(dip));
         } else {
             inet_ntop(AF_INET, &iph->saddr, sip, sizeof(sip));
             inet_ntop(AF_INET, &iph->daddr, dip, sizeof(dip));

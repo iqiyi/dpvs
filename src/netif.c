@@ -2259,7 +2259,7 @@ static int netif_deliver_mbuf(struct netif_port *dev, lcoreid_t cid,
      */
     if (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) {
         struct rte_mbuf *mbuf_copied = mbuf_copy(mbuf, pktmbuf_pool[dev->socket]);
-        if (likely(mbuf_copied))
+        if (likely(mbuf_copied != NULL))
             kni_ingress(mbuf_copied, dev);
         else
             RTE_LOG(WARNING, NETIF, "%s: failed to copy mbuf for kni\n", __func__);
