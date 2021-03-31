@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -44,6 +44,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ipvs/redirect.h>
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+#include "icmp.h"
+#endif
 
 #define NETIF_PKTPOOL_NB_MBUF_DEF   65535
 #define NETIF_PKTPOOL_NB_MBUF_MIN   1023
@@ -89,6 +92,7 @@ struct port_conf_stream {
     int rx_queue_nb;
     int rx_desc_nb;
     char rss[32];
+    int mtu;
 
     int tx_queue_nb;
     int tx_desc_nb;
@@ -148,7 +152,6 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 #define NETIF_CTRL_BUFFER_LEN     4096
 
 /* function declarations */
-static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev);
 static void kni_lcore_loop(void *dummy);
 
 
@@ -302,6 +305,8 @@ static void device_handler(vector_t tokens)
     port_cfg->tx_queue_nb = -1;
     port_cfg->rx_desc_nb = NETIF_NB_RX_DESC_DEF;
     port_cfg->tx_desc_nb = NETIF_NB_TX_DESC_DEF;
+    port_cfg->mtu = NETIF_DEFAULT_ETH_MTU;
+
     port_cfg->promisc_mode = false;
     strncpy(port_cfg->rss, "tcp", sizeof(port_cfg->rss));
     port_cfg->fdir_mode = RTE_FDIR_MODE_PERFECT;
@@ -611,6 +616,28 @@ static void promisc_mode_handler(vector_t tokens)
     current_device->promisc_mode = true;
 }
 
+static void custom_mtu_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    int mtu = 0;
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+
+    assert(str);
+    mtu = atoi(str);
+    if (mtu <= 0 || mtu > NETIF_MAX_ETH_MTU) {
+        RTE_LOG(WARNING, NETIF, "invalid %s:MTU %s, using default %d\n",
+                current_device->name, str, NETIF_DEFAULT_ETH_MTU);
+        current_device->mtu= NETIF_DEFAULT_ETH_MTU;
+    } else {
+        RTE_LOG(INFO, NETIF, "%s:mtu = %d\n",
+                current_device->name, mtu);
+        current_device->mtu = mtu;
+    }
+
+    FREE_PTR(str);
+
+}
 static void kni_name_handler(vector_t tokens)
 {
     char *str = set_value(tokens);
@@ -811,6 +838,18 @@ static void cpu_id_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+static void cpu_icmp_redirect_handler(vector_t tokens)
+{
+    struct worker_conf_stream *current_worker = list_entry(worker_list.next,
+            struct worker_conf_stream, worker_list_node);
+
+    RTE_LOG(INFO, NETIF, "%s(%d) used to redirect icmp packets\n",
+        current_worker->name, current_worker->cpu_id);
+    g_icmp_redirect_lcore_id = current_worker->cpu_id;
+}
+#endif
+
 static void worker_port_handler(vector_t tokens)
 {
     assert(VECTOR_SIZE(tokens) >= 1);
@@ -979,6 +1018,7 @@ void install_netif_keywords(void)
     install_keyword("filter", fdir_filter_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
+    install_keyword("mtu", custom_mtu_handler,KW_TYPE_INIT);
     install_keyword("kni_name", kni_name_handler, KW_TYPE_INIT);
     install_keyword("kni_isolate", kni_isolate_handler, KW_TYPE_INIT);
     install_keyword("kni_ipaddress", NULL, KW_TYPE_INIT);
@@ -1000,6 +1040,9 @@ void install_netif_keywords(void)
     install_sublevel();
     install_keyword("type", worker_type_handler, KW_TYPE_INIT);
     install_keyword("cpu_id", cpu_id_handler, KW_TYPE_INIT);
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+    install_keyword("icmp_redirect_core", cpu_icmp_redirect_handler, KW_TYPE_INIT);
+#endif
     install_keyword("port", worker_port_handler, KW_TYPE_INIT);
     install_sublevel();
     install_keyword("rx_queue_ids", rx_queue_ids_handler, KW_TYPE_INIT);
@@ -1110,7 +1153,7 @@ __rte_unused static void pkt_send_back(struct rte_mbuf *mbuf, struct netif_port 
     ether_addr_copy(&ehdr->s_addr, &eaddr);
     ether_addr_copy(&ehdr->d_addr, &ehdr->s_addr);
     ether_addr_copy(&eaddr, &ehdr->d_addr);
-    netif_xmit(mbuf, port, 0);
+    netif_xmit(mbuf, port);
 }
 #endif
 
@@ -2189,7 +2232,7 @@ static int msg_type_master_xmit_cb(struct dpvs_msg *msg)
         //RTE_LOG(DEBUG, NETIF, "Xmit master packet on Slave lcore%u %s\n",
         //        rte_lcore_id(), data->dev->name);
         //fflush(stdout);
-        return netif_xmit(data->mbuf, data->dev, 0);
+        return netif_xmit(data->mbuf, data->dev);
     }
 
     return EDPVS_INVAL;
@@ -2245,7 +2288,7 @@ static inline int validate_xmit_mbuf(struct rte_mbuf *mbuf,
     return err;
 }
 
-int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     lcoreid_t cid;
     int pid, qindex;
@@ -2310,7 +2353,7 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
     //RTE_LOG(DEBUG, NETIF, "tx-queue hash(%x) = %d\n", ((uint32_t)mbuf->buf_physaddr) >> 8, qindex);
     txq = &lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].txqs[qindex];
 
-    /* Date plane traffic should be buffered for NETIF_MAX_PKT_BURST pkts to transmit. */
+    /* No space left in txq mbufs, transmit cached mbufs immediately */
     if (unlikely(txq->len == NETIF_MAX_PKT_BURST)) {
         netif_tx_burst(cid, pid, qindex);
         txq->len = 0;
@@ -2320,16 +2363,12 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
     txq->mbufs[txq->len] = mbuf;
     txq->len++;
 
-    /* Push the buffered packets to network immediately if tx flag `NETIF_TX_FLAG_PUSH` set. */
-    if (unlikely(flags & NETIF_TX_FLAG_PUSH)) {
-        netif_tx_burst(cid, pid, qindex);
-        txq->len = 0;
-    }
+    /* Cached mbufs transmit later in job `lcore_job_xmit` */
 
     return EDPVS_OK;
 }
 
-int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
+int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     int ret = EDPVS_OK;
     uint16_t mbuf_refcnt;
@@ -2353,7 +2392,7 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags)
             return ret;
     }
 
-    return netif_hard_xmit(mbuf, dev, flags);
+    return netif_hard_xmit(mbuf, dev);
 }
 
 static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
@@ -2808,7 +2847,7 @@ static inline void free_mbufs(struct rte_mbuf **pkts, unsigned num)
     }
 }
 
-static void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev)
+void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     if (!kni_dev_exist(dev))
         goto freepkt;
@@ -2828,7 +2867,6 @@ freepkt:
 static void kni_egress(struct netif_port *port)
 {
     unsigned i, npkts;
-    int txflags;
     struct rte_mbuf *kni_pkts_burst[NETIF_MAX_PKT_BURST];
 
     if (!kni_dev_exist(port))
@@ -2841,11 +2879,7 @@ static void kni_egress(struct netif_port *port)
     }
 
     for (i = 0; i < npkts; i++) {
-        if (unlikely(i == npkts - 1))
-            txflags = NETIF_TX_FLAG_PUSH;
-        else
-            txflags = 0;
-        if (unlikely(netif_xmit(kni_pkts_burst[i], port, txflags) != EDPVS_OK)) {
+        if (unlikely(netif_xmit(kni_pkts_burst[i], port) != EDPVS_OK)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
             RTE_LOG(INFO, NETIF, "%s: fail to transmit kni packet", __func__);
 #endif
@@ -2921,6 +2955,11 @@ void kni_lcore_loop(void *dummy)
     kni_ingress_process(KNI_FWD_MODE_ISOLATE_RX);
     kni_ingress_process(KNI_FWD_MODE_DEFAULT);
     kni_egress_process();
+
+    /* This is a lazy solution.
+     * `lcore_job_xmit` can be scheduled with an independent job on kni worker instead. */
+    if (g_kni_lcore_id != 0)
+        lcore_job_xmit(NULL);
 }
 
 /********************************************* port *************************************************/
@@ -3578,6 +3617,9 @@ static inline void port_mtu_set(struct netif_port *port)
             mtu = t_mtu;
     }
     port->mtu = mtu;
+
+    rte_eth_dev_set_mtu((uint8_t)port->id,port->mtu);
+
 }
 
 /*
@@ -3709,6 +3751,7 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         port->dev_conf.fdir_conf.mode = cfg_stream->fdir_mode;
         port->dev_conf.fdir_conf.pballoc = cfg_stream->fdir_pballoc;
         port->dev_conf.fdir_conf.status = cfg_stream->fdir_status;
+        port->mtu = cfg_stream->mtu;
 
         if (cfg_stream->rx_queue_nb > 0 && port->nrxq > cfg_stream->rx_queue_nb) {
             RTE_LOG(WARNING, NETIF, "%s: rx-queues(%d) configured in workers != "
@@ -3728,6 +3771,7 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         /* using default configurations */
         port->rxq_desc_nb = NETIF_NB_RX_DESC_DEF;
         port->txq_desc_nb = NETIF_NB_TX_DESC_DEF;
+        port->mtu = NETIF_DEFAULT_ETH_MTU;
     }
 
     if (port->type == PORT_TYPE_BOND_MASTER) {
@@ -3750,9 +3794,11 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         if (cfg_stream) {
             port->rxq_desc_nb = cfg_stream->rx_desc_nb;
             port->txq_desc_nb = cfg_stream->tx_desc_nb;
+            port->mtu = cfg_stream->mtu;
         } else {
             port->rxq_desc_nb = NETIF_NB_RX_DESC_DEF;
             port->txq_desc_nb = NETIF_NB_TX_DESC_DEF;
+            port->mtu = NETIF_DEFAULT_ETH_MTU;
         }
     }
     /* enable promicuous mode if configured */
@@ -3923,6 +3969,8 @@ int netif_port_start(struct netif_port *port)
 
     // device configure
     if ((ret = netif_port_fdir_dstport_mask_set(port)) != EDPVS_OK)
+        return ret;
+    if ((ret = rte_eth_dev_set_mtu(port->id,port->mtu)) != EDPVS_OK)
         return ret;
 
     if (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)

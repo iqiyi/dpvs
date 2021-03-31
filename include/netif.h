@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -47,10 +47,6 @@ enum {
     NETIF_PORT_FLAG_NO_ARP                  = (0x1<<12),
 };
 
-enum {
-    NETIF_TX_FLAG_PUSH                      = (0x1<<0),
-};
-
 /* max tx/rx queue number for each nic */
 #define NETIF_MAX_QUEUES            16
 /* invalid queue id for initial val */
@@ -70,6 +66,10 @@ enum {
 /* maximum number of DPDK rte device */
 #define NETIF_MAX_RTE_PORTS         64
 
+#define NETIF_MAX_ETH_MTU           9000
+#define NETIF_DEFAULT_ETH_MTU       1500
+
+
 #define NETIF_ALIGN                 32
 
 #define NETIF_PORT_ID_INVALID       0xFF
@@ -87,7 +87,6 @@ struct netif_queue_conf
 {
     queueid_t id;
     uint16_t len;
-    uint16_t kni_len;
     struct rx_partner *isol_rxq;
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
 } __rte_cache_aligned;
@@ -288,8 +287,8 @@ struct netif_port {
 } __rte_cache_aligned;
 
 /**************************** lcore API *******************************/
-int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags);
-int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev, int flags);
+int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
+int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
 int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf);
 int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
@@ -348,6 +347,7 @@ void netif_cfgfile_init(void);
 void netif_keyword_value_init(void);
 void install_netif_keywords(void);
 lcoreid_t netif_get_kni_lcore_id(void);
+void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev);
 
 static inline void *netif_priv(struct netif_port *dev)
 {

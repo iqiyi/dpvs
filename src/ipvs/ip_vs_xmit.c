@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -85,7 +85,7 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
-    err = netif_xmit(mbuf, conn->in_dev, 0);
+    err = netif_xmit(mbuf, conn->in_dev);
     if (err != EDPVS_OK)
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
 
@@ -138,7 +138,7 @@ static int __dp_vs_fast_xmit_fnat6(struct dp_vs_proto *proto,
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
-    err = netif_xmit(mbuf, conn->in_dev, 0);
+    err = netif_xmit(mbuf, conn->in_dev);
     if (err != EDPVS_OK)
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
 
@@ -207,7 +207,7 @@ static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
-    err = netif_xmit(mbuf, conn->out_dev, 0);
+    err = netif_xmit(mbuf, conn->out_dev);
     if (err != EDPVS_OK)
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
 
@@ -260,7 +260,7 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
-    err = netif_xmit(mbuf, conn->out_dev, 0);
+    err = netif_xmit(mbuf, conn->out_dev);
     if (err != EDPVS_OK)
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
 
@@ -1624,7 +1624,7 @@ static int dp_vs_fast_xmit_nat(struct dp_vs_proto *proto,
     eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
     mbuf->packet_type = ETHER_TYPE_IPv4;
 
-    err = netif_xmit(mbuf, conn->in_dev, 0);
+    err = netif_xmit(mbuf, conn->in_dev);
     if (err != EDPVS_OK)
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
 
@@ -1669,7 +1669,7 @@ static int dp_vs_fast_outxmit_nat(struct dp_vs_proto *proto,
     eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
     mbuf->packet_type = ETHER_TYPE_IPv4;
 
-    err = netif_xmit(mbuf, conn->out_dev, 0);
+    err = netif_xmit(mbuf, conn->out_dev);
     if (err != EDPVS_OK)
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
 

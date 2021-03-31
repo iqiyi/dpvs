@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -29,6 +29,7 @@
 #include "ipvs/sched.h"
 #include "ipvs/laddr.h"
 #include "ipvs/blklst.h"
+#include "ipvs/whtlst.h"
 #include "ctrl.h"
 #include "route.h"
 #include "route6.h"
@@ -638,6 +639,8 @@ static void __dp_vs_service_del(struct dp_vs_service *svc)
     dp_vs_laddr_flush(svc);
 
     dp_vs_blklst_flush(svc);
+
+    dp_vs_whtlst_flush(svc);
 
     /*
      *    Unlink the whole destination list

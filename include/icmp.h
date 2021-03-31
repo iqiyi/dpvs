@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -26,4 +26,9 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info);
 
 #define icmp4_id(icmph)      (((icmph)->un).echo.id)
 
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+int icmp_recv_proc(struct rte_mbuf *mbuf);
+void icmp_redirect_proc(void *args);
+extern lcoreid_t g_icmp_redirect_lcore_id;
+#endif
 #endif /* __DPVS_ICMP_H__ */

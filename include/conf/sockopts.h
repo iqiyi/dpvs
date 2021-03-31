@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -116,6 +116,12 @@ enum {
     SOCKOPT_TUNNEL_CHANGE,
     SOCKOPT_TUNNEL_REPLACE,
     SOCKOPT_TUNNEL_SHOW = 1200,
+
+    /* whtlst */
+    SOCKOPT_SET_WHTLST_ADD = 1300,
+    SOCKOPT_SET_WHTLST_DEL,
+    SOCKOPT_SET_WHTLST_FLUSH,
+    SOCKOPT_GET_WHTLST_GETALL = 1300,
 
     /* ipset */
     SOCKOPT_SET_IPSET_ADD  = 3300,

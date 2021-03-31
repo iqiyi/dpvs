@@ -1,7 +1,7 @@
 #
 # DPVS is a software load balancer (Virtual Server) based on DPDK.
 #
-# Copyright (C) 2017 iQIYI (www.iqiyi.com).
+# Copyright (C) 2021 iQIYI (www.iqiyi.com).
 # All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or
@@ -44,6 +44,7 @@ CFLAGS += -D DPVS_MAX_LCORE=64
 #CFLAGS += -D CONFIG_NDISC_DEBUG
 #CFLAGS += -D CONFIG_MSG_DEBUG
 #CFLAGS += -D CONFIG_DPVS_MP_DEBUG
+#CFLAGS += -D CONFIG_ICMP_REDIRECT_CORE
 
 ifeq ($(CONFIG_PDUMP), y)
 CFLAGS += -D CONFIG_DPVS_PDUMP

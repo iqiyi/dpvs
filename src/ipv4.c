@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -326,7 +326,7 @@ static int ip4_rcv_options(struct rte_mbuf *mbuf)
     return EDPVS_OK;
 }
 
-static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
+int ipv4_rcv_fin(struct rte_mbuf *mbuf)
 {
     int err;
     struct route_entry *rt = NULL;
@@ -378,6 +378,9 @@ drop:
 
 static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 {
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+        struct icmphdr *ich, _icmph;
+#endif
     struct ipv4_hdr *iph;
     uint16_t hlen, len;
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
@@ -430,6 +433,18 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 
     if (unlikely(iph->next_proto_id == IPPROTO_OSPF))
         return EDPVS_KNICONTINUE;
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+    else if (unlikely(iph->next_proto_id == IPPROTO_ICMP)) {
+        ich = mbuf_header_pointer(mbuf, hlen, sizeof(_icmph), &_icmph);
+        if (unlikely(!ich))
+            goto drop;
+        if (ich->type == ICMP_ECHOREPLY || ich->type == ICMP_ECHO) {
+            rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr));
+            icmp_recv_proc(mbuf);
+            return EDPVS_OK;
+        }
+    }
+#endif
 
     return INET_HOOK(AF_INET, INET_HOOK_PRE_ROUTING,
                      mbuf, port, NULL, ipv4_rcv_fin);
@@ -533,7 +548,7 @@ int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
     struct route_entry *rt;
     struct ipv4_hdr *iph;
 
-    if (!mbuf || !fl4 || fl4->fl4_saddr.s_addr == htonl(INADDR_ANY)) {
+    if (!mbuf || !fl4) {
         if (mbuf)
             rte_pktmbuf_free(mbuf);
         return EDPVS_INVAL;
