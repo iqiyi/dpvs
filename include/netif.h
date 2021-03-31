@@ -62,6 +62,10 @@ enum {
 /* maximum number of DPDK rte device */
 #define NETIF_MAX_RTE_PORTS         64
 
+#define NETIF_MAX_ETH_MTU           9000
+#define NETIF_DEFAULT_ETH_MTU       1500
+
+
 #define NETIF_ALIGN                 32
 
 #define NETIF_PORT_ID_INVALID       0xFF
