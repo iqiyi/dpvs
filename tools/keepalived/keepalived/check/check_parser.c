@@ -996,6 +996,9 @@ whtlst_gname_handler(const vector_t *strvec)
 static void
 tunnel_handler(const vector_t *strvec)
 {
+	if (!strvec)
+		return;
+
 	alloc_tunnel(vector_slot(strvec, 1));
 }
 

@@ -303,6 +303,22 @@ clear_service_vs(virtual_server_t * vs, bool stopping)
 	UNSET_ALIVE(vs);
 }
 
+static void
+clear_laddr_group(local_addr_group *laddr_group, virtual_server_t *vs)
+{
+	element e;
+	local_addr_entry *laddr_entry;
+
+	LIST_FOREACH(laddr_group->addr_ip, laddr_entry, e) {
+		if (!ipvs_laddr_remove_entry(vs, laddr_entry))
+			return;
+	}
+	LIST_FOREACH(laddr_group->range, laddr_entry, e) {
+		if (!ipvs_laddr_remove_entry(vs, laddr_entry))
+			return;
+	}
+}
+
 /* IPVS cleaner processing */
 void
 clear_services(void)
@@ -312,11 +328,15 @@ clear_services(void)
 
 	element e;
 	virtual_server_t *vs;
+	local_addr_group *laddr_group;
 
 	if (!check_data || !check_data->vs)
 		return;
 
 	LIST_FOREACH(check_data->vs, vs, e) {
+		laddr_group = ipvs_get_laddr_group_by_name(vs->local_addr_gname,
+										check_data->laddr_group);
+		clear_laddr_group(laddr_group, vs);
 		/* Remove the real servers, and clear the vs unless it is
 		 * using a VS group and it is not the last vs of the same
 		 * protocol or address family using the group. */
@@ -324,7 +344,6 @@ clear_services(void)
 	}
 }
 
-/* Set a realserver IPVS rules */
 static bool
 init_service_rs(virtual_server_t * vs)
 {
@@ -1470,3 +1489,13 @@ int clear_diff_tunnel(void)
 	return IPVS_SUCCESS;
 }
 
+void 
+clear_tunnels(void)
+{
+	element e;
+	tunnel_group *group;
+	
+	LIST_FOREACH(check_data->tunnel_group, group, e) {
+		clear_tunnel_group(group);
+	}
+}
