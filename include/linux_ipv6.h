@@ -266,18 +266,6 @@ static inline int ipv6_addr_cmp(const struct in6_addr *a1, const struct in6_addr
     return memcmp(a1, a2, sizeof(struct in6_addr));
 }
 
-static inline int ipv6_addr_cmp_u128(const struct in6_addr *a1, const struct in6_addr *a2)
-{
-    uint8_t *p1, *p2;
-
-    for (p1 = (uint8_t *)a1, p2 = (uint8_t *)a2; p1 - (uint8_t *)a1 < 16; p1++, p2++) {
-        if (*p1 != *p2)
-            return *p1 > *p2 ? 1 : -1;
-    }
-
-    return 0;
-}
-
 static inline bool
 ipv6_masked_addr_cmp(const struct in6_addr *a1, const struct in6_addr *m,
              const struct in6_addr *a2)

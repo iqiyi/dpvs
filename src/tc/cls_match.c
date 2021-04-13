@@ -119,14 +119,14 @@ l2parse:
 
         ip6h = rte_pktmbuf_mtod_offset(mbuf, struct ip6_hdr *, offset);
         if (!ipv6_addr_any(&m->srange.max_addr.in6)) {
-            if (ipv6_addr_cmp_u128(&ip6h->ip6_src, &m->srange.min_addr.in6) < 0 ||
-                    ipv6_addr_cmp_u128(&ip6h->ip6_src, &m->srange.max_addr.in6) > 0)
+            if (ipv6_addr_cmp(&ip6h->ip6_src, &m->srange.min_addr.in6) < 0 ||
+                    ipv6_addr_cmp(&ip6h->ip6_src, &m->srange.max_addr.in6) > 0)
                 goto done;
         }
 
         if (!ipv6_addr_any(&m->drange.max_addr.in6)) {
-            if (ipv6_addr_cmp_u128(&ip6h->ip6_dst, &m->drange.min_addr.in6) < 0 ||
-                    ipv6_addr_cmp_u128(&ip6h->ip6_dst, &m->drange.max_addr.in6) > 0)
+            if (ipv6_addr_cmp(&ip6h->ip6_dst, &m->drange.min_addr.in6) < 0 ||
+                    ipv6_addr_cmp(&ip6h->ip6_dst, &m->drange.max_addr.in6) > 0)
                 goto done;
         }
 
