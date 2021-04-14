@@ -31,27 +31,43 @@ static void log_current_time(void)
     RTE_LOG(INFO, CFG_FILE, "load dpvs configuation file at %s\n", buf);
 }
 
+static inline void set_log_level_dynamic_types(const char *regex, uint32_t level)
+{
+#if RTE_VERSION >= RTE_VERSION_NUM(17, 5, 0, 0)
+    rte_log_set_level_regexp(regex, level);
+#endif
+}
+
 static int set_log_level(char *log_level)
 {
-    if (!log_level)
+    if (!log_level) {
         rte_log_set_global_level(RTE_LOG_DEBUG);
-    else if (!strncmp(log_level, "EMERG", strlen("EMERG")))
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_DEBUG);
+    } else if (!strncmp(log_level, "EMERG", strlen("EMERG"))) {
         rte_log_set_global_level(RTE_LOG_EMERG);
-    else if (!strncmp(log_level, "ALERT", strlen("ALERT")))
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_EMERG);
+    } else if (!strncmp(log_level, "ALERT", strlen("ALERT"))) {
         rte_log_set_global_level(RTE_LOG_ALERT);
-    else if (!strncmp(log_level, "CRIT", strlen("CRIT")))
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_ALERT);
+    } else if (!strncmp(log_level, "CRIT", strlen("CRIT"))) {
         rte_log_set_global_level(RTE_LOG_CRIT);
-    else if (!strncmp(log_level, "ERR", strlen("ERR")))
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_CRIT);
+    } else if (!strncmp(log_level, "ERR", strlen("ERR"))) {
         rte_log_set_global_level(RTE_LOG_ERR);
-    else if (!strncmp(log_level, "WARNING", strlen("WARNING")))
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_ERR);
+    } else if (!strncmp(log_level, "WARNING", strlen("WARNING"))) {
         rte_log_set_global_level(RTE_LOG_WARNING);
-    else if (!strncmp(log_level, "NOTICE", strlen("NOTICE")))
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_WARNING);
+    } else if (!strncmp(log_level, "NOTICE", strlen("NOTICE"))) {
         rte_log_set_global_level(RTE_LOG_NOTICE);
-    else if (!strncmp(log_level, "INFO", strlen("INFO")))
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_NOTICE);
+    } else if (!strncmp(log_level, "INFO", strlen("INFO"))) {
         rte_log_set_global_level(RTE_LOG_INFO);
-    else if (!strncmp(log_level, "DEBUG", strlen("DEBUG")))
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_INFO);
+    } else if (!strncmp(log_level, "DEBUG", strlen("DEBUG"))) {
         rte_log_set_global_level(RTE_LOG_DEBUG);
-    else {
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_DEBUG);
+    } else {
         RTE_LOG(WARNING, CFG_FILE, "%s: illegal log level: %s\n",
                 __func__, log_level);
         return EDPVS_INVAL;
