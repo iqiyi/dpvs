@@ -22,6 +22,7 @@
  */
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/ip6.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include "netif.h"
@@ -29,6 +30,8 @@
 #include "tc/tc.h"
 #include "tc/sch.h"
 #include "tc/cls.h"
+#include "linux_ipv6.h"
+#include "ipv6.h"
 #include "conf/match.h"
 #include "conf/tc.h"
 
@@ -48,8 +51,10 @@ static int match_classify(struct tc_cls *cls, struct rte_mbuf *mbuf,
     struct dp_vs_match *m = &priv->match;
     struct ether_hdr *eh = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
     struct iphdr *iph = NULL;
+    struct ip6_hdr *ip6h = NULL;
     struct tcphdr *th;
     struct udphdr *uh;
+    uint8_t l4_proto = 0;
     int offset = sizeof(*eh);
     __be16 pkt_type = eh->ether_type;
     __be16 sport, dport;
@@ -77,6 +82,9 @@ static int match_classify(struct tc_cls *cls, struct rte_mbuf *mbuf,
 l2parse:
     switch (ntohs(pkt_type)) {
     case ETH_P_IP:
+        if (m->af != AF_INET && m->af != AF_UNSPEC)
+            goto done;
+
         if (mbuf_may_pull(mbuf, offset + sizeof(struct iphdr)) != 0) {
             err = TC_ACT_SHOT;
             goto done;
@@ -97,7 +105,37 @@ l2parse:
                 goto done;
         }
 
+        l4_proto = iph->protocol;
         offset += (iph->ihl << 2);
+        break;
+
+    case ETH_P_IPV6:
+        if (m->af != AF_INET6 && m->af != AF_UNSPEC)
+            goto done;
+        if (mbuf_may_pull(mbuf, offset + sizeof(struct ip6_hdr)) != 0) {
+            err = TC_ACT_SHOT;
+            goto done;
+        }
+
+        ip6h = rte_pktmbuf_mtod_offset(mbuf, struct ip6_hdr *, offset);
+        if (!ipv6_addr_any(&m->srange.max_addr.in6)) {
+            if (ipv6_addr_cmp(&ip6h->ip6_src, &m->srange.min_addr.in6) < 0 ||
+                    ipv6_addr_cmp(&ip6h->ip6_src, &m->srange.max_addr.in6) > 0)
+                goto done;
+        }
+
+        if (!ipv6_addr_any(&m->drange.max_addr.in6)) {
+            if (ipv6_addr_cmp(&ip6h->ip6_dst, &m->drange.min_addr.in6) < 0 ||
+                    ipv6_addr_cmp(&ip6h->ip6_dst, &m->drange.max_addr.in6) > 0)
+                goto done;
+        }
+
+        l4_proto = ip6h->ip6_nxt;
+        offset = ip6_skip_exthdr(mbuf, offset + sizeof(struct ip6_hdr), &l4_proto);
+        if (offset < 0) {
+            err = TC_ACT_SHOT;
+            goto done;
+        }
         break;
 
     case ETH_P_8021Q:
@@ -111,10 +149,10 @@ l2parse:
     }
 
     /* check if protocol matches */
-    if (priv->proto && priv->proto != iph->protocol)
+    if (priv->proto && l4_proto && priv->proto != l4_proto)
         goto done;
 
-    switch (iph->protocol) {
+    switch (l4_proto) {
     case IPPROTO_TCP:
         if (mbuf_may_pull(mbuf, offset + sizeof(struct tcphdr)) != 0) {
             err = TC_ACT_SHOT;
@@ -161,17 +199,22 @@ match:
 
 done:
 #if defined(CONFIG_TC_DEBUG)
-    if (iph) {
+    if (iph || ip6h) {
         char sip[64], dip[64];
         char cls_id[16], qsch_id[16];
 
-        inet_ntop(AF_INET, &iph->saddr, sip, sizeof(sip));
-        inet_ntop(AF_INET, &iph->daddr, dip, sizeof(dip));
+        if (ip6h) {
+            inet_ntop(AF_INET6, &ip6h->ip6_src, sip, sizeof(sip));
+            inet_ntop(AF_INET6, &ip6h->ip6_dst, dip, sizeof(dip));
+        } else {
+            inet_ntop(AF_INET, &iph->saddr, sip, sizeof(sip));
+            inet_ntop(AF_INET, &iph->daddr, dip, sizeof(dip));
+        }
         tc_handle_itoa(cls->handle, cls_id, sizeof(cls_id));
         tc_handle_itoa(priv->result.sch_id, qsch_id, sizeof(qsch_id));
 
         RTE_LOG(DEBUG, TC, "cls %s %s %s:%u -> %s:%u %s %s\n",
-                cls_id, inet_proto_name(iph->protocol),
+                cls_id, inet_proto_name(l4_proto),
                 sip, sport, dip, dport,
                 (err == TC_ACT_OK ? "target" : "miss"),
                 (err == TC_ACT_OK ? \
@@ -193,25 +236,40 @@ static int match_init(struct tc_cls *cls, const void *arg)
     if (copt->proto)
         priv->proto = copt->proto;
 
+    if (copt->match.af)
+        priv->match.af = copt->match.af;
+
     if (strlen(copt->match.iifname))
         snprintf(priv->match.iifname, IFNAMSIZ, "%s", copt->match.iifname);
 
     if (strlen(copt->match.oifname))
         snprintf(priv->match.oifname, IFNAMSIZ, "%s", copt->match.oifname);
 
-    if (ntohl(copt->match.srange.max_addr.in.s_addr) != INADDR_ANY) {
-        priv->match.srange.min_addr = copt->match.srange.min_addr;
-        priv->match.srange.max_addr = copt->match.srange.max_addr;
+    if (copt->match.af == AF_INET6) {
+        if (!ipv6_addr_any(&copt->match.srange.max_addr.in6)) {
+            priv->match.srange.min_addr = copt->match.srange.min_addr;
+            priv->match.srange.max_addr = copt->match.srange.max_addr;
+        }
+
+        if (!ipv6_addr_any(&copt->match.drange.max_addr.in6)) {
+            priv->match.drange.min_addr = copt->match.drange.min_addr;
+            priv->match.drange.max_addr = copt->match.drange.max_addr;
+        }
+    } else { /* ipv4 by default */
+        if (ntohl(copt->match.srange.max_addr.in.s_addr) != INADDR_ANY) {
+            priv->match.srange.min_addr = copt->match.srange.min_addr;
+            priv->match.srange.max_addr = copt->match.srange.max_addr;
+        }
+
+        if (ntohl(copt->match.drange.max_addr.in.s_addr) != INADDR_ANY) {
+            priv->match.drange.min_addr = copt->match.drange.min_addr;
+            priv->match.drange.max_addr = copt->match.drange.max_addr;
+        }
     }
 
     if (ntohs(copt->match.srange.max_port)) {
         priv->match.srange.min_port = copt->match.srange.min_port;
         priv->match.srange.max_port = copt->match.srange.max_port;
-    }
-
-    if (ntohl(copt->match.drange.max_addr.in.s_addr) != INADDR_ANY) {
-        priv->match.drange.min_addr = copt->match.drange.min_addr;
-        priv->match.drange.max_addr = copt->match.drange.max_addr;
     }
 
     if (ntohs(copt->match.drange.max_port)) {
@@ -222,7 +280,7 @@ static int match_init(struct tc_cls *cls, const void *arg)
     if (copt->result.drop) {
         priv->result.drop = copt->result.drop;
     } else {
-        /* 0: (TC_H_UNSPEC) is valid handle but not valid target */
+        /* 0: (TC_H_UNSPEC) is not valid target */
         if (copt->result.sch_id != TC_H_UNSPEC) {
             priv->result.sch_id = copt->result.sch_id;
             priv->result.drop = false; /* exclusive with sch_id */

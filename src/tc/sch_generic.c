@@ -26,19 +26,17 @@
 #include "netif.h"
 #include "tc/tc.h"
 #include "tc/sch.h"
+#include "scheduler.h"
 
 /* may configurable in the future. */
 static int dev_tx_weight = 64;
-static int qsch_recycle_timeout = 5;
+
+static struct list_head qsch_head[DPVS_MAX_LCORE];
+#define this_qsch_head qsch_head[rte_lcore_id()]
 
 static inline int sch_hash(tc_handle_t handle, int hash_size)
 {
     return handle % hash_size;
-}
-
-static inline int sch_qlen(struct Qsch *sch)
-{
-    return sch->this_q.qlen;
 }
 
 /* return current queue length (num of packets in queue),
@@ -52,72 +50,35 @@ static inline int sch_dequeue_xmit(struct Qsch *sch, int *npkt)
     if (unlikely(!mbuf))
         return 0;
 
-    netif_hard_xmit(mbuf, netif_port_get(mbuf->port));
-    return sch_qlen(sch);
+    if (sch->flags & QSCH_F_INGRESS)
+        netif_rcv_mbuf(sch->tc->dev, rte_lcore_id(), mbuf, false);
+    else
+        netif_hard_xmit(mbuf, sch->tc->dev);
+
+    return sch->q.qlen;
 }
 
 static inline struct Qsch *sch_alloc(struct netif_tc *tc, struct Qsch_ops *ops)
 {
     struct Qsch *sch;
     unsigned int size = TC_ALIGN(sizeof(*sch)) + ops->priv_size;
-    lcoreid_t cid;
 
     sch = rte_zmalloc(NULL, size, RTE_CACHE_LINE_SIZE);
     if (!sch)
         return NULL;
 
-    for (cid = 0; cid < NELEMS(sch->q); cid++)
-        tc_mbuf_head_init(&sch->q[cid]);
-
+    tc_mbuf_head_init(&sch->q);
     INIT_LIST_HEAD(&sch->cls_list);
     INIT_HLIST_NODE(&sch->hlist);
+
     sch->tc = tc;
     sch->ops = ops;
-    rte_atomic32_set(&sch->refcnt, 1);
+    sch->refcnt = 1;
 
     return sch;
 }
 
-static inline void sch_free(struct Qsch *sch)
-{
-    rte_free(sch);
-}
-
-static void __qsch_destroy(struct Qsch *sch)
-{
-    struct Qsch_ops *ops = sch->ops;
-
-    if (ops->reset)
-        ops->reset(sch);
-    if (ops->destroy)
-        ops->destroy(sch);
-
-    tc_qsch_ops_put(ops);
-    sch_free(sch);
-}
-
-static int sch_recycle(void *arg)
-{
-    struct Qsch *sch = arg;
-
-    if (rte_atomic32_read(&sch->refcnt)) {
-        dpvs_timer_reset_nolock(&sch->rc_timer, true);
-        RTE_LOG(WARNING, TC, "%s: sch %u is in use.\n", __func__, sch->handle);
-        return DTIMER_OK;
-    }
-
-    __qsch_destroy(sch);
-    return DTIMER_STOP;
-}
-
-static void sch_dying(struct Qsch *sch)
-{
-    struct timeval timeout = { qsch_recycle_timeout, 0 };
-
-    dpvs_timer_sched(&sch->rc_timer, &timeout, sch_recycle, sch, true);
-}
-
-static inline tc_handle_t sch_alloc_handle(struct netif_port *dev)
+tc_handle_t sch_alloc_handle(struct netif_tc *tc)
 {
     int i = 0x8000;
     static uint32_t autohandle = TC_H_MAKE(0x80000000U, 0);
@@ -126,9 +87,9 @@ static inline tc_handle_t sch_alloc_handle(struct netif_port *dev)
         autohandle += TC_H_MAKE(0x10000U, 0);
         if (autohandle == TC_H_MAKE(TC_H_ROOT, 0))
             autohandle = TC_H_MAKE(0x80000000U, 0);
-        if (!qsch_lookup_noref(&dev->tc, autohandle))
+        if (!qsch_lookup_noref(tc, autohandle))
             return autohandle;
-    } while    (--i > 0);
+    } while (--i > 0);
 
     return 0;
 }
@@ -139,61 +100,56 @@ struct Qsch *qsch_create(struct netif_port *dev, const char *kind,
 {
     int err;
     struct Qsch_ops *ops = NULL;
-    struct Qsch *sch = NULL;
+    struct Qsch *sch = NULL, *psch = NULL;
     struct netif_tc *tc = netif_tc(dev);
     assert(dev && kind && errp);
 
-    err = EDPVS_NOTSUPP;
+    err = EDPVS_INVAL;
     ops = tc_qsch_ops_lookup(kind);
-    if (!ops)
+    if (!ops) {
+        err = EDPVS_NOTSUPP;
         goto errout;
+    }
 
-    err = EDPVS_NOMEM;
     sch = sch_alloc(tc, ops);
-    if (!sch)
+    if (!sch) {
+        err = EDPVS_NOMEM;
         goto errout;
+    }
 
+    if (parent != 0) {
+        psch = qsch_lookup_noref(tc, parent);
+        if (!psch) {
+            err = EDPVS_NOTEXIST;
+            goto errout;
+        }
+    }
     sch->parent = parent;
 
     if (handle == TC_H_INGRESS) {
         sch->flags |= QSCH_F_INGRESS;
-        handle = TC_H_MAKE(TC_H_INGRESS, 0);
-
-        /* already exist ? */
         if (tc->qsch_ingress) {
             err = EDPVS_EXIST;
             goto errout;
         }
-    } else { /* egress */
-        struct Qsch *q;
-
-        if (handle == 0) {
-            handle = sch_alloc_handle(dev);
-            if (!handle)
-                goto errout;
-        }
-
-        /* already exist ? */
-        q = qsch_lookup_noref(tc, handle);
-        if (q) {
+    } else if (handle == TC_H_ROOT) {
+        if (tc->qsch) {
             err = EDPVS_EXIST;
             goto errout;
         }
-
-        /* if use this API, parent must not be root
-         * and must be exist */
-        if (parent == TC_H_ROOT) {
+    } else {
+        if (handle == 0 || parent == 0) {
             err = EDPVS_INVAL;
             goto errout;
-        } else {
-            q = qsch_lookup_noref(tc, parent);
-            if (!q) {
-                err = EDPVS_NOTEXIST;
-                goto errout;
-            }
+        }
+
+        sch->flags |= (psch->flags & QSCH_F_INGRESS);
+
+        if (qsch_lookup_noref(tc, handle)) {
+            err = EDPVS_EXIST;
+            goto errout;
         }
     }
-
     sch->handle = handle;
 
     if (ops->init && (err = ops->init(sch, arg)) != EDPVS_OK) {
@@ -202,69 +158,22 @@ struct Qsch *qsch_create(struct netif_port *dev, const char *kind,
         goto errout;
     }
 
-    if (sch->flags & QSCH_F_INGRESS) {
-        tc->qsch_ingress = sch;
-        sch->tc->qsch_cnt++;
-    } else
-        qsch_hash_add(sch, false);
+    qsch_hash_add(sch, false);
+
     *errp = EDPVS_OK;
     return sch;
 
 errout:
     if (sch)
         sch_free(sch);
-    if (ops)
-        tc_qsch_ops_put(ops);
     *errp = err;
     return NULL;
 }
 
-struct Qsch *qsch_create_dflt(struct netif_port *dev, struct Qsch_ops *ops,
-                              tc_handle_t parent)
-{
-    int err;
-    struct Qsch *sch;
-    assert(dev && ops);
-
-    tc_qsch_ops_get(ops);
-
-    sch = sch_alloc(&dev->tc, ops);
-    if (!sch) {
-        tc_qsch_ops_put(ops);
-        return NULL;
-    }
-
-    sch->parent = parent;
-
-    if (ops->init && (err = ops->init(sch, NULL)) != EDPVS_OK) {
-        tc_qsch_ops_put(ops);
-        qsch_destroy(sch);
-        return NULL;
-    }
-
-    return sch;
-}
-
 void qsch_destroy(struct Qsch *sch)
 {
-    if (sch->flags & QSCH_F_INGRESS) {
-        assert(sch->tc->qsch_ingress == sch);
-        sch->tc->qsch_ingress = NULL;
-        sch->tc->qsch_cnt--;
-    } else if (sch == sch->tc->qsch) {
-        sch->tc->qsch = NULL;
-        sch->tc->qsch_cnt--;
-    } else {
-        qsch_hash_del(sch);
-    }
-
-    if (!rte_atomic32_dec_and_test(&sch->refcnt)) {
-        RTE_LOG(WARNING, TC, "%s: sch %u is in use.\n", __func__, sch->handle);
-        sch_dying(sch);
-        return;
-    }
-
-    __qsch_destroy(sch);
+    qsch_hash_del(sch);
+    qsch_put(sch);
 }
 
 int qsch_change(struct Qsch *sch, const void *arg)
@@ -275,27 +184,22 @@ int qsch_change(struct Qsch *sch, const void *arg)
     return sch->ops->change(sch, arg);
 }
 
-void qsch_reset(struct Qsch *sch)
-{
-    lcoreid_t cid;
-
-    if (sch->ops->reset)
-        sch->ops->reset(sch);
-
-    for (cid = 0; cid < NELEMS(sch->q); cid++)
-        sch->q[cid].qlen = 0;
-}
-
 void qsch_hash_add(struct Qsch *sch, bool invisible)
 {
     int hash;
     assert(sch && sch->tc && sch->tc->qsch_hash);
 
-    if (sch->parent == TC_H_ROOT || (sch->flags & QSCH_F_INGRESS))
-        return;
+    if (sch->handle == TC_H_INGRESS) {
+        sch->tc->qsch_ingress = sch;
+    } else if (sch->handle == TC_H_ROOT) {
+        sch->tc->qsch= sch;
+    } else {
+        hash = sch_hash(sch->handle, sch->tc->qsch_hash_size);
+        hlist_add_head(&sch->hlist, &sch->tc->qsch_hash[hash]);
+    }
 
-    hash = sch_hash(sch->handle, sch->tc->qsch_hash_size);
-    hlist_add_head(&sch->hlist, &sch->tc->qsch_hash[hash]);
+    list_add_tail(&sch->list_node, &this_qsch_head);
+
     sch->tc->qsch_cnt++;
 
     if (invisible)
@@ -306,10 +210,16 @@ void qsch_hash_del(struct Qsch *sch)
 {
     assert(sch && sch->tc && sch->tc->qsch_hash);
 
-    if (sch->parent == TC_H_ROOT || (sch->flags & QSCH_F_INGRESS))
-        return;
+    if (sch == sch->tc->qsch_ingress) {
+        sch->tc->qsch_ingress = NULL;
+    } else if (sch == sch->tc->qsch) {
+        sch->tc->qsch = NULL;
+    } else {
+        hlist_del_init(&sch->hlist);
+    }
 
-    hlist_del_init(&sch->hlist);
+    list_del(&sch->list_node);
+
     sch->tc->qsch_cnt--;
 }
 
@@ -319,17 +229,17 @@ struct Qsch *qsch_lookup_noref(const struct netif_tc *tc, tc_handle_t handle)
     struct Qsch *sch;
     assert(tc->qsch_hash && tc->qsch_hash_size);
 
-    if (likely(tc->qsch && tc->qsch->handle == handle))
+    if (tc->qsch && tc->qsch->handle == handle)
         return tc->qsch;
-
-    hash = sch_hash(handle, tc->qsch_hash_size);
-    hlist_for_each_entry(sch, &tc->qsch_hash[hash], hlist) {
-        if (likely(sch->handle == handle))
-            return sch;
-    }
 
     if (tc->qsch_ingress && tc->qsch_ingress->handle == handle)
         return tc->qsch_ingress;
+
+    hash = sch_hash(handle, tc->qsch_hash_size);
+    hlist_for_each_entry(sch, &tc->qsch_hash[hash], hlist) {
+        if (sch->handle == handle)
+            return sch;
+    }
 
     return NULL;
 }
@@ -354,4 +264,52 @@ void qsch_do_sched(struct Qsch *sch)
         quota -= npkt;
 
     return;
+}
+
+static void qsch_sched_all(void *dummy)
+{
+    struct Qsch *sch;
+    lcoreid_t cid = rte_lcore_id();
+
+    list_for_each_entry(sch, &qsch_head[cid], list_node) {
+        if (sch->flags & QSCH_F_INGRESS) {
+            if (sch->tc->dev->flag & NETIF_PORT_FLAG_TC_INGRESS)
+                qsch_do_sched(sch);
+        } else {
+            if (sch->tc->dev->flag & NETIF_PORT_FLAG_TC_EGRESS)
+                qsch_do_sched(sch);
+        }
+    }
+}
+
+static struct dpvs_lcore_job qsch_sched_job = {
+    .name = "qsch_sched",
+    .func = qsch_sched_all,
+    .data = NULL,
+    .type = LCORE_JOB_LOOP,
+};
+
+int qsch_init(void)
+{
+    int i, err;
+
+    for (i = 0; i < DPVS_MAX_LCORE; i++)
+        INIT_LIST_HEAD(&qsch_head[i]);
+
+    err = dpvs_lcore_job_register(&qsch_sched_job, LCORE_ROLE_FWD_WORKER);
+    if (err != EDPVS_OK)
+        return err;
+
+    return qsch_shm_init();
+}
+
+int qsch_term(void)
+{
+    int err;
+
+    err = dpvs_lcore_job_unregister(&qsch_sched_job, LCORE_ROLE_FWD_WORKER);
+    if (err != EDPVS_OK)
+        return err;
+
+    return qsch_shm_term();
 }

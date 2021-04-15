@@ -39,7 +39,7 @@ static void cls_help(void)
         "             [ CLS_TYPE [ COPTIONS ] ]\n"
         "\n"
         "Parameters:\n"
-        "    PKTTYPE    := { ipv4 | vlan }\n"
+        "    PKTTYPE    := { ipv4 | ipv6 | vlan }\n"
         "    CLS_TYPE   := { match }\n"
         "    COPTIONS   := { MATCH_OPTS }\n"
         "    PRIO       := NUMBER\n"
@@ -67,15 +67,19 @@ static void cls_help(void)
         );
 }
 
-static void cls_dump_param(const char *ifname, const union tc_param *param)
+static void cls_dump_param(const char *ifname, const union tc_param *param,
+                           bool stats, bool verbose)
 {
     const struct tc_cls_param *cls = &param->cls;
     char handle[16], sch_id[16];
 
-    printf("cls %s %s dev %s %s pkttype 0x%04x prio %d ",
+    if (verbose)
+        printf("[%02d] ", cls->cid);
+
+    printf("cls %s %s dev %s qsch %s pkttype 0x%04x prio %d ",
            cls->kind, tc_handle_itoa(cls->handle, handle, sizeof(handle)),
            ifname, tc_handle_itoa(cls->sch_id, sch_id, sizeof(sch_id)),
-           cls->pkt_type, cls->priority);
+           ntohs(cls->pkt_type), cls->priority);
 
     if (strcmp(cls->kind, "match") == 0) {
         char result[32], patt[256], target[16];
@@ -102,9 +106,9 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
     memset(param, 0, sizeof(*param));
 
     /* default values */
-    param->pkt_type = ETH_P_IP;
+    param->pkt_type = htons(ETH_P_IP);
     param->handle = TC_H_UNSPEC;
-    param->sch_id = TC_H_ROOT; /* invalid qsch handle */
+    param->sch_id = TC_H_ROOT;
     param->priority = 0;
 
     while (cf->argc > 0) {
@@ -120,9 +124,11 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
         } else if (strcmp(CURRARG(cf), "pkttype") == 0) {
             NEXTARG_CHECK(cf, CURRARG(cf));
             if (strcasecmp(CURRARG(cf), "ipv4") == 0)
-                param->pkt_type = ETH_P_IP;
+                param->pkt_type = htons(ETH_P_IP);
+            else if (strcasecmp(CURRARG(cf), "ipv6") == 0)
+                param->pkt_type = htons(ETH_P_IPV6);
             else if (strcasecmp(CURRARG(cf), "vlan") == 0)
-                param->pkt_type = ETH_P_8021Q;
+                param->pkt_type = htons(ETH_P_8021Q);
             else {
                 fprintf(stderr, "pkttype not support\n");
                 return EDPVS_INVAL;
@@ -151,7 +157,7 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
                         m->result.sch_id = tc_handle_atoi(CURRARG(cf));
                 }
             } else {
-                fprintf(stderr, "invalid/miss cls type: `%s'\n", param->kind);
+                fprintf(stderr, "invalid/miss cls type: '%s'\n", param->kind);
                 return EDPVS_INVAL;
             }
         }
@@ -235,6 +241,12 @@ static int cls_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
     int err, i;
     size_t size;
 
+    if (conf->stats)
+        tc_conf->op_flags |= TC_F_OPS_STATS;
+
+    if (conf->verbose)
+        tc_conf->op_flags |= TC_F_OPS_VERBOSE;
+
     switch (cmd) {
     case DPIP_CMD_ADD:
         return dpvs_setsockopt(SOCKOPT_TC_ADD, tc_conf,
@@ -261,7 +273,7 @@ static int cls_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         }
 
         for (i = 0; i < size / sizeof(*params); i++)
-            cls_dump_param(tc_conf->ifname, &params[i]);
+            cls_dump_param(tc_conf->ifname, &params[i], conf->stats, conf->verbose);
 
         dpvs_sockopt_msg_free(params);
         return EDPVS_OK;

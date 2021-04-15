@@ -39,7 +39,7 @@ static void qsch_help(void)
         "              [ QSCH_KIND [ QOPTIONS ] ]\n"
         "\n"
         "Parameters:\n"
-        "    QSCH_KIND := { [b|p]fifo | tbf }\n"
+        "    QSCH_KIND := { [b|p]fifo | pfifo_fast | tbf }\n"
         "    QOPTIONS  := { FIFO_OPTS | TBF_OPTS }\n"
         "    FIFO_OPTS := [ limit NUMBER ]\n"
         "    TBF_OPTS  := rate RATE burst BYTES { latency MS | limit BYTES }\n"
@@ -134,15 +134,17 @@ static int qsch_parse(struct dpip_obj *obj, struct dpip_conf *cf)
             NEXTARG_CHECK(cf, CURRARG(cf));
             param->handle = tc_handle_atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "root") == 0) {
-            param->where = TC_H_ROOT;
+            param->handle = TC_H_ROOT;
+            param->where = TC_H_UNSPEC;
         } else if (strcmp(CURRARG(cf), "ingress") == 0) {
-            param->where = TC_H_INGRESS;
             param->handle = TC_H_INGRESS;
+            param->where = TC_H_UNSPEC;
         } else if (strcmp(CURRARG(cf), "parent") == 0) {
             NEXTARG_CHECK(cf, CURRARG(cf));
             param->where = tc_handle_atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "bfifo") == 0 ||
                    strcmp(CURRARG(cf), "pfifo") == 0 ||
+                   strcmp(CURRARG(cf), "pfifo_fast") == 0 ||
                    strcmp(CURRARG(cf), "tbf") == 0) {
             snprintf(param->kind, TCNAMESIZ, "%s", CURRARG(cf));
         } else { /* kind must be set ahead then QOPTIONS */
@@ -151,7 +153,7 @@ static int qsch_parse(struct dpip_obj *obj, struct dpip_conf *cf)
                     NEXTARG_CHECK(cf, CURRARG(cf));
                     param->qopt.fifo.limit = atoi(CURRARG(cf));
                 } else {
-                    fprintf(stderr, "invalid option for %s: `%s'\n",
+                    fprintf(stderr, "invalid option for %s: '%s'\n",
                             param->kind, CURRARG(cf));
                     return EDPVS_INVAL;
                 }
@@ -160,7 +162,7 @@ static int qsch_parse(struct dpip_obj *obj, struct dpip_conf *cf)
                     NEXTARG_CHECK(cf, CURRARG(cf));
                     param->qopt.tbf.rate.rate = rate_atoi(CURRARG(cf));
                     if (!param->qopt.tbf.rate.rate) {
-                        fprintf(stderr, "invalid rate: `%s'\n", CURRARG(cf));
+                        fprintf(stderr, "invalid rate: '%s'\n", CURRARG(cf));
                         return EDPVS_INVAL;
                     }
                 } else if (strcmp(CURRARG(cf), "burst") == 0) {
@@ -184,7 +186,7 @@ static int qsch_parse(struct dpip_obj *obj, struct dpip_conf *cf)
                     NEXTARG_CHECK(cf, CURRARG(cf));
                     param->qopt.tbf.peakrate.rate = rate_atoi(CURRARG(cf));
                     if (!param->qopt.tbf.peakrate.rate) {
-                        fprintf(stderr, "invalid peakrate: `%s'\n",
+                        fprintf(stderr, "invalid peakrate: '%s'\n",
                                 CURRARG(cf));
                         return EDPVS_INVAL;
                     }
@@ -192,12 +194,14 @@ static int qsch_parse(struct dpip_obj *obj, struct dpip_conf *cf)
                     NEXTARG_CHECK(cf, CURRARG(cf));
                     param->qopt.tbf.mtu = atoi(CURRARG(cf));
                 } else {
-                    fprintf(stderr, "invalid option for %s: `%s'\n",
+                    fprintf(stderr, "invalid option for %s: '%s'\n",
                             param->kind, CURRARG(cf));
                     return EDPVS_INVAL;
                 }
+            } else if (strcmp(param->kind, "pfifo_fast") == 0) {
+                ; // pfifo_fast doesn't have any param
             } else {
-                fprintf(stderr, "invalid/miss qsch kind: `%s'\n", param->kind);
+                fprintf(stderr, "invalid/miss qsch kind: '%s'\n", param->kind);
                 return EDPVS_INVAL;
             }
         }
@@ -238,6 +242,8 @@ static int qsch_check(const struct dpip_obj *obj, dpip_cmd_t cmd)
                 fprintf(stderr, "missing buffer for tbf.\n");
                 return EDPVS_INVAL;
             }
+        } else if (strcmp(param->kind, "pfifo_fast") == 0) {
+            ;
         } else {
             fprintf(stderr, "invalid qsch kind.\n");
             return EDPVS_INVAL;
@@ -256,7 +262,7 @@ static int qsch_check(const struct dpip_obj *obj, dpip_cmd_t cmd)
         if (strcmp(param->kind, "pfifo") != 0 &&
             strcmp(param->kind, "bfifo") != 0 &&
             strcmp(param->kind, "tbf") != 0) {
-            fprintf(stderr, "invalid qsch kind.\n");
+            fprintf(stderr, "qsch kind '%s' doesn't support SET.\n", param->kind);
             return EDPVS_INVAL;
         }
         break;
@@ -282,8 +288,8 @@ static void qsch_dump_stats(const char *prefix, const struct qsch_qstats *qs,
            "(dropped %u, overlimits %u requeues %u)\n",
            prefix ? : "", bs->bytes, bs->packets,
            qs->drops, qs->overlimits, qs->requeues);
-    printf("%sbacklog %uB %up requeues %u\n",
-           prefix ? : "", qs->backlog, qs->qlen, qs->requeues);
+    printf("%sBacklog %u bytes %u pkts\n",
+           prefix ? : "", qs->backlog, qs->qlen);
 }
 
 static void qsch_dump_param(const char *ifname, const union tc_param *param,
@@ -293,15 +299,19 @@ static void qsch_dump_param(const char *ifname, const union tc_param *param,
     const struct tc_qsch_param *qsch = &param->qsch;
     int i;
 
-    printf("qsch %s %s dev %s %s", qsch->kind,
+    if (verbose)
+        printf("[%02d] ", qsch->cid);
+
+    printf("qsch %s %s dev %s parent %s flags 0x%x cls %d", qsch->kind,
            tc_handle_itoa(qsch->handle, handle, sizeof(handle)), ifname,
-           tc_handle_itoa(qsch->where, where, sizeof(where)));
+           tc_handle_itoa(qsch->where, where, sizeof(where)),
+           qsch->flags, qsch->cls_cnt);
 
     if (strcmp(qsch->kind, "bfifo") == 0 ||
         strcmp(qsch->kind, "pfifo") == 0) {
         printf(" limit %u", qsch->qopt.fifo.limit);
     } else if (strcmp(qsch->kind, "pfifo_fast") == 0) {
-        printf(" bands %u priomap ", qsch->qopt.prio.bands);
+        printf(" bands %u priomap", qsch->qopt.prio.bands);
         for (i = 0; i <= TC_PRIO_MAX; i++)
             printf(" %u", qsch->qopt.prio.priomap[i]);
     } else if (strcmp(qsch->kind, "tbf") == 0) {
@@ -317,20 +327,8 @@ static void qsch_dump_param(const char *ifname, const union tc_param *param,
     }
     printf("\n");
 
-    if (stats) {
+    if (stats)
         qsch_dump_stats(" ", &qsch->qstats, &qsch->bstats);
-
-        if (verbose) {
-            /* dump per-cpu statistics */
-            for (i = 0; i < DPVS_MAX_LCORE; i++) {
-                char cpu[10];
-                snprintf(cpu, sizeof(cpu), " [%02d]", i);
-
-                qsch_dump_stats(cpu, &qsch->qstats_cpus[i],
-                                &qsch->bstats_cpus[i]);
-            }
-        }
-    }
 }
 
 static int qsch_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
@@ -340,6 +338,12 @@ static int qsch_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
     union tc_param *params;
     int err, i;
     size_t size;
+
+    if (conf->stats)
+        tc_conf->op_flags |= TC_F_OPS_STATS;
+
+    if (conf->verbose)
+        tc_conf->op_flags |= TC_F_OPS_VERBOSE;
 
     switch (cmd) {
     case DPIP_CMD_ADD:

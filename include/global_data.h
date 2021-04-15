@@ -56,6 +56,12 @@ extern dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
  * */
 extern int g_lcore_index[DPVS_MAX_LCORE];
 extern int g_lcore_num;
+extern lcoreid_t g_master_lcore_id;
+extern lcoreid_t g_kni_lcore_id;
+extern uint8_t g_slave_lcore_num;
+extern uint8_t g_isol_rx_lcore_num;
+extern uint64_t g_slave_lcore_mask;
+extern uint64_t g_isol_rx_lcore_mask;
 
 int global_data_init(void);
 int global_data_term(void);

@@ -30,6 +30,9 @@
 #include "tc/sch.h"
 #include "tc/cls.h"
 
+#define TC_F_OPS_STATS    0x0001
+#define TC_F_OPS_VERBOSE  0x0002
+
 typedef enum {
     TC_OBJ_QSCH,
     TC_OBJ_CLS,
@@ -39,6 +42,7 @@ typedef enum {
  * scheduler section
  */
 struct tc_qsch_param {
+    lcoreid_t       cid;
     tc_handle_t     handle;
     tc_handle_t     where;              /* TC_H_ROOT | TC_H_INGRESS | parent */
     char            kind[TCNAMESIZ];    /* qsch type: bfifo, tbf, ... */
@@ -50,23 +54,18 @@ struct tc_qsch_param {
     } qopt;
 
     /* get only */
+    int cls_cnt;
+    uint32_t flags;
     struct qsch_qstats qstats;
     struct qsch_bstats bstats;
 
-    /* master only, to fill stats from workers. */
-    struct qsch_qstats qstats_cpus[DPVS_MAX_LCORE];
-    struct qsch_bstats bstats_cpus[DPVS_MAX_LCORE];
-} __attribute__((__packed__));
-
-struct tc_qsch_stats {
-    struct qsch_qstats qstats;
-    struct qsch_bstats bstats;
 } __attribute__((__packed__));
 
 /**
  * classifier section
  */
 struct tc_cls_param {
+    lcoreid_t       cid;
     tc_handle_t     sch_id;             /* ID of Qsch attached to */
     tc_handle_t     handle;             /* or class-id */
     char            kind[TCNAMESIZ];    /* tc_cls type: "match", ... */
@@ -88,6 +87,7 @@ union tc_param {
 
 struct tc_conf {
     tc_obj_t        obj;                /* schedler, classifier, ... */
+    uint32_t        op_flags;           /* TC_F_OPS_XXX */
     char            ifname[IFNAMSIZ];
     union tc_param  param;              /* object specific parameters */
 } __attribute__((__packed__));
@@ -101,6 +101,12 @@ static inline tc_handle_t tc_handle_atoi(const char *handle)
 
     if (sscanf(handle, "%x:", &maj) == 1)
         return (maj << 16);
+
+    if (!strncmp(handle, "root", 4))
+        return TC_H_ROOT;
+
+    if (!strncmp(handle, "ingress", 7))
+        return TC_H_INGRESS;
 
     return TC_H_UNSPEC;
 }
