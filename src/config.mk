@@ -58,3 +58,7 @@ endif
 GCC_MAJOR = $(shell echo __GNUC__ | $(CC) -E -x c - | tail -n 1)
 GCC_MINOR = $(shell echo __GNUC_MINOR__ | $(CC) -E -x c - | tail -n 1)
 GCC_VERSION = $(GCC_MAJOR)$(GCC_MINOR)
+
+ifeq ($(CONFIG_MLX5), y)
+LIBS += -libverbs -lmlx5 -lmnl
+endif

@@ -102,6 +102,7 @@ $ mkdir [user desired build folder - dpdkbuild]
 $ meson  -Dprefix=[dpdklib] dpdkbuild
 $ ninja -C dpdkbuild
 $ cd dpdkbuild; ninja install
+$ export PKG_CONFIG_PATH=${PKG_CONFIG_PATH:+$PKG_CONFIG_PATH:}$(pwd)/../dpdklib/lib64/pkgconfig/libdpdk.pc
 ```
 
 2. Using Makefile for build DPDK linraries and export `RTE_SDK` env variable for DPDK app (DPVS).

@@ -40,7 +40,7 @@ ifeq ($(RTE_SDK),)
 	$(error "The variable RTE_SDK is not defined.")
 endif
 include $(RTE_SDK)/mk/rte.vars.mk
-LIBS += -lpthread -lnuma
+LIBS += -lpthread -lnuma -lrt -lm -ldl -lcrypto -lpcap
 endif
 
 include $(SRCDIR)/config.mk
@@ -67,7 +67,7 @@ else
 endif
 
 
-CFLAGS += $(INCDIRS) $(LIBS)
+CFLAGS += $(INCDIRS)
 
 OBJS := $(shell find $(SRCDIR) -name '*.c' | sort)
 OBJS := $(patsubst %.c,%.o,$(OBJS))
