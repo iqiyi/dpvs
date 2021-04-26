@@ -16,8 +16,11 @@
 #
 ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
 
-CFLAGS += -DALLOW_EXPERIMENTAL_API -static $(shell pkg-config --cflags libdpdk)
-LIBS += $(shell pkg-config --libs --static libdpdk)
+CFLAGS += -DALLOW_EXPERIMENTAL_API $(shell pkg-config --cflags libdpdk)
+LIBS += $(shell pkg-config --static --libs libdpdk)
+
+# FIXME: DPVS would link if not specified the following PMD libraries.
+LIBS += -l:librte_bus_vdev.a -l:librte_net_bond.a
 
 else
 

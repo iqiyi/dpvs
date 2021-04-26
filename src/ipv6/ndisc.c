@@ -197,7 +197,7 @@ static struct rte_mbuf *ndisc_build_mbuf(struct netif_port *dev,
 {
     struct rte_mbuf *mbuf;
     struct icmp6_hdr *icmp6hdr;
-    struct ipv6_hdr iph;
+    struct rte_ipv6_hdr iph;
     int len;
     uint8_t *opt;
 
@@ -211,7 +211,7 @@ static struct rte_mbuf *ndisc_build_mbuf(struct netif_port *dev,
         RTE_LOG(ERR, NEIGHBOUR, "mbuf_pool alloc failed\n");
         return NULL;
     }
-    mbuf->userdata = NULL;
+    mbuf_userdata_reset(mbuf);
 
     icmp6hdr = (struct icmp6_hdr *)rte_pktmbuf_append(mbuf, sizeof(*icmp6h));
     rte_memcpy(icmp6hdr, icmp6h, sizeof(*icmp6h));
@@ -356,8 +356,8 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
     int hashkey = 0;
     uint32_t ndoptlen = 0;
 
-    struct in6_addr *saddr = &((struct ip6_hdr *)mbuf->userdata)->ip6_src;
-    struct in6_addr *daddr = &((struct ip6_hdr *)mbuf->userdata)->ip6_dst;
+    struct in6_addr *saddr = &MBUF_USERDATA(mbuf, struct ip6_hdr *, MBUF_FIELD_PROTO)->ip6_src;
+    struct in6_addr *daddr = &MBUF_USERDATA(mbuf, struct ip6_hdr *, MBUF_FIELD_PROTO)->ip6_dst;
 
     struct nd_msg *msg = rte_pktmbuf_mtod(mbuf, struct nd_msg *);
     int dad = ipv6_addr_any(saddr);
@@ -440,12 +440,12 @@ static int ndisc_recv_ns(struct rte_mbuf *mbuf, struct netif_port *dev)
     hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)saddr, dev);
     neigh = neigh_lookup_entry(AF_INET6, (union inet_addr *)saddr, dev, hashkey);
     if (neigh && !(neigh->flag & NEIGHBOUR_STATIC)) {
-        neigh_edit(neigh, (struct ether_addr *)lladdr);
+        neigh_edit(neigh, (struct rte_ether_addr *)lladdr);
         neigh_entry_state_trans(neigh, 1);
         neigh_sync_core(neigh, 1, NEIGH_ENTRY);
     } else {
         neigh = neigh_add_table(AF_INET6, (union inet_addr *)saddr,
-                      (struct ether_addr *)lladdr, dev, hashkey, 0);
+                      (struct rte_ether_addr *)lladdr, dev, hashkey, 0);
         if (!neigh){
             RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
             return EDPVS_NOMEM;
@@ -468,12 +468,12 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     struct neighbour_entry *neigh;
     struct inet_ifaddr *ifa;
     int hashkey;
-    struct in6_addr *daddr = &((struct ip6_hdr *)mbuf->userdata)->ip6_dst;
+    struct in6_addr *daddr = &MBUF_USERDATA(mbuf, struct ip6_hdr *, MBUF_FIELD_PROTO)->ip6_dst;
     struct nd_msg *msg = rte_pktmbuf_mtod(mbuf, struct nd_msg *);
     uint32_t ndoptlen = mbuf->data_len - offsetof(struct nd_msg, opt);
 
 #ifdef CONFIG_NDISC_DEBUG
-    struct in6_addr *saddr = &((struct ip6_hdr *)mbuf->userdata)->ip6_src;
+    struct in6_addr *saddr = &MBUF_USERDATA(mbuf, struct ip6_hdr *, MBUF_FIELD_PROTO)->ip6_src;
     ndisc_show_addr(__func__, saddr, daddr);
 #endif
 
@@ -526,12 +526,12 @@ static int ndisc_recv_na(struct rte_mbuf *mbuf, struct netif_port *dev)
     hashkey = neigh_hashkey(AF_INET6, (union inet_addr *)&msg->target, dev);
     neigh = neigh_lookup_entry(AF_INET6, (union inet_addr *)&msg->target, dev, hashkey);
     if (neigh && !(neigh->flag & NEIGHBOUR_STATIC)) {
-        neigh_edit(neigh, (struct ether_addr *)lladdr);
+        neigh_edit(neigh, (struct rte_ether_addr *)lladdr);
         neigh_entry_state_trans(neigh, 1);
         neigh_sync_core(neigh, 1, NEIGH_ENTRY);
     } else {
         neigh = neigh_add_table(AF_INET6, (union inet_addr *)&msg->target,
-                       (struct ether_addr *)lladdr, dev, hashkey, 0);
+                       (struct rte_ether_addr *)lladdr, dev, hashkey, 0);
         if (!neigh) {
            RTE_LOG(ERR, NEIGHBOUR, "[%s] add neighbour wrong\n", __func__);
            return EDPVS_NOMEM;
@@ -548,7 +548,7 @@ int ndisc_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     struct nd_msg *msg;
     int ret;
-    struct ip6_hdr *ipv6_hdr = mbuf->userdata;
+    struct ip6_hdr *ipv6_hdr = MBUF_USERDATA(mbuf, struct ip6_hdr *, MBUF_FIELD_PROTO);
 
     if (mbuf_may_pull(mbuf, sizeof(struct icmp6_hdr)) != 0) {
         ret = EDPVS_NOMEM;

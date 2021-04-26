@@ -68,6 +68,8 @@ extern int log_slave_init(void);
                     dpvs_scheduler_init, dpvs_scheduler_term),  \
         DPVS_MODULE(MODULE_GLOBAL_DATA, "global data",          \
                     global_data_init,    global_data_term),     \
+        DPVS_MODULE(MODULE_MBUF,        "mbuf",                 \
+                    mbuf_init,           NULL),                 \
         DPVS_MODULE(MODULE_CFG,         "config file",          \
                     cfgfile_init,        cfgfile_term),         \
         DPVS_MODULE(MODULE_PDUMP,        "pdump",               \

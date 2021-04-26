@@ -160,7 +160,7 @@ bool is_lcore_id_valid(lcoreid_t cid)
     if (unlikely(cid >= DPVS_MAX_LCORE))
         return false;
 
-    return ((cid == rte_get_master_lcore()) ||
+    return ((cid == rte_get_main_lcore()) ||
             (cid == g_kni_lcore_id) ||
             (g_slave_lcore_mask & (1L << cid)) ||
             (g_isol_rx_lcore_mask & (1L << cid)));
@@ -171,7 +171,7 @@ static bool is_lcore_id_fwd(lcoreid_t cid)
     if (unlikely(cid >= DPVS_MAX_LCORE))
         return false;
 
-    return ((cid == rte_get_master_lcore()) ||
+    return ((cid == rte_get_main_lcore()) ||
             (g_slave_lcore_mask & (1L << cid)));
 }
 
@@ -943,24 +943,24 @@ static void netif_cfgfile_term(void)
 #include <netinet/in.h>
 
 static inline int parse_ether_hdr(struct rte_mbuf *mbuf, uint16_t port, uint16_t queue) {
-    struct ether_hdr *eth_hdr;
+    struct rte_ether_hdr *eth_hdr;
     char saddr[18], daddr[18];
-    eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-    ether_format_addr(saddr, sizeof(saddr), &eth_hdr->s_addr);
-    ether_format_addr(daddr, sizeof(daddr), &eth_hdr->d_addr);
+    eth_hdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
+    rte_ether_format_addr(saddr, sizeof(saddr), &eth_hdr->s_addr);
+    rte_ether_format_addr(daddr, sizeof(daddr), &eth_hdr->d_addr);
     RTE_LOG(INFO, NETIF, "[%s] lcore=%u port=%u queue=%u ethtype=%0x saddr=%s daddr=%s\n",
             __func__, rte_lcore_id(), port, queue, rte_be_to_cpu_16(eth_hdr->ether_type),
             saddr, daddr);
     return EDPVS_OK;
 }
 
-static inline int is_ipv4_pkt_valid(struct ipv4_hdr *iph, uint32_t link_len)
+static inline int is_ipv4_pkt_valid(struct rte_ipv4_hdr *iph, uint32_t link_len)
 {
     if (((iph->version_ihl) >> 4) != 4)
         return EDPVS_INVAL;
     if ((iph->version_ihl & 0xf) < 5)
         return EDPVS_INVAL;
-    if (rte_cpu_to_be_16(iph->total_length) < sizeof(struct ipv4_hdr))
+    if (rte_cpu_to_be_16(iph->total_length) < sizeof(struct rte_ipv4_hdr))
         return EDPVS_INVAL;
     return EDPVS_OK;
 }
@@ -969,14 +969,14 @@ static void parse_ipv4_hdr(struct rte_mbuf *mbuf, uint16_t port, uint16_t queue)
 {
     char saddr[16], daddr[16];
     uint16_t lcore;
-    struct ipv4_hdr *iph;
-    struct udp_hdr *uh;
+    struct rte_ipv4_hdr *iph;
+    struct rte_udp_hdr *uh;
 
-    iph = rte_pktmbuf_mtod_offset(mbuf, struct ipv4_hdr *, sizeof(struct ether_hdr));
+    iph = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
     if (is_ipv4_pkt_valid(iph, mbuf->pkt_len) < 0)
         return;
-    uh = rte_pktmbuf_mtod_offset(mbuf, struct udp_hdr *, sizeof(struct ether_hdr) +
-            (IPV4_HDR_IHL_MASK & iph->version_ihl) * sizeof(uint32_t));
+    uh = rte_pktmbuf_mtod_offset(mbuf, struct rte_udp_hdr *, sizeof(struct rte_ether_hdr) +
+            (RTE_IPV4_HDR_IHL_MASK & iph->version_ihl) * sizeof(uint32_t));
 
     lcore = rte_lcore_id();
     if (!inet_ntop(AF_INET, &iph->src_addr, saddr, sizeof(saddr)))
@@ -986,7 +986,7 @@ static void parse_ipv4_hdr(struct rte_mbuf *mbuf, uint16_t port, uint16_t queue)
 
     RTE_LOG(INFO, NETIF, "[%s] lcore=%u port=%u queue=%u ipv4_hl=%u tos=%u tot=%u "
             "id=%u ttl=%u prot=%u src=%s dst=%s sport=%04x|%u dport=%04x|%u\n",
-            __func__, lcore, port, queue, IPV4_HDR_IHL_MASK & iph->version_ihl,
+            __func__, lcore, port, queue, RTE_IPV4_HDR_IHL_MASK & iph->version_ihl,
             iph->type_of_service, ntohs(iph->total_length),
             ntohs(iph->packet_id), iph->time_to_live, iph->next_proto_id, saddr, daddr,
             uh->src_port, ntohs(uh->src_port), uh->dst_port, ntohs(uh->dst_port));
@@ -995,12 +995,12 @@ static void parse_ipv4_hdr(struct rte_mbuf *mbuf, uint16_t port, uint16_t queue)
 
 __rte_unused static void pkt_send_back(struct rte_mbuf *mbuf, struct netif_port *port)
 {
-    struct ether_hdr *ehdr;
-    struct ether_addr eaddr;
-    ehdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr*);
-    ether_addr_copy(&ehdr->s_addr, &eaddr);
-    ether_addr_copy(&ehdr->d_addr, &ehdr->s_addr);
-    ether_addr_copy(&eaddr, &ehdr->d_addr);
+    struct rte_ether_hdr *ehdr;
+    struct rte_ether_addr eaddr;
+    ehdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr*);
+    rte_ether_addr_copy(&ehdr->s_addr, &eaddr);
+    rte_ether_addr_copy(&ehdr->d_addr, &ehdr->s_addr);
+    rte_ether_addr_copy(&eaddr, &ehdr->d_addr);
     netif_xmit(mbuf, port);
 }
 #endif
@@ -1307,7 +1307,7 @@ static void build_lcore_index(void)
 {
     int i, idx = 0;
 
-    g_lcore_index[idx++] = rte_get_master_lcore();
+    g_lcore_index[idx++] = rte_get_main_lcore();
 
     for (i = 0; i < DPVS_MAX_LCORE; i++)
         if (g_lcore_role[i] == LCORE_ROLE_FWD_WORKER)
@@ -1329,7 +1329,7 @@ static void lcore_role_init(void)
             /* invalidate the disabled cores */
             g_lcore_role[cid] = LCORE_ROLE_MAX;
 
-    cid = rte_get_master_lcore();
+    cid = rte_get_main_lcore();
 
     assert(g_lcore_role[cid] == LCORE_ROLE_IDLE);
     g_lcore_role[cid] = LCORE_ROLE_MASTER;
@@ -1717,7 +1717,7 @@ static int build_port_queue_lcore_map(void)
 
                 dev = netif_port_get(pid);
                 if (dev) {
-                    ether_format_addr(pql_map[pid].mac_addr,
+                    rte_ether_format_addr(pql_map[pid].mac_addr,
                             sizeof(pql_map[pid].mac_addr), &dev->addr);
                 }
             }
@@ -1877,7 +1877,7 @@ int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool has_ti
     if (unlikely(!buf || !len || *len <= 0))
         return EDPVS_INVAL;
 
-    if (unlikely(rte_get_master_lcore() == cid)) {
+    if (unlikely(rte_get_main_lcore() == cid)) {
         buf[0] = '\0';
         *len = 0;
         return EDPVS_OK;
@@ -2127,9 +2127,9 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     cid = rte_lcore_id();
 
     if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM))
-        mbuf->l2_len = sizeof(struct ether_hdr);
+        mbuf->l2_len = sizeof(struct rte_ether_hdr);
 
-    if (rte_get_master_lcore() == cid) { // master thread
+    if (rte_get_main_lcore() == cid) { // master thread
         struct dpvs_msg *msg;
         struct master_xmit_msg_data msg_data;
 
@@ -2140,7 +2140,7 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 
         msg_data.mbuf = mbuf;
         msg_data.dev = dev;
-        msg = msg_make(MSG_TYPE_MASTER_XMIT, 0, DPVS_MSG_UNICAST, rte_get_master_lcore(),
+        msg = msg_make(MSG_TYPE_MASTER_XMIT, 0, DPVS_MSG_UNICAST, rte_get_main_lcore(),
                 sizeof(struct master_xmit_msg_data), &msg_data);
         if (unlikely(NULL == msg)) {
             rte_pktmbuf_free(mbuf);
@@ -2165,9 +2165,9 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     /* port id is determined by routing */
     pid = dev->id;
     /* qindex is hashed by physical address of mbuf */
-    qindex = (((uint32_t) mbuf->buf_physaddr) >> 8) %
+    qindex = (((uint32_t) mbuf->buf_iova) >> 8) %
         (lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].ntxq);
-    //RTE_LOG(DEBUG, NETIF, "tx-queue hash(%x) = %d\n", ((uint32_t)mbuf->buf_physaddr) >> 8, qindex);
+    //RTE_LOG(DEBUG, NETIF, "tx-queue hash(%x) = %d\n", ((uint32_t)mbuf->buf_iova) >> 8, qindex);
     txq = &lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].txqs[qindex];
 
     /* No space left in txq mbufs, transmit cached mbufs immediately */
@@ -2212,14 +2212,14 @@ int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
     return netif_hard_xmit(mbuf, dev);
 }
 
-static inline eth_type_t eth_type_parse(const struct ether_hdr *eth_hdr,
+static inline eth_type_t eth_type_parse(const struct rte_ether_hdr *eth_hdr,
                                         const struct netif_port *dev)
 {
     if (eth_addr_equal(&dev->addr, &eth_hdr->d_addr))
         return ETH_PKT_HOST;
 
-    if (is_multicast_ether_addr(&eth_hdr->d_addr)) {
-        if (is_broadcast_ether_addr(&eth_hdr->d_addr))
+    if (rte_is_multicast_ether_addr(&eth_hdr->d_addr)) {
+        if (rte_is_broadcast_ether_addr(&eth_hdr->d_addr))
             return ETH_PKT_BROADCAST;
         else
             return ETH_PKT_MULTICAST;
@@ -2246,12 +2246,12 @@ static int netif_deliver_mbuf(struct netif_port *dev, lcoreid_t cid,
                   struct rte_mbuf *mbuf, bool pkts_from_ring)
 {
     int ret = EDPVS_OK;
-    struct ether_hdr *eth_hdr;
+    struct rte_ether_hdr *eth_hdr;
 
     assert(mbuf->port <= NETIF_MAX_PORTS);
     assert(dev != NULL);
 
-    eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+    eth_hdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
     /* reuse mbuf.packet_type, it was RTE_PTYPE_XXX */
     mbuf->packet_type = eth_type_parse(eth_hdr, dev);
 
@@ -2281,13 +2281,13 @@ static int netif_deliver_mbuf(struct netif_port *dev, lcoreid_t cid,
 
 int netif_rcv_mbuf(struct netif_port *dev, lcoreid_t cid, struct rte_mbuf *mbuf, bool pkts_from_ring)
 {
-    struct ether_hdr *eth_hdr;
+    struct rte_ether_hdr *eth_hdr;
     struct pkt_type *pt;
     int err;
     uint16_t data_off;
     bool forward2kni;
 
-    eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+    eth_hdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
     /*
      * do not drop pkt to other hosts (ETH_PKT_OTHERHOST)
      * since virtual devices may have different MAC with
@@ -2306,7 +2306,7 @@ int netif_rcv_mbuf(struct netif_port *dev, lcoreid_t cid, struct rte_mbuf *mbuf,
         dev = netif_port_get(mbuf->port);
         if (unlikely(!dev))
             goto drop;
-        eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+        eth_hdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
     }
 
     forward2kni = (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) ? true : false;
@@ -2320,16 +2320,16 @@ int netif_rcv_mbuf(struct netif_port *dev, lcoreid_t cid, struct rte_mbuf *mbuf,
     }
 
     /* clone arp pkt to every queue */
-    if (unlikely(pt->type == rte_cpu_to_be_16(ETHER_TYPE_ARP) && !pkts_from_ring)) {
+    if (unlikely(pt->type == rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP) && !pkts_from_ring)) {
         uint8_t i;
-        struct arp_hdr *arp;
+        struct rte_arp_hdr *arp;
         struct rte_mbuf *mbuf_clone;
 
-        arp = rte_pktmbuf_mtod_offset(mbuf, struct arp_hdr *, sizeof(struct ether_hdr));
-        if (rte_be_to_cpu_16(arp->arp_op) == ARP_OP_REPLY) {
+        arp = rte_pktmbuf_mtod_offset(mbuf, struct rte_arp_hdr *, sizeof(struct rte_ether_hdr));
+        if (rte_be_to_cpu_16(arp->arp_opcode) == RTE_ARP_OP_REPLY) {
             for (i = 0; i < DPVS_MAX_LCORE; i++) {
                 if ((i == cid) || (!is_lcore_id_fwd(i))
-                     || (i == rte_get_master_lcore()))
+                     || (i == rte_get_main_lcore()))
                     continue;
                 /* rte_pktmbuf_clone will not clone pkt.data, just copy pointer! */
                 mbuf_clone = rte_pktmbuf_clone(mbuf, pktmbuf_pool[rte_socket_id()]);
@@ -2351,11 +2351,11 @@ int netif_rcv_mbuf(struct netif_port *dev, lcoreid_t cid, struct rte_mbuf *mbuf,
         }
     }
 
-    mbuf->l2_len = sizeof(struct ether_hdr);
+    mbuf->l2_len = sizeof(struct rte_ether_hdr);
 
     /* Remove ether_hdr at the beginning of an mbuf */
     data_off = mbuf->data_off;
-    if (unlikely(NULL == rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr))))
+    if (unlikely(NULL == rte_pktmbuf_adj(mbuf, sizeof(struct rte_ether_hdr))))
         goto drop;
 
     err = pt->func(mbuf, dev);
@@ -2632,7 +2632,7 @@ static int update_bond_macaddr(struct netif_port *port)
     if (kni_dev_exist(port)) {
         ret = linux_set_if_mac(port->kni.name, (unsigned char *)&port->addr);
         if (ret == EDPVS_OK)
-            ether_addr_copy(&port->addr, &port->kni.addr);
+            rte_ether_addr_copy(&port->addr, &port->kni.addr);
     }
 
     return ret;
@@ -2868,7 +2868,7 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
         snprintf(dev->name, sizeof(dev->name), "%s", namefmt);
 
     dev->socket = SOCKET_ID_ANY;
-    dev->hw_header_len = sizeof(struct ether_hdr); /* default */
+    dev->hw_header_len = sizeof(struct rte_ether_hdr); /* default */
 
     if (setup)
         setup(dev);
@@ -2947,7 +2947,7 @@ static int bond_set_mc_list(struct netif_port *dev)
 
 static int dpdk_set_mc_list(struct netif_port *dev)
 {
-    struct ether_addr addrs[NETIF_MAX_HWADDR];
+    struct rte_ether_addr addrs[NETIF_MAX_HWADDR];
     int err;
     int ret;
     size_t naddr = NELEMS(addrs);
@@ -3065,7 +3065,7 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
     port->nrxq = nrxq; // update after port_rx_queues_get();
     port->ntxq = ntxq; // update after port_tx_queues_get();
     port->socket = rte_eth_dev_socket_id(id);
-    port->hw_header_len = sizeof(struct ether_hdr);
+    port->hw_header_len = sizeof(struct rte_ether_hdr);
     if (port->socket == SOCKET_ID_ANY)
         port->socket = rte_socket_id();
     port->mbuf_pool = pktmbuf_pool[port->socket];
@@ -3609,8 +3609,8 @@ int netif_port_start(struct netif_port *port)
 
     /* add in6_addr multicast address */
     int cid = 0;
-    rte_eal_mp_remote_launch(idev_add_mcast_init, port, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(idev_add_mcast_init, port, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((ret = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, NETIF, "%s: lcore %d: multicast address add failed for device %s\n",
                     __func__, cid, port->name);
@@ -4058,7 +4058,7 @@ int netif_init(void)
     netif_port_init();
     netif_lcore_init();
 
-    g_master_lcore_id = rte_get_master_lcore();
+    g_master_lcore_id = rte_get_main_lcore();
     netif_get_slave_lcores(&g_slave_lcore_num, &g_slave_lcore_mask);
     netif_get_isol_rx_lcores(&g_isol_rx_lcore_num, &g_isol_rx_lcore_mask);
 
@@ -4333,7 +4333,7 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
     strncpy(get->name, port->name, sizeof(get->name));
     get->nrxq = port->nrxq;
     get->ntxq = port->ntxq;
-    ether_format_addr(get->addr, sizeof(get->addr), &port->addr);
+    rte_ether_format_addr(get->addr, sizeof(get->addr), &port->addr);
 
     get->socket_id = port->socket;
     get->mtu = port->mtu;
@@ -4606,10 +4606,10 @@ static int get_bond_status(struct netif_port *port, void **out, size_t *out_len)
             get->slaves[i].is_active = 1;
         if (slaves[i] == primary)
             get->slaves[i].is_primary = 1;
-        ether_format_addr(&get->slaves[i].macaddr[0], sizeof(get->slaves[i].macaddr) - 1, &sport->addr);
+        rte_ether_format_addr(&get->slaves[i].macaddr[0], sizeof(get->slaves[i].macaddr) - 1, &sport->addr);
     }
 
-    ether_format_addr(get->macaddr, sizeof(get->macaddr), &mport->addr);
+    rte_ether_format_addr(get->macaddr, sizeof(get->macaddr), &mport->addr);
 
     xmit_policy = rte_eth_bond_xmit_policy_get(port->id);
     switch (xmit_policy) {
@@ -4730,7 +4730,7 @@ static int set_lcore(const netif_lcore_set_t *lcore_cfg)
 
 static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
 {
-    struct ether_addr ea;
+    struct rte_ether_addr ea;
     assert(port_cfg);
 
     if (port_cfg->promisc_on) {
@@ -4793,7 +4793,7 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
             (unsigned *)&ea.addr_bytes[3],
             (unsigned *)&ea.addr_bytes[4],
             (unsigned *)&ea.addr_bytes[5]);
-    if (is_valid_assigned_ether_addr(&ea)) {
+    if (rte_is_valid_assigned_ether_addr(&ea)) {
         if (port->type == PORT_TYPE_BOND_MASTER) {
             if (rte_eth_bond_mac_address_set(port->id, &ea) < 0) {
                 RTE_LOG(WARNING, NETIF, "fail to set %s's macaddr to be %s\n",

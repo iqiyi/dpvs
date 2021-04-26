@@ -201,7 +201,7 @@ int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
     lcoreid_t cid = rte_lcore_id();
 
     if (cid > 64 || !((sa_lcore_mask & (1UL << cid)))) {
-        if (cid == rte_get_master_lcore())
+        if (cid == rte_get_main_lcore())
             return EDPVS_OK; /* no sapool on master */
         return EDPVS_INVAL;
     }
@@ -268,7 +268,7 @@ int sa_pool_destroy(struct inet_ifaddr *ifa)
     lcoreid_t cid = rte_lcore_id();
 
     if (cid > 64 || !((sa_lcore_mask & (1UL << cid)))) {
-        if (cid == rte_get_master_lcore())
+        if (cid == rte_get_main_lcore())
             return EDPVS_OK;
         return EDPVS_INVAL;
     }
@@ -729,7 +729,7 @@ int sa_pool_init(void)
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (cid >= 64 || !(sa_lcore_mask & (1L << cid)))
             continue;
-        assert(rte_lcore_is_enabled(cid) && cid != rte_get_master_lcore());
+        assert(rte_lcore_is_enabled(cid) && cid != rte_get_main_lcore());
 
         sa_flows[cid].mask = ~((~0x0) << shift);
         sa_flows[cid].lcore = cid;

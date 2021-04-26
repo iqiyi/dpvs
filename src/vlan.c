@@ -78,7 +78,7 @@ static int alloc_vlan_info(struct netif_port *dev)
 static int vlan_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     struct vlan_dev_priv *vlan = netif_priv(dev);
-    struct ether_hdr *ethhdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+    struct rte_ether_hdr *ethhdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
     unsigned int len;
     int err;
 
@@ -175,7 +175,7 @@ static void vlan_setup(struct netif_port *dev)
 {
     dev->netif_ops = &vlan_netif_ops;
     dev->mtu = VLAN_ETH_DATA_LEN;
-    dev->hw_header_len = sizeof(struct ether_hdr) + VLAN_HLEN;
+    dev->hw_header_len = sizeof(struct rte_ether_hdr) + VLAN_HLEN;
 }
 
 /* @ifname is optional or vlan dev name will be auto generated. */
@@ -233,7 +233,7 @@ int vlan_add_dev(struct netif_port *real_dev, const char *ifname,
     dev->flag &= ~NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
     dev->type = PORT_TYPE_VLAN;
-    ether_addr_copy(&real_dev->addr, &dev->addr);
+    rte_ether_addr_copy(&real_dev->addr, &dev->addr);
 
     vlan = netif_priv(dev);
     memset(vlan, 0, sizeof(*vlan));
@@ -358,8 +358,8 @@ static inline int vlan_untag_mbuf(struct rte_mbuf *mbuf)
     if (mbuf->ol_flags & PKT_RX_VLAN_STRIPPED)
         return EDPVS_OK;
 
-    if (unlikely(mbuf_may_pull(mbuf, sizeof(struct ether_hdr) + \
-                                     sizeof(struct vlan_hdr)) != 0))
+    if (unlikely(mbuf_may_pull(mbuf, sizeof(struct rte_ether_hdr) + \
+                                     sizeof(struct rte_vlan_hdr)) != 0))
         return EDPVS_INVPKT;
 
     /* the data_off of mbuf is still at ethernet header. */
@@ -384,7 +384,7 @@ int vlan_rcv(struct rte_mbuf *mbuf, struct netif_port *real_dev)
 {
     struct netif_port *dev;
     struct vlan_dev_priv *vlan;
-    struct ether_hdr *ehdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+    struct rte_ether_hdr *ehdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
     int err;
 
     err = vlan_untag_mbuf(mbuf);

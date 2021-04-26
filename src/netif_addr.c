@@ -26,7 +26,7 @@
 #include "kni.h"
 
 static int __netif_hw_addr_add(struct netif_hw_addr_list *list,
-                               const struct ether_addr *addr)
+                               const struct rte_ether_addr *addr)
 {
     struct netif_hw_addr *ha;
 
@@ -41,7 +41,7 @@ static int __netif_hw_addr_add(struct netif_hw_addr_list *list,
     if (!ha)
         return EDPVS_NOMEM;
 
-    ether_addr_copy(addr, &ha->addr);
+    rte_ether_addr_copy(addr, &ha->addr);
     rte_atomic32_set(&ha->refcnt, 1);
     ha->sync_cnt = 0;
     list_add_tail(&ha->list, &list->addrs);
@@ -51,7 +51,7 @@ static int __netif_hw_addr_add(struct netif_hw_addr_list *list,
 }
 
 static int __netif_hw_addr_del(struct netif_hw_addr_list *list,
-                               const struct ether_addr *addr)
+                               const struct rte_ether_addr *addr)
 {
     struct netif_hw_addr *ha, *n;
 
@@ -210,17 +210,17 @@ static int __netif_hw_addr_unsync_multiple(struct netif_hw_addr_list *to,
     return EDPVS_INVAL;
 }
 
-int __netif_mc_add(struct netif_port *dev, const struct ether_addr *addr)
+int __netif_mc_add(struct netif_port *dev, const struct rte_ether_addr *addr)
 {
     return __netif_hw_addr_add(&dev->mc, addr);
 }
 
-int __netif_mc_del(struct netif_port *dev, const struct ether_addr *addr)
+int __netif_mc_del(struct netif_port *dev, const struct rte_ether_addr *addr)
 {
     return __netif_hw_addr_del(&dev->mc, addr);
 }
 
-int netif_mc_add(struct netif_port *dev, const struct ether_addr *addr)
+int netif_mc_add(struct netif_port *dev, const struct rte_ether_addr *addr)
 {
     int err;
 
@@ -233,7 +233,7 @@ int netif_mc_add(struct netif_port *dev, const struct ether_addr *addr)
     return err;
 }
 
-int netif_mc_del(struct netif_port *dev, const struct ether_addr *addr)
+int netif_mc_del(struct netif_port *dev, const struct rte_ether_addr *addr)
 {
     int err;
 
@@ -272,7 +272,7 @@ void netif_mc_init(struct netif_port *dev)
 }
 
 int __netif_mc_dump(struct netif_port *dev,
-                    struct ether_addr *addrs, size_t *naddr)
+                    struct rte_ether_addr *addrs, size_t *naddr)
 {
     struct netif_hw_addr *ha;
     int off = 0;
@@ -281,14 +281,14 @@ int __netif_mc_dump(struct netif_port *dev,
         return EDPVS_NOROOM;
 
     list_for_each_entry(ha, &dev->mc.addrs, list)
-        ether_addr_copy(&ha->addr, &addrs[off++]);
+        rte_ether_addr_copy(&ha->addr, &addrs[off++]);
 
     *naddr = off;
     return EDPVS_OK;
 }
 
 int netif_mc_dump(struct netif_port *dev,
-                  struct ether_addr *addrs, size_t *naddr)
+                  struct rte_ether_addr *addrs, size_t *naddr)
 {
     int err;
 
@@ -302,7 +302,7 @@ int netif_mc_dump(struct netif_port *dev,
 int __netif_mc_print(struct netif_port *dev,
                      char *buf, int *len, int *pnaddr)
 {
-    struct ether_addr addrs[NETIF_MAX_HWADDR];
+    struct rte_ether_addr addrs[NETIF_MAX_HWADDR];
     size_t naddr = NELEMS(addrs);
     int err, i;
     int strlen = 0;

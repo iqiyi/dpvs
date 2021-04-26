@@ -18,6 +18,7 @@
 #ifndef __DPVS_NETIF_H__
 #define __DPVS_NETIF_H__
 #include <net/if.h>
+#include <net/ethernet.h>
 #include "list.h"
 #include "dpdk.h"
 #include "inetaddr.h"
@@ -166,12 +167,12 @@ typedef enum {
 } port_type_t;
 
 struct netif_kni {
-    char name[IFNAMSIZ];
-    struct rte_kni *kni;
-    struct ether_addr addr;
-    struct dpvs_timer kni_rtnl_timer;
-    int kni_rtnl_fd;
-    struct rte_ring *rx_ring;
+    char                    name[IFNAMSIZ];
+    struct rte_kni *        kni;
+    struct rte_ether_addr   addr;
+    struct dpvs_timer       kni_rtnl_timer;
+    int                     kni_rtnl_fd;
+    struct rte_ring *       rx_ring;
 } __rte_cache_aligned;
 
 union netif_bond {
@@ -201,7 +202,7 @@ struct netif_ops {
 
 struct netif_hw_addr {
     struct list_head        list;
-    struct ether_addr       addr;
+    struct rte_ether_addr   addr;
     rte_atomic32_t          refcnt;
     /*
      * - sync only once!
@@ -233,7 +234,7 @@ struct netif_port {
     int                     ntxq;                       /* tx queue numbe */
     uint16_t                rxq_desc_nb;                /* rx queue descriptor number */
     uint16_t                txq_desc_nb;                /* tx queue descriptor number */
-    struct ether_addr       addr;                       /* MAC address */
+    struct rte_ether_addr   addr;                       /* MAC address */
     struct netif_hw_addr_list mc;                       /* HW multicast list */
     int                     socket;                     /* socket id */
     int                     hw_header_len;              /* HW header length */
