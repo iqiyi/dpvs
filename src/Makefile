@@ -34,13 +34,13 @@ DATE_STRING := $(shell date +%Y.%m.%d.%H:%M:%S)
 # same path of THIS Makefile
 SRCDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
+LIBS += -lpthread -lnuma
 ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
 else
 ifeq ($(RTE_SDK),)
 	$(error "The variable RTE_SDK is not defined.")
 endif
 include $(RTE_SDK)/mk/rte.vars.mk
-LIBS += -lpthread -lnuma
 endif
 
 include $(SRCDIR)/config.mk
