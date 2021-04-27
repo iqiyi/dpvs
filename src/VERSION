@@ -1,43 +1,33 @@
 #!/bin/sh -
 # program: dpvs
-# Jan 7, 2021
+# Apr 26, 2021
 #
-# # Features
+# Features
 # ----------
-# - Dpvs: Configurable kni worker type.
-# - Dpvs: Support mh(megalev hash) scheduling.
-# - Dpvs: Udp one-packet forwarding.
-# - Dpvs: Dpdk-pdump for package capture.
-# - Dpvs: Support examination of eal memory(ring/seg/zone/pool) usage.
-# - Dpvs: Sapool memory optimization.
-# - Dpvs: Support ENA driver on AWS
-# - Dpvs: Some code refactorings, including sockopt definitions, jobs initializations, main function, etc.
-# - Update some documents.
-# - Delete some useless codes.
+# - CI: Enable CI workflow.
+# - Dpvs: TC stability and performance enhancement.
+# - Dpvs: TC supports ipv6 and ingress traffic.
+# - Dpvs: Add document and examples for dpvs tc.
+# - Dpvs: Add supports for ipvs whitelist.
+# - Dpvs: Support icmp forwarding with icmp_fwd_core.
+# - Dpvs: Support mtu config.
+# - Dpvs: Obsolete dpdk 16.07 and 17.05.02.
+# - Patch: Add eal memory debug patch for dpdk-stable-18.11.2.
 # 
 # # Bugfix
 # --------
-# - Dpvs: Fix lcore packet statistics loss problem on isol_rx_lcore.
-# - Dpvs: Fix per-lcore mulitcast address initialization problem.
-# - Dpvs: Fix ifa::tstemp timer problem when updating ifa entry.
-# - Dpvs: Fix ifa adding fail problem by reusing expired ifa.
-# - Dpvs: Fix memory leak problem when mbuf is invalid.
-# - Dpvs: Fix problem that rs cannot get client's real ip for some short tcp connections.
-# - Dpvs: Fix unnecessary memory waste caused by incorrect setting of rte_mempool size.
-# - Dpvs: Fix connection limitation problem caused by incorrect rs connection statistics.
-# - Dpvs: Fix illegal instruction problem by using the same RTE_MACHINE and cpu CFLAGS as dpdk.
-# - Dpvs: Fix mismatch problem when deleting blacklist addresses.
-# - Dpvs: Fix problem that mbuf may be used after released.
-# - Keepalived: Conhash scheduler performance optimization.
-# - Keepalived: Use correct return value for netlink_route.
-# - Keepalived: Fix compile error with kernel 3.11 and above.
-# - Keepalived: Fix too many open file descriptor problem for tcp_check health check.
-# - Keepailved: Fix epoll_wait error after keepalived running for a long time.
-# - Ipvsadm: Fix compile warnings of format-overflow and restrict.
-# - Ipvsadm: Fix `ipvsadm -ln` show null error.
-# - Toa: Fix problem when getting/setting pte writable flag.
+# - Dpvs: Fix traceroute problem of dpvs ip address.
+# - Dpvs: Fix flags conflicts for ipvs conn/service/dest.
+# - Dpvs: Reset tcp connection when syn-cookie check fails.
+# - Dpvs: Use correct mbuf:l4_len for checkout offload.
+# - Dpvs: Fix udp checksum problem for uoa when checksum offload is off.
+# - Dpvs: Simplify checksum calculations and remove superfluous checksum functions.
+# - Dpvs: Refactor netif recv procedure.
+# - Dpvs: Fix debug level log problem.
+# - Keepalived: Fix problem that local ip config doesn't take effect when restart.
+# - Keepalived: Fix crash problem when tunnel is configured.
 
 export VERSION=1.8
-export RELEASE=8
+export RELEASE=10
 
 echo $VERSION-$RELEASE

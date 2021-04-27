@@ -105,7 +105,7 @@ dpip link set dpdk0 tc-ingress on    # enable tc-ingress for dpdk0
 ```
 You can verify if TC for dpdk0 is enabled by checking if "tc-egress" or "tc-ingress" flag exists in the output of the command `dpip link show dpdk0`.
 
-> It's safe to enable or disable TC of a device anytime you like, even if when TC is processing packets.
+> It's safe to enable or disable TC of a device whenever you like, even if when TC is processing packets.
  
 **2. Add a root Qsch object.**
 
@@ -140,25 +140,33 @@ qsch tbf 1: dev dpdk0 parent root flags 0x0 cls 0 rate 10.00Mbps burst 10000B li
 
 # Check Cls on Qsch root
 [root@dpvs-test]# dpip cls show dev dpdk0 qsch root
-cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 ICMP,iif-dpdk0 target 2:
+cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
 
 # Check Cls on Qsch ingress
 [root@dpvs-test]# dpip cls show dev dpdk0 qsch ingress
-cls match 8003: dev dpdk0 qsch ingress pkttype 0x0800 prio 0 ICMP,iif-dpdk0 target 2:
+cls match 8002: dev dpdk0 qsch ingress pkttype 0x0800 prio 0 ICMP,iif=dpdk0 target 2:
 
-# Get statistics of Qsch 2:0
+# Get statistics of Qsch
+[root@dpvs-test]# dpip qsch -s show dev dpdk0 handle  1:
+qsch tbf 1: dev dpdk0 parent root flags 0x0 cls 0 rate 10.00Mbps burst 10000B limit 2500B
+ Sent 4050639 bytes 46334 pkts (dropped 0, overlimits 0 requeues 0)
+     Backlog 0 bytes 0 pkts
 [root@dpvs-test]# dpip qsch -s show dev dpdk0 handle  2:
 qsch bfifo 2: dev dpdk0 parent ingress flags 0x1 cls 0 limit 100000
- Sent 17308172 bytes 176614 pkts (dropped 0, overlimits 0 requeues 0)
+ Sent 980 bytes 10 pkts (dropped 0, overlimits 0 requeues 0)
  Backlog 0 bytes 0 pkts
 
 # Get per-lcore config of Cls 8001:
 [root@dpvs-test]# dpip cls -v show dev dpdk0 qsch root handle 8001:
-[00] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 ICMP,iif-dpdk0 target 2:
-[01] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 ICMP,iif-dpdk0 target 2:
-[02] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 ICMP,iif-dpdk0 target 2:
-[03] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 ICMP,iif-dpdk0 target 2:
-[04] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 ICMP,iif-dpdk0 target 2:
+[00] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
+[01] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
+[02] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
+[04] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
+[03] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
+[05] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
+[06] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
+[07] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
+[08] cls match 8001: dev dpdk0 qsch root pkttype 0x0800 prio 0 TCP,oif=dpdk0 target 1:
 ```
 
 <a id='examples'/>
