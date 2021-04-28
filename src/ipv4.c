@@ -239,9 +239,6 @@ static int ipv4_output_fin2(struct rte_mbuf *mbuf)
     mbuf->packet_type = ETHER_TYPE_IPv4;
     mbuf->l3_len = ip4_hdrlen(mbuf);
 
-    /* reuse @userdata/@udata64 for prio (used by tc:pfifo_fast) */
-    mbuf->udata64 = ((ip4_hdr(mbuf)->type_of_service >> 1) & 15);
-
     err = neigh_output(AF_INET, (union inet_addr *)&nexthop, mbuf, rt->port);
     route4_put(rt);
     return err;
@@ -326,7 +323,7 @@ static int ip4_rcv_options(struct rte_mbuf *mbuf)
     return EDPVS_OK;
 }
 
-static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
+int ipv4_rcv_fin(struct rte_mbuf *mbuf)
 {
     int err;
     struct route_entry *rt = NULL;
@@ -378,6 +375,9 @@ drop:
 
 static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 {
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+        struct icmphdr *ich, _icmph;
+#endif
     struct ipv4_hdr *iph;
     uint16_t hlen, len;
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
@@ -430,6 +430,18 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 
     if (unlikely(iph->next_proto_id == IPPROTO_OSPF))
         return EDPVS_KNICONTINUE;
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+    else if (unlikely(iph->next_proto_id == IPPROTO_ICMP)) {
+        ich = mbuf_header_pointer(mbuf, hlen, sizeof(_icmph), &_icmph);
+        if (unlikely(!ich))
+            goto drop;
+        if (ich->type == ICMP_ECHOREPLY || ich->type == ICMP_ECHO) {
+            rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr));
+            icmp_recv_proc(mbuf);
+            return EDPVS_OK;
+        }
+    }
+#endif
 
     return INET_HOOK(AF_INET, INET_HOOK_PRE_ROUTING,
                      mbuf, port, NULL, ipv4_rcv_fin);
@@ -533,7 +545,7 @@ int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
     struct route_entry *rt;
     struct ipv4_hdr *iph;
 
-    if (!mbuf || !fl4 || fl4->fl4_saddr.s_addr == htonl(INADDR_ANY)) {
+    if (!mbuf || !fl4) {
         if (mbuf)
             rte_pktmbuf_free(mbuf);
         return EDPVS_INVAL;

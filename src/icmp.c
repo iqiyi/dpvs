@@ -20,6 +20,11 @@
 #include "icmp.h"
 #include "netinet/in.h"
 #include "netinet/ip_icmp.h"
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+#include "netif.h"
+#include "scheduler.h"
+#include "global_data.h"
+#endif
 
 #define ICMP
 #define RTE_LOGTYPE_ICMP    RTE_LOGTYPE_USER1
@@ -318,9 +323,112 @@ static struct inet_protocol icmp_protocol = {
     .handler    = icmp_rcv,
 };
 
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+static struct rte_ring *icmp_redirect_ring;
+#define ICMP_RING_SIZE 2048
+lcoreid_t g_icmp_redirect_lcore_id = 0;
+
+static struct dpvs_lcore_job icmp_redirect = {
+    .name = "icmp_redirect_proc",
+    .type = LCORE_JOB_LOOP,
+    .func = icmp_redirect_proc,
+    .data = NULL,
+};
+
+static int icmp_redirect_init(void)
+{
+    int ret = 0;
+    int socket_id;
+
+    socket_id = rte_socket_id();
+    icmp_redirect_ring = rte_ring_create("icmp_redirect_ring", ICMP_RING_SIZE, socket_id, RING_F_SC_DEQ);
+    if (icmp_redirect_ring == NULL) {
+        rte_panic("create ring:icmp_redirect_ring  failed!\n");
+        return EDPVS_NOMEM;
+    }
+
+    ret = dpvs_lcore_job_register(&icmp_redirect, LCORE_ROLE_FWD_WORKER);
+    if (ret < 0) {
+        rte_ring_free(icmp_redirect_ring);
+        return ret;
+    }
+
+    return EDPVS_OK;
+}
+
+int icmp_recv_proc(struct rte_mbuf *mbuf)
+{
+    int ret = 0;
+    ret = rte_ring_enqueue(icmp_redirect_ring, mbuf);
+    if (unlikely(-EDQUOT == ret)) {
+        RTE_LOG(WARNING, ICMP, "%s: icmp ring quota exceeded\n", __func__);
+    }
+    else if (ret < 0) {
+        RTE_LOG(WARNING, ICMP, "%s: icmp ring enqueue failed\n", __func__);
+        rte_pktmbuf_free(mbuf);
+    }
+
+    return 0;
+}
+
+void icmp_redirect_proc(void *args)
+{
+    int ret = 0;
+    int i = 0;
+    lcoreid_t cid;
+    struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
+    uint16_t nb_rb = 0;
+    uint16_t data_off;
+
+    cid = rte_lcore_id();
+    if (cid != g_icmp_redirect_lcore_id)
+        return;
+
+    nb_rb = rte_ring_dequeue_burst(icmp_redirect_ring, (void**)mbufs, NETIF_MAX_PKT_BURST, NULL);
+    if (nb_rb <= 0) {
+        return;
+    }
+
+    for (i = 0; i < nb_rb; i++) {
+        struct rte_mbuf *mbuf = mbufs[i];
+        struct netif_port *dev = netif_port_get(mbuf->port);
+
+        /* Remove ether_hdr at the beginning of an mbuf */
+        data_off = mbuf->data_off;
+        if (unlikely(NULL == rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr)))) {
+            rte_pktmbuf_free(mbuf);
+            return;
+        }
+
+        ret = INET_HOOK(AF_INET, INET_HOOK_PRE_ROUTING,
+                     mbuf, dev, NULL, ipv4_rcv_fin);
+        if (ret == EDPVS_KNICONTINUE) {
+            if (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) {
+                rte_pktmbuf_free(mbuf);
+                return;
+            }
+            if (likely(NULL != rte_pktmbuf_prepend(mbuf,
+                (mbuf->data_off - data_off)))) {
+                    kni_ingress(mbuf, dev);
+            } else {
+                rte_pktmbuf_free(mbuf);
+            }
+        }
+    }
+
+    return;
+}
+#endif
+
 int icmp_init(void)
 {
     int err;
+
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+    err = icmp_redirect_init();
+    if (err)
+        return err;
+#endif
 
     err = ipv4_register_protocol(&icmp_protocol, IPPROTO_ICMP);
 

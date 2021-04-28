@@ -303,6 +303,22 @@ clear_service_vs(virtual_server_t * vs, bool stopping)
 	UNSET_ALIVE(vs);
 }
 
+static void
+clear_laddr_group(local_addr_group *laddr_group, virtual_server_t *vs)
+{
+	element e;
+	local_addr_entry *laddr_entry;
+
+	LIST_FOREACH(laddr_group->addr_ip, laddr_entry, e) {
+		if (!ipvs_laddr_remove_entry(vs, laddr_entry))
+			return;
+	}
+	LIST_FOREACH(laddr_group->range, laddr_entry, e) {
+		if (!ipvs_laddr_remove_entry(vs, laddr_entry))
+			return;
+	}
+}
+
 /* IPVS cleaner processing */
 void
 clear_services(void)
@@ -312,11 +328,15 @@ clear_services(void)
 
 	element e;
 	virtual_server_t *vs;
+	local_addr_group *laddr_group;
 
 	if (!check_data || !check_data->vs)
 		return;
 
 	LIST_FOREACH(check_data->vs, vs, e) {
+		laddr_group = ipvs_get_laddr_group_by_name(vs->local_addr_gname,
+										check_data->laddr_group);
+		clear_laddr_group(laddr_group, vs);
 		/* Remove the real servers, and clear the vs unless it is
 		 * using a VS group and it is not the last vs of the same
 		 * protocol or address family using the group. */
@@ -324,7 +344,6 @@ clear_services(void)
 	}
 }
 
-/* Set a realserver IPVS rules */
 static bool
 init_service_rs(virtual_server_t * vs)
 {
@@ -599,7 +618,10 @@ init_service_vs(virtual_server_t * vs)
 		if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, vs, NULL))
 			return 0;
 	}
-
+    if (vs->whtlst_addr_gname) {
+		if (!ipvs_cmd(LVS_CMD_ADD_WHTLST, vs, NULL))
+			return 0;
+	}
 	/* Processing real server queue */
 	if (!init_service_rs(vs))
 		return false;
@@ -1140,6 +1162,72 @@ clear_diff_blklst(virtual_server_t * old_vs)
 	return 1;
 }
 
+/* Check if a whitelist address entry is in list */
+static int
+whtlst_entry_exist(whtlst_addr_entry *whtlst_entry, list l)
+{
+    element e;
+    whtlst_addr_entry *entry;
+
+    for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+        entry = ELEMENT_DATA(e);
+        if (sockstorage_equal(&entry->addr, &whtlst_entry->addr) &&
+            entry->range == whtlst_entry->range)
+            return 1;
+    }
+    return 0;
+}
+
+/* Clear the diff whtlst address entry of the old vs */
+static int
+clear_diff_whtlst_entry(list old, list new, virtual_server_t * old_vs)
+{
+    element e;
+    whtlst_addr_entry *whtlst_entry;
+
+    for (e = LIST_HEAD(old); e; ELEMENT_NEXT(e)) {
+        whtlst_entry = ELEMENT_DATA(e);
+        if (!whtlst_entry_exist(whtlst_entry, new)) {
+            log_message(LOG_INFO, "VS [%s-%d] in whitelist address group %s no longer exist\n"
+                    , inet_sockaddrtos(&whtlst_entry->addr)
+                    , whtlst_entry->range
+                    , old_vs->whtlst_addr_gname);
+
+            if (!ipvs_whtlst_remove_entry(old_vs, whtlst_entry))
+                return 0;
+        }
+    }
+
+    return 1;
+}
+
+/* Clear the diff whitelist address of the old vs */
+static int
+clear_diff_whtlst(virtual_server_t * old_vs)
+{
+    whtlst_addr_group *old;
+    whtlst_addr_group *new;
+    /*
+     *  If old vs  didn't own whitelist address group,
+     * then do nothing and return
+     */
+    if (!old_vs->whtlst_addr_gname)
+        return 1;
+
+    /* Fetch whitelist address group */
+    old = ipvs_get_whtlst_group_by_name(old_vs->whtlst_addr_gname,
+                                        old_check_data->whtlst_group);
+    new = ipvs_get_whtlst_group_by_name(old_vs->whtlst_addr_gname,
+                                        check_data->whtlst_group);
+
+    if (!clear_diff_whtlst_entry(old->addr_ip, new->addr_ip, old_vs))
+        return 0;
+    if (!clear_diff_whtlst_entry(old->range, new->range, old_vs))
+        return 0;
+
+    return 1;
+}
+
 /* When reloading configuration, remove negative diff entries */
 void
 clear_diff_services(list old_checkers_queue)
@@ -1196,6 +1284,10 @@ clear_diff_services(list old_checkers_queue)
 			/* perform blacklist address diff */
 			if (!clear_diff_blklst(vs))
 				return;
+			/* perform whitelist address diff */
+			if (!clear_diff_whtlst(vs))
+				return;
+
 		}
 	}
 }
@@ -1397,3 +1489,13 @@ int clear_diff_tunnel(void)
 	return IPVS_SUCCESS;
 }
 
+void 
+clear_tunnels(void)
+{
+	element e;
+	tunnel_group *group;
+	
+	LIST_FOREACH(check_data->tunnel_group, group, e) {
+		clear_tunnel_group(group);
+	}
+}

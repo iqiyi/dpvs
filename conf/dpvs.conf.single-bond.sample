@@ -37,8 +37,9 @@ netif_defs {
             pballoc             64k
             status              matched
         }
+        ! mtu                   1500
         ! promisc_mode
-        ! kni_name                dpdk0.kni
+        ! kni_name              dpdk0.kni
     }
 
     <init> device dpdk2 {
@@ -56,8 +57,9 @@ netif_defs {
             pballoc             64k
             status              matched
         }
+        ! mtu                   1500
         ! promisc_mode
-        ! kni_name                dpdk2.kni
+        ! kni_name              dpdk2.kni
     }
 
     <init> bonding bond0 {
@@ -156,6 +158,7 @@ worker_defs {
     <init> worker cpu8 {
         type    slave
         cpu_id  8
+        icmp_redirect_core
         port    bond0 {
             rx_queue_ids     7
             tx_queue_ids     7

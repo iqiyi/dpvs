@@ -28,54 +28,37 @@
 #include "tc/sch.h"
 #include "conf/tc.h"
 
+struct tc_msg_param {
+    struct netif_port *dev;
+    sockoptid_t operator;
+    union tc_param param;
+} __attribute__((__packed__));
+
+static uint32_t tc_msg_seq(void)
+{
+    static uint32_t counter = 0;
+    return counter++;
+}
+
 static int fill_qsch_param(struct Qsch *sch, struct tc_qsch_param *pr)
 {
     int err;
-    struct dpvs_msg *req, *reply;
-    struct dpvs_multicast_queue *replies = NULL;
-    struct tc_qsch_stats *st;
 
     memset(pr, 0, sizeof(*pr));
 
+    pr->cid    = rte_lcore_id();
     pr->handle = sch->handle;
-    pr->where = sch->parent;
+    pr->where  = sch->parent;
     snprintf(pr->kind, sizeof(pr->kind), "%s", sch->ops->name);
 
     if (sch->ops->dump && (err = sch->ops->dump(sch, &pr->qopt)) != EDPVS_OK)
         return err;
 
-    /* send msg to workers for per-cpu stats */
-    req = msg_make(MSG_TYPE_TC_STATS, 0, DPVS_MSG_MULTICAST,
-                   rte_lcore_id(), sizeof(struct Qsch *), &sch);
-    if (!req)
-        return EDPVS_NOMEM;
+    pr->cls_cnt = sch->cls_cnt;
+    pr->flags   = sch->flags;
+    pr->qstats  = sch->qstats;
+    pr->bstats  = sch->bstats;
 
-    err = multicast_msg_send(req, 0, &replies);
-    if (err != EDPVS_OK) {
-        RTE_LOG(ERR, TC, "%s: send msg: %s\n", __func__, dpvs_strerror(err));
-        msg_destroy(&req);
-        return err;
-    }
-
-    /* handle replies */
-    list_for_each_entry(reply, &replies->mq, mq_node) {
-        st = (struct tc_qsch_stats *)reply->data;
-        assert(st && reply->cid < DPVS_MAX_LCORE);
-
-        pr->qstats_cpus[reply->cid] = st->qstats;
-        pr->bstats_cpus[reply->cid] = st->bstats;
-
-        pr->qstats.qlen         += st->qstats.qlen;
-        pr->qstats.backlog      += st->qstats.backlog;
-        pr->qstats.drops        += st->qstats.drops;
-        pr->qstats.requeues     += st->qstats.requeues;
-        pr->qstats.overlimits   += st->qstats.overlimits;
-
-        pr->bstats.bytes        += st->bstats.bytes;
-        pr->bstats.packets      += st->bstats.packets;
-    }
-
-    msg_destroy(&req);
     return EDPVS_OK;
 }
 
@@ -85,8 +68,9 @@ static int fill_cls_param(struct tc_cls *cls, struct tc_cls_param *pr)
 
     memset(pr, 0, sizeof(*pr));
 
-    pr->handle = cls->handle;
+    pr->cid    = rte_lcore_id();
     pr->sch_id = cls->sch->handle;
+    pr->handle = cls->handle;
     snprintf(pr->kind, sizeof(pr->kind), "%s", cls->ops->name);
     pr->pkt_type = cls->pkt_type;
     pr->priority = cls->prio;
@@ -97,13 +81,17 @@ static int fill_cls_param(struct tc_cls *cls, struct tc_cls_param *pr)
     return EDPVS_OK;
 }
 
-/* with tc->lock */
-static int __tc_so_qsch_set(struct netif_tc *tc, sockoptid_t oper,
+static int tc_local_qsch_set(struct netif_port *dev, sockoptid_t oper,
                             const struct tc_qsch_param *qpar)
 {
+    struct netif_tc *tc;
     struct Qsch *sch = NULL;
     tc_handle_t where;
     int err;
+
+    if (!netif_port_get(dev->id))
+        return EDPVS_NODEV;
+    tc = netif_tc(dev);
 
     if (oper == SOCKOPT_TC_DEL ||
         oper == SOCKOPT_TC_CHANGE ||
@@ -111,17 +99,15 @@ static int __tc_so_qsch_set(struct netif_tc *tc, sockoptid_t oper,
         sch = qsch_lookup_noref(tc, qpar->handle);
         if (!sch)
             return EDPVS_NOTEXIST;
-
-        /* egress root is readonly */
-        if (sch == tc->qsch)
-            return EDPVS_NOTSUPP;
     }
 
     switch (oper) {
     case SOCKOPT_TC_ADD:
-        qsch_create(tc->dev, qpar->kind, qpar->where, qpar->handle,
-                    &qpar->qopt, &err);
+        assert(qpar->handle != 0);
+        qsch_create(tc->dev, qpar->kind, qpar->where,
+                    qpar->handle, &qpar->qopt, &err);
         return err;
+
     case SOCKOPT_TC_DEL:
         qsch_destroy(sch);
         return EDPVS_OK;
@@ -130,33 +116,39 @@ static int __tc_so_qsch_set(struct netif_tc *tc, sockoptid_t oper,
         return qsch_change(sch, &qpar->qopt);
 
     case SOCKOPT_TC_REPLACE:
+        assert(qpar->handle != 0);
         /* keep parent unchanged if not indicated */
         if (qpar->where == TC_H_UNSPEC)
             where = sch->parent;
         else
             where = qpar->where;
-
         qsch_destroy(sch);
-        qsch_create(tc->dev, qpar->kind, where, qpar->handle,
-                    &qpar->qopt, &err);
+        qsch_create(tc->dev, qpar->kind, where,
+                    qpar->handle, &qpar->qopt, &err);
         return err;
 
     default:
         return EDPVS_NOTSUPP;
     }
+
+    return EDPVS_OK;
 }
 
-/* with tc->lock */
-static int __tc_so_qsch_get(struct netif_tc *tc, sockoptid_t oper,
+static int tc_local_qsch_get(struct netif_port *dev, sockoptid_t oper,
                             const struct tc_qsch_param *qpar,
-                            union tc_param **arr, int *narr)
+                            union tc_param **arr, uint32_t *narr)
 {
-    int nparam, off, h, err;
-    union tc_param *params = NULL;
+    struct netif_tc *tc;
     struct Qsch *sch = NULL;
+    union tc_param *params = NULL;
+    int nparam, off, h, err;
 
     if (oper != SOCKOPT_TC_SHOW)
         return EDPVS_INVAL;
+
+    if (!netif_port_get(dev->id))
+        return EDPVS_NODEV;
+    tc = netif_tc(dev);
 
     if (qpar->handle != TC_H_UNSPEC) {
         sch = qsch_lookup_noref(tc, qpar->handle);
@@ -164,7 +156,7 @@ static int __tc_so_qsch_get(struct netif_tc *tc, sockoptid_t oper,
             return EDPVS_NOTEXIST;
 
         nparam = 1;
-        params = rte_malloc(NULL, sizeof(*params), 0);
+        params = msg_reply_alloc(nparam * sizeof(*params)); /* msg may like it */
         if (!params)
             return EDPVS_NOMEM;
 
@@ -173,8 +165,12 @@ static int __tc_so_qsch_get(struct netif_tc *tc, sockoptid_t oper,
             goto errout;
     } else { /* get all Qsch */
         nparam = tc->qsch_cnt;
+        if (!nparam) {
+            err = EDPVS_OK;
+            goto errout;
+        }
 
-        params = rte_zmalloc(NULL, nparam * sizeof(*params), 0);
+        params = msg_reply_alloc(nparam * sizeof(*params)); /* msg may like it */
         if (!params) {
             err = EDPVS_NOMEM;
             goto errout;
@@ -210,22 +206,27 @@ static int __tc_so_qsch_get(struct netif_tc *tc, sockoptid_t oper,
 
     *arr = params;
     *narr = nparam;
-
     return EDPVS_OK;
 
 errout:
     if (params)
-        rte_free(params);
+        msg_reply_free(params);
+    *arr = NULL;
+    *narr = 0;
     return err;
 }
 
-/* with tc->lock */
-static int __tc_so_cls_set(struct netif_tc *tc, sockoptid_t oper,
+static int tc_local_cls_set(struct netif_port *dev, sockoptid_t oper,
                            const struct tc_cls_param *cpar)
 {
+    struct netif_tc *tc;
     struct Qsch *sch;
     struct tc_cls *cls = NULL;
     int err;
+
+    if (!netif_port_get(dev->id))
+        return EDPVS_NODEV;
+    tc = netif_tc(dev);
 
     sch = qsch_lookup_noref(tc, cpar->sch_id);
     if (!sch)
@@ -241,6 +242,7 @@ static int __tc_so_cls_set(struct netif_tc *tc, sockoptid_t oper,
 
     switch (oper) {
     case SOCKOPT_TC_ADD:
+        assert(cpar->handle != 0);
         tc_cls_create(sch, cpar->kind, cpar->handle, cpar->pkt_type,
                       cpar->priority, &cpar->copt, &err);
         return err;
@@ -253,6 +255,7 @@ static int __tc_so_cls_set(struct netif_tc *tc, sockoptid_t oper,
         return tc_cls_change(cls, &cpar->copt);
 
     case SOCKOPT_TC_REPLACE:
+        assert(cpar->handle != 0);
         tc_cls_destroy(cls);
         tc_cls_create(sch, cpar->kind, cpar->handle, cpar->pkt_type,
                       cpar->priority, &cpar->copt, &err);
@@ -261,20 +264,26 @@ static int __tc_so_cls_set(struct netif_tc *tc, sockoptid_t oper,
     default:
         return EDPVS_NOTSUPP;
     }
+
+    return EDPVS_OK;
 }
 
-/* with tc->lock */
-static int __tc_so_cls_get(struct netif_tc *tc, sockoptid_t oper,
+static int tc_local_cls_get(struct netif_port *dev, sockoptid_t oper,
                            const struct tc_cls_param *cpar,
-                           union tc_param **arr, int *narr)
+                           union tc_param **arr, uint32_t *narr)
 {
+    struct netif_tc *tc;
     struct Qsch *sch;
     struct tc_cls *cls;
     int err, nparam, off;
-    union tc_param *params;
+    union tc_param *params = NULL;
 
     if (oper != SOCKOPT_TC_SHOW)
         return EDPVS_INVAL;
+
+    if (!netif_port_get(dev->id))
+        return EDPVS_NODEV;
+    tc = netif_tc(dev);
 
     sch = qsch_lookup_noref(tc, cpar->sch_id);
     if (!sch)
@@ -286,7 +295,7 @@ static int __tc_so_cls_get(struct netif_tc *tc, sockoptid_t oper,
             return EDPVS_NOTEXIST;
 
         nparam = 1;
-        params = rte_malloc(NULL, sizeof(*params), 0);
+        params = msg_reply_alloc(nparam * sizeof(*params)); /* msg may like it */
         if (!params)
             return EDPVS_NOMEM;
 
@@ -295,8 +304,12 @@ static int __tc_so_cls_get(struct netif_tc *tc, sockoptid_t oper,
             goto errout;
     } else {
         nparam = sch->cls_cnt;
+        if (!nparam) {
+            err = EDPVS_OK;
+            goto errout;
+        }
 
-        params = rte_malloc(NULL, nparam * sizeof(*params), 0);
+        params = msg_reply_alloc(nparam * sizeof(*params)); /* msg may like it */
         if (!params) {
             err = EDPVS_NOMEM;
             goto errout;
@@ -312,12 +325,320 @@ static int __tc_so_cls_get(struct netif_tc *tc, sockoptid_t oper,
 
     *arr = params;
     *narr = nparam;
-
     return EDPVS_OK;
 
 errout:
     if (params)
-        rte_free(params);
+        msg_reply_free(params);
+    *arr = NULL;
+    *narr = 0;
+    return err;
+}
+
+static int tc_qsch_set_cb(struct dpvs_msg *msg)
+{
+    struct tc_msg_param *mpar;
+
+    if (msg->len != sizeof(struct tc_msg_param))
+        return EDPVS_INVAL;
+    mpar = (struct tc_msg_param *)msg->data;
+
+    return tc_local_qsch_set(mpar->dev, mpar->operator, &mpar->param.qsch);
+}
+
+static int tc_qsch_get_cb(struct dpvs_msg *msg)
+{
+    int err;
+    uint32_t narr;
+    union tc_param *arr;
+    struct tc_msg_param *mpar;
+
+    if (msg->len != sizeof(struct tc_msg_param))
+        return EDPVS_INVAL;
+    mpar = (struct tc_msg_param *)msg->data;
+
+    err = tc_local_qsch_get(mpar->dev, mpar->operator, &mpar->param.qsch, &arr, &narr);
+    if (err != EDPVS_OK)
+        return err;
+
+    msg->reply.data = arr;
+    msg->reply.len= narr * sizeof(*arr);
+    return EDPVS_OK;
+}
+
+static int tc_cls_set_cb(struct dpvs_msg *msg)
+{
+    struct tc_msg_param *mpar;
+
+    if (msg->len != sizeof(struct tc_msg_param))
+        return EDPVS_INVAL;
+    mpar = (struct tc_msg_param *)msg->data;
+
+    return tc_local_cls_set(mpar->dev, mpar->operator, &mpar->param.cls);
+}
+
+static int tc_cls_get_cb(struct dpvs_msg *msg)
+{
+    int err;
+    uint32_t narr;
+    union tc_param *arr;
+    struct tc_msg_param *mpar;
+
+    if (msg->len != sizeof(struct tc_msg_param))
+        return EDPVS_INVAL;
+    mpar = (struct tc_msg_param *)msg->data;
+
+    err = tc_local_cls_get(mpar->dev, mpar->operator, &mpar->param.cls, &arr, &narr);
+    if (err != EDPVS_OK)
+        return err;
+
+    msg->reply.data = arr;
+    msg->reply.len = narr * sizeof(*arr);
+    return EDPVS_OK;
+}
+
+static int tc_so_qsch_set(struct netif_port *dev, sockoptid_t oper,
+                         const struct tc_qsch_param *qpar)
+{
+    int err;
+    struct dpvs_msg *msg;
+    struct tc_msg_param mpar;
+    struct tc_qsch_param param = *qpar;
+
+    if (oper == SOCKOPT_TC_ADD || oper == SOCKOPT_TC_REPLACE) {
+        if (!param.handle) {
+            param.handle = sch_alloc_handle(netif_tc(dev));
+            if (unlikely(!param.handle))
+                return EDPVS_RESOURCE;
+        }
+    }
+
+    /* set master lcore */
+    err = tc_local_qsch_set(dev, oper, &param);
+    if (err != EDPVS_OK)
+        return err;
+
+    /* set slave lcores */
+    mpar.dev = dev;
+    mpar.operator = oper;
+    mpar.param.qsch = param;
+
+    msg = msg_make(MSG_TYPE_TC_QSCH_SET, tc_msg_seq(), DPVS_MSG_MULTICAST,
+                    rte_lcore_id(), sizeof(mpar), &mpar);
+    if (unlikely(!msg))
+        return EDPVS_NOMEM;
+
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+    if (err != EDPVS_OK) {
+        msg_destroy(&msg);
+        return err;
+    }
+
+    msg_destroy(&msg);
+    return EDPVS_OK;
+}
+
+static int tc_so_qsch_get(struct netif_port *dev,
+                            sockoptid_t oper, uint32_t flags,
+                            const struct tc_qsch_param *qpar,
+                            union tc_param **arr, uint32_t *narr)
+{
+    int err, i, off = 0;
+    struct dpvs_msg *msg, *_msg;
+    struct dpvs_multicast_queue *reply;
+    struct tc_msg_param mpar;
+
+    union tc_param *entries, *_arr;
+    uint32_t nentry, _narr, nqsch;
+
+    err = tc_local_qsch_get(dev, oper, qpar, &_arr, &_narr);
+    if (err != EDPVS_OK || !_narr)
+        return err;
+
+    nqsch = nentry = _narr;
+    if (flags & TC_F_OPS_VERBOSE)
+        nentry += g_slave_lcore_num * _narr;
+    entries = rte_zmalloc("tc_qsch_get", nentry * sizeof(*entries), RTE_CACHE_LINE_SIZE);
+    if (unlikely(!entries)) {
+        msg_reply_free(_arr);
+        err = EDPVS_NOMEM;
+        goto errout;
+    }
+
+    for (i = 0; i < _narr; i++)
+        entries[off++] = _arr[i];
+    msg_reply_free(_arr);
+
+    if (flags & (TC_F_OPS_STATS|TC_F_OPS_VERBOSE)) {
+        mpar.dev = dev;
+        mpar.operator = oper;
+        mpar.param.qsch = *qpar;
+
+        msg = msg_make(MSG_TYPE_TC_QSCH_GET, tc_msg_seq(), DPVS_MSG_MULTICAST,
+                        rte_lcore_id(), sizeof(mpar), &mpar);
+        if (unlikely(!msg))
+            goto errout;
+        err = multicast_msg_send(msg, 0, &reply);
+        if (err != EDPVS_OK) {
+            msg_destroy(&msg);
+            goto errout;
+        }
+        list_for_each_entry(_msg, &reply->mq, mq_node) {
+            _arr = (union tc_param *)_msg->data;
+            _narr = _msg->len/sizeof(*_arr);
+            if (unlikely(_narr != nqsch)) {
+                RTE_LOG(WARNING, TC, "%s: tc qsch number does not match -- master=%d, slave[%d]=%d\n",
+                        __func__, nqsch, _msg->cid, _narr);
+                msg_destroy(&msg);
+                err = EDPVS_INVAL;
+                goto errout;
+            }
+            for (i = 0; i < _narr; i++) {
+                if (flags & TC_F_OPS_VERBOSE)
+                    entries[off++] = _arr[i];
+                if (flags & TC_F_OPS_STATS) {
+                    entries[i].qsch.qstats.qlen       += _arr[i].qsch.qstats.qlen;
+                    entries[i].qsch.qstats.backlog    += _arr[i].qsch.qstats.backlog;
+                    entries[i].qsch.qstats.drops      += _arr[i].qsch.qstats.drops;
+                    entries[i].qsch.qstats.requeues   += _arr[i].qsch.qstats.requeues;
+                    entries[i].qsch.qstats.overlimits += _arr[i].qsch.qstats.overlimits;
+                    entries[i].qsch.bstats.bytes      += _arr[i].qsch.bstats.bytes;
+                    entries[i].qsch.bstats.packets    += _arr[i].qsch.bstats.packets;
+                }
+            }
+        }
+        msg_destroy(&msg);
+    }
+
+    assert(off <= nentry);
+    *narr = nentry;
+    *arr = entries;
+    return EDPVS_OK;
+
+errout:
+    if (entries)
+        rte_free(entries);
+    *narr = 0;
+    *arr = NULL;
+    return err;
+}
+
+static int tc_so_cls_set(struct netif_port  *dev, sockoptid_t oper,
+                        const struct tc_cls_param *cpar)
+{
+    int err;
+    struct dpvs_msg *msg;
+    struct tc_msg_param mpar;
+    struct tc_cls_param param = *cpar;
+
+    if (oper == SOCKOPT_TC_ADD || oper == SOCKOPT_TC_REPLACE) {
+        if (!param.handle) {
+            struct Qsch *sch = qsch_lookup_noref(netif_tc(dev), cpar->sch_id);
+            if (!sch)
+                return EDPVS_NOTEXIST;
+            param.handle = cls_alloc_handle(sch);
+            if (unlikely(!param.handle))
+                return EDPVS_RESOURCE;
+        }
+    }
+
+    /* set master lcores */
+    err = tc_local_cls_set(dev, oper, &param);
+    if (err != EDPVS_OK)
+        return err;
+
+    /* set slave lcore */
+    mpar.dev = dev;
+    mpar.operator = oper;
+    mpar.param.cls = param;
+
+    msg = msg_make(MSG_TYPE_TC_CLS_SET, tc_msg_seq(), DPVS_MSG_MULTICAST,
+                    rte_lcore_id(), sizeof(mpar), &mpar);
+    if (unlikely(!msg))
+        return EDPVS_NOMEM;
+
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+    if (err != EDPVS_OK) {
+        msg_destroy(&msg);
+        return err;
+    }
+
+    msg_destroy(&msg);
+    return EDPVS_OK;
+}
+
+static int tc_so_cls_get(struct netif_port *dev,
+                           sockoptid_t oper, uint32_t flags,
+                           const struct tc_cls_param *cpar,
+                           union tc_param **arr, uint32_t *narr)
+{
+    int err, i, off = 0;
+    struct dpvs_msg *msg, *_msg;
+    struct dpvs_multicast_queue *reply;
+    struct tc_msg_param mpar;
+
+    union tc_param *entries, *_arr;
+    uint32_t nentry, _narr, ncls;
+
+    err = tc_local_cls_get(dev, oper, cpar, &_arr, &_narr);
+    if (err != EDPVS_OK || !_narr)
+        return err;
+
+    ncls = nentry = _narr;
+    if (flags & TC_F_OPS_VERBOSE)
+        nentry += g_slave_lcore_num * _narr;
+    entries = rte_zmalloc("tc_cls_get", nentry * sizeof(*entries), RTE_CACHE_LINE_SIZE);
+    if (unlikely(!entries)) {
+        msg_reply_free(_arr);
+        err = EDPVS_NOMEM;
+        goto errout;
+    }
+
+    for (i = 0; i < _narr; i++)
+        entries[off++] = _arr[i];
+    msg_reply_free(_arr);
+
+    if (flags & TC_F_OPS_VERBOSE) {
+        mpar.dev = dev;
+        mpar.operator = oper;
+        mpar.param.cls = *cpar;
+
+        msg = msg_make(MSG_TYPE_TC_CLS_GET, tc_msg_seq(), DPVS_MSG_MULTICAST,
+                        rte_lcore_id(), sizeof(mpar), &mpar);
+        if (unlikely(!msg))
+            goto errout;
+        err = multicast_msg_send(msg, 0, &reply);
+        if (err != EDPVS_OK) {
+            msg_destroy(&msg);
+            goto errout;
+        }
+        list_for_each_entry(_msg, &reply->mq, mq_node) {
+            _arr = (union tc_param *)_msg->data;
+            _narr = _msg->len/sizeof(*_arr);
+            if (unlikely(_narr != ncls)) {
+                RTE_LOG(WARNING, TC, "%s: tc cls number does not match -- master=%d, slave[%d]=%d\n",
+                        __func__, ncls, _msg->cid, _narr);
+                msg_destroy(&msg);
+                err = EDPVS_INVAL;
+                goto errout;
+            }
+            for (i = 0; i < _narr; i++) {
+                entries[off++] = _arr[i];
+            }
+        }
+        msg_destroy(&msg);
+    }
+
+    assert(off <= nentry);
+    *narr = nentry;
+    *arr = entries;
+    return EDPVS_OK;
+
+errout:
+    if (entries)
+        rte_free(entries);
+    *narr = 0;
+    *arr = NULL;
     return err;
 }
 
@@ -325,7 +646,6 @@ static int tc_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
     const struct tc_conf *cf = conf;
     int err = EDPVS_INVAL;
-    struct netif_tc *tc;
     struct netif_port *dev;
 
     if (!conf || size < sizeof(*cf))
@@ -334,21 +654,18 @@ static int tc_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     dev = netif_port_get_by_name(cf->ifname);
     if (!dev)
         return EDPVS_NODEV;
-    tc = netif_tc(dev);
 
-    rte_rwlock_write_lock(&tc->lock);
     switch (cf->obj) {
     case TC_OBJ_QSCH:
-        err = __tc_so_qsch_set(tc, opt, &cf->param.qsch);
+        err = tc_so_qsch_set(dev, opt, &cf->param.qsch);
         break;
     case TC_OBJ_CLS:
-        err = __tc_so_cls_set(tc, opt, &cf->param.cls);
+        err = tc_so_cls_set(dev, opt, &cf->param.cls);
         break;
     default:
         err = EDPVS_NOTSUPP;
         break;
     }
-    rte_rwlock_write_unlock(&tc->lock);
     return err;
 }
 
@@ -356,10 +673,10 @@ static int tc_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                           void **out, size_t *outsize)
 {
     const struct tc_conf *cf = conf;
-    struct netif_tc *tc;
     struct netif_port *dev;
     union tc_param *param_arr = NULL;
-    int nparam = 0, err;
+    uint32_t nparam = 0;
+    int err;
 
     if (!conf || size < sizeof(*cf) || !out || !outsize)
         return EDPVS_INVAL;
@@ -367,16 +684,14 @@ static int tc_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     dev = netif_port_get_by_name(cf->ifname);
     if (!dev)
         return EDPVS_NODEV;
-    tc = netif_tc(dev);
 
-    rte_rwlock_read_lock(&tc->lock);
     switch (cf->obj) {
         case TC_OBJ_QSCH:
-            err = __tc_so_qsch_get(tc, opt, &cf->param.qsch,
+            err = tc_so_qsch_get(dev, opt, cf->op_flags, &cf->param.qsch,
                                    &param_arr, &nparam);
             break;
         case TC_OBJ_CLS:
-            err = __tc_so_cls_get(tc, opt, &cf->param.cls,
+            err = tc_so_cls_get(dev, opt, cf->op_flags, &cf->param.cls,
                                   &param_arr, &nparam);
             break;
         default:
@@ -389,7 +704,6 @@ static int tc_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         *outsize = nparam * sizeof(union tc_param);
     }
 
-    rte_rwlock_read_unlock(&tc->lock);
     return err;
 }
 
@@ -403,47 +717,69 @@ static struct dpvs_sockopts tc_sockopts = {
     .get            = tc_sockopt_get,
 };
 
-static int tc_msg_get_stats(struct dpvs_msg *msg)
-{
-    void *ptr;
-    struct Qsch *qsch;
-    struct tc_qsch_stats *st;
-
-    assert(msg && msg->len == sizeof(struct Qsch *));
-
-    ptr = msg->data;
-    qsch = *(struct Qsch **)ptr;
-
-    st = msg_reply_alloc(sizeof(*st));
-    if (!st)
-        return EDPVS_NOMEM;
-
-    st->qstats = qsch->this_qstats;
-    st->bstats = qsch->this_bstats;
-
-    msg->reply.len = sizeof(*st);
-    msg->reply.data = st;
-
-    return EDPVS_OK;
-}
-
-static struct dpvs_msg_type tc_stats_msg = {
-    .type           = MSG_TYPE_TC_STATS,
-    .prio           = MSG_PRIO_LOW,
-    .unicast_msg_cb = tc_msg_get_stats,
+static struct dpvs_msg_type tc_msg_types[] = {
+    {
+        .type           = MSG_TYPE_TC_QSCH_GET,
+        .prio           = MSG_PRIO_LOW,
+        .mode           = DPVS_MSG_MULTICAST,
+        .unicast_msg_cb = tc_qsch_get_cb,
+    },
+    {
+        .type           = MSG_TYPE_TC_QSCH_SET,
+        .prio           = MSG_PRIO_NORM,
+        .mode           = DPVS_MSG_MULTICAST,
+        .unicast_msg_cb = tc_qsch_set_cb,
+    },
+    {
+        .type           = MSG_TYPE_TC_CLS_GET,
+        .prio           = MSG_PRIO_LOW,
+        .mode           = DPVS_MSG_MULTICAST,
+        .unicast_msg_cb = tc_cls_get_cb,
+    },
+    {
+        .type           = MSG_TYPE_TC_CLS_SET,
+        .prio           = MSG_PRIO_LOW,
+        .mode           = DPVS_MSG_MULTICAST,
+        .unicast_msg_cb = tc_cls_set_cb,
+    },
 };
 
 int tc_ctrl_init(void)
 {
-    int err;
+    int i, err;
 
     err = sockopt_register(&tc_sockopts);
     if (err != EDPVS_OK)
         return err;
 
-    err = msg_type_mc_register(&tc_stats_msg);
+    for (i = 0; i < NELEMS(tc_msg_types); i++) {
+        err = msg_type_mc_register(&tc_msg_types[i]);
+        if (err != EDPVS_OK)
+            break;
+    }
     if (err != EDPVS_OK) {
+        for (--i; i >=0; i--)
+            msg_type_mc_unregister(&tc_msg_types[i]);
         sockopt_unregister(&tc_sockopts);
+        return err;
+    }
+
+    return EDPVS_OK;
+}
+
+int tc_ctrl_term(void)
+{
+    int i, err;
+
+    for (i = 0; i < NELEMS(tc_msg_types); i++) {
+        err = msg_type_mc_unregister(&tc_msg_types[i]);
+        if (err != EDPVS_OK)
+            RTE_LOG(ERR, TC, "%s: fail to unregister tc_msg_types[%d]\n", __func__, i);
+    }
+
+    err = sockopt_unregister(&tc_sockopts);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, TC, "%s: fail to unregister tc_sockopts\n", __func__);
         return err;
     }
 

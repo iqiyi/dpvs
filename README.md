@@ -1,3 +1,5 @@
+![Build](https://github.com/iqiyi/dpvs/workflows/Build/badge.svg)  ![Run](https://github.com/iqiyi/dpvs/workflows/Run/badge.svg)
+
 ![dpvs-logo.png](./pic/DPVS-logo.png)
 
 # Introduction
@@ -27,7 +29,7 @@ Major features of `DPVS` including:
 * Different *schedule algorithms* like RR, WLC, WRR, MH(Maglev Hashing), Conhash(Consistent Hashing) etc.
 * User-space *Lite IP stack* (IPv4/IPv6, Routing, ARP, Neighbor, ICMP ...).
 * Support *KNI*, *VLAN*, *Bonding*, *Tunneling* for different IDC environment.
-* Security aspect, support *TCP syn-proxy*, *Conn-Limit*, *black-list*.
+* Security aspect, support *TCP syn-proxy*, *Conn-Limit*, *black-list*， *white-list*.
 * QoS: *Traffic Control*.
 
 `DPVS` feature modules are illustrated as following picture.

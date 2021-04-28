@@ -40,6 +40,7 @@ netif_defs {
             pballoc             64k         <64k, 64k|128k|256k>
             status              matched     <matched, close|matched|always>
         }
+    !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
     }
@@ -55,6 +56,7 @@ netif_defs {
             queue_number        4
             descriptor_number   256
         }
+    !    mtu                    1500
     !    promisc_mode
     !    kni_name               dpdk1.kni
     }
@@ -135,6 +137,7 @@ worker_defs {
     <init> worker cpu5 {
         type    kni
         cpu_id  5
+        icmp_redirect_core
         port dpdk0 {
             tx_queue_ids 6
         }

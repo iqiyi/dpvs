@@ -29,6 +29,7 @@
 #include "ipvs/conn.h"
 #include "ipvs/service.h"
 #include "ipvs/blklst.h"
+#include "ipvs/whtlst.h"
 #include "ipvs/redirect.h"
 #include "parser/parser.h"
 #include "uoa.h"
@@ -65,7 +66,7 @@ static int udp_timeouts[DPVS_UDP_S_LAST + 1] = {
 inline void udp4_send_csum(struct ipv4_hdr *iph, struct udp_hdr *uh)
 {
     uh->dgram_cksum = 0;
-    uh->dgram_cksum = ip4_udptcp_cksum(iph, uh);
+    uh->dgram_cksum = rte_ipv4_udptcp_cksum(iph, uh);
 }
 
 inline void udp6_send_csum(struct ipv6_hdr *iph, struct udp_hdr *uh)
@@ -96,7 +97,7 @@ static inline int udp_send_csum(int af, int iphdrlen, struct udp_hdr *uh,
                 dev = conn->out_dev;
             if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
                 mbuf->l3_len = iphdrlen;
-                mbuf->l4_len = ntohs(ip6h->ip6_plen) + sizeof(struct ip6_hdr) -iphdrlen;
+                mbuf->l4_len = sizeof(struct udp_hdr);
                 mbuf->ol_flags |= (PKT_TX_UDP_CKSUM | PKT_TX_IPV6);
                 uh->dgram_cksum = ip6_phdr_cksum(ip6h, mbuf->ol_flags,
                         iphdrlen, IPPROTO_UDP);
@@ -129,9 +130,9 @@ static inline int udp_send_csum(int af, int iphdrlen, struct udp_hdr *uh,
                 dev = conn->out_dev;
             if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
                 mbuf->l3_len = iphdrlen;
-                mbuf->l4_len = ntohs(iph->total_length) - iphdrlen;
+                mbuf->l4_len = sizeof(struct udp_hdr);
                 mbuf->ol_flags |= (PKT_TX_UDP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
-                uh->dgram_cksum = ip4_phdr_cksum(iph, mbuf->ol_flags);
+                uh->dgram_cksum = rte_ipv4_phdr_cksum(iph, mbuf->ol_flags);
             } else {
                 if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                     return EDPVS_INVPKT;
@@ -208,6 +209,12 @@ udp_conn_lookup(struct dp_vs_proto *proto,
 
     if (dp_vs_blklst_lookup(iph->af, iph->proto, &iph->daddr,
                 uh->dst_port, &iph->saddr)) {
+        *drop = true;
+        return NULL;
+    }
+
+    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, 
+							uh->dst_port, &iph->saddr)) {
         *drop = true;
         return NULL;
     }

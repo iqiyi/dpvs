@@ -77,13 +77,13 @@ extern int log_slave_init(void);
         DPVS_MODULE(MODULE_TIMER,       "timer",                \
                     dpvs_timer_init,     dpvs_timer_term),      \
         DPVS_MODULE(MODULE_TC,          "tc",                   \
-                    tc_init,             NULL),                 \
+                    tc_init,             tc_term),              \
         DPVS_MODULE(MODULE_NETIF,       "netif",                \
                     netif_init,          netif_term),           \
-        DPVS_MODULE(MODULE_CTRL,        "cp",                   \
+        DPVS_MODULE(MODULE_CTRL,        "ctrl",                 \
                     ctrl_init,           ctrl_term),            \
-        DPVS_MODULE(MODULE_TC_CTRL,     "tc cp",                \
-                    tc_ctrl_init,        NULL),                 \
+        DPVS_MODULE(MODULE_TC_CTRL,     "tc_ctrl",              \
+                    tc_ctrl_init,        tc_ctrl_term),         \
         DPVS_MODULE(MODULE_VLAN,        "vlan",                 \
                     vlan_init,           NULL),                 \
         DPVS_MODULE(MODULE_INET,        "inet",                 \

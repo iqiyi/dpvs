@@ -35,6 +35,7 @@
 #include "ctrl.h"
 #include "conf/conn.h"
 #include "sys_time.h"
+#include "global_data.h"
 
 #define DPVS_CONN_TBL_BITS          20
 #define DPVS_CONN_TBL_SIZE          (1 << DPVS_CONN_TBL_BITS)
@@ -1239,8 +1240,6 @@ struct ip_vs_conn_array_list {
     ipvs_conn_entry_t array[0];
 };
 
-static uint8_t g_slave_lcore_nb;
-static uint64_t g_slave_lcore_mask;
 static struct list_head conn_to_dump;
 
 static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
@@ -1737,7 +1736,6 @@ static int conn_ctrl_init(void)
     int err;
 
     INIT_LIST_HEAD(&conn_to_dump);
-    netif_get_slave_lcores(&g_slave_lcore_nb, &g_slave_lcore_mask);
 
     if ((err = register_conn_get_msg()) != EDPVS_OK)
         return err;

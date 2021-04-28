@@ -21,6 +21,7 @@ DPVS Tutorial
   - [KNI for virtual device](#vdev-kni)
 * [UDP Option of Address (UOA)](#uoa)
 * [Launch DPVS in Virtual Machine (Ubuntu)](#Ubuntu16.04)
+* [Traffic Control(TC)](#tc)
 * [Debug DPVS](#debug)
   - [Debug with Log](#debug-with-log)
   - [Packet Capture and Tcpdump](#packet-capture)
@@ -1150,6 +1151,12 @@ worker_defs {
     }
 
 ```
+
+<a id='tc'/>
+
+# Traffic Control(TC)
+
+Please refer to doc [tc.md](tc.md).
 
 <a id='debug'/>
 

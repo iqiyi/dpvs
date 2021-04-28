@@ -26,6 +26,7 @@
 #define __DPVS_TC_SCH_H__
 #include <assert.h>
 #include "conf/common.h"
+#include "tc.h"
 #ifdef __DPVS__
 #include "dpdk.h"
 #include "timer.h"
@@ -67,7 +68,6 @@ struct Qsch_ops {
 
     /* internal use */
     struct list_head        list;       /* global sch ops list */
-    rte_atomic32_t          refcnt;
 };
 
 /* queue scheduler, see kernel Qdisc */
@@ -78,24 +78,19 @@ struct Qsch {
     struct list_head        cls_list;   /* classifiers */
     int                     cls_cnt;
     struct hlist_node       hlist;      /* netif_tc.qsch_hash node */
+    struct list_head        list_node;  /* qsch_head list node */
     struct netif_tc         *tc;
-    rte_atomic32_t          refcnt;
+    uint32_t                refcnt;
 
     uint32_t                limit;
-    struct tc_mbuf_head     q[DPVS_MAX_LCORE];
+    struct tc_mbuf_head     q;
     uint32_t                flags;
 
     struct Qsch_ops         *ops;
 
     /* per-lcore statistics */
-    struct qsch_qstats      qstats[DPVS_MAX_LCORE];
-    struct qsch_bstats      bstats[DPVS_MAX_LCORE];
-
-    struct dpvs_timer       rc_timer;
-
-#define this_q      q[rte_lcore_id()]
-#define this_qstats qstats[rte_lcore_id()]
-#define this_bstats bstats[rte_lcore_id()]
+    struct qsch_qstats      qstats;
+    struct qsch_bstats      bstats;
 };
 
 struct qsch_rate {
@@ -130,12 +125,11 @@ static inline uint64_t qsch_t2l_ns(const struct qsch_rate *rate, uint64_t ns)
 static inline int qsch_drop(struct Qsch *sch, struct rte_mbuf *mbuf)
 {
     rte_pktmbuf_free(mbuf);
-    sch->this_qstats.drops++;
+    sch->qstats.drops++;
     return EDPVS_DROP;
 }
 
-static inline int __qsch_enqueue_tail(struct Qsch *sch, struct rte_mbuf *mbuf,
-                                      struct tc_mbuf_head *qh)
+static inline int __qsch_enqueue_tail(struct Qsch *sch, struct rte_mbuf *mbuf, struct tc_mbuf_head *q)
 {
     struct tc_mbuf *tm;
     assert(sch && sch->tc && sch->tc->tc_mbuf_pool && mbuf);
@@ -147,88 +141,102 @@ static inline int __qsch_enqueue_tail(struct Qsch *sch, struct rte_mbuf *mbuf,
     }
 
     tm->mbuf = mbuf;
-    list_add_tail(&tm->list, &qh->mbufs);
-    qh->qlen++;
-    sch->this_qstats.backlog += mbuf->pkt_len;
-    sch->this_qstats.qlen++;
+    list_add_tail(&tm->list, &q->mbufs);
+    q->qlen++;
 
     return EDPVS_OK;
 }
 
 static inline int qsch_enqueue_tail(struct Qsch *sch, struct rte_mbuf *mbuf)
 {
-    return __qsch_enqueue_tail(sch, mbuf, &sch->this_q);
+    int err;
+
+    err = __qsch_enqueue_tail(sch, mbuf, &sch->q);
+    if (unlikely(err != EDPVS_OK))
+        return err;
+
+    sch->qstats.backlog += mbuf->pkt_len;
+    sch->qstats.qlen++;
+
+    return EDPVS_OK;
 }
 
-static inline struct rte_mbuf *__qsch_dequeue_head(struct Qsch *sch,
-                                                   struct tc_mbuf_head *qh)
+static inline struct rte_mbuf *__qsch_dequeue_head(struct Qsch *sch, struct tc_mbuf_head *q)
 {
     struct tc_mbuf *tm;
     struct rte_mbuf *mbuf;
 
-    tm = list_first_entry(&qh->mbufs, struct tc_mbuf, list);
+    if (list_empty(&q->mbufs))
+        return NULL;
+
+    tm = list_first_entry(&q->mbufs, struct tc_mbuf, list);
     if (unlikely(!tm))
         return NULL;
 
     list_del(&tm->list);
     mbuf = tm->mbuf;
-    qh->qlen--;
-    sch->this_qstats.backlog -= mbuf->pkt_len;
-    sch->this_bstats.packets += 1;
-    sch->this_bstats.bytes += mbuf->pkt_len;
-    sch->this_qstats.qlen--;
-
+    q->qlen--;
     rte_mempool_put(sch->tc->tc_mbuf_pool, tm);
+
     return mbuf;
 }
 
 static inline struct rte_mbuf *qsch_dequeue_head(struct Qsch *sch)
 {
-    return __qsch_dequeue_head(sch, &sch->this_q);
+    struct rte_mbuf *mbuf;
+
+    mbuf = __qsch_dequeue_head(sch, &sch->q);
+    if (unlikely(!mbuf))
+        return NULL;
+
+    sch->qstats.qlen--;
+    sch->qstats.backlog -= mbuf->pkt_len;
+    sch->bstats.packets++;
+    sch->bstats.bytes += mbuf->pkt_len;
+
+    return mbuf;
 }
 
 static inline struct rte_mbuf *qsch_peek_head(struct Qsch *sch)
 {
     struct tc_mbuf *tm;
 
-    tm = list_first_entry(&sch->this_q.mbufs, struct tc_mbuf, list);
+    if (list_empty(&sch->q.mbufs))
+        return NULL;
+
+    tm = list_first_entry(&sch->q.mbufs, struct tc_mbuf, list);
     if (unlikely(!tm))
         return NULL;
 
     return tm->mbuf;
 }
 
-static inline void __qsch_reset_queue(struct Qsch *sch,
-                                      struct tc_mbuf_head *qh)
+static inline void __qsch_reset_queue(struct Qsch *sch, struct tc_mbuf_head *q)
 {
     struct tc_mbuf *tm, *n;
 
-    list_for_each_entry_safe(tm, n, &qh->mbufs, list) {
+    list_for_each_entry_safe(tm, n, &q->mbufs, list) {
+        list_del(&tm->list);
         qsch_drop(sch, tm->mbuf);
         rte_mempool_put(sch->tc->tc_mbuf_pool, tm);
     }
-    INIT_LIST_HEAD(&qh->mbufs);
-    qh->qlen = 0;
-    sch->this_qstats.qlen = 0;
-    sch->this_qstats.backlog = 0;
+    INIT_LIST_HEAD(&q->mbufs);
+    q->qlen = 0;
 }
 
 static inline void qsch_reset_queue(struct Qsch *sch)
 {
-    return __qsch_reset_queue(sch, &sch->this_q);
+    __qsch_reset_queue(sch, &sch->q);
+    sch->qstats.qlen = 0;
+    sch->qstats.backlog = 0;
 }
 
 /* Qsch APIs */
 struct Qsch *qsch_create(struct netif_port *dev, const char *kind,
                          tc_handle_t parent, tc_handle_t handle,
                          const void *arg, int *errp);
-struct Qsch *qsch_create_dflt(struct netif_port *dev, struct Qsch_ops *ops,
-                              tc_handle_t parent);
 void qsch_destroy(struct Qsch *sch);
 int qsch_change(struct Qsch *sch, const void *arg);
-void qsch_reset(struct Qsch *sch);
-void qsch_stats(struct Qsch *sch, struct qsch_qstats *qstats,
-                struct qsch_bstats *bstats);
 
 void qsch_hash_add(struct Qsch *sch, bool invisible);
 void qsch_hash_del(struct Qsch *sch);
@@ -236,20 +244,39 @@ void qsch_hash_del(struct Qsch *sch);
 struct Qsch *qsch_lookup(const struct netif_tc *tc, tc_handle_t handle);
 struct Qsch *qsch_lookup_noref(const struct netif_tc *tc, tc_handle_t handle);
 void qsch_do_sched(struct Qsch *sch);
+tc_handle_t sch_alloc_handle(struct netif_tc *tc);
+
+static inline void sch_free(struct Qsch *sch)
+{
+    rte_free(sch);
+}
 
 static inline void qsch_get(struct Qsch *sch)
 {
-    rte_atomic32_inc(&sch->refcnt);
+    sch->refcnt++;
 }
 
 static inline void qsch_put(struct Qsch *sch)
 {
-    rte_atomic32_dec(&sch->refcnt);
+    struct Qsch_ops *ops = sch->ops;
+
+    if (--sch->refcnt > 0)
+        return;
+
+    if (ops->reset)
+        ops->reset(sch);
+    if (ops->destroy)
+        ops->destroy(sch);
+
+    sch_free(sch);
 }
 
-int fifo_set_limit(struct Qsch *sch, unsigned int limit);
-struct Qsch *fifo_create_dflt(struct Qsch *sch, struct Qsch_ops *ops,
-                              unsigned int limit);
+void *qsch_shm_get_or_create(struct Qsch *sch, uint32_t len);
+int qsch_shm_put_or_destroy(struct Qsch *sch);
+int qsch_shm_init(void);
+int qsch_shm_term(void);
+int qsch_init(void);
+int qsch_term(void);
 
 #endif /* __DPVS__ */
 
