@@ -36,7 +36,6 @@
 #include "netif.h"
 #include "assert.h"
 #include "neigh.h"
-#include "ipset.h"
 
 static rte_atomic16_t dp_vs_num_services[DPVS_MAX_LCORE];
 
@@ -218,11 +217,7 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
         if ((rt->flag & RTF_KNI) || (rt->flag & RTF_LOCALIN))
             return NULL;
         oif = rt->port->id;
-    } else if (outwall != NULL && (NULL != ipset_addr_lookup(AF_INET, &daddr))
-                               && (rt = route_gfw_net_lookup(&daddr.in))) {
-        char dst[64];
-        RTE_LOG(DEBUG, IPSET, "%s: IP %s is in the gfwip set, found route in the outwall table.\n", __func__,
-                              inet_ntop(AF_INET, &daddr, dst, sizeof(dst))? dst: "");
+    } else if (outwall != NULL && (rt = route_gfw_net_lookup(&daddr.in))) {
         oif = rt->port->id;
         route4_put(rt);
         *outwall = true;

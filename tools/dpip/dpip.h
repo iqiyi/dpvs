@@ -31,6 +31,7 @@ typedef enum dpip_cmd_e {
     DPIP_CMD_REPLACE,
     DPIP_CMD_FLUSH,
     DPIP_CMD_HELP,
+    DPIP_CMD_TEST,
 } dpip_cmd_t;
 
 struct dpip_conf {
@@ -40,6 +41,8 @@ struct dpip_conf {
     int         interval;
     int         count;
     bool        color;
+    bool        destroy;
+    bool        force;
     char        *obj;
     dpip_cmd_t  cmd;
     int         argc;
