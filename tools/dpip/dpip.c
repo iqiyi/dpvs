@@ -34,7 +34,7 @@ static void usage(void)
         "    "DPIP_NAME" [OPTIONS] OBJECT { COMMAND | help }\n"
         "Parameters:\n"
         "    OBJECT  := { link | addr | route | neigh | vlan | tunnel |\n"
-        "                 qsch | cls | ipv6 | iftraf | eal-mem }\n"
+        "                 qsch | cls | ipv6 | iftraf | eal-mem | ipset }\n"
         "    COMMAND := { add | del | change | replace | show | flush | enable | disable }\n"
         "Options:\n"
         "    -v, --verbose\n"
@@ -44,6 +44,8 @@ static void usage(void)
         "    -6, --family=inet6\n"
         "    -s, --stats, statistics\n"
         "    -C, --color\n"
+        "    -D, --destroy\n"
+        "    -F, --force\n"
         );
 }
 
@@ -62,6 +64,7 @@ static struct dpip_obj *dpip_obj_get(const char *name)
 static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
 {
     int opt;
+    bool show_usage = false;
     struct dpip_obj *obj;
     struct option opts[] = {
         {"verbose", no_argument, NULL, 'v'},
@@ -73,6 +76,8 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         {"color",  no_argument, NULL, 'C'},
         {"interval", required_argument, NULL, 'i'},
         {"count", required_argument, NULL, 'c'},
+        {"destroy", no_argument, NULL, 'D'},
+        {"force", no_argument, NULL, 'F'},
         {NULL, 0, NULL, 0},
     };
 
@@ -84,14 +89,14 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         exit(0);
     }
 
-    while ((opt = getopt_long(argc, argv, "vhV46f:si:c:C", opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "vhV46f:si:c:CDF", opts, NULL)) != -1) {
         switch (opt) {
         case 'v':
             conf->verbose = 1;
             break;
         case 'h':
-            usage();
-            exit(0);
+            show_usage = true;
+            break;
         case 'V':
             printf(DPIP_NAME"-"DPIP_VERSION"\n");
             exit(0);
@@ -121,7 +126,13 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
             conf->count = atoi(optarg);
             break;
         case 'C':
-                conf->color = true;
+            conf->color = true;
+            break;
+        case 'D':
+            conf->destroy = true;
+            break;
+        case 'F':
+            conf->force = true;
             break;
         case '?':
         default:
@@ -143,7 +154,7 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
     argv += optind;
 
     conf->obj = argv[0];
-    if (argc < 2) {
+    if (argc < 2 || show_usage) {
         obj = dpip_obj_get(conf->obj);
         if (obj && obj->help)
             obj->help();
@@ -170,6 +181,8 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         conf->cmd = DPIP_CMD_FLUSH;
     else if (strcmp(argv[1], "help") == 0)
         conf->cmd = DPIP_CMD_HELP;
+    else if (strcmp(argv[1], "test") == 0)
+        conf->cmd = DPIP_CMD_TEST;
     else {
         fprintf(stderr, "invalid command %s\n", argv[1]);
         exit(1);
