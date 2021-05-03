@@ -98,8 +98,7 @@ $ cd dpdk-stable-18.11.11
 $ mkdir [user desired install folder - dpdklib]
 $ mkdir [user desired build folder - dpdkbuild]
 $ meson  -Dprefix=[dpdklib] dpdkbuild
-$ ninja -C dpdkbuild
-$ cd dpdkbuild; ninja install
+$ ninja -C dpdkbuild install
 $ export PKG_CONFIG_PATH=$(PKG_CONFIG_PATH):[user desired install folder - dpdklib]/lib/pkgconfig/
 ```
 
