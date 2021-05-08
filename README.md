@@ -162,7 +162,7 @@ $ make # or "make -j40" to speed up.
 $ make install
 ```
 
-> Build dependencies may be needed, such as `automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`. You can install the missing dependencies by using the package manager of the system, e.g., `yum install popt-devel` (CentOS).
+> Build dependencies may be needed, such as `pkg-config`(latest version),`automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`. You can install the missing dependencies by using the package manager of the system, e.g., `yum install popt-devel` (CentOS).
 
 Output files are installed to `dpvs/bin`.
 

@@ -199,12 +199,12 @@ int mbuf_init(void)
         [ MBUF_FIELD_PROTO ] = {
             .name = "route",
             .size = sizeof(mbuf_userdata_field_proto_t),
-            .align = RTE_CACHE_LINE_SIZE,
+            .align = 8,
         },
         [ MBUF_FIELD_ROUTE ] = {
             .name = "protocol",
             .size = sizeof(mbuf_userdata_field_route_t),
-            .align = RTE_CACHE_LINE_SIZE,
+            .align = 8,
         },
     };
 

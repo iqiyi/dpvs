@@ -152,7 +152,7 @@ void *mbuf_userdata_const(const struct rte_mbuf *, mbuf_usedata_field_t);
 
 static inline void mbuf_userdata_reset(struct rte_mbuf *m)
 {
-    memset(m, 0, sizeof(m->dynfield1));
+    memset((void *)m->dynfield1, 0, sizeof(m->dynfield1));
 }
 
 int mbuf_init(void);
