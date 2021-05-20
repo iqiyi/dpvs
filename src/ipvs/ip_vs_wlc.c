@@ -26,9 +26,11 @@ static inline unsigned int dp_vs_wlc_dest_overhead(struct dp_vs_dest *dest)
 static struct dp_vs_dest *dp_vs_wlc_schedule(struct dp_vs_service *svc,
                     const struct rte_mbuf *mbuf, const struct dp_vs_iphdr *iph __rte_unused)
 {
+    struct list_head *first, *cur;
     struct dp_vs_dest *dest, *least;
     unsigned int loh, doh;
 
+    first = dp_vs_sched_first_dest(svc);
     /*
      * We calculate the load of each dest server as follows:
      *                (dest overhead) / dest->weight
@@ -36,26 +38,36 @@ static struct dp_vs_dest *dp_vs_wlc_schedule(struct dp_vs_service *svc,
      * The server with weight=0 is quiesced and will not receive any
      * new connections.
      */
-
-    list_for_each_entry(dest, &svc->dests, n_list) {
+    cur = first;
+    do {
+        if (unlikely(cur == &svc->dests)) {
+            cur = cur->next;
+            continue;
+        }
+        dest = list_entry(cur, struct dp_vs_dest, n_list);
         if (dp_vs_dest_is_valid(dest)) {
             least = dest;
             loh = dp_vs_wlc_dest_overhead(least);
             goto nextstage;
         }
-    }
+        cur = cur->next;
+    } while (cur != first);
+
     return NULL;
 
     /*
      *    Find the destination with the least load.
      */
 nextstage:
-    list_for_each_entry_continue(dest, &svc->dests, n_list) {
+    for (cur = cur->next; cur != first; cur = cur->next) {
+        if (unlikely(cur == &svc->dests))
+            continue;
+        dest = list_entry(cur, struct dp_vs_dest, n_list);
         if (dest->flags & DPVS_DEST_F_OVERLOAD)
             continue;
         doh = dp_vs_wlc_dest_overhead(dest);
         if (loh * rte_atomic16_read(&dest->weight) >
-            doh * rte_atomic16_read(&least->weight)) {
+                doh * rte_atomic16_read(&least->weight)) {
             least = dest;
             loh = doh;
         }

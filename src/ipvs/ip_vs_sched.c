@@ -120,6 +120,29 @@ int dp_vs_gcd_weight(struct dp_vs_service *svc)
 }
 
 /*
+ * Different workers should start schedule algorith from the dests that are evenly distributed
+ * across the whole dest list. It can avoid the clustering of connections across dests on the
+ * early phase after the service setup, especially for such scheduling methods as rr/wrr/wlc.
+ */
+struct list_head * dp_vs_sched_first_dest(const struct dp_vs_service *svc)
+{
+    int i, cid, loc;
+    struct list_head *ini;
+
+    cid = rte_lcore_id();
+    ini = svc->dests.next;
+    loc = (svc->num_dests / g_slave_lcore_num ?: 1) * g_lcore_index[cid] % (svc->num_dests ?: 1);
+
+    for (i = 0; i < loc; i++) {
+        ini = ini->next;
+        if (unlikely(ini == &svc->dests))
+            ini = ini->next;
+    }
+
+    return ini;
+}
+
+/*
  *  Lookup scheduler and try to load it if it doesn't exist
  */
 struct dp_vs_scheduler *dp_vs_scheduler_get(const char *sched_name)

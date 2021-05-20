@@ -54,7 +54,7 @@ static int dp_vs_wrr_init_svc(struct dp_vs_service *svc)
     if (mark == NULL) {
         return EDPVS_NOMEM;
     }
-    mark->cl = &svc->dests;
+    mark->cl = dp_vs_sched_first_dest(svc);
     mark->cw = 0;
     mark->mw = dp_vs_wrr_max_weight(svc);
     mark->di = dp_vs_gcd_weight(svc);
@@ -78,7 +78,7 @@ static int dp_vs_wrr_update_svc(struct dp_vs_service *svc,
 {
     struct dp_vs_wrr_mark *mark = svc->sched_data;
 
-    mark->cl = &svc->dests;
+    mark->cl = dp_vs_sched_first_dest(svc);
     mark->mw = dp_vs_wrr_max_weight(svc);
     mark->di = dp_vs_gcd_weight(svc);
     if (mark->cw > mark->mw)
