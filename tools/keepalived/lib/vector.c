@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include <string.h>
+
 #include "vector.h"
 #include "memory.h"
 
@@ -309,6 +311,32 @@ vector_dump(FILE *fp, const vector_t *v)
 #endif
 
 /* String vector related */
+char *
+make_strvec_str(const vector_t *v, unsigned start)
+{
+	size_t len;
+	char *str;
+	unsigned i;
+
+	for (i = start, len = 0; i < v->allocated; i++) {
+		if (v->slot[i])
+			len += strlen(v->slot[i]) + 1;
+	}
+
+	str = MALLOC(len);
+
+	for (i = start, len = 0; i < v->allocated; i++) {
+		if (v->slot[i]) {
+			if (i > start)
+				str[len++] = ' ';
+			strcpy(str + len, v->slot[i]);
+			len += strlen(v->slot[i]);
+		}
+	}
+
+	return str;
+}
+
 void
 free_strvec(const vector_t *strvec)
 {

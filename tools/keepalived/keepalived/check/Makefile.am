@@ -14,7 +14,7 @@ noinst_LIBRARIES	= libcheck.a
 
 libcheck_a_SOURCES = \
 	check_daemon.c check_data.c check_parser.c \
-	check_api.c check_tcp.c check_http.c check_ssl.c \
+	check_api.c check_tcp.c check_udp.c check_http.c check_ssl.c \
 	check_smtp.c check_misc.c check_dns.c check_print.c \
 	ipwrapper.c ipvswrapper.c libipvs.c sockopt.c
 
