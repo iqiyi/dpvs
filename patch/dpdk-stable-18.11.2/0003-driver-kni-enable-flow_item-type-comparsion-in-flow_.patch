@@ -1,7 +1,7 @@
-From 2e26428dc4d450e974ceb9bc737f691057cd80b6 Mon Sep 17 00:00:00 2001
+From e3d1e01d57ebca7feb9a602a2949661e4351c5ad Mon Sep 17 00:00:00 2001
 From: ywc689 <ywc689@163.com>
 Date: Fri, 28 Jun 2019 17:02:40 +0800
-Subject: [PATCH 3/3] driver:kni: enable flow_item type comparsion in
+Subject: [PATCH 3/7] driver:kni: enable flow_item type comparsion in
  flow_fdir_cmp
 
 the existence is checked before adding/deleting a fdir flow, but
