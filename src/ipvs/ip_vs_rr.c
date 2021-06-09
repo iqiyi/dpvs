@@ -20,15 +20,15 @@
 
 static int dp_vs_rr_init_svc(struct dp_vs_service *svc)
 {
-    svc->sched_data = &svc->dests;
+    svc->sched_data = dp_vs_sched_first_dest(svc);
+
     return EDPVS_OK;
 }
 
 static int dp_vs_rr_update_svc(struct dp_vs_service *svc,
         struct dp_vs_dest *dest __rte_unused, sockoptid_t opt __rte_unused)
 {
-    svc->sched_data = &svc->dests;
-    return EDPVS_OK;
+    return dp_vs_rr_init_svc(svc);
 }
 
 /*
@@ -68,7 +68,6 @@ out:
 
 static struct dp_vs_scheduler dp_vs_rr_scheduler = {
     .name = "rr",       /* name */
-//    .refcnt = ATOMIC_INIT(0),
     .n_list = LIST_HEAD_INIT(dp_vs_rr_scheduler.n_list),
     .init_service = dp_vs_rr_init_svc,
     .update_service = dp_vs_rr_update_svc,
