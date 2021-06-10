@@ -431,9 +431,20 @@ virtual_server group 192.168.100.254-80 {
 }
 ```
 
-The keepalived config for backup is the same with Master, except the `state` should be 'BACKUP', and `priority` should be lower.
+The keepalived config for backup is the same with Master, except
+
+* local address is not the same with MASTER,
+* vrrp_instance `state` should be 'BACKUP',
+* vrrp_instance `priority` should be lower.
 
 ```
+local_address_group laddr_g1 {
+    192.168.100.202 dpdk0    # use DPDK interface
+    192.168.100.203 dpdk0    # use DPDK interface
+}
+
+... ...
+
 vrrp_instance VI_1 {
     state BACKUP
     priority 80
@@ -447,12 +458,19 @@ Start `keepalived` on both Master and Backup.
 ./keepalived -f /etc/keepalived/keepalived.conf
 ```
 
-For **test only**, add `VIP` and *routes* to DPDK interface manually on Master. Do not set VIP on both master and backup, in practice they should be added to keepalived configure file.
+Then, add *routes* to DPDK interface manually on both MASTER and BACKUP.
 
 ```bash
-./dpip addr add 192.168.100.254/32 dev dpdk0
 ./dpip route add 192.168.100.0/24 dev dpdk0
 ```
+Lastly, configure dpdk0.kni to make keepalived's vrrp and health-check work properly.
+
+```bash
+ip link set dpdk0.kni up
+ip addr add 192.168.100.28/24 dev dpdk0.kni               # assign an IP to dpdk0.kni
+dpip route add 192.168.100.28/32 scope kni_host dev dpdk0 # route packets target at 192.168.100.28 to dpdk0.kni
+```
+Note the dpdk0.kni's IP addresses should be different for MASTER and BACKUP.
 
 Check if parameters just set are correct:
 
@@ -465,7 +483,7 @@ TCP  192.168.100.254:80 rr
   -> 192.168.100.2:80             FullNat 100    0          0
   -> 192.168.100.3:80             FullNat 100    0          0
 
-$ ./dpip addr show
+$ ./dpip addr show -s
 inet 192.168.100.254/32 scope global dpdk0
      valid_lft forever preferred_lft forever
 inet 192.168.100.201/32 scope global dpdk0
@@ -474,8 +492,10 @@ inet 192.168.100.200/32 scope global dpdk0
      valid_lft forever preferred_lft forever sa_used 0 sa_free 1032176 sa_miss 0
 
 $ ./dpip route show
+inet 192.168.100.28/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope kni_host metric 0 proto auto
 inet 192.168.100.200/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
 inet 192.168.100.201/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
+inet 192.168.100.254/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
 inet 192.168.100.0/24 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope link metric 0 proto auto
 
 $ ./ipvsadm  -G
@@ -492,7 +512,20 @@ client$ curl 192.168.100.254
 Your ip:port : 192.168.100.146:42394
 ```
 
-> We just explain how DPVS works with keepalived, and not verify if the master/backup feature provided by keepalived works. Please refer LVS docs if needed.
+> Note:
+> 1. We just explain how DPVS works with keepalived, and not verify if the master/backup feature provided by keepalived works. Please refer LVS docs if needed.
+> 2. Keepalived master/backup failover may fail if switch enabled the ARP broadcast suppression (unfortunately often is the case). If you don't want to change configurations of your switch, decrease the number of gratuitous ARP packets sent by keepalived (dpvs) on failover may help.
+
+```
+global_defs {
+    ... ...
+   vrrp_garp_master_repeat          1   # repeat counts for master state gratuitous arp
+   vrrp_garp_master_delay           1   # time to relaunch gratuitous arp after failover for master, in second
+   vrrp_garp_master_refresh         600 # time interval to refresh gratuitous arp periodically(0 = none), in second
+   vrrp_garp_master_refresh_repeat  1   # repeat counts to refresh gratuitous arp periodically
+   ... ...
+}
+```
 
 <a id='dr'/>
 
