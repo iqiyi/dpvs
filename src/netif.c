@@ -264,7 +264,7 @@ static void fdir_mode_handler(vector_t tokens)
                 mode, "perfect");
         g_fdir_mode = RTE_FDIR_MODE_PERFECT;
     }
-    RTE_LOG(INFO, NETIF, "%s:g_fdir_mode = %s\n", mode);
+    RTE_LOG(INFO, NETIF, "g_fdir_mode = %s\n", mode);
 
     FREE_PTR(str);
 }
@@ -445,7 +445,7 @@ static void kni_name_handler(vector_t tokens)
             struct port_conf_stream, port_list_node);
 
     assert(str);
-    RTE_LOG(INFO, NETIF, "%s: kni_name = %s\n",current_device->name, str);
+    RTE_LOG(INFO, NETIF, "%s:kni_name = %s\n",current_device->name, str);
     strncpy(current_device->kni_name, str, sizeof(current_device->kni_name));
 
     FREE_PTR(str);
