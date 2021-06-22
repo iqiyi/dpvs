@@ -220,6 +220,9 @@ int netif_flow_flush(struct netif_port *dev)
     if (unlikely(!dev))
         return EDPVS_INVAL;
 
+    if (dev->type == PORT_TYPE_BOND_SLAVE)
+        return EDPVS_OK;
+
     if (dev->type == PORT_TYPE_VLAN) {
         struct vlan_dev_priv *vlan = netif_priv(dev);
         if (unlikely(!vlan || !vlan->real_dev))
@@ -244,7 +247,7 @@ int netif_flow_flush(struct netif_port *dev)
         return err;
     }
 
-    return EDPVS_INVAL;
+    return EDPVS_NOTSUPP;
 }
 
 /*
