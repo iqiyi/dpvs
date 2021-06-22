@@ -21,7 +21,7 @@
 # TODO: use standard way to define compile flags.
 #
 
-CONFIG_MLX5=n
+CONFIG_IXGEB_PMD=y
 CONFIG_PDUMP=y
 
 CFLAGS += -D DPVS_MAX_SOCKET=2
@@ -47,7 +47,7 @@ CFLAGS += -D DPVS_MAX_LCORE=64
 #CFLAGS += -D CONFIG_ICMP_REDIRECT_CORE
 
 # for ixgbe nic
-ifneq ($(CONFIG_MLX5), y)
+ifeq ($(CONFIG_IXGEB_PMD), y)
 CFLAGS += -D CONFIG_DPVS_FDIR
 endif
 
@@ -59,6 +59,3 @@ GCC_MAJOR = $(shell echo __GNUC__ | $(CC) -E -x c - | tail -n 1)
 GCC_MINOR = $(shell echo __GNUC_MINOR__ | $(CC) -E -x c - | tail -n 1)
 GCC_VERSION = $(GCC_MAJOR)$(GCC_MINOR)
 
-ifeq ($(CONFIG_MLX5), y)
-LIBS += -libverbs -lmlx5 -lmnl
-endif
