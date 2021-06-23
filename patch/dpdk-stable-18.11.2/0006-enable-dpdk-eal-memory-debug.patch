@@ -1,7 +1,7 @@
-From 19652889ed74b09aba6f22dfa96b19c009a7309a Mon Sep 17 00:00:00 2001
+From 51aa71b8c000a55e9caac0fe12b216d8bde05ac8 Mon Sep 17 00:00:00 2001
 From: ywc <ywc689@163.com>
 Date: Mon, 25 Jan 2021 10:27:52 +0800
-Subject: [PATCH] enable dpdk eal memory debug
+Subject: [PATCH 6/7] enable dpdk eal memory debug
 
 ---
  config/common_base                         |  2 +-
@@ -10,7 +10,7 @@ Subject: [PATCH] enable dpdk eal memory debug
  3 files changed, 20 insertions(+), 1 deletion(-)
 
 diff --git a/config/common_base b/config/common_base
-index d12ae98..765ae2e 100644
+index 5ac8d11..ef15b0a 100644
 --- a/config/common_base
 +++ b/config/common_base
 @@ -94,7 +94,7 @@ CONFIG_RTE_EAL_IGB_UIO=n

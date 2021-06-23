@@ -63,11 +63,12 @@ netif_defs {
     }
 
     <init> bonding bond0 {
-        mode                    0
+        mode                    4
         slave                   dpdk0
         slave                   dpdk2
         primary                 dpdk0
         kni_name                bond0.kni
+        options                 dedicated_queues=off
     }
 }
 
