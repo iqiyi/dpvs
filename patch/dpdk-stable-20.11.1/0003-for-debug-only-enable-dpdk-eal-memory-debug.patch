@@ -1,7 +1,7 @@
 From 906f4690d1f3cadca260b23fd1c839d12db9e629 Mon Sep 17 00:00:00 2001
 From: wencyu <yuwenchao@qiyi.com>
 Date: Fri, 18 Jun 2021 11:43:07 +0800
-Subject: [PATCH 3/4] [for debug only] enable dpdk eal memory debug
+Subject: [PATCH 3/5] [for debug only] enable dpdk eal memory debug
 
 The patch is used for memory debug. To use the patch, configure meson with option
 -Dc_args="-DRTE_MALLOC_DEBUG" when building dpdk. For example,

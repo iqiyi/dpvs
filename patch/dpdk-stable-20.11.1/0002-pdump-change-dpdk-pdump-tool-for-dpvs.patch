@@ -1,7 +1,7 @@
 From 6a99af8a3f9067a18211d15b4a65bcafa9430875 Mon Sep 17 00:00:00 2001
 From: wencyu <yuwenchao@qiyi.com>
 Date: Fri, 18 Jun 2021 10:20:45 +0800
-Subject: [PATCH 2/4] pdump: change dpdk-pdump tool for dpvs
+Subject: [PATCH 2/5] pdump: change dpdk-pdump tool for dpvs
 
 Signed-off-by: wencyu <yuwenchao@qiyi.com>
 ---

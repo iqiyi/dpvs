@@ -1,7 +1,7 @@
 From 83ba9cf5e6eb111f8becc1e9c05301fabb40e16b Mon Sep 17 00:00:00 2001
 From: wencyu <yuwenchao@qiyi.com>
 Date: Fri, 18 Jun 2021 14:00:24 +0800
-Subject: [PATCH 4/4] ixgbe_flow: patch ixgbe fdir rte_flow for dpvs
+Subject: [PATCH 4/5] ixgbe_flow: patch ixgbe fdir rte_flow for dpvs
 
 1. Ignore fdir flow rule priority attribute.
 2. Use different fdir soft-id for flow rules configured for the same queue.
