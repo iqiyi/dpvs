@@ -35,6 +35,7 @@
 #include "dpdk.h"
 #include "netif.h"
 #include "netif_addr.h"
+#include "netdev_flow.h"
 #include "kni.h"
 
 #define Kni /* KNI is defined */
@@ -45,6 +46,11 @@
 #define KNI_MBUFPOOL_CACHE_SIZE 256
 
 static struct rte_mempool *kni_mbuf_pool[DPVS_MAX_SOCKET];
+
+extern netif_filter_op_func g_netif_filter_func;
+
+/* kni fdir info */
+static struct kni_fdir kni_fdir = { .init_success = false, .port_base_num = 0 };
 
 static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
                           struct rte_kni_conf *conf)
@@ -401,6 +407,130 @@ int kni_del_dev(struct netif_port *dev)
     rte_ring_free(dev->kni.rx_ring);
     dev->kni.kni = NULL;
     dev->kni.rx_ring = NULL;
+    return EDPVS_OK;
+}
+
+/*
+ * @brief: init kni fdir, set dip + proto + dport + dst_port_mask
+ *         filters for kni_ip to replace dip + proto filter
+ *
+ * @return EDPVS_OK on success, EDPVS_INVAL on failure
+ */
+int kni_fdir_init(void)
+{
+    int i, shift;
+    uint16_t port_base;
+    uint8_t total_nlcore;
+    uint8_t expected_nlcore;
+    uint64_t total_lcore_mask;
+
+    /* get total lcore mask, including worker only */
+    netif_get_slave_lcores(&total_nlcore, &total_lcore_mask);
+
+    RTE_LOG(INFO, Kni, "[%s] total_nlcore: %d total_lcore_mask: %llx\n",
+            __func__, total_nlcore, total_lcore_mask);
+
+    for (shift = 0; (0x1 << shift) < total_nlcore; shift++)
+        ;
+    /* exceed maxnum lcore num */
+    if (shift >= 16) {
+        RTE_LOG(ERR, Kni, "[%s] invalid shift: %d total_nlcore: %d\n",
+                __func__, shift, total_nlcore);
+        return EDPVS_INVAL;
+    }
+
+    port_base = 0;
+    expected_nlcore = (0x1 << shift);
+    kni_fdir.filter_mask = ~((~0x0) << shift);
+
+    /* specify the num of filters to cover port range [0-65535] */
+    for (i = 0; i < expected_nlcore; i++) {
+        kni_fdir.port_base_array[kni_fdir.port_base_num] = htons(port_base);
+        memset(kni_fdir.soft_id_array[kni_fdir.port_base_num], 0, MAX_FDIR_PROTO);
+        RTE_LOG(INFO, Kni, "[%s] port_base_array[%d]: %d\n",
+                __func__, kni_fdir.port_base_num, htons(port_base));
+        kni_fdir.port_base_num++;
+        port_base++;
+    }
+
+    RTE_LOG(INFO, Kni, "[%s] kni fdir init success, port_base_num: %d\n",
+            __func__, kni_fdir.port_base_num);
+
+    /* set kni fdir init flag */
+    kni_fdir.init_success = true;
+
+    return EDPVS_OK;
+}
+
+/*
+ * @brief: add kni fdir, set high priority for bgp/hc
+ *         which will be redirected to kni core on hardware
+ *
+ * @param af - AF_INET or AF_INET6 on kni ip
+ * @param dev - lan or wan link to add kni fdir
+ * @param kni_ip - kni ip address
+ *
+ * @return EDPVS_OK on success, negative on failure
+ */
+int kni_fdir_filter_add(struct netif_port *dev,
+                        const union inet_addr *kni_ip,
+                        int af)
+{
+    int err = EDPVS_OK;
+    int i = 0;
+    char dst[64];
+    union inet_addr addr;
+    lcoreid_t kni_lcore_id = netif_get_kni_lcore_id();
+
+    /* params assert */
+    if (unlikely(dev == NULL || kni_ip == NULL
+        || kni_lcore_id == 0)) {
+        RTE_LOG(ERR, Kni, "[%s] invalid kni fdir params info on port\n", __func__);
+        return EDPVS_INVAL;
+    }
+
+    if (unlikely(!kni_fdir.init_success || kni_fdir.port_base_num == 0
+        || g_netif_filter_func == NULL)) {
+        RTE_LOG(ERR, Kni, "[%s] kni fdir info uninitialized on port\n", __func__);
+        return EDPVS_INVAL;
+    }
+
+    /* signature mode is required for ipv6 filter on ixgbe */
+    if (af == AF_INET6
+        && dev->dev_conf.fdir_conf.mode != RTE_FDIR_MODE_SIGNATURE
+        && strstr(dev->dev_info.driver_name, NETDEV_IXGBE_DRIVER_NAME) != NULL) {
+        RTE_LOG(ERR, Kni, "[%s] kni ipv6 fdir filter require signature mode on ixgbe\n", __func__);
+        return EDPVS_INVAL;
+    }
+
+    for (i = 0; i < kni_fdir.port_base_num; i++) {
+        err = g_netif_filter_func(af, dev,
+                                  kni_lcore_id, kni_ip,
+                                  kni_fdir.port_base_array[i],
+                                  kni_fdir.soft_id_array[i],
+                                  true);
+        if (unlikely(err != EDPVS_OK)) {
+            RTE_LOG(ERR, Kni, "[%s] fail to add kni fdir %s filter "
+                    "on port: %s for port_base: %d\n",
+                    __func__, af == AF_INET ? "ipv4" : "ipv6",
+                    dev->name, kni_fdir.port_base_array[i]);
+            return EDPVS_NOTSUPP;
+        }
+    }
+
+    if (af == AF_INET) {
+        addr.in.s_addr = kni_ip->in.s_addr;
+        RTE_LOG(INFO, Kni, "[%s] success to add kni fdir ipv4 filter "
+                "on port: %s for kni_ip: %s\n",
+                __func__, dev->name,
+                inet_ntop(AF_INET, &addr, dst, sizeof(dst)) ? dst: "");
+    } else {
+        inet_ntop(AF_INET6, kni_ip, dst, sizeof(dst));
+        RTE_LOG(INFO, Kni, "[%s] success to add kni fdir ipv6 filter "
+                "on port: %s for kni_ip: %s\n",
+                __func__, dev->name, dst);
+    }
+
     return EDPVS_OK;
 }
 

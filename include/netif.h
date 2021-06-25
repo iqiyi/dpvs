@@ -49,6 +49,10 @@ enum {
 
 /* max tx/rx queue number for each nic */
 #define NETIF_MAX_QUEUES            16
+/* invalid queue id for initial val */
+#define NETIF_QUEUE_ID_INVALID      -1
+/* max addr count on kni interface */
+#define NETIF_KNI_ADDR_MAX_NUM      32
 /* max nic number used in the program */
 #define NETIF_MAX_PORTS             4096
 /* maximum pkt number at a single burst */
@@ -72,6 +76,8 @@ enum {
 #define NETIF_PORT_ID_ALL           NETIF_PORT_ID_INVALID
 
 #define NETIF_LCORE_ID_INVALID      0xFF
+
+#define MAX_FDIR_PROTO              2
 
 /************************* lcore conf  ***************************/
 struct rx_partner;
@@ -165,13 +171,28 @@ typedef enum {
     PORT_TYPE_INVAL,
 } port_type_t;
 
+typedef enum {
+    KNI_FWD_MODE_DEFAULT,
+    KNI_FWD_MODE_ISOLATE_RX,
+    KNI_FWD_MODE_MAX,
+} kni_fwd_mode_t;
+
+struct kni_addr {
+    int af;
+    union inet_addr addr;
+} __rte_cache_aligned;
+
 struct netif_kni {
     char name[IFNAMSIZ];
     struct rte_kni *kni;
     struct ether_addr addr;
     struct dpvs_timer kni_rtnl_timer;
+    int ip_addr_cnt;         /* total count of kni addrs */
     int kni_rtnl_fd;
     struct rte_ring *rx_ring;
+    struct kni_addr ip[NETIF_KNI_ADDR_MAX_NUM]; /* ipv4 or ipv6 */
+    queueid_t rx_queue_id;   /* only one kni queue supported by default */
+    kni_fwd_mode_t fwd_mode; /* kni fwd mode: default or isolated rx */
 } __rte_cache_aligned;
 
 union netif_bond {
@@ -227,6 +248,12 @@ struct netif_hw_addr_list {
     int                     count;
 };
 
+struct flow_info {
+    struct list_head        flow_list;                  /* store rte flow related on port */
+    int                     flow_cnt;                   /* current flow count */
+    int                     flow_err;                   /* error flow count */
+};
+
 struct netif_port {
     char                    name[IFNAMSIZ];  /* device name */
     portid_t                id;                         /* device id */
@@ -254,6 +281,9 @@ struct netif_port {
     struct vlan_info        *vlan_info;                 /* VLANs info for real device */
     struct netif_tc         tc[DPVS_MAX_LCORE];         /* traffic control */
     struct netif_ops        *netif_ops;
+    int                     rss_queue_num;
+    queueid_t               rss_queues[NETIF_MAX_QUEUES];
+    struct flow_info        hw_flow_info;               /* hardware rte flow on port */
 } __rte_cache_aligned;
 
 /**************************** lcore API *******************************/
@@ -318,6 +348,7 @@ int netif_ctrl_term(void); /* netif ctrl plane cleanup */
 void netif_cfgfile_init(void);
 void netif_keyword_value_init(void);
 void install_netif_keywords(void);
+lcoreid_t netif_get_kni_lcore_id(void);
 void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev);
 
 static inline void *netif_priv(struct netif_port *dev)
@@ -340,5 +371,11 @@ static inline uint16_t dpvs_rte_eth_dev_count(void)
 }
 
 extern bool dp_vs_fdir_filter_enable;
+
+extern bool dp_vs_kni_isolate_rx_enable;
+
+typedef int (* netif_filter_op_func)(int af, struct netif_port *dev, lcoreid_t cid,
+                                     const union inet_addr *dip, __be16 dport,
+                                     uint32_t filter_id[], bool add);
 
 #endif /* __DPVS_NETIF_H__ */

@@ -28,6 +28,7 @@
 #include "conf/common.h"
 #include "netif.h"
 #include "netif_addr.h"
+#include "netdev_flow.h"
 #include "vlan.h"
 #include "ctrl.h"
 #include "list.h"
@@ -105,6 +106,9 @@ struct port_conf_stream {
 
     bool promisc_mode;
 
+    int kni_addr_cnt;
+    struct kni_addr kni_ip[NETIF_KNI_ADDR_MAX_NUM]; /* ipv4 or ipv6 */
+
     struct list_head port_list_node;
 };
 
@@ -159,6 +163,36 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 static void kni_lcore_loop(void *dummy);
 
 bool dp_vs_fdir_filter_enable = true;
+
+bool dp_vs_kni_isolate_rx_enable = true;
+
+/*
+ * @brief assert kni rx is isolated on dev, kni
+ *        isolated rx benefits for hc/ssh traffic
+ *        on lan and for bgp connection on wan.
+ *
+ * @param dev - lan or wan link
+ *
+ * @return true on enabled, false on disabled
+ */
+static inline bool netif_kni_isolate_rx_enable(const struct netif_port *dev)
+{
+    /* the premise of kni isolate rx */
+    if (likely(dp_vs_kni_isolate_rx_enable)
+        && dev->kni.rx_queue_id != NETIF_QUEUE_ID_INVALID
+        && dev->nrxq != dev->rss_queue_num
+        && dev->kni.ip_addr_cnt != 0
+        && dev->type == PORT_TYPE_GENERAL) {
+        return true;
+    }
+
+    return false;
+}
+
+lcoreid_t netif_get_kni_lcore_id(void)
+{
+    return g_kni_lcore_id;
+}
 
 bool is_lcore_id_valid(lcoreid_t cid)
 {
@@ -504,6 +538,74 @@ static void fdir_filter_handler(vector_t tokens)
     RTE_LOG(INFO, IPVS, "fdir:filter = %s\n", dp_vs_fdir_filter_enable ? "on" : "off");
 
     FREE_PTR(str);
+}
+
+static void kni_isolate_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+
+    assert(str);
+
+    if (strcasecmp(str, "on") == 0)
+        dp_vs_kni_isolate_rx_enable = true;
+    else if (strcasecmp(str, "off") == 0)
+        dp_vs_kni_isolate_rx_enable = false;
+    else
+        RTE_LOG(WARNING, IPVS, "invalid kni:isolated %s\n", str);
+
+    RTE_LOG(INFO, IPVS, "kni:isolated = %s\n", dp_vs_kni_isolate_rx_enable ? "on" : "off");
+
+    FREE_PTR(str);
+}
+
+static void kni_ipv4_address_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+
+    assert(str);
+
+    if (unlikely(strstr(str, ".") == NULL
+        || current_device->kni_addr_cnt >= NETIF_KNI_ADDR_MAX_NUM)) {
+        RTE_LOG(WARNING, NETIF, "%s: invalid kni v4 ip %s\n", current_device->name, str);
+        return;
+    }
+
+    if (inet_pton(AF_INET, str, &current_device->kni_ip[current_device->kni_addr_cnt].addr) <= 0) {
+        RTE_LOG(WARNING, NETIF, "%s: parse kni v4 ip %s failed\n", current_device->name, str);
+        return;
+    }
+
+    current_device->kni_ip[current_device->kni_addr_cnt++].af = AF_INET;
+
+    RTE_LOG(INFO, NETIF, "%s: kni v4 addr = %s, count = %d\n", current_device->name,
+            str, current_device->kni_addr_cnt);
+}
+
+static void kni_ipv6_address_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+
+    assert(str);
+
+    if (unlikely(strstr(str, ":") == NULL
+        || current_device->kni_addr_cnt >= NETIF_KNI_ADDR_MAX_NUM)) {
+        RTE_LOG(WARNING, NETIF, "%s: invalid kni v6 ip %s\n", current_device->name, str);
+        return;
+    }
+
+    if (inet_pton(AF_INET6, str, &current_device->kni_ip[current_device->kni_addr_cnt].addr) <= 0) {
+        RTE_LOG(WARNING, NETIF, "%s: parse kni v6 addr %s failed\n", current_device->name, str);
+        return;
+    }
+
+    current_device->kni_ip[current_device->kni_addr_cnt++].af = AF_INET6;
+
+    RTE_LOG(INFO, NETIF, "%s: kni v6 addr = %s, count = %d\n", current_device->name,
+            str, current_device->kni_addr_cnt);
 }
 
 static void promisc_mode_handler(vector_t tokens)
@@ -971,6 +1073,12 @@ void install_netif_keywords(void)
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
     install_keyword("mtu", custom_mtu_handler,KW_TYPE_INIT);
     install_keyword("kni_name", kni_name_handler, KW_TYPE_INIT);
+    install_keyword("kni_isolate", kni_isolate_handler, KW_TYPE_INIT);
+    install_keyword("kni_ipaddress", NULL, KW_TYPE_INIT);
+    install_sublevel();
+    install_keyword("ipv4", kni_ipv4_address_handler, KW_TYPE_INIT);
+    install_keyword("ipv6", kni_ipv6_address_handler, KW_TYPE_INIT);
+    install_sublevel_end();
     install_sublevel_end();
     install_keyword("bonding", bonding_handler, KW_TYPE_INIT);
     install_sublevel();
@@ -1219,6 +1327,31 @@ static int isol_rxq_add(lcoreid_t cid, portid_t pid, queueid_t qid,
         unsigned rb_sz, struct netif_queue_conf *rxq);
 static void isol_rxq_del(struct rx_partner *isol_rxq, bool force);
 
+static void
+classify_port_queues(struct netif_port *port,
+                     dpvs_lcore_role_t cid_role,
+                     queueid_t queue_id)
+{
+    if (unlikely(port == NULL)) {
+        RTE_LOG(INFO, NETIF,
+                "[%s]: invalid port info.\n", __func__);
+        return;
+    }
+
+    switch (cid_role) {
+    case LCORE_ROLE_FWD_WORKER:
+        port->rss_queues[port->rss_queue_num++] = queue_id;
+        break;
+    case LCORE_ROLE_KNI_WORKER:
+        port->kni.rx_queue_id = queue_id;
+        port->kni.fwd_mode = KNI_FWD_MODE_ISOLATE_RX;
+        break;
+    default:
+        RTE_LOG(INFO, NETIF, "[%s]: ignore idle worker.\n", __func__);
+        break;
+    }
+}
+
 static void config_lcores(struct list_head *worker_list)
 {
     int ii, tk;
@@ -1228,6 +1361,7 @@ static void config_lcores(struct list_head *worker_list)
     struct netif_port *port;
     struct queue_conf_stream *queue;
     struct worker_conf_stream *worker, *worker_next, *worker_min;
+    dpvs_lcore_role_t cid_role;
 
     memset(lcore_conf, 0, sizeof(lcore_conf));
 
@@ -1265,6 +1399,7 @@ static void config_lcores(struct list_head *worker_list)
         else
             lcore_conf[id].type = LCORE_ROLE_IDLE;
 
+        cid_role = lcore_conf[id].type;
         list_for_each_entry_reverse(queue, &worker_min->port_list, queue_list_node) {
             port = netif_port_get_by_name(queue->port_name);
             if (port)
@@ -1276,6 +1411,10 @@ static void config_lcores(struct list_head *worker_list)
             for (ii = 0; queue->rx_queues[ii] != NETIF_MAX_QUEUES && ii < NETIF_MAX_QUEUES;
                  ii++) {
                 lcore_conf[id].pqs[tk].rxqs[ii].id = queue->rx_queues[ii];
+
+                /* classify various queues on port, kni and rss */
+                classify_port_queues(port, cid_role, queue->rx_queues[ii]);
+
                 if (queue->isol_rxq_lcore_ids[ii] != NETIF_LCORE_ID_INVALID) {
                     if (isol_rxq_add(queue->isol_rxq_lcore_ids[ii],
                                 port->id, queue->rx_queues[ii],
@@ -2807,7 +2946,7 @@ static void kni_egress_process(void)
 /*
  * KNI rx rte_ring use mode as multi-producers and the single-consumer.
  */
-static void kni_ingress_process(void)
+static void kni_ingress_process(kni_fwd_mode_t fwd_mode)
 {
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     struct netif_port *dev;
@@ -2817,11 +2956,18 @@ static void kni_ingress_process(void)
 
     for (id = 0; id < g_nports; id++) {
         dev = netif_port_get(id);
-        if (!dev || !kni_dev_exist(dev))
+        if (!dev || !kni_dev_exist(dev) ||
+            !kni_fwd_valid(dev, fwd_mode))
             continue;
 
-        nb_rb = rte_ring_dequeue_burst(dev->kni.rx_ring, (void**)mbufs,
-                                       NETIF_MAX_PKT_BURST, NULL);
+        if (fwd_mode == KNI_FWD_MODE_ISOLATE_RX) {
+            nb_rb = rte_eth_rx_burst(dev->id, dev->kni.rx_queue_id,
+                                     mbufs, NETIF_MAX_PKT_BURST);
+        } else {
+            nb_rb = rte_ring_dequeue_burst(dev->kni.rx_ring, (void**)mbufs,
+                                           NETIF_MAX_PKT_BURST, NULL);
+        }
+
         if (nb_rb == 0)
             continue;
         lcore_stats[cid].ipackets += nb_rb;
@@ -2847,7 +2993,8 @@ static void kni_ingress_process(void)
  */
 void kni_lcore_loop(void *dummy)
 {
-    kni_ingress_process();
+    kni_ingress_process(KNI_FWD_MODE_ISOLATE_RX);
+    kni_ingress_process(KNI_FWD_MODE_DEFAULT);
     kni_egress_process();
 
     /* This is a lazy solution.
@@ -3245,6 +3392,40 @@ static inline void setup_dev_of_flags(struct netif_port *port)
         port->flag |= NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD;
 }
 
+/*
+ * @brief load address from dpvs conf file.
+ *
+ * @param dev - lan or wan link
+ *
+ * @return true on success, false on failure
+ */
+static bool
+netif_kni_addr_init(struct netif_port *port)
+{
+    struct port_conf_stream *cfg_stream;
+
+    if (unlikely(port == NULL || strlen(port->name) == 0)) {
+        RTE_LOG(ERR, NETIF, "[%s]: invalid port info\n", __func__);
+        return false;
+    }
+
+    cfg_stream = get_port_conf_stream(port->name);
+    if (unlikely(cfg_stream == NULL || cfg_stream->kni_addr_cnt == 0)) {
+        RTE_LOG(ERR, NETIF, "[%s]: invalid port cfg stream\n", __func__);
+        return false;
+    }
+
+    /* init kni info */
+    rte_memcpy(&port->kni.ip, &cfg_stream->kni_ip,
+               sizeof(struct kni_addr) * cfg_stream->kni_addr_cnt);
+    port->kni.ip_addr_cnt = cfg_stream->kni_addr_cnt;
+
+    RTE_LOG(INFO, NETIF, "[%s] success to init kni addr on port: %s, ip_addr_cnt: %d\n",
+            __func__, port->name, port->kni.ip_addr_cnt);
+
+    return true;
+}
+
 /* TODO: refactor it with netif_alloc */
 static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
         int ntxq, const struct rte_eth_conf *conf)
@@ -3308,11 +3489,19 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
         INIT_LIST_HEAD(&port->in_ptr->ifm_list[ii]);
     }
 
+    port->rss_queue_num = 0;
+    port->kni.ip_addr_cnt = 0;
+    port->kni.rx_queue_id = NETIF_QUEUE_ID_INVALID;
+    port->kni.fwd_mode = KNI_FWD_MODE_DEFAULT;
+    INIT_LIST_HEAD(&port->hw_flow_info.flow_list);
     if (tc_init_dev(port) != EDPVS_OK) {
         RTE_LOG(ERR, NETIF, "%s: fail to init TC\n", __func__);
         rte_free(port);
         return NULL;
     }
+
+    /* load address from dpvs conf */
+    netif_kni_addr_init(port);
 
     return port;
 }
@@ -3720,11 +3909,80 @@ static int fdir_filter_flush(const struct netif_port *port)
 }
 
 /*
+ * @brief netif kni isolate rx filter config
+ *
+ * @note  1.config rss queue region excluding kni queue on port
+ *        2.should after fdir_filter_flush(), otherwise rte_flow
+ *          will be flushed either on mellanox
+ *        3.use rte_flow on mellanox, dev_filter on others
+ *        4.signature mode is essential for ixgbe ipv6 filter, which
+ *          match the first 4 bytes for ipv6 addr, please refer to
+ *          chapter 7.1.2.7.15 of intel 85299 datasheet
+ *
+ * @param port - lan or wan physical device
+ *
+ * @return EDPVS_OK on success, negative on failure
+ */
+static int netif_kni_filter_config(struct netif_port *port)
+{
+    int j, ret;
+    queueid_t kni_queue_id;
+
+    if (unlikely(port == NULL
+        || port->type != PORT_TYPE_GENERAL)) {
+        RTE_LOG(ERR, NETIF,
+                "[%s]: invalid netif info on port\n",
+                __func__);
+        return EDPVS_INVAL;
+    }
+
+    ret = netdev_flow_init(port);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(ERR, NETIF,
+                "[%s]: failed to init netdev flow for device %s\n",
+                __func__, port->name);
+        return ret;
+    }
+
+    ret = netif_get_queue(port, g_kni_lcore_id, &kni_queue_id);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(ERR, NETIF,
+                "[%s]: failed to get kni rx queue for device %s\n",
+                __func__, port->name);
+        return ret;
+    }
+
+    for (j = 0; j < port->kni.ip_addr_cnt; j++) {
+        /* assert mellanox device */
+        if (strstr(port->dev_info.driver_name, NETDEV_MLNX_DRIVER_NAME) != NULL) {
+            ret = netdev_flow_add_kni_filter(port,
+                                             &port->kni.ip[j].addr,
+                                             kni_queue_id,
+                                             port->kni.ip[j].af,
+                                             IPPROTO_IP);
+        } else {
+            ret = kni_fdir_filter_add(port,
+                                      &port->kni.ip[j].addr,
+                                      port->kni.ip[j].af);
+        }
+
+        if (ret != EDPVS_OK) {
+            RTE_LOG(ERR, NETIF,
+                "[%s]: failed to add kni filter %d for device %s\n",
+                __func__, j, port->name);
+            return ret;
+        }
+    }
+
+    return EDPVS_OK;
+}
+
+/*
  * Note: Invoke the function after port is allocated and lcores are configured.
  */
 int netif_port_start(struct netif_port *port)
 {
-    int ii, ret;
+    int ii, j, ret;
     queueid_t qid;
     char promisc_on;
     char buf[512];
@@ -3820,6 +4078,22 @@ int netif_port_start(struct netif_port *port)
     // build port-queue-lcore mapping array
     build_port_queue_lcore_map();
 
+    // print rss queues info, which exclude kni queue
+    if (port->rss_queue_num <= 0 || port->rss_queue_num > port->nrxq) {
+        rte_exit(EXIT_FAILURE, "%s: invalid rss queues num on port %d,"
+                 " exiting ...\n", __func__, port->id);
+    } else {
+        RTE_LOG(INFO, NETIF, "%s: port %d rss queues num: %d\n",
+                __func__, port->id, port->rss_queue_num);
+        for (j = 0; j < port->rss_queue_num; j++) {
+            RTE_LOG(INFO, NETIF,
+                    "%s: rss queue id: %d\n",
+                    __func__, port->rss_queues[j]);
+        }
+        RTE_LOG(INFO, NETIF, "%s: kni queue id: %d\n",
+                __func__, port->kni.rx_queue_id);
+    }
+
     // start the device
     ret = rte_eth_dev_start(port->id);
     if (ret < 0) {
@@ -3874,6 +4148,16 @@ int netif_port_start(struct netif_port *port)
     if (ret != EDPVS_OK) {
         RTE_LOG(WARNING, NETIF, "fail to flush FDIR filters for device %s\n", port->name);
         return ret;
+    }
+
+    /* add kni isolate rx filter */
+    if (netif_kni_isolate_rx_enable(port)) {
+        ret = netif_kni_filter_config(port);
+        if (ret != EDPVS_OK) {
+            RTE_LOG(WARNING, NETIF,
+                    "fail to add kni isolate rx filters for device %s\n", port->name);
+            return ret;
+        }
     }
 
     return EDPVS_OK;

@@ -43,6 +43,11 @@ netif_defs {
     !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
+    !    kni_isolate            on          <on, on/off>
+    !    kni_ipaddress {
+    !       ipv4                <lan link ipv4 address>
+    !       ipv6                <lan link ipv6 address>
+    !    }
     }
 
     <init> device dpdk1 {
@@ -59,6 +64,11 @@ netif_defs {
     !    mtu                    1500
     !    promisc_mode
     !    kni_name               dpdk1.kni
+    !    kni_isolate            on          <on, on/off>
+    !    kni_ipaddress {
+    !       ipv4                <wan link ipv4 address>
+    !       ipv6                <wan link ipv6 address>
+    !    }
     }
 
     <init> device bond0 {

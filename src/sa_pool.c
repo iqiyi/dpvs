@@ -87,6 +87,8 @@ static uint64_t             sa_lcore_mask;
 
 static uint8_t              sa_pool_hash_size   = SAPOOL_DEF_HASH_SZ;
 
+netif_filter_op_func g_netif_filter_func = NULL;
+
 static int __add_del_filter(int af, struct netif_port *dev, lcoreid_t cid,
                             const union inet_addr *dip, __be16 dport,
                             uint32_t filter_id[MAX_FDIR_PROTO], bool add)
@@ -844,6 +846,9 @@ int sa_pool_init(void)
 
         port_base++;
     }
+
+    /* set filter op func */
+    g_netif_filter_func = __add_del_filter;
 
     return EDPVS_OK;
 }
