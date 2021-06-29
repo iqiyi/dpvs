@@ -1,12 +1,10 @@
-From b83dc422e4de55dbaa2f1376d56254d8fa00dbea Mon Sep 17 00:00:00 2001
-From: wencyu <yuwenchao@qiyi.com>
-Date: Thu, 24 Jun 2021 17:24:51 +0800
+From f90f9a21d7fed4d18ff8fd2429db1d8055737ce7 Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@qiyi.com>
+Date: Tue, 29 Jun 2021 11:28:36 +0800
 Subject: [PATCH 5/5] Fix bonding mode 4 problem caused by LACP failure.
 
 The problem is disscussed in Issue #725 of iqiyi/dpvs in detail.
 https://github.com/iqiyi/dpvs/issues/725
-
-Signed-off-by: wencyu <yuwenchao@qiyi.com>
 ---
  drivers/net/bonding/rte_eth_bond_8023ad.c | 20 +++++++++++---------
  1 file changed, 11 insertions(+), 9 deletions(-)
@@ -15,7 +13,7 @@ diff --git a/drivers/net/bonding/rte_eth_bond_8023ad.c b/drivers/net/bonding/rte
 index 5fe004e..52bd960 100644
 --- a/drivers/net/bonding/rte_eth_bond_8023ad.c
 +++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
-@@ -831,7 +831,6 @@
+@@ -831,7 +831,6 @@ bond_mode_8023ad_periodic_cb(void *arg)
  	struct port *port;
  	struct rte_eth_link link_info;
  	struct rte_ether_addr slave_addr;
@@ -23,7 +21,7 @@ index 5fe004e..52bd960 100644
  	uint16_t slave_id;
  	uint16_t i;
  
-@@ -903,6 +902,7 @@
+@@ -903,6 +902,7 @@ bond_mode_8023ad_periodic_cb(void *arg)
  			/* Find LACP packet to this port. Do not check subtype,
  			 * it is done in function that queued packet
  			 */
@@ -31,7 +29,7 @@ index 5fe004e..52bd960 100644
  			int retval = rte_ring_dequeue(port->rx_ring,
  					(void **)&lacp_pkt);
  
-@@ -911,15 +911,17 @@
+@@ -911,15 +911,17 @@ bond_mode_8023ad_periodic_cb(void *arg)
  
  			rx_machine_update(internals, slave_id, lacp_pkt);
  		} else {

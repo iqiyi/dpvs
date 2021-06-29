@@ -1,6 +1,6 @@
-From 906f4690d1f3cadca260b23fd1c839d12db9e629 Mon Sep 17 00:00:00 2001
-From: wencyu <yuwenchao@qiyi.com>
-Date: Fri, 18 Jun 2021 11:43:07 +0800
+From 02aa011332843b7b6b349ffe1845a8e2bb9a1c7f Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@qiyi.com>
+Date: Tue, 29 Jun 2021 11:23:44 +0800
 Subject: [PATCH 3/5] [for debug only] enable dpdk eal memory debug
 
 The patch is used for memory debug. To use the patch, configure meson with option
@@ -8,8 +8,6 @@ The patch is used for memory debug. To use the patch, configure meson with optio
 
 meson -Dc_args="-DRTE_MALLOC_DEBUG" -Dbuildtype=debug -Dprefix=$(pwd)/dpdklib dpdkbuild
 ninja -C dpdkbuild
-
-Signed-off-by: wencyu <yuwenchao@qiyi.com>
 ---
  lib/librte_eal/common/rte_malloc.c  |  4 ++++
  lib/librte_eal/include/rte_malloc.h | 15 +++++++++++++++
@@ -34,7 +32,7 @@ diff --git a/lib/librte_eal/include/rte_malloc.h b/lib/librte_eal/include/rte_ma
 index 3af64f8..671e4f2 100644
 --- a/lib/librte_eal/include/rte_malloc.h
 +++ b/lib/librte_eal/include/rte_malloc.h
-@@ -248,6 +248,21 @@ struct rte_malloc_socket_stats {
+@@ -248,6 +248,21 @@ rte_calloc_socket(const char *type, size_t num, size_t size, unsigned align, int
  	__rte_alloc_size(2, 3);
  
  /**

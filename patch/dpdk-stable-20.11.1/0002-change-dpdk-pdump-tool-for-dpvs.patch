@@ -1,9 +1,8 @@
-From 6a99af8a3f9067a18211d15b4a65bcafa9430875 Mon Sep 17 00:00:00 2001
-From: wencyu <yuwenchao@qiyi.com>
-Date: Fri, 18 Jun 2021 10:20:45 +0800
-Subject: [PATCH 2/5] pdump: change dpdk-pdump tool for dpvs
+From fad87988c197755a353f113613d8f3b96be7025a Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@qiyi.com>
+Date: Tue, 29 Jun 2021 11:22:43 +0800
+Subject: [PATCH 2/5] change dpdk-pdump tool for dpvs
 
-Signed-off-by: wencyu <yuwenchao@qiyi.com>
 ---
  app/pdump/main.c             | 167 ++++++++++++++++++++++++++++++++++++++++---
  lib/librte_pdump/rte_pdump.c | 145 +++++++++++++++++++++++++++++++++++--
@@ -37,7 +36,7 @@ index b34bf33..9d14474 100644
  #define VDEV_NAME_FMT "net_pcap_%s_%d"
  #define VDEV_PCAP_ARGS_FMT "tx_pcap=%s"
  #define VDEV_IFACE_ARGS_FMT "tx_iface=%s"
-@@ -97,6 +106,13 @@ enum pdump_by {
+@@ -97,6 +106,13 @@ static const char * const valid_pdump_arguments[] = {
  	PDUMP_RING_SIZE_ARG,
  	PDUMP_MSIZE_ARG,
  	PDUMP_NUM_MBUFS_ARG,
@@ -59,7 +58,7 @@ index b34bf33..9d14474 100644
  
  	/* stats */
  	struct pdump_stats stats;
-@@ -158,6 +175,11 @@ struct parse_val {
+@@ -158,6 +175,11 @@ pdump_usage(const char *prgname)
  			"(queue=<queue_id>),"
  			"(rx-dev=<iface or pcap file> |"
  			" tx-dev=<iface or pcap file>,"
@@ -71,7 +70,7 @@ index b34bf33..9d14474 100644
  			"[ring-size=<ring size>default:16384],"
  			"[mbuf-size=<mbuf data size>default:2176],"
  			"[total-num-mbufs=<number of mbufs>default:65535]'\n",
-@@ -244,6 +266,64 @@ struct parse_val {
+@@ -244,6 +266,64 @@ parse_uint_value(const char *key, const char *value, void *extra_args)
  }
  
  static int
@@ -136,7 +135,7 @@ index b34bf33..9d14474 100644
  parse_pdump(const char *optarg)
  {
  	struct rte_kvargs *kvlist;
-@@ -370,6 +450,75 @@ struct parse_val {
+@@ -370,6 +450,75 @@ parse_pdump(const char *optarg)
  	} else
  		pt->total_num_mbufs = MBUFS_PER_POOL;
  
@@ -212,7 +211,7 @@ index b34bf33..9d14474 100644
  	num_tuples++;
  
  free_kvlist:
-@@ -510,6 +659,8 @@ struct parse_val {
+@@ -510,6 +659,8 @@ cleanup_rings(void)
  			rte_ring_free(pt->rx_ring);
  		if (pt->tx_ring)
  			rte_ring_free(pt->tx_ring);
@@ -221,7 +220,7 @@ index b34bf33..9d14474 100644
  	}
  }
  
-@@ -837,20 +988,20 @@ struct parse_val {
+@@ -837,20 +988,20 @@ enable_pdump(void)
  						pt->queue,
  						RTE_PDUMP_FLAG_RX,
  						pt->rx_ring,
@@ -246,7 +245,7 @@ index b34bf33..9d14474 100644
  			}
  		} else if (pt->dir == RTE_PDUMP_FLAG_RX) {
  			if (pt->dump_by_type == DEVICE_ID)
-@@ -858,22 +1009,22 @@ struct parse_val {
+@@ -858,22 +1009,22 @@ enable_pdump(void)
  						pt->device_id,
  						pt->queue,
  						pt->dir, pt->rx_ring,
@@ -288,7 +287,7 @@ index b3c8d5c..b73fb8f 100644
  
  #include "rte_pdump.h"
  
-@@ -69,6 +73,132 @@ struct pdump_response {
+@@ -69,6 +73,132 @@ static struct pdump_rxtx_cbs {
  } rx_cbs[RTE_MAX_ETHPORTS][RTE_MAX_QUEUES_PER_PORT],
  tx_cbs[RTE_MAX_ETHPORTS][RTE_MAX_QUEUES_PER_PORT];
  
@@ -421,7 +420,7 @@ index b3c8d5c..b73fb8f 100644
  
  static inline void
  pdump_copy(struct rte_mbuf **pkts, uint16_t nb_pkts, void *user_params)
-@@ -86,6 +216,8 @@ struct pdump_response {
+@@ -86,6 +216,8 @@ pdump_copy(struct rte_mbuf **pkts, uint16_t nb_pkts, void *user_params)
  	ring = cbs->ring;
  	mp = cbs->mp;
  	for (i = 0; i < nb_pkts; i++) {
@@ -430,7 +429,7 @@ index b3c8d5c..b73fb8f 100644
  		p = rte_pktmbuf_copy(pkts[i], mp, 0, UINT32_MAX);
  		if (p)
  			dup_bufs[d_pkts++] = p;
-@@ -122,7 +254,7 @@ struct pdump_response {
+@@ -122,7 +254,7 @@ pdump_tx(uint16_t port __rte_unused, uint16_t qidx __rte_unused,
  static int
  pdump_register_rx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
  				struct rte_ring *ring, struct rte_mempool *mp,
@@ -439,7 +438,7 @@ index b3c8d5c..b73fb8f 100644
  {
  	uint16_t qid;
  	struct pdump_rxtx_cbs *cbs = NULL;
-@@ -140,6 +272,7 @@ struct pdump_response {
+@@ -140,6 +272,7 @@ pdump_register_rx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
  			}
  			cbs->ring = ring;
  			cbs->mp = mp;
@@ -447,7 +446,7 @@ index b3c8d5c..b73fb8f 100644
  			cbs->cb = rte_eth_add_first_rx_callback(port, qid,
  								pdump_rx, cbs);
  			if (cbs->cb == NULL) {
-@@ -176,7 +309,7 @@ struct pdump_response {
+@@ -176,7 +309,7 @@ pdump_register_rx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
  static int
  pdump_register_tx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
  				struct rte_ring *ring, struct rte_mempool *mp,
@@ -456,7 +455,7 @@ index b3c8d5c..b73fb8f 100644
  {
  
  	uint16_t qid;
-@@ -195,6 +328,7 @@ struct pdump_response {
+@@ -195,6 +328,7 @@ pdump_register_tx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
  			}
  			cbs->ring = ring;
  			cbs->mp = mp;
@@ -464,7 +463,7 @@ index b3c8d5c..b73fb8f 100644
  			cbs->cb = rte_eth_add_tx_callback(port, qid, pdump_tx,
  								cbs);
  			if (cbs->cb == NULL) {
-@@ -238,6 +372,7 @@ struct pdump_response {
+@@ -238,6 +372,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
  	uint16_t operation;
  	struct rte_ring *ring;
  	struct rte_mempool *mp;
@@ -472,7 +471,7 @@ index b3c8d5c..b73fb8f 100644
  
  	flags = p->flags;
  	operation = p->op;
-@@ -253,6 +388,7 @@ struct pdump_response {
+@@ -253,6 +388,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
  		queue = p->data.en_v1.queue;
  		ring = p->data.en_v1.ring;
  		mp = p->data.en_v1.mp;
@@ -480,7 +479,7 @@ index b3c8d5c..b73fb8f 100644
  	} else {
  		ret = rte_eth_dev_get_port_by_name(p->data.dis_v1.device,
  				&port);
-@@ -265,6 +401,7 @@ struct pdump_response {
+@@ -265,6 +401,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
  		queue = p->data.dis_v1.queue;
  		ring = p->data.dis_v1.ring;
  		mp = p->data.dis_v1.mp;
@@ -488,7 +487,7 @@ index b3c8d5c..b73fb8f 100644
  	}
  
  	/* validation if packet capture is for all queues */
-@@ -303,7 +440,7 @@ struct pdump_response {
+@@ -303,7 +440,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
  	if (flags & RTE_PDUMP_FLAG_RX) {
  		end_q = (queue == RTE_PDUMP_ALL_QUEUES) ? nb_rx_q : queue + 1;
  		ret = pdump_register_rx_callbacks(end_q, port, queue, ring, mp,
@@ -497,7 +496,7 @@ index b3c8d5c..b73fb8f 100644
  		if (ret < 0)
  			return ret;
  	}
-@@ -312,7 +449,7 @@ struct pdump_response {
+@@ -312,7 +449,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
  	if (flags & RTE_PDUMP_FLAG_TX) {
  		end_q = (queue == RTE_PDUMP_ALL_QUEUES) ? nb_tx_q : queue + 1;
  		ret = pdump_register_tx_callbacks(end_q, port, queue, ring, mp,

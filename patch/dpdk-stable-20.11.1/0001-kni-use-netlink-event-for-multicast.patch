@@ -1,7 +1,7 @@
-From fc25cda5bab943feac5455779fb6a6f00ee2a87d Mon Sep 17 00:00:00 2001
-From: wencyu <yuwenchao@qiyi.com>
-Date: Thu, 17 Jun 2021 20:39:55 +0800
-Subject: [PATCH 1/5] kni: use netlink event for multicast (driver part)
+From db292243dcd6ef371fc6268e54b9ec16116a9d87 Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@qiyi.com>
+Date: Tue, 29 Jun 2021 11:19:12 +0800
+Subject: [PATCH 1/5] kni: use netlink event for multicast
 
 Kni driver sends netlink event every time hw-multicast list updated by
 kernel, the user kni app should capture the event and update multicast
@@ -10,8 +10,6 @@ to kni device.
 Original way is using rte_kni_request to pass hw-multicast to user kni
 module. That method works but finally memory corruption found, which is
 not easy to address. That's why we use netlink event instead.
-
-Signed-off-by: wencyu <yuwenchao@qiyi.com>
 ---
  kernel/linux/kni/kni_net.c | 76 ++++++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 76 insertions(+)
@@ -29,7 +27,7 @@ index 4b75208..cde565e 100644
  
  #include <rte_kni_common.h>
  #include <kni_fifo.h>
-@@ -128,6 +130,7 @@
+@@ -128,6 +130,7 @@ kni_net_process_request(struct kni_dev *kni, struct rte_kni_request *req)
  	ret_val = wait_event_interruptible_timeout(kni->wq,
  			kni_fifo_count(kni->resp_q), 3 * HZ);
  	if (signal_pending(current) || ret_val <= 0) {
@@ -37,7 +35,7 @@ index 4b75208..cde565e 100644
  		ret = -ETIME;
  		goto fail;
  	}
-@@ -657,6 +660,77 @@ void kni_net_release_fifo_phy(struct kni_dev *kni)
+@@ -657,6 +660,77 @@ kni_net_change_mtu(struct net_device *dev, int new_mtu)
  	return (ret == 0) ? req.result : ret;
  }
  
@@ -115,7 +113,7 @@ index 4b75208..cde565e 100644
  static void
  kni_net_change_rx_flags(struct net_device *netdev, int flags)
  {
-@@ -757,6 +831,7 @@ void kni_net_release_fifo_phy(struct kni_dev *kni)
+@@ -757,6 +831,7 @@ kni_net_set_mac(struct net_device *netdev, void *p)
  	kni = netdev_priv(netdev);
  	ret = kni_net_process_request(kni, &req);
  
@@ -123,7 +121,7 @@ index 4b75208..cde565e 100644
  	return (ret == 0 ? req.result : ret);
  }
  
-@@ -788,6 +863,7 @@ void kni_net_release_fifo_phy(struct kni_dev *kni)
+@@ -788,6 +863,7 @@ static const struct net_device_ops kni_net_netdev_ops = {
  	.ndo_change_rx_flags = kni_net_change_rx_flags,
  	.ndo_start_xmit = kni_net_tx,
  	.ndo_change_mtu = kni_net_change_mtu,
