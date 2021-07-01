@@ -72,41 +72,59 @@ ipaddresstos(char *buf, const ip_address_t *ipaddress)
 }
 
 /* Add/Delete IP address to a specific interface_t */
-static void
+static bool
 dpvs_fill_addrconf(int is_add, uint32_t flags, ip_address_t *ipaddress,
 				   char *dpdk_port, struct inet_addr_param *param)
 {
+	if (ipaddress->ifp) {
+		strncpy(param->ifa_entry.ifname, ipaddress->ifp->ifname, IFNAMSIZ);
+	} else if (dpdk_port) {
+		strncpy(param->ifa_entry.ifname, dpdk_port, IFNAMSIZ);
+	} else {
+		return false;
+	}
+
 	if (is_add)
 		param->ifa_ops = INET_ADDR_ADD;
 	else
 		param->ifa_ops = INET_ADDR_DEL;
+
 	param->ifa_ops_flags = 0;
 	param->ifa_entry.af = ipaddress->ifa.ifa_family;
-	if (dpdk_port) {
-		strcpy(param->ifa_entry.ifname, dpdk_port);
-	} else {
-		strcpy(param->ifa_entry.ifname, IF_NAME(if_get_by_ifindex(ipaddress->ifa.ifa_index)));
-	}
+
 	if (param->ifa_entry.af == AF_INET)
 		param->ifa_entry.addr.in  = ipaddress->u.sin.sin_addr;
 	else
 		param->ifa_entry.addr.in6 = ipaddress->u.sin6_addr;
+
 	param->ifa_entry.plen = ipaddress->ifa.ifa_prefixlen;
 	param->ifa_entry.flags &= ~IFA_F_SAPOOL;
+
+	return true;
 }
 
 int
 netlink_ipaddress(ip_address_t* ipaddress, char *dpdk_port, int cmd)
 {
+	int err;
 	struct inet_addr_param param;
 
-	if (dpdk_port == NULL)
-		return 1;
-
 	memset(&param, 0, sizeof(param));
-	dpvs_fill_addrconf(cmd == IPADDRESS_DEL ? 0 : 1, 0,
-			ipaddress, dpdk_port, &param);
-	ipvs_set_ipaddr(&param, cmd);
+
+	if (dpvs_fill_addrconf((cmd == IPADDRESS_ADD) ? 1 : 0,
+						   0, ipaddress, dpdk_port, &param) == false) {
+		return -1;
+	}
+
+	err = ipvs_set_ipaddr(&param, cmd);
+	if (err) {
+		log_message(LOG_INFO, "%s: failed to \"%s %s dev %s\"",
+					__func__,
+					(cmd == IPADDRESS_ADD) ? "add" : "del",
+					ipaddresstos(NULL, ipaddress),
+					param.ifa_entry.ifname);
+		return -1;
+	}
 
 	return 1;
 }
@@ -548,9 +566,10 @@ address_exist(vrrp_t *vrrp, ip_address_t *ipaddress, char *old_dpdk_port, char *
 	if (!ipaddress)
 		return true;
 
-
 	LIST_FOREACH(vrrp->vip, ipaddr, e) {
-		if (IP_ISEQ(ipaddr, ipaddress) && !strcmp(old_dpdk_port, new_dpdk_port)) {
+		if (IP_ISEQ(ipaddr, ipaddress) &&
+			old_dpdk_port && new_dpdk_port &&
+			!strcmp(old_dpdk_port, new_dpdk_port)) {
 			ipaddr->set = ipaddress->set;
 #ifdef _WITH_IPTABLES_
 			ipaddr->iptable_rule_set = ipaddress->iptable_rule_set;
@@ -564,7 +583,9 @@ address_exist(vrrp_t *vrrp, ip_address_t *ipaddress, char *old_dpdk_port, char *
     }
 
 	LIST_FOREACH(vrrp->evip, ipaddr, e) {
-		if (IP_ISEQ(ipaddr, ipaddress) && !strcmp(old_dpdk_port, new_dpdk_port)) {
+		if (IP_ISEQ(ipaddr, ipaddress) &&
+			old_dpdk_port && new_dpdk_port &&
+			!strcmp(old_dpdk_port, new_dpdk_port)) {
 			ipaddr->set = ipaddress->set;
 #ifdef _WITH_IPTABLES_
 			ipaddr->iptable_rule_set = ipaddress->iptable_rule_set;
