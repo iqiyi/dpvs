@@ -633,6 +633,41 @@ static void dp_vs_conn_free_packets(struct dp_vs_conn *conn)
     }
 }
 
+/* term one conn */
+static int dp_vs_conn_term_one(struct dp_vs_conn* conn)
+{
+	struct dp_vs_proto *pp;
+
+	pp = dp_vs_proto_lookup(conn->proto);
+	if(!pp || pp->proto != IPPROTO_TCP)
+		return 0;
+
+	//send rst to every tcp conn
+	if (pp->conn_expire)
+    	pp->conn_expire(pp, conn);
+	
+	return 0;
+}
+
+
+/* term all conns on lcore */
+void dp_vs_conn_term_all()
+{
+	struct dp_vs_conn* conn;
+	struct conn_tuple_hash *tuphash;
+	int key;
+
+	for(key = 0; key < DPVS_CONN_TBL_SIZE; key ++){
+		struct list_head* node = &this_conn_tbl[key];
+		if(!list_empty(node)){
+			list_for_each_entry(tuphash, node, list){
+				conn = tuplehash_to_conn(tuphash);
+				dp_vs_conn_term_one(conn);
+			}
+		}
+	}
+}
+
 /* timeout hanlder */
 static int dp_vs_conn_expire(void *priv)
 {
@@ -1762,7 +1797,7 @@ static void conn_ctrl_term(void)
     unregister_conn_get_msg();
 }
 
-int dp_vs_conn_init(void)
+int dp_vs_conn_res_init(void)
 {
     int i, err;
     lcoreid_t lcore;
@@ -1817,11 +1852,11 @@ int dp_vs_conn_init(void)
     return EDPVS_OK;
 
 cleanup:
-    dp_vs_conn_term();
+    dp_vs_conn_res_term();
     return err;
 }
 
-int dp_vs_conn_term(void)
+int dp_vs_conn_res_term(void)
 {
     lcoreid_t lcore;
 

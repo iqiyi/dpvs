@@ -99,11 +99,6 @@ static inline void load_conf_file(char *cfg_file)
     init_data(cfg_file, install_keywords);
 }
 
-static inline void sighup(void)
-{
-    SET_RELOAD;
-}
-
 static void try_reload(void *dump)
 {
     if (unlikely(RELOAD_STATUS)) {
@@ -113,27 +108,6 @@ static void try_reload(void *dump)
     }
 }
 
-static void sig_callback(int sig)
-{
-    switch(sig) {
-        case SIGHUP:
-            RTE_LOG(INFO, CFG_FILE, "Got signal SIGHUP.\n");
-            sighup();
-            break;
-        case SIGINT:
-            RTE_LOG(INFO, CFG_FILE, "Got signal SIGINT.\n");
-            break;
-        case SIGQUIT:
-            RTE_LOG(INFO, CFG_FILE, "Got signal SIGQUIT.\n");
-            break;
-        case SIGTERM:
-            RTE_LOG(INFO, CFG_FILE, "Got signal SIGTERM.\n");
-            break;
-        default:
-            RTE_LOG(INFO, CFG_FILE, "Unkown signal type %d.\n", sig);
-            break;
-    }
-}
 
 static struct dpvs_lcore_job reload_job = {
     .name = "cfgfile_reload",
@@ -144,21 +118,8 @@ static struct dpvs_lcore_job reload_job = {
 int cfgfile_init(void)
 {
     int ret;
-    struct sigaction sig;
 
     netif_cfgfile_init();
-
-    /* register SIGHUP signal handler */
-    memset(&sig, 0, sizeof(struct sigaction));
-    sig.sa_handler = sig_callback;
-    sigemptyset(&sig.sa_mask);
-    sig.sa_flags = 0;
-
-    ret = sigaction(SIGHUP, &sig, NULL);
-    if (ret < 0) {
-        RTE_LOG(ERR, CFG_FILE, "%s: signal handler register failed\n", __func__);
-        return EDPVS_SYSCALL;
-    }
 
     /* module initialization */
     if ((ret = global_conf_init()) != EDPVS_OK) {

@@ -2575,6 +2575,26 @@ static void lcore_job_recv_fwd(void *arg)
     }
 }
 
+void netif_hard_flush_by_lcore(lcoreid_t cid)
+{
+    int i, j;
+    portid_t pid;
+    struct netif_queue_conf *qconf;
+
+    cid = rte_lcore_id();
+    for (i = 0; i < lcore_conf[lcore2index[cid]].nports; i++) {
+        pid = lcore_conf[lcore2index[cid]].pqs[i].id;
+        for (j = 0; j < lcore_conf[lcore2index[cid]].pqs[i].ntxq; j++) {
+            qconf = &lcore_conf[lcore2index[cid]].pqs[i].txqs[j];
+            if (qconf->len <= 0)
+                continue;
+            netif_tx_burst(cid, pid, j);
+            qconf->len = 0;
+        }
+    }
+}
+
+
 static void lcore_job_xmit(void *args)
 {
     int i, j;

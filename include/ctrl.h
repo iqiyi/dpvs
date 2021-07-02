@@ -212,6 +212,7 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_TC_QSCH_SET                28
 #define MSG_TYPE_TC_CLS_GET                 29
 #define MSG_TYPE_TC_CLS_SET                 30
+#define MSG_TYPE_SIG_TERM_CONNS             31
 #define MSG_TYPE_IPVS_RANGE_START           100
 
 /* for svc per_core, refer to service.h*/
