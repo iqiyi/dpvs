@@ -264,6 +264,7 @@ int netif_print_lcore_conf(char *buf, int *len, bool is_all, portid_t pid);
 int netif_print_lcore_queue_conf(lcoreid_t cid, char *buf, int *len, bool title);
 void netif_get_slave_lcores(uint8_t *nb, uint64_t *mask);
 void netif_update_worker_loop_cnt(void);
+void netif_hard_flush_by_lcore(lcoreid_t cid);
 // function only for init or termination //
 int netif_register_master_xmit_msg(void);
 int netif_lcore_conf_set(int lcores, const struct netif_lcore_conf *lconf);

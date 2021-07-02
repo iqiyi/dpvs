@@ -175,8 +175,8 @@ struct dp_vs_synproxy_ack_pakcet {
 #define tuplehash_in(c)         ((c)->tuplehash[DPVS_CONN_DIR_INBOUND])
 #define tuplehash_out(c)        ((c)->tuplehash[DPVS_CONN_DIR_OUTBOUND])
 
-int dp_vs_conn_init(void);
-int dp_vs_conn_term(void);
+int dp_vs_conn_res_init(void);
+int dp_vs_conn_res_term(void);
 
 struct dp_vs_conn *
 dp_vs_conn_new(struct rte_mbuf *mbuf,
@@ -207,6 +207,8 @@ unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn);
 void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp);
 
 void dp_vs_conn_expire_now(struct dp_vs_conn *conn);
+
+void dp_vs_conn_term_all();
 
 void ipvs_conn_keyword_value_init(void);
 void install_ipvs_conn_keywords(void);

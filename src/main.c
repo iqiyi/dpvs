@@ -47,6 +47,7 @@
 #include "eal_mem.h"
 #include "scheduler.h"
 #include "pdump.h"
+#include "signals.h"
 
 #define DPVS    "dpvs"
 #define RTE_LOGTYPE_DPVS RTE_LOGTYPE_USER1
@@ -99,7 +100,9 @@ extern int log_slave_init(void);
         DPVS_MODULE(MODULE_IFTRAF,      "iftraf",               \
                     iftraf_init,         iftraf_term),          \
         DPVS_MODULE(MODULE_LAST,        "iftraf",               \
-                    eal_mem_init,        eal_mem_term)          \
+                    eal_mem_init,        eal_mem_term),         \
+        DPVS_MODULE(MODULE_SIGNAL,      "signal_proc",          \
+                    signal_proc_init,   NULL)                   \
     }
 
 #define DPVS_MODULE(a, b, c, d)  a

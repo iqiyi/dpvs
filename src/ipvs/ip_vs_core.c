@@ -1176,7 +1176,7 @@ int dp_vs_init(void)
         goto err_laddr;
     }
 
-    err = dp_vs_conn_init();
+    err = dp_vs_conn_res_init();
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to init conn: %s\n", dpvs_strerror(err));
         goto err_conn;
@@ -1248,7 +1248,7 @@ err_sched:
 err_synproxy:
     dp_vs_redirects_term();
 err_redirect:
-    dp_vs_conn_term();
+    dp_vs_conn_res_term();
 err_conn:
     dp_vs_laddr_term();
 err_laddr:
@@ -1293,7 +1293,7 @@ int dp_vs_term(void)
     if (err != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "fail to terminate redirect: %s\n", dpvs_strerror(err));
 
-    err = dp_vs_conn_term();
+    err = dp_vs_conn_res_term();
     if (err != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "fail to terminate conn: %s\n", dpvs_strerror(err));
 
