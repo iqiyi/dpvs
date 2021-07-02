@@ -1,7 +1,7 @@
-From db292243dcd6ef371fc6268e54b9ec16116a9d87 Mon Sep 17 00:00:00 2001
-From: huangyichen <huangyichen@qiyi.com>
-Date: Tue, 29 Jun 2021 11:19:12 +0800
-Subject: [PATCH 1/5] kni: use netlink event for multicast
+From 8e66b7600c7d8d0e59dd85565986436c0e03a2c8 Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@iqiyi.com>
+Date: Thu, 1 Jul 2021 21:21:16 +0800
+Subject: [PATCH 1/5] kni: use netlink event for multicast (driver part)
 
 Kni driver sends netlink event every time hw-multicast list updated by
 kernel, the user kni app should capture the event and update multicast

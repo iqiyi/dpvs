@@ -1,7 +1,7 @@
-From fad87988c197755a353f113613d8f3b96be7025a Mon Sep 17 00:00:00 2001
-From: huangyichen <huangyichen@qiyi.com>
-Date: Tue, 29 Jun 2021 11:22:43 +0800
-Subject: [PATCH 2/5] change dpdk-pdump tool for dpvs
+From 0ef2e126c8ca9b4a246f680a2a5110b734e9782b Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@iqiyi.com>
+Date: Thu, 1 Jul 2021 21:23:50 +0800
+Subject: [PATCH 2/5] pdump: change dpdk-pdump tool for dpvs
 
 ---
  app/pdump/main.c             | 167 ++++++++++++++++++++++++++++++++++++++++---
