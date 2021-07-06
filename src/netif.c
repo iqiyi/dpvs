@@ -3474,6 +3474,90 @@ static inline void port_mtu_set(struct netif_port *port)
 
 }
 
+#ifdef DPVS_CFG_I40E_PMD
+/*
+ * i40e supports getting/setting input set info for RSS, FDIR, and FDIR flexible payload.
+ * Supported by commit https://github.com/DPDK/dpdk/commit/97bd4ef9a0fecfc660231d9547f94a8df616e8df.
+ *
+ * Example for configure non fragement IPv4 TCP input set by testpmd:
+ *     1. port config 0 pctype 33 fdir_inset clear all
+ *     2. port config 0 pctype 33 fdir_inset set field 27
+ *     3. port config 0 pctype 33 fdir_inset set field 28
+ *     4. flow_director_filter 0 mode IP add flow ipv4-tcp dst [LIP] fwd queue [queue_id] fd_id 1
+ *
+ * Based on testpmd example, this function set dst port field mask and i40e can be used in FNAT and SNAT.
+ */
+static int __cfg_ipv4_input_set(uint16_t port_id, uint8_t pctype, uint16_t dport_mask)
+{
+    int ret;
+    struct rte_pmd_i40e_inset inset;
+
+    memset(&inset, 0, sizeof(inset));
+    ret = rte_pmd_i40e_inset_set(port_id, pctype, &inset, INSET_FDIR);
+    if (ret) {
+        RTE_LOG(ERR, NETIF, "Failed to clear input set.\n");
+        return ret;
+    }
+
+    // enable flow director input set for dst ip and dst port and use dst port mask
+    ret = rte_pmd_i40e_inset_get(port_id, pctype, &inset, INSET_FDIR);
+    if (ret) {
+        RTE_LOG(ERR, NETIF, "Failed to get input set.\n");
+        return ret;
+    }
+    /*
+     * For field index, please refer to Table 7-12 in flowing link.
+     * https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/xl710-10-40-controller-datasheet.pdf
+     */
+    rte_pmd_i40e_inset_field_set(&inset.inset, 27);
+    rte_pmd_i40e_inset_field_set(&inset.inset, 28);
+    rte_pmd_i40e_inset_field_set(&inset.inset, 30);
+    inset.mask[0].field_idx = 30;
+    inset.mask[0].mask = dport_mask;
+    ret = rte_pmd_i40e_inset_set(port_id, pctype, &inset, INSET_FDIR);
+    if (ret) {
+        RTE_LOG(ERR, NETIF, "Failed to set input set.\n");
+    }
+
+    return ret;
+}
+
+// I40E_FILTER_PCTYPE_NONF_IPV4_TCP is defined in i40e_type.h
+static inline int __add_tcp_input_set(uint16_t port_id, uint16_t dport_mask)
+{
+    return __cfg_ipv4_input_set(port_id, 33, dport_mask); // I40E_FILTER_PCTYPE_NONF_IPV4_TCP = 33
+}
+
+// I40E_FILTER_PCTYPE_NONF_IPV4_UDP is defined in i40e_type.h
+static inline int __add_udp_input_set(uint16_t port_id, uint16_t dport_mask)
+{
+    return __cfg_ipv4_input_set(port_id, 31, dport_mask); // I40E_FILTER_PCTYPE_NONF_IPV4_UDP = 31
+}
+
+/*
+ * use input set to configure FDIR for i40e NIC
+ * */
+static int netif_port_cfg_input_set(struct netif_port *port) {
+    int ret;
+    uint16_t dport_mask;
+
+    // for input set mask, bit 0 means mask and it's little endian
+    dport_mask = ~ntohs(port->dev_conf.fdir_conf.mask.dst_port_mask);
+    ret = __add_tcp_input_set(port->id, dport_mask);
+    if (ret) {
+        RTE_LOG(ERR, NETIF, "Failed to add tcp input set.\n");
+        return ret;
+    }
+    ret = __add_udp_input_set(port->id, dport_mask);
+    if (ret) {
+         RTE_LOG(ERR, NETIF, "Failed to add udp input set.\n");
+         return ret;
+    }
+
+    return ret;
+}
+#endif
+
 /*
  * fdir mask must be set according to configured slave lcore number
  * */
@@ -3826,6 +3910,14 @@ int netif_port_start(struct netif_port *port)
         RTE_LOG(ERR, NETIF, "%s: fail to start %s\n", __func__, port->name);
         return EDPVS_DPDKAPIFAIL;
     }
+
+#ifdef DPVS_CFG_I40E_PMD
+    ret = netif_port_cfg_input_set(port);
+    if (ret < 0) {
+        RTE_LOG(ERR, NETIF, "%s: fail to cfg input set %s\n", __func__, port->name);
+        return EDPVS_DPDKAPIFAIL;
+    }
+#endif
 
     // wait the device link up
     RTE_LOG(INFO, NETIF, "Waiting for %s link up, be patient ...\n", port->name);
