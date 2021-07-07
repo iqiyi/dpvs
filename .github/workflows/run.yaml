@@ -2,14 +2,14 @@ name: Run
 
 on:
   push:
-    branches: [master, devel]
+    branches: [master, devel, DPVS-1.8-LTS]
   release:
     branches: [master]
     types: [published]
   schedule:
     - cron:  '30 3 * * 1'
   pull_request:
-    branches: [master, devel]
+    branches: [master, devel, DPVS-1.8-LTS]
     types: [labeled]
 
 jobs:
