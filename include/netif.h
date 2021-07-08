@@ -168,11 +168,11 @@ typedef enum {
 
 struct netif_kni {
     char                    name[IFNAMSIZ];
-    struct rte_kni *        kni;
+    struct rte_kni          *kni;
     struct rte_ether_addr   addr;
     struct dpvs_timer       kni_rtnl_timer;
     int                     kni_rtnl_fd;
-    struct rte_ring *       rx_ring;
+    struct rte_ring         *rx_ring;
 } __rte_cache_aligned;
 
 union netif_bond {

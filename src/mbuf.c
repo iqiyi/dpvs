@@ -197,12 +197,12 @@ int mbuf_init(void)
 
     const struct rte_mbuf_dynfield rte_mbuf_userdata_fields[] = {
         [ MBUF_FIELD_PROTO ] = {
-            .name = "route",
+            .name = "protocol",
             .size = sizeof(mbuf_userdata_field_proto_t),
             .align = 8,
         },
         [ MBUF_FIELD_ROUTE ] = {
-            .name = "protocol",
+            .name = "route",
             .size = sizeof(mbuf_userdata_field_route_t),
             .align = 8,
         },

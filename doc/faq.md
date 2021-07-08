@@ -118,9 +118,9 @@ Yes, it does support UDP. In order to get the real client IP/port in FullNAT mod
 
 ### Does DPVS support IP fragment ?
 
-No, since connection table is per-lcore (per-CPU), and RSS/rte_flow are used for FNAT. Assuming RSS mode is TCP and rte_flow uses L4 info `<lip, lport>`. Considered that IP fragment doesn't have L4 info, it needs reassembling first and re-schedule the pkt to **correct** lcore which the 5-tuple flow (connection) belongs to.
+No, since connection table is per-lcore (per-CPU), and RSS/rte_flow are used for FNAT. Assuming RSS mode is TCP and rte_flow uses L4 info `<lip, lport>`. Considered that IP fragment doesn't have L4 info, it needs reassembling first and re-schedule the packet to **correct** lcore which the 5-tuple flow (connection) belongs to.
 
-May be someday in the future, we will support "pkt re-schedule" on lcores or use L3 (IP) info only for `RSS`/`FDIR`, then we may support fragment. But even we support fragment, it may hurt the performance (reassemble, re-schedule effort) or security.
+May be someday in the future, we will support "packet re-schedule" on lcores or use L3 (IP) info only for `RSS` or `flow control`, then we may support fragment. But even we support fragment, it may hurt the performance (reassemble, re-schedule effort) or security.
 
 Actually, IPv4 fragment is not recommended, while IPv6 even not support fragment by fixed header, and do not allow re-fragment on middle-boxes. The applications, especially for the datagram-oriented apps, like UDP-apps, should perform PMTU discover algorithm to avoid fragment. TCP is sending sliced *segments*, notifying MSS to peer side and *PMTU discover* is built-in, TCP-app should not need worry about fragment.
 

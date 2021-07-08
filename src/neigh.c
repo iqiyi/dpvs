@@ -54,7 +54,7 @@ struct raw_neigh {
     int                     af;
     union inet_addr         ip_addr;
     struct rte_ether_addr   eth_addr;
-    struct netif_port *     port;
+    struct netif_port       *port;
     bool                    add;
     uint8_t                 flag;
 } __rte_cache_aligned;
@@ -147,7 +147,7 @@ static lcoreid_t master_cid = 0;
 
 static struct list_head neigh_table[DPVS_MAX_LCORE][NEIGH_TAB_SIZE];
 
-static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* neighbour,
+static struct raw_neigh *neigh_ring_clone_entry(const struct neighbour_entry *neighbour,
                                                 bool add);
 
 static int neigh_send_arp(struct netif_port *port, uint32_t src_ip, uint32_t dst_ip);
@@ -245,7 +245,7 @@ static inline int neigh_unhash(struct neighbour_entry *neighbour)
 }
 
 static inline bool neigh_key_cmp(int af, const struct neighbour_entry *neighbour,
-                                 const union inet_addr *key, const struct netif_port* port)
+                                 const union inet_addr *key, const struct netif_port *port)
 {
 
     return (inet_addr_equal(af, key, &neighbour->ip_addr)) &&
@@ -333,7 +333,7 @@ static int neighbour_timer_event(void *data)
 }
 
 struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key,
-                                           const struct netif_port* port,
+                                           const struct netif_port *port,
                                            unsigned int hashkey)
 {
     struct neighbour_entry *neighbour;
@@ -501,7 +501,7 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
     unsigned int hashkey;
     struct inet_ifaddr *ifa;
 
-    ifa = inet_addr_ifa_get(AF_INET, port, (union inet_addr*)&arp->arp_data.arp_tip);
+    ifa = inet_addr_ifa_get(AF_INET, port, (union inet_addr *)&arp->arp_data.arp_tip);
     if (!ifa)
         return EDPVS_KNICONTINUE;
     inet_addr_ifa_put(ifa);
@@ -760,10 +760,10 @@ static int neigh_ring_init(void)
     return EDPVS_OK;
 }
 
-static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* neighbour,
+static struct raw_neigh *neigh_ring_clone_entry(const struct neighbour_entry *neighbour,
                                                 bool add)
 {
-    struct raw_neigh* mac_param;
+    struct raw_neigh *mac_param;
 
     mac_param = dpvs_mempool_get(neigh_mempool, sizeof(struct raw_neigh));
     if (unlikely(mac_param == NULL))
@@ -779,11 +779,11 @@ static struct raw_neigh* neigh_ring_clone_entry(const struct neighbour_entry* ne
     return mac_param;
 }
 
-static struct raw_neigh* neigh_ring_clone_param(const struct dp_vs_neigh_conf *param,
+static struct raw_neigh *neigh_ring_clone_param(const struct dp_vs_neigh_conf *param,
                                                 bool add)
 {
     struct netif_port *port;
-    struct raw_neigh* mac_param;
+    struct raw_neigh *mac_param;
 
     mac_param = dpvs_mempool_get(neigh_mempool, sizeof(struct raw_neigh));
     if (unlikely(mac_param == NULL))
