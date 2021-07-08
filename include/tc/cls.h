@@ -39,6 +39,11 @@ struct tc_cls_match_copt {
     struct tc_cls_result    result;
 } __attribute__((__packed__));
 
+struct tc_cls_ipset_copt {
+    char                    setname[32];
+    struct tc_cls_result    result;
+} __attribute__((__packed__));
+
 #ifdef __DPVS__
 
 struct tc_cls;

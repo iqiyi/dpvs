@@ -231,7 +231,7 @@ static int match_init(struct tc_cls *cls, const void *arg)
     const struct tc_cls_match_copt *copt = arg;
 
     if (!arg)
-        return EDPVS_OK;
+        return EDPVS_INVAL;
 
     if (copt->proto)
         priv->proto = copt->proto;
