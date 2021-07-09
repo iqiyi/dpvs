@@ -509,8 +509,8 @@ int ipset_init(void)
     for (i = 0; i < IPSET_TAB_SIZE; i++)
         INIT_LIST_HEAD(&this_ipset_table_lcore[i]);
 
-    rte_eal_mp_remote_launch(ipset_lcore_init, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(ipset_lcore_init, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));
@@ -542,8 +542,8 @@ int ipset_term(void)
     if ((err = sockopt_unregister(&ipset_sockopts)) != EDPVS_OK)
         return err;
 
-    rte_eal_mp_remote_launch(ipset_flush_lcore, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(ipset_flush_lcore, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));

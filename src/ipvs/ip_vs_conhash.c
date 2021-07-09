@@ -56,14 +56,14 @@ static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
     else
         udphoff = ip4_hdrlen(mbuf);
 
-    quic_len = udphoff + sizeof(struct udp_hdr) +
+    quic_len = udphoff + sizeof(struct rte_udp_hdr) +
                sizeof(pub_flags) + sizeof(*quic_cid);
 
     if (mbuf_may_pull((struct rte_mbuf *)mbuf, quic_len) != 0)
         return EDPVS_NOTEXIST;
 
     quic_data = rte_pktmbuf_mtod_offset(mbuf, char *,
-                                        udphoff + sizeof(struct udp_hdr));
+                                        udphoff + sizeof(struct rte_udp_hdr));
     pub_flags = *((uint8_t *)quic_data);
 
     if ((pub_flags & QUIC_PACKET_8BYTE_CONNECTION_ID) == 0) {

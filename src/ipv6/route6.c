@@ -137,7 +137,7 @@ static int rt6_setup_lcore(void *arg)
 
     tv.tv_sec = g_rt6_recycle_time,
     tv.tv_usec = 0,
-    global = (rte_lcore_id() == rte_get_master_lcore());
+    global = (rte_lcore_id() == rte_get_main_lcore());
 
     INIT_LIST_HEAD(&this_rt6_dustbin.routes);
     err = dpvs_timer_sched_period(&this_rt6_dustbin.tm, &tv, rt6_recycle, NULL, global);
@@ -210,7 +210,7 @@ static int rt6_add_del(const struct dp_vs_route6_conf *cf)
     lcoreid_t cid;
 
     cid = rte_lcore_id();
-    assert(cid == rte_get_master_lcore());
+    assert(cid == rte_get_main_lcore());
 
     /* for master */
     switch (cf->ops) {
@@ -412,8 +412,8 @@ int route6_init(void)
         return EDPVS_NOTEXIST;
     }
 
-    rte_eal_mp_remote_launch(rt6_setup_lcore, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(rt6_setup_lcore, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(ERR, RT6, "%s: fail to setup rt6 on lcore%d -- %s\n",
                     __func__, cid, dpvs_strerror(err));
@@ -462,8 +462,8 @@ int route6_term(void)
     if (err != EDPVS_OK)
         RTE_LOG(WARNING, RT6, "%s:fail to unregister route6 msg!\n", __func__);
 
-    rte_eal_mp_remote_launch(rt6_destroy_lcore, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(rt6_destroy_lcore, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, RT6, "%s: fail to destroy rt6 on lcore%d -- %s\n",
                     __func__, cid, dpvs_strerror(err));

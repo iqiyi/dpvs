@@ -16,12 +16,11 @@ jobs:
   run-dpvs:
     runs-on: self-hosted
     env:
-      RTE_SDK: /data/dpdk/intel/dpdk-stable-18.11.2
-      RTE_TARGET: x86_64-native-linuxapp-gcc
+      PKG_CONFIG_PATH: /data/dpdk/dpdklib/lib64/pkgconfig
     steps:
     - uses: actions/checkout@v2
     - name: make
-      run: make -j32
+      run: make -j
     - name: install
       run: make install
     - name: run-dpvs

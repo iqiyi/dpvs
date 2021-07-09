@@ -23,10 +23,10 @@
  * ways to achieve the goal. one is to calc RSS the same way of
  * NIC to select the currect CPU for connect.
  *
- * the way we use is based on Flow-Director (fdir), allocate
+ * the way we use is based on DPDK Generic Flow(rte_flow), allocate
  * local source (e.g., <ip, port>) for each CPU core in advance.
- * and redirect the back traffic to that CPU by fdir. it does not
- * need too many fdir rules, the number of rules can be equal to
+ * and redirect the back traffic to that CPU by rte_flow. it does not
+ * need too many flow rules, the number of rules can be equal to
  * the number of CPU core.
  *
  * LVS use laddr and try <laddr,lport> to see if is used when
@@ -69,130 +69,25 @@ enum {
     SA_F_USED               = 0x01,
 };
 
-struct sa_fdir {
+struct sa_flow {
     /* the ports one lcore can use means
-     * "(fdir.mask & port) == port_base" */
+     * "(sa_flow.mask & port) == port_base" */
     uint16_t                mask;       /* filter's port mask */
     lcoreid_t               lcore;
     __be16                  port_base;
-    uint16_t                soft_id;    /* current unsed soft-id,
-                                           increase after use. */
     uint16_t                shift;
 };
 
-static struct sa_fdir       sa_fdirs[DPVS_MAX_LCORE];
+static struct sa_flow       sa_flows[DPVS_MAX_LCORE];
 
 static uint8_t              sa_nlcore;
 static uint64_t             sa_lcore_mask;
 
-static uint8_t              sa_pool_hash_size   = SAPOOL_DEF_HASH_SZ;
-
-static int __add_del_filter(int af, struct netif_port *dev, lcoreid_t cid,
-                            const union inet_addr *dip, __be16 dport,
-                            uint32_t filter_id[MAX_FDIR_PROTO], bool add)
-{
-    queueid_t queue;
-    int err;
-    enum rte_filter_op op, rop;
-
-    struct rte_eth_fdir_filter filt[MAX_FDIR_PROTO] = {
-        {
-            .action.behavior = RTE_ETH_FDIR_ACCEPT,
-            .action.report_status = RTE_ETH_FDIR_REPORT_ID,
-            .soft_id = filter_id[0],
-        },
-        {
-            .action.behavior = RTE_ETH_FDIR_ACCEPT,
-            .action.report_status = RTE_ETH_FDIR_REPORT_ID,
-            .soft_id = filter_id[1],
-        },
-    };
-
-    if (af == AF_INET) {
-        filt[0].input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV4_TCP;
-        filt[0].input.flow.tcp4_flow.ip.dst_ip = dip->in.s_addr;
-        filt[0].input.flow.tcp4_flow.dst_port = dport;
-        filt[1].input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV4_UDP;
-        filt[1].input.flow.udp4_flow.ip.dst_ip = dip->in.s_addr;
-        filt[1].input.flow.udp4_flow.dst_port = dport;
-    } else if (af == AF_INET6) {
-        filt[0].input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV6_TCP;
-        memcpy(filt[0].input.flow.ipv6_flow.dst_ip, &dip->in6, sizeof(struct in6_addr));
-        filt[0].input.flow.tcp6_flow.dst_port = dport;
-        filt[1].input.flow_type = RTE_ETH_FLOW_NONFRAG_IPV6_UDP;
-        memcpy(filt[1].input.flow.ipv6_flow.dst_ip, &dip->in6, sizeof(struct in6_addr));
-        filt[1].input.flow.udp6_flow.dst_port = dport;
-    } else {
-        return EDPVS_NOTSUPP;
-    }
-
-    if (dev->netif_ops && dev->netif_ops->op_filter_supported) {
-        if (dev->netif_ops->op_filter_supported(dev, RTE_ETH_FILTER_FDIR) < 0) {
-            if (dev->nrxq <= 1)
-                return EDPVS_OK;
-            RTE_LOG(ERR, SAPOOL, "%s: FDIR is not supported by device %s. Only"
-                    " single rxq can be configured.\n", __func__, dev->name);
-            return EDPVS_NOTSUPP;
-        }
-    } else {
-        RTE_LOG(ERR, SAPOOL, "%s: FDIR support of device %s is not known.\n",
-                __func__, dev->name);
-        return EDPVS_INVAL;
-    }
-
-    err = netif_get_queue(dev, cid, &queue);
-    if (err != EDPVS_OK)
-        return err;
-
-    filt[0].action.rx_queue = filt[1].action.rx_queue = queue;
-    op = add ? RTE_ETH_FILTER_ADD : RTE_ETH_FILTER_DELETE;
-
-    netif_mask_fdir_filter(af, dev, &filt[0]);
-    netif_mask_fdir_filter(af, dev, &filt[1]);
-
-    err = netif_fdir_filter_set(dev, op, &filt[0]);
-    if (err != EDPVS_OK)
-        return err;
-
-    err = netif_fdir_filter_set(dev, op, &filt[1]);
-    if (err != EDPVS_OK) {
-        rop = add ? RTE_ETH_FILTER_DELETE : RTE_ETH_FILTER_ADD;
-        netif_fdir_filter_set(dev, rop, &filt[0]);
-        return err;
-    }
-
-#ifdef CONFIG_DPVS_SAPOOL_DEBUG
-    {
-        char ipaddr[64];
-        RTE_LOG(DEBUG, SAPOOL, "FDIR: %s %s %s TCP/UDP "
-                "ip %s port %d (0x%04x) mask 0x%04X queue %d lcore %2d filterID %d/%d\n",
-                add ? "add" : "del", dev->name,
-                af == AF_INET ? "IPv4" : "IPv6",
-                inet_ntop(af, dip, ipaddr, sizeof(ipaddr)) ? : "::",
-                ntohs(dport), ntohs(dport), sa_fdirs[cid].mask, queue, cid,
-                filter_id[0], filter_id[1]);
-    }
-#endif
-
-    return err;
-}
-
-static inline int sa_add_filter(int af, struct netif_port *dev, lcoreid_t cid,
-                                const union inet_addr *dip, __be16 dport,
-                                uint32_t filter_id[MAX_FDIR_PROTO])
-{
-    return  __add_del_filter(af, dev, cid, dip, dport, filter_id, true);
-}
-
-static inline int sa_del_filter(int af, struct netif_port *dev, lcoreid_t cid,
-                                const union inet_addr *dip, __be16 dport,
-                                uint32_t filter_id[MAX_FDIR_PROTO])
-{
-    return  __add_del_filter(af, dev, cid, dip, dport, filter_id, false);
-}
+static uint8_t              sa_pool_hash_size  = SAPOOL_DEF_HASH_SZ;
+static bool                 sapool_flow_enable = true;
 
 static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
-                               const struct sa_fdir *fdir)
+                               const struct sa_flow *flow)
 {
     int hash;
     struct sa_entry_pool *pool;
@@ -202,7 +97,7 @@ static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
     uint32_t sa_entry_size;
     uint32_t sa_entry_num;
 
-    sa_entry_num = MAX_PORT >> fdir->shift;
+    sa_entry_num = MAX_PORT >> flow->shift;
     sa_entry_pool_size = sizeof(struct sa_entry_pool) * hash_sz;
     sa_entry_size = sizeof(struct sa_entry) * sa_entry_num * hash_sz;
 
@@ -214,7 +109,7 @@ static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
     ap->pool_hash_sz = hash_sz;
     sep = (struct sa_entry *)&ap->pool_hash[hash_sz];
 
-    /* the big loop takes about 17ms */
+    /* the big loop may take tens of milliseconds */
     for (hash = 0; hash < hash_sz; hash++) {
         pool = &ap->pool_hash[hash];
 
@@ -223,14 +118,14 @@ static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
 
         pool->used_cnt = 0;
         pool->free_cnt = 0;
-        pool->shift = fdir->shift;
+        pool->shift = flow->shift;
         pool->sa_entries = &sep[sa_entry_num * hash];
 
         for (port = ap->low; port <= ap->high; port++) {
             struct sa_entry *sa;
 
-            if (fdir->mask &&
-                ((uint16_t)port & fdir->mask) != ntohs(fdir->port_base))
+            if (flow->mask &&
+                ((uint16_t)port & flow->mask) != ntohs(flow->port_base))
                 continue;
 
             sa = &pool->sa_entries[(uint16_t)(port >> pool->shift)];
@@ -246,7 +141,7 @@ static int sa_pool_alloc_hash(struct sa_pool *ap, uint8_t hash_sz,
 
 static int sa_pool_free_hash(struct sa_pool *ap)
 {
-    /* FIXME: it may takes about 3ms to free the huge `sa->pool_hash`, and
+    /* FIXME: it may take about 3ms to free the huge `sa->pool_hash`, and
      * @rte_free uses a spinlock to protect its heap. If multiple workers
      * free their sapools simultaneously, a worker may be stuck up to 3*N ms,
      * where `N` is the dpvs worker number.
@@ -254,7 +149,7 @@ static int sa_pool_free_hash(struct sa_pool *ap)
      * use mempool for sapool could solve the problem. we still use @rte_free
      * here considering sapool is not frequently changed.
      */
-    rte_free(ap->pool_hash);    /* it may takes up to 3ms */
+    rte_free(ap->pool_hash);    /* it may take up to 3ms */
     ap->pool_hash_sz = 0;
     return EDPVS_OK;
 }
@@ -262,23 +157,21 @@ static int sa_pool_free_hash(struct sa_pool *ap)
 static int sa_pool_add_filter(struct inet_ifaddr *ifa, struct sa_pool *ap,
                              lcoreid_t cid)
 {
-    int err = EDPVS_OK;
-    uint32_t filtids[MAX_FDIR_PROTO];
-    struct sa_fdir *fdir = &sa_fdirs[cid];
+    int err;
+    struct sa_flow *flow = &sa_flows[cid];
 
-    if (dp_vs_fdir_filter_enable) {
-        /* if add filter failed, waste some soft-id is acceptable. */
-        filtids[0] = fdir->soft_id++;
-        filtids[1] = fdir->soft_id++;
+    netif_flow_handler_param_t flow_handlers = {
+            .size     = MAX_SA_FLOW,
+            .flow_num = 0,
+            .handlers = ap->flows,
+    };
 
-        err = sa_add_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
-                            fdir->port_base, filtids);
+    if (!sapool_flow_enable)
+        return EDPVS_OK;
 
-        if (err == EDPVS_OK) {
-            ap->filter_id[0] = filtids[0];
-            ap->filter_id[1] = filtids[1];
-        }
-    }
+    err = netif_sapool_flow_add(ifa->idev->dev, cid, ifa->af, &ifa->addr,
+            flow->port_base, htons(flow->mask), &flow_handlers);
+    ap->flow_num = flow_handlers.flow_num;
 
     return err;
 }
@@ -286,25 +179,29 @@ static int sa_pool_add_filter(struct inet_ifaddr *ifa, struct sa_pool *ap,
 static int sa_pool_del_filter(struct inet_ifaddr *ifa, struct sa_pool *ap,
                                lcoreid_t cid)
 {
-    int err = EDPVS_OK;
-    struct sa_fdir *fdir = &sa_fdirs[cid];
+    struct sa_flow *flow = &sa_flows[cid];
 
-    if (dp_vs_fdir_filter_enable)
-        err = sa_del_filter(ifa->af, ifa->idev->dev, cid, &ifa->addr,
-                            fdir->port_base, ap->filter_id); /* thread-safe ? */
+    netif_flow_handler_param_t flow_handlers = {
+            .size     = MAX_SA_FLOW,
+            .flow_num = ap->flow_num,
+            .handlers = ap->flows,
+    };
 
-    return err;
+    if (!sapool_flow_enable)
+        return EDPVS_OK;
+
+    return netif_sapool_flow_del(ifa->idev->dev, cid, ifa->af, &ifa->addr,
+            flow->port_base, htons(flow->mask), &flow_handlers);
 }
 
 int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
 {
     int err;
     struct sa_pool *ap;
-    struct sa_fdir *fdir;
     lcoreid_t cid = rte_lcore_id();
 
     if (cid > 64 || !((sa_lcore_mask & (1UL << cid)))) {
-        if (cid == rte_get_master_lcore())
+        if (cid == rte_get_main_lcore())
             return EDPVS_OK; /* no sapool on master */
         return EDPVS_INVAL;
     }
@@ -317,8 +214,6 @@ int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
         return EDPVS_INVAL;
     }
 
-    fdir = &sa_fdirs[cid];
-
     ap = rte_zmalloc(NULL, sizeof(struct sa_pool), 0);
     if (unlikely(!ap))
         return EDPVS_NOMEM;
@@ -329,7 +224,7 @@ int sa_pool_create(struct inet_ifaddr *ifa, uint16_t low, uint16_t high)
     ap->flags = 0;
     rte_atomic32_set(&ap->refcnt, 1);
 
-    err = sa_pool_alloc_hash(ap, sa_pool_hash_size, fdir);
+    err = sa_pool_alloc_hash(ap, sa_pool_hash_size, &sa_flows[cid]);
     if (err != EDPVS_OK) {
         goto free_ap;
     }
@@ -373,7 +268,7 @@ int sa_pool_destroy(struct inet_ifaddr *ifa)
     lcoreid_t cid = rte_lcore_id();
 
     if (cid > 64 || !((sa_lcore_mask & (1UL << cid)))) {
-        if (cid == rte_get_master_lcore())
+        if (cid == rte_get_main_lcore())
             return EDPVS_OK;
         return EDPVS_INVAL;
     }
@@ -834,13 +729,12 @@ int sa_pool_init(void)
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (cid >= 64 || !(sa_lcore_mask & (1L << cid)))
             continue;
-        assert(rte_lcore_is_enabled(cid) && cid != rte_get_master_lcore());
+        assert(rte_lcore_is_enabled(cid) && cid != rte_get_main_lcore());
 
-        sa_fdirs[cid].mask = ~((~0x0) << shift);
-        sa_fdirs[cid].lcore = cid;
-        sa_fdirs[cid].port_base = htons(port_base);
-        sa_fdirs[cid].soft_id = 0;
-        sa_fdirs[cid].shift = shift;
+        sa_flows[cid].mask = ~((~0x0) << shift);
+        sa_flows[cid].lcore = cid;
+        sa_flows[cid].port_base = htons(port_base);
+        sa_flows[cid].shift = shift;
 
         port_base++;
     }
@@ -856,7 +750,7 @@ int sa_pool_term(void)
 /*
  * config file
  */
-static void sa_pool_hash_size_conf(vector_t tokens)
+static void sa_pool_hash_size_handler(vector_t tokens)
 {
     char *str = set_value(tokens);
     int size;
@@ -874,8 +768,26 @@ static void sa_pool_hash_size_conf(vector_t tokens)
     FREE_PTR(str);
 }
 
+static void sa_pool_flow_enable_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+
+    if (!str)
+        return;
+
+    if (!strcasecmp(str, "on"))
+        sapool_flow_enable = true;
+    if (!strcasecmp(str, "off"))
+        sapool_flow_enable = false;
+    else
+        RTE_LOG(WARNING, SAPOOL, "sapool_filter_enable = %s\n", sapool_flow_enable ? "on" : "off");
+
+    FREE_PTR(str);
+}
+
 void install_sa_pool_keywords(void)
 {
     install_keyword_root("sa_pool", NULL);
-    install_keyword("pool_hash_size", sa_pool_hash_size_conf, KW_TYPE_INIT);
+    install_keyword("pool_hash_size", sa_pool_hash_size_handler, KW_TYPE_INIT);
+    install_keyword("flow_enable", sa_pool_flow_enable_handler, KW_TYPE_INIT);
 }

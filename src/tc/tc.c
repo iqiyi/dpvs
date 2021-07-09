@@ -128,7 +128,7 @@ struct rte_mbuf *tc_hook(struct netif_tc *tc, struct rte_mbuf *mbuf,
     if (flags & QSCH_F_INGRESS) {
         sch = tc->qsch_ingress;
         /* mbuf->packet_type was not set by DPVS for ingress */
-        pkt_type = rte_pktmbuf_mtod(mbuf, struct ether_hdr *)->ether_type;
+        pkt_type = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *)->ether_type;
     } else {
         sch = tc->qsch;
         pkt_type = rte_cpu_to_be_16(mbuf->packet_type);

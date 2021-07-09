@@ -199,8 +199,8 @@ static inline bool __service_in_range(int af,
 static struct dp_vs_service *
 __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t cid)
 {
-    struct route_entry *rt = mbuf->userdata;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
+    struct route_entry *rt = MBUF_USERDATA_CONST(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
     struct dp_vs_service *svc;
     union inet_addr saddr, daddr;
     __be16 _ports[2], *ports;
@@ -267,7 +267,7 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
 static struct dp_vs_service *
 __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
 {
-    struct route6 *rt = mbuf->userdata;
+    struct route6 *rt = MBUF_USERDATA_CONST(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
     struct ip6_hdr *iph = ip6_hdr(mbuf);
     uint8_t ip6nxt = iph->ip6_nxt;
     struct dp_vs_service *svc;
@@ -299,7 +299,7 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
         if (!rt)
             return NULL;
 
-        /* set mbuf->userdata to @rt as side-effect is not good!
+        /* set mbuf userdata(MBUF_FIELD_ROUTE) to @rt as side-effect is not good!
          * although route will done again when out-xmit. */
         if ((rt->rt6_flags & RTF_KNI) || (rt->rt6_flags & RTF_LOCALIN)) {
             route6_put(rt);
@@ -914,13 +914,13 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
     struct in_addr *vip;
     lcoreid_t cid = rte_lcore_id();
 
-    if (opt == DPVS_SO_SET_GRATARP && cid == rte_get_master_lcore()){
+    if (opt == DPVS_SO_SET_GRATARP && cid == rte_get_main_lcore()){
         vip = (struct in_addr *)user;
         return gratuitous_arp_send_vip(vip);
     }
 
     // send to slave core
-    if (cid == rte_get_master_lcore()) {
+    if (cid == rte_get_main_lcore()) {
         struct dpvs_msg *msg;
 
         msg = msg_make(set_opt_so2msg(opt), svc_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
@@ -1262,7 +1262,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                     return EDPVS_MSG_FAIL;
                 }
 
-                if (cid == rte_get_master_lcore()) {
+                if (cid == rte_get_main_lcore()) {
                     output = rte_zmalloc("get_services", size, 0);
                     if (unlikely(NULL == output)) {
                         msg_destroy(&msg);
@@ -1331,7 +1331,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                     return EDPVS_MSG_FAIL;
                 }
 
-                if (cid == rte_get_master_lcore()) {
+                if (cid == rte_get_main_lcore()) {
                     svc = dp_vs_service_get_lcore(entry, cid);
                     if (!svc) {
                         msg_destroy(&msg);
@@ -1426,7 +1426,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                     return EDPVS_MSG_FAIL;
                 }
 
-                if (cid == rte_get_master_lcore()) {
+                if (cid == rte_get_main_lcore()) {
                     svc = dp_vs_service_get_lcore(&entry, cid);
                     if (!svc) {
                         msg_destroy(&msg);

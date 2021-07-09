@@ -243,5 +243,5 @@ int dpvs_lcore_start(int is_master)
 {
     if (is_master)
         return dpvs_job_loop(NULL);
-    return rte_eal_mp_remote_launch(dpvs_job_loop, NULL, SKIP_MASTER);
+    return rte_eal_mp_remote_launch(dpvs_job_loop, NULL, SKIP_MAIN);
 }

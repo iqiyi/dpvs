@@ -37,13 +37,13 @@ static void list_eal_mem_seg_info(eal_all_mem_seg_ret_t *all_eal_mem_seg_ret)
     int i = 0;
 
     printf("%-10s %16s %16s %20s %20s %10s %10s %20s\n",
-            "socket_id", "phys_addr(Hex)", "virt_addr(Hex)", "len(KB)",
+            "socket_id", "iova(Hex)", "virt_addr(Hex)", "len(KB)",
             "hugepage_size(KB)","nchannel", "nrank", "free_len(KB)");
 
     for (i = 0; i < all_eal_mem_seg_ret->seg_num; i++) {
         seg_ret = &all_eal_mem_seg_ret->seg_info[i];
         printf("%-10d %16lx %16lx %20lu %20lu %10u %10u %20lu\n",
-                seg_ret->socket_id, seg_ret->phys_addr, seg_ret->virt_addr,
+                seg_ret->socket_id, seg_ret->iova, seg_ret->virt_addr,
                 seg_ret->len / 1024, seg_ret->hugepage_sz / 1024,
                 seg_ret->nchannel, seg_ret->nrank,
                 seg_ret->free_seg_len / 1024);
@@ -77,13 +77,13 @@ static void list_eal_mem_zone_info(eal_all_mem_zone_ret_t *all_eal_mem_zone_ret)
     int i = 0;
 
     printf("%-8s %32s %16s %16s %20s %20s %10s\n", "zone_id",
-            "zone_name", "phys_addr(Hex)", "virt_addr(Hex)", "len(KB)", "hugepage_size(KB)",
+            "zone_name", "iova(Hex)", "virt_addr(Hex)", "len(KB)", "hugepage_size(KB)",
             "socket_id");
 
     for (i = 0; i < all_eal_mem_zone_ret->zone_num; i++) {
         zone_ret = &all_eal_mem_zone_ret->zone_info[i];
         printf("%-8d %32s %16lx %16lx %20lu %20lu %10d\n", i,
-                zone_ret->name, zone_ret->phys_addr, zone_ret->virt_addr,
+                zone_ret->name, zone_ret->iova, zone_ret->virt_addr,
                 zone_ret->len / 1024, zone_ret->hugepage_sz / 1024, zone_ret->socket_id);
     }
 }

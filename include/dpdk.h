@@ -57,6 +57,7 @@
 #include <rte_ip_frag.h>
 #include <rte_eth_bond.h>
 #include <rte_eth_bond_8023ad.h>
+#include <rte_ethdev_driver.h>
 #include "mbuf.h"
 #ifdef CONFIG_DPVS_PDUMP
 #include <rte_pdump.h>

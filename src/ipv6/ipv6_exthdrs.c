@@ -93,7 +93,7 @@ int ip6_skip_exthdr(const struct rte_mbuf *imbuf, int start, __u8 *nexthdrp)
  */
 static int ip6_dummy_hdr_rcv(struct rte_mbuf *mbuf)
 {
-    struct ip6_hdr *hdr = mbuf->userdata;
+    struct ip6_hdr *hdr = MBUF_USERDATA(mbuf, struct ip6_hdr *, MBUF_FIELD_PROTO);
     struct ip6_ext *exthdr;
 
     if (mbuf_may_pull(mbuf, 8) != 0)

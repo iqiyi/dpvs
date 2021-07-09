@@ -345,7 +345,7 @@ static int route_add_del(bool add, struct in_addr* dest,
     struct dpvs_msg *msg;
     struct dp_vs_route_conf cf;
 
-    if (cid != rte_get_master_lcore()) {
+    if (cid != rte_get_main_lcore()) {
         RTE_LOG(INFO, ROUTE, "[%s] must set from master lcore\n", __func__);
         return EDPVS_NOTSUPP;
     }
@@ -759,8 +759,8 @@ int route_init(void)
     rte_atomic32_set(&this_num_routes, 0);
     rte_atomic32_set(&this_num_out_routes, 0);
     /* master core also need routes */
-    rte_eal_mp_remote_launch(route_lcore_init, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(route_lcore_init, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, ROUTE, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));
@@ -806,8 +806,8 @@ int route_term(void)
     if ((err = sockopt_unregister(&route_sockopts)) != EDPVS_OK)
         return err;
 
-    rte_eal_mp_remote_launch(route_lcore_term, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(route_lcore_term, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, ROUTE, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));

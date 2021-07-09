@@ -179,7 +179,7 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add)
 {
     int err;
     union inet_addr iaddr;
-    struct ether_addr eaddr;
+    struct rte_ether_addr eaddr;
 
     /* for ipv6 only */
     if (ifa->af != AF_INET6)
@@ -219,7 +219,7 @@ int idev_add_mcast_init(void *args)
     int err;
     struct inet_device *idev;
     union inet_addr all_nodes, all_routers;
-    struct ether_addr eaddr_nodes, eaddr_routers;
+    struct rte_ether_addr eaddr_nodes, eaddr_routers;
 
     struct netif_port *dev = (struct netif_port *) args;
 
@@ -600,7 +600,7 @@ errout:
 static int ifa_add_route(struct inet_ifaddr *ifa)
 {
     /* set route from master */
-    if (unlikely(rte_lcore_id() != rte_get_master_lcore()))
+    if (unlikely(rte_lcore_id() != rte_get_main_lcore()))
         return EDPVS_OK;
 
     switch (ifa->af) {
@@ -666,7 +666,7 @@ static int ifa_del_route6(struct inet_ifaddr *ifa)
 static int ifa_del_route(struct inet_ifaddr *ifa)
 {
     /* set route from master */
-    if (unlikely(rte_lcore_id() != rte_get_master_lcore()))
+    if (unlikely(rte_lcore_id() != rte_get_main_lcore()))
         return EDPVS_OK;
 
     switch (ifa->af) {
@@ -686,7 +686,7 @@ static int inet_ifaddr_dad_completed(void *arg)
     struct inet_ifaddr *ifa = arg;
 
     /* only master's ifa scheduled ifa->dad_timer */
-    assert(rte_lcore_id() == rte_get_master_lcore());
+    assert(rte_lcore_id() == rte_get_main_lcore());
 
     dpvs_timer_cancel_nolock(&ifa->dad_timer, true);
     ifa->flags &= ~(IFA_F_TENTATIVE | IFA_F_OPTIMISTIC | IFA_F_DADFAILED);
@@ -719,7 +719,7 @@ static void inet_ifaddr_dad_start(struct inet_ifaddr *ifa)
     ifa->flags |= IFA_F_TENTATIVE | IFA_F_OPTIMISTIC;
 
     /* timing and sending dad on master only */
-    if (cid != rte_get_master_lcore())
+    if (cid != rte_get_main_lcore())
         return;
 
     dpvs_time_rand_delay(&tv, 1000000);
@@ -765,7 +765,7 @@ static int ifa_expire(void *arg)
     struct inet_ifaddr *ifa = (struct inet_ifaddr *)arg;
 
     /* only master's ifa scheduled ifa->timer */
-    assert(cid == rte_get_master_lcore());
+    assert(cid == rte_get_main_lcore());
 
     err = inet_addr_del(ifa->af, ifa->idev->dev, &ifa->addr, ifa->plen);
     if (err != EDPVS_OK) {
@@ -783,7 +783,7 @@ static int ifa_entry_add(const struct ifaddr_action *param)
     struct inet_device *idev;
     struct inet_ifaddr *ifa;
     struct timeval timeo = { 0 };
-    bool is_master = (rte_lcore_id() == rte_get_master_lcore());
+    bool is_master = (rte_lcore_id() == rte_get_main_lcore());
 
     if (!param || !param->dev || !ifa_prefix_check(param->af,
                 &param->addr, param->plen))
@@ -900,7 +900,7 @@ static int ifa_entry_mod(const struct ifaddr_action *param)
     struct inet_device *idev;
     struct inet_ifaddr *ifa;
     struct timeval timeo = { 0 };
-    bool is_master = (rte_lcore_id() == rte_get_master_lcore());
+    bool is_master = (rte_lcore_id() == rte_get_main_lcore());
 
     if (!param || !param->dev || !ifa_prefix_check(param->af,
                 &param->addr, param->plen))
@@ -1021,7 +1021,7 @@ static int ifa_entry_sync(const struct ifaddr_action *param)
     /* only support snyc flags now */
     ifa->flags = param->flags;
     if ((ifa->flags & IFA_F_DADFAILED) &&
-        (rte_lcore_id() == rte_get_master_lcore()))
+        (rte_lcore_id() == rte_get_main_lcore()))
         dpvs_timer_cancel(&ifa->dad_timer, true);
 
     ifa_put(ifa);
@@ -1041,7 +1041,7 @@ static void ifa_free(struct inet_ifaddr **ifa_p)
     /* remove @ifa from @ifa_expired_list */
     list_del_init(&ifa->h_list);
 
-    if (cid == rte_get_master_lcore()) {
+    if (cid == rte_get_main_lcore()) {
         /* it's safe to cancel timer not pending but zeroed */
         dpvs_timer_cancel(&ifa->dad_timer, true);
         dpvs_timer_cancel(&ifa->timer, true);
@@ -1105,7 +1105,7 @@ static void fill_ifaddr_entry(lcoreid_t cid, const struct inet_ifaddr *ifa, stru
         entry->ifa_entry.prefered_lft = 0;
     } else {
         struct timeval now, diff;
-        dpvs_time_now(&now, rte_lcore_id() == rte_get_master_lcore());
+        dpvs_time_now(&now, rte_lcore_id() == rte_get_main_lcore());
         timersub(&now, &ifa->tstemp, &diff);
         entry->ifa_entry.valid_lft    = ifa->valid_lft - diff.tv_sec;
         entry->ifa_entry.prefered_lft = ifa->prefered_lft - diff.tv_sec;
@@ -1227,7 +1227,7 @@ static int ifa_msg_sync_cb(struct dpvs_msg *msg)
     struct ifaddr_action *param;
 
     /* sync from master lcore only */
-    assert(rte_lcore_id() == rte_get_master_lcore());
+    assert(rte_lcore_id() == rte_get_main_lcore());
 
     if (!msg || msg->len != sizeof(*param))
         return EDPVS_INVAL;
@@ -1459,7 +1459,7 @@ static int inet_addr_sync(const struct ifaddr_action *param)
     struct dpvs_msg *msg;
 
     cid = rte_lcore_id();
-    mid = rte_get_master_lcore();
+    mid = rte_get_main_lcore();
 
     /* call from master */
     if (cid == mid)
@@ -1473,7 +1473,7 @@ static int inet_addr_sync(const struct ifaddr_action *param)
         return EDPVS_NOMEM;
     }
 
-    err = msg_send(msg, rte_get_master_lcore(), DPVS_MSG_F_ASYNC, NULL);
+    err = msg_send(msg, rte_get_main_lcore(), DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK)
         RTE_LOG(WARNING, IFA, "[%02d] %s: msg_send failed\n", cid, __func__);
 
@@ -1488,7 +1488,7 @@ static int ifaddr_get_basic(struct inet_device *idev, struct inet_addr_data_arra
 
     /* convey ifa data on master lcore */
     cid = rte_lcore_id();
-    assert(cid == rte_get_master_lcore());
+    assert(cid == rte_get_main_lcore());
 
     if (idev)
         ifa_cnt = idev->ifa_cnt[cid];
@@ -1785,7 +1785,7 @@ static struct dpvs_msg_type ifa_msg_types[] = {
         .type               = MSG_TYPE_IFA_SYNC,
         .prio               = MSG_PRIO_NORM,
         .mode               = DPVS_MSG_UNICAST,
-        //.cid              = rte_get_master_lcore(),
+        //.cid              = rte_get_main_lcore(),
         .unicast_msg_cb     = ifa_msg_sync_cb,
         .multicast_msg_cb   = NULL
     }
@@ -1815,7 +1815,7 @@ int inet_addr_init(void)
         INIT_LIST_HEAD(&ifa_expired_list[cid]);
     }
 
-    ifa_msg_types[2].cid = rte_get_master_lcore();
+    ifa_msg_types[2].cid = rte_get_main_lcore();
 
     if ((err = sockopt_register(&ifa_sockopts)) != EDPVS_OK) {
         RTE_LOG(ERR, IFA, "%s: fail to register ifa_sockopts -- %s\n",

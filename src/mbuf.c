@@ -21,6 +21,7 @@
  * it includes some mbuf related functions beyond dpdk mbuf API.
  */
 #include <assert.h>
+#include <rte_mbuf_dyn.h>
 #include "mbuf.h"
 #include "inet.h"
 #include "ipv4.h"
@@ -28,6 +29,19 @@
 
 #define EMBUF
 #define RTE_LOGTYPE_EMBUF    RTE_LOGTYPE_USER1
+
+#define MBUF_DYNFIELDS_MAX   8
+static int mbuf_dynfields_offset[MBUF_DYNFIELDS_MAX];
+
+void *mbuf_userdata(struct rte_mbuf *mbuf, mbuf_usedata_field_t field)
+{
+    return (void *)mbuf + mbuf_dynfields_offset[field];
+}
+
+void *mbuf_userdata_const(const struct rte_mbuf *mbuf, mbuf_usedata_field_t field)
+{
+    return (void *)mbuf + mbuf_dynfields_offset[field];
+}
 
 /**
  * mbuf_may_pull - pull bits from segments to heading mbuf if needed.
@@ -107,7 +121,7 @@ void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m)
     mi->nb_segs = 1;
     mi->ol_flags = m->ol_flags & (~IND_ATTACHED_MBUF);
     mi->packet_type = m->packet_type;
-    mi->userdata = NULL;
+    mbuf_userdata_reset(mi);
 
     __rte_mbuf_sanity_check(mi, 1);
     __rte_mbuf_sanity_check(m, 0);
@@ -153,7 +167,7 @@ inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf
 {
     char stime[SYS_TIME_STR_LEN];
     char sbuf[64], dbuf[64];
-    struct ipv4_hdr *iph;
+    struct rte_ipv4_hdr *iph;
     union inet_addr saddr, daddr;
     __be16 _ports[2], *ports;
 
@@ -176,3 +190,34 @@ inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf
         ntohs(ports[1]));
 }
 #endif
+
+int mbuf_init(void)
+{
+    int i, offset;
+
+    const struct rte_mbuf_dynfield rte_mbuf_userdata_fields[] = {
+        [ MBUF_FIELD_PROTO ] = {
+            .name = "protocol",
+            .size = sizeof(mbuf_userdata_field_proto_t),
+            .align = 8,
+        },
+        [ MBUF_FIELD_ROUTE ] = {
+            .name = "route",
+            .size = sizeof(mbuf_userdata_field_route_t),
+            .align = 8,
+        },
+    };
+
+    for (i = 0; i < NELEMS(rte_mbuf_userdata_fields); i++) {
+        if (rte_mbuf_userdata_fields[i].size == 0)
+            continue;
+        offset = rte_mbuf_dynfield_register(&rte_mbuf_userdata_fields[i]);
+        if (offset < 0) {
+            RTE_LOG(ERR, MBUF, "fail to register dynfield[%d] in mbuf!\n", i);
+            return EDPVS_NOROOM;
+        }
+        mbuf_dynfields_offset[i] = offset;
+    }
+
+    return EDPVS_OK;
+}

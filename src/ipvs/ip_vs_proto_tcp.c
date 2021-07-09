@@ -139,7 +139,7 @@ inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
  * @th:  pointer to the beginning of the L4 header
  * @return void
  */
-inline void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th)
+inline void tcp4_send_csum(struct rte_ipv4_hdr *iph, struct tcphdr *th)
 {
     th->check = 0;
     th->check = rte_ipv4_udptcp_cksum(iph, th);
@@ -151,7 +151,7 @@ inline void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th)
  * @th:  pointer to the beginning of the L4 header
  * @return void
  */
-inline void tcp6_send_csum(struct ipv6_hdr *iph, struct tcphdr *th) {
+inline void tcp6_send_csum(struct rte_ipv6_hdr *iph, struct tcphdr *th) {
     th->check = 0;
     th->check = ip6_udptcp_cksum((struct ip6_hdr *)iph, th,
             (void *)th - (void *)iph, IPPROTO_TCP);
@@ -165,7 +165,7 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
     struct netif_port *dev = NULL;
 
     if (AF_INET6 == af) {
-        struct route6 *rt6 = mbuf->userdata;
+        struct route6 *rt6 = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
         struct ip6_hdr *ip6h = ip6_hdr(mbuf);
         if (rt6 && rt6->rt6_dev)
             dev = rt6->rt6_dev;
@@ -179,11 +179,11 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return EDPVS_INVPKT;
-            tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
+            tcp6_send_csum((struct rte_ipv6_hdr *)ip6h, th);
         }
     } else { /* AF_INET */
-        struct route_entry *rt = mbuf->userdata;
-        struct ipv4_hdr *iph = ip4_hdr(mbuf);
+        struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
+        struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
         if (rt && rt->port)
             dev = rt->port;
         else if (conn->out_dev)
@@ -319,9 +319,11 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
      * check if we can add the new option
      */
     /* skb length and tcp option length checking */
-    if (tuplehash_out(conn).af == AF_INET && (rt = mbuf->userdata) != NULL) {
+    if (tuplehash_out(conn).af == AF_INET && (rt = MBUF_USERDATA(mbuf,
+                    struct route_entry *, MBUF_FIELD_ROUTE)) != NULL) {
         mtu = rt->mtu;
-    } else if (tuplehash_out(conn).af == AF_INET6 && (rt6 = mbuf->userdata) != NULL) {
+    } else if (tuplehash_out(conn).af == AF_INET6 && (rt6 = MBUF_USERDATA(mbuf,
+                    struct route6 *, MBUF_FIELD_ROUTE)) != NULL) {
         mtu = rt6->rt6_mtu;
     } else if (conn->in_dev) { /* no route for fast-xmit */
         mtu = conn->in_dev->mtu;
@@ -990,7 +992,7 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
     struct rte_mempool *pool;
     struct rte_mbuf *mbuf = NULL;
     struct tcphdr *th;
-    struct ipv4_hdr *ip4h;
+    struct rte_ipv4_hdr *ip4h;
     struct ip6_hdr *ip6h;
 
     if (conn->state != DPVS_TCP_S_ESTABLISHED) {
@@ -1005,7 +1007,7 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
     mbuf = rte_pktmbuf_alloc(pool);
     if (!mbuf)
         return EDPVS_NOMEM;
-    mbuf->userdata = NULL; /* make sure "no route info" */
+    mbuf_userdata_reset(mbuf); /* make sure "no route info" */
 
     /*
      * reserve head room ?
@@ -1041,8 +1043,8 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
     /* IP header (before translation) */
     if (dir == DPVS_CONN_DIR_INBOUND) {
         if (tuplehash_in(conn).af == AF_INET) {
-            ip4h = (struct ipv4_hdr *)rte_pktmbuf_prepend(mbuf,
-                                       sizeof(struct ipv4_hdr));
+            ip4h = (struct rte_ipv4_hdr *)rte_pktmbuf_prepend(mbuf,
+                                       sizeof(struct rte_ipv4_hdr));
             if (!ip4h) {
                 rte_pktmbuf_free(mbuf);
                 return EDPVS_NOROOM;
@@ -1050,7 +1052,7 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
             ip4h->version_ihl     = 0x45;
             ip4h->total_length    = htons(mbuf->pkt_len);
             ip4h->packet_id       = 0;
-            ip4h->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+            ip4h->fragment_offset = htons(RTE_IPV4_HDR_DF_FLAG);
             ip4h->time_to_live    = 64;
             ip4h->next_proto_id   = IPPROTO_TCP;
             ip4h->src_addr        = conn->caddr.in.s_addr;
@@ -1079,15 +1081,15 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
 
             mbuf->l3_len = sizeof(*ip6h);
 
-            tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
+            tcp6_send_csum((struct rte_ipv6_hdr *)ip6h, th);
         }
 
         conn->packet_xmit(proto, conn, mbuf);
 
     } else {
         if (tuplehash_out(conn).af == AF_INET) {
-            ip4h = (struct ipv4_hdr *)rte_pktmbuf_prepend(mbuf,
-                                       sizeof(struct ipv4_hdr));
+            ip4h = (struct rte_ipv4_hdr *)rte_pktmbuf_prepend(mbuf,
+                                       sizeof(struct rte_ipv4_hdr));
             if (!ip4h) {
                 rte_pktmbuf_free(mbuf);
                 return EDPVS_NOROOM;
@@ -1095,7 +1097,7 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
             ip4h->version_ihl     = 0x45;
             ip4h->total_length    = htons(mbuf->pkt_len);
             ip4h->packet_id       = 0;
-            ip4h->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+            ip4h->fragment_offset = htons(RTE_IPV4_HDR_DF_FLAG);
             ip4h->time_to_live    = 64;
             ip4h->next_proto_id   = IPPROTO_TCP;
             ip4h->src_addr        = conn->daddr.in.s_addr;
@@ -1124,7 +1126,7 @@ static int tcp_send_rst(struct dp_vs_proto *proto,
 
             mbuf->l3_len = sizeof(*ip6h);
 
-            tcp6_send_csum((struct ipv6_hdr *)ip6h, th);
+            tcp6_send_csum((struct rte_ipv6_hdr *)ip6h, th);
         }
 
         conn->packet_out_xmit(proto, conn, mbuf);

@@ -39,6 +39,30 @@
         s != NULL; \
         s = n, n = s ? s->next : NULL)
 
+#define MBUF_USERDATA(m, type, field) \
+    (*((type *)(mbuf_userdata((m), (field)))))
+
+#define MBUF_USERDATA_CONST(m, type, field) \
+    (*((type *)(mbuf_userdata_const((m), (field)))))
+
+typedef union {
+    void *hdr;
+    struct {
+        uint64_t l2_len:RTE_MBUF_L2_LEN_BITS;           /* L2 Header Length */
+        uint64_t l3_len:RTE_MBUF_L3_LEN_BITS;           /* L3 Header Length */
+        uint64_t l4_len:RTE_MBUF_L4_LEN_BITS;           /* L4 Header Length */
+        uint64_t outer_l2_len:RTE_MBUF_OUTL2_LEN_BITS;  /* Outer L2 Header Length */
+        uint64_t outer_l3_len:RTE_MBUF_OUTL3_LEN_BITS;  /* Outer L3 Header Length */
+    };
+} mbuf_userdata_field_proto_t;
+
+typedef void * mbuf_userdata_field_route_t;
+
+typedef enum {
+    MBUF_FIELD_PROTO = 0,
+    MBUF_FIELD_ROUTE,
+} mbuf_usedata_field_t;
+
 /**
  * mbuf_copy_bits - copy bits from mbuf to buffer.
  * see skb_copy_bits().
@@ -122,5 +146,15 @@ void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m);
 #ifdef CONFIG_DPVS_MBUF_DEBUG
 inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf);
 #endif
+
+void *mbuf_userdata(struct rte_mbuf *, mbuf_usedata_field_t);
+void *mbuf_userdata_const(const struct rte_mbuf *, mbuf_usedata_field_t);
+
+static inline void mbuf_userdata_reset(struct rte_mbuf *m)
+{
+    memset((void *)m->dynfield1, 0, sizeof(m->dynfield1));
+}
+
+int mbuf_init(void);
 
 #endif /* __DP_VS_MBUF_H__ */

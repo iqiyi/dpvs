@@ -56,7 +56,7 @@ uint16_t icmp6_csum(struct ip6_hdr *iph, struct icmp6_hdr *ich)
     hdr.ip6_dst     = iph->ip6_dst;
 
     csum = rte_raw_cksum(ich, l4_len);
-    csum += rte_ipv6_phdr_cksum((struct ipv6_hdr *)&hdr, 0);
+    csum += rte_ipv6_phdr_cksum((struct rte_ipv6_hdr *)&hdr, 0);
 
     csum = ((csum & 0xffff0000) >> 16) + (csum & 0xffff);
     csum = (~csum) & 0xffff;
@@ -75,7 +75,7 @@ void icmp6_send_csum(struct ip6_hdr *shdr, struct icmp6_hdr *ich)
     l4_len = ntohs(shdr->ip6_plen);
 
     csum = rte_raw_cksum(ich, l4_len);
-    csum += rte_ipv6_phdr_cksum((struct ipv6_hdr *)shdr, 0);
+    csum += rte_ipv6_phdr_cksum((struct rte_ipv6_hdr *)shdr, 0);
 
     csum = ((csum & 0xffff0000) >> 16) + (csum & 0xffff);
     csum = (~csum) & 0xffff;
@@ -221,7 +221,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
         RTE_LOG(DEBUG, ICMP6, "%s: no memory.\n", __func__);
         return;
     }
-    mbuf->userdata = NULL;
+    mbuf_userdata_reset(mbuf);
     assert(rte_pktmbuf_headroom(mbuf) >= 128); /* for L2/L3 */
     ich = (struct icmp6_hdr*)rte_pktmbuf_append(mbuf, sizeof(struct icmp6_hdr));;
     if (!ich) {
@@ -298,7 +298,7 @@ static int icmp6_echo_reply(struct rte_mbuf *mbuf, struct ip6_hdr *iph,
 
 static int icmp6_rcv(struct rte_mbuf *mbuf)
 {
-    struct ip6_hdr *iph = mbuf->userdata;
+    struct ip6_hdr *iph = MBUF_USERDATA(mbuf, struct ip6_hdr *, MBUF_FIELD_PROTO);
     struct icmp6_hdr *ich;
 
     assert(iph);

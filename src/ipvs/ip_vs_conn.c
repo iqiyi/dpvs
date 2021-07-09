@@ -556,7 +556,7 @@ static int dp_vs_conn_resend_packets(struct dp_vs_conn *conn,
                             "%s: no memory for syn_proxy rs's syn retransmit\n",
                             __func__);
                 } else {
-                    cloned_syn_mbuf->userdata = NULL;
+                    MBUF_USERDATA(cloned_syn_mbuf, void *, MBUF_FIELD_ROUTE) = NULL;
                     conn->packet_xmit(pp, conn, cloned_syn_mbuf);
                 }
             }
@@ -1476,7 +1476,7 @@ again:
     }
 
     if ((conn_req->flag & GET_IPVS_CONN_FLAG_TEMPLATE)
-            && (cid == rte_get_master_lcore())) { /* persist conns */
+            && (cid == rte_get_main_lcore())) { /* persist conns */
         rte_spinlock_lock(&dp_vs_ct_lock);
         res = __lcore_conn_table_dump(dp_vs_ct_tbl);
         rte_spinlock_unlock(&dp_vs_ct_lock);
@@ -1787,8 +1787,8 @@ int dp_vs_conn_init(void)
      * RTE_PER_LCORE() can only access own instances.
      * it make codes looks strange.
      */
-    rte_eal_mp_remote_launch(conn_init_lcore, NULL, SKIP_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(lcore) {
+    rte_eal_mp_remote_launch(conn_init_lcore, NULL, SKIP_MAIN);
+    RTE_LCORE_FOREACH_WORKER(lcore) {
         if ((err = rte_eal_wait_lcore(lcore)) < 0) {
             RTE_LOG(WARNING, IPVS, "%s: lcore %d: %s.\n",
                     __func__, lcore, dpvs_strerror(err));
@@ -1827,8 +1827,8 @@ int dp_vs_conn_term(void)
 
     /* no API opposite to rte_mempool_create() */
 
-    rte_eal_mp_remote_launch(conn_term_lcore, NULL, SKIP_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(lcore) {
+    rte_eal_mp_remote_launch(conn_term_lcore, NULL, SKIP_MAIN);
+    RTE_LCORE_FOREACH_WORKER(lcore) {
         rte_eal_wait_lcore(lcore);
     }
 

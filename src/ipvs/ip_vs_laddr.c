@@ -439,7 +439,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     lcoreid_t cid = rte_lcore_id();
 
     // send to slave core
-    if (cid == rte_get_master_lcore()) {
+    if (cid == rte_get_main_lcore()) {
         struct dpvs_msg *msg;
 
         msg = msg_make(set_opt_so2msg(opt), laddr_msg_seq(), DPVS_MSG_MULTICAST, cid, size, conf);
@@ -608,7 +608,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                 return EDPVS_MSG_FAIL;
             }
 
-            if (cid == rte_get_master_lcore()) {
+            if (cid == rte_get_main_lcore()) {
                 if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
                                       laddr_conf->iifname, laddr_conf->oifname,
                                       laddr_conf->af_s, &match) != EDPVS_OK) {

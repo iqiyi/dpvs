@@ -427,8 +427,8 @@ int dpvs_timer_init(void)
     int err;
 
     /* per-lcore timer */
-    rte_eal_mp_remote_launch(timer_lcore_init, NULL, SKIP_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(timer_lcore_init, NULL, SKIP_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         err = rte_eal_wait_lcore(cid);
         if (err < 0) {
             RTE_LOG(ERR, DTIMER, "%s: lcore %d: %s.\n",
@@ -438,7 +438,7 @@ int dpvs_timer_init(void)
     }
 
     /* global timer */
-    return timer_init_schedler(&g_timer_sched, rte_get_master_lcore());
+    return timer_init_schedler(&g_timer_sched, rte_get_main_lcore());
 }
 
 int dpvs_timer_term(void)
@@ -447,8 +447,8 @@ int dpvs_timer_term(void)
     int err;
 
     /* per-lcore timer */
-    rte_eal_mp_remote_launch(timer_lcore_term, NULL, SKIP_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(timer_lcore_term, NULL, SKIP_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         err = rte_eal_wait_lcore(cid);
         if (err < 0) {
             RTE_LOG(WARNING, DTIMER, "%s: lcore %d: %s.\n",
@@ -464,7 +464,7 @@ static inline struct timer_scheduler *this_lcore_sched(bool global)
 {
     /* any lcore (including master and slaves) can use global timer,
      * but only slave lcores can use per-lcore timer. */
-    if (!global && rte_lcore_id() == rte_get_master_lcore()) {
+    if (!global && rte_lcore_id() == rte_get_main_lcore()) {
         RTE_LOG(ERR, DTIMER, "try get per-lcore timer from master\n");
         return NULL;
     }

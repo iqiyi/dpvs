@@ -675,7 +675,7 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
     portid_t devid;
 
     if (af == AF_INET) {
-        struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
+        struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
 
         if (unlikely(ip4h->next_proto_id != IPPROTO_TCP &&
             ip4h->next_proto_id != IPPROTO_UDP)) {

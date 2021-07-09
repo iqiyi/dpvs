@@ -63,7 +63,7 @@ static void __dp_vs_dest_update(struct dp_vs_service *svc,
 
     if (udest->max_conn == 0 || udest->max_conn > dest->max_conn)
         dest->flags &= ~DPVS_DEST_F_OVERLOAD;
-    if (rte_lcore_id() != rte_get_master_lcore()) {
+    if (rte_lcore_id() != rte_get_main_lcore()) {
         dest->max_conn = udest->max_conn / num_lcores;
         dest->min_conn = udest->min_conn / num_lcores;
     } else {

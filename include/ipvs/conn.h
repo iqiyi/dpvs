@@ -81,7 +81,6 @@ struct dp_vs_conn_stats {
     rte_atomic64_t      outbytes;
 } __rte_cache_aligned;
 
-struct dp_vs_fdir_filt;
 struct dp_vs_proto;
 
 struct dp_vs_conn {
@@ -121,10 +120,10 @@ struct dp_vs_conn {
                         struct rte_mbuf *mbuf);
 
     /* L2 fast xmit */
-    struct ether_addr       in_smac;
-    struct ether_addr       in_dmac;
-    struct ether_addr       out_smac;
-    struct ether_addr       out_dmac;
+    struct rte_ether_addr   in_smac;
+    struct rte_ether_addr   in_dmac;
+    struct rte_ether_addr   out_smac;
+    struct rte_ether_addr   out_dmac;
 
     /* route for neigbour */
     struct netif_port       *in_dev;    /* inside to rs*/

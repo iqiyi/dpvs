@@ -33,7 +33,7 @@ int pdump_init(void)
 #ifdef CONFIG_DPVS_PDUMP
     if (g_dpvs_pdump) {
         /* initialize packet capture framework */
-        err = rte_pdump_init(NULL);
+        err = rte_pdump_init();
     }
 #endif
 

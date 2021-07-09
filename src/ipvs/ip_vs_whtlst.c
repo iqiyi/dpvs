@@ -151,7 +151,7 @@ static int dp_vs_whtlst_add(int af, uint8_t proto, const union inet_addr *vaddr,
     struct dpvs_msg *msg;
     struct dp_vs_whtlst_conf cf;
 
-    if (cid != rte_get_master_lcore()) {
+    if (cid != rte_get_main_lcore()) {
         RTE_LOG(INFO, SERVICE, "[%s] must set from master lcore\n", __func__);
         return EDPVS_NOTSUPP;
     }
@@ -194,7 +194,7 @@ static int dp_vs_whtlst_del(int af, uint8_t proto, const union inet_addr *vaddr,
     struct dpvs_msg *msg;
     struct dp_vs_whtlst_conf cf;
 
-    if (cid != rte_get_master_lcore()) {
+    if (cid != rte_get_main_lcore()) {
         RTE_LOG(INFO, SERVICE, "[%s] must set from master lcore\n", __func__);
         return EDPVS_NOTSUPP;
     }
@@ -444,8 +444,8 @@ int dp_vs_whtlst_init(void)
 
     rte_atomic32_set(&this_num_whtlsts, 0);
 
-    rte_eal_mp_remote_launch(whtlst_lcore_init, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(whtlst_lcore_init, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, SERVICE, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));
@@ -497,8 +497,8 @@ int dp_vs_whtlst_term(void)
     if ((err = sockopt_unregister(&whtlst_sockopts)) != EDPVS_OK)
         return err;
 
-    rte_eal_mp_remote_launch(whtlst_lcore_term, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(whtlst_lcore_term, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, SERVICE, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));

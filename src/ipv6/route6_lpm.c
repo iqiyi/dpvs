@@ -118,7 +118,7 @@ static int rt6_lpm_setup_lcore(void *arg)
         .flags = 0,
     };
 
-    if ((!(g_lcore_mask & (1<<cid))) && (cid != rte_get_master_lcore())) {
+    if ((!(g_lcore_mask & (1<<cid))) && (cid != rte_get_main_lcore())) {
         /* skip idle lcore for memory save */
         this_rt6_array = NULL;
         this_lpm6_struct = NULL;

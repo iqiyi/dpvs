@@ -35,7 +35,7 @@ enum {
 };
 
 typedef struct eal_mem_seg_ret_s {
-    uint64_t phys_addr;
+    uint64_t iova;
     uint64_t virt_addr;
     uint64_t len;
     uint64_t hugepage_sz;
@@ -52,7 +52,7 @@ typedef struct eal_all_mem_seg_ret_s {
 
 typedef struct eal_mem_zone_ret_s {
     char name[EAL_MEM_NAME_LEN];
-    uint64_t phys_addr;
+    uint64_t iova;
     uint64_t virt_addr;
     uint64_t len;
     uint64_t hugepage_sz;

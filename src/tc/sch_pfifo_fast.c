@@ -60,7 +60,7 @@ static int pfifo_fast_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
     struct pfifo_fast_priv *priv;
     struct tc_mbuf_head *qh;
 
-    struct ether_hdr *eh = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+    struct rte_ether_hdr *eh = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
     struct iphdr *iph = NULL;
     struct ip6_hdr *ip6h = NULL;
     struct vlan_ethhdr *veh;
