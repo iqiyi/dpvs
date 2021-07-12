@@ -27,6 +27,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <getopt.h>
+#include <sys/resource.h>
 #include "pidfile.h"
 #include "dpdk.h"
 #include "conf/common.h"
@@ -242,6 +243,14 @@ static int parse_app_args(int argc, char **argv)
     return ret;
 }
 
+static void enable_coredump(void)
+{
+    struct rlimit core_limits;
+
+    core_limits.rlim_cur = core_limits.rlim_max = RLIM_INFINITY;
+    setrlimit(RLIMIT_CORE, &core_limits);
+}
+
 int main(int argc, char *argv[])
 {
     int err, nports;
@@ -250,6 +259,8 @@ int main(int argc, char *argv[])
     struct timeval tv;
     char pql_conf_buf[LCORE_CONF_BUFFER_LEN];
     int pql_conf_buf_len = LCORE_CONF_BUFFER_LEN;
+
+    enable_coredump();
 
     /**
      * add application agruments parse before EAL ones.

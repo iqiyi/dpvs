@@ -1087,6 +1087,8 @@ ipvs_group_sync_entry(virtual_server_t *vs, virtual_server_group_entry_t *vsge)
 			}
 			else
 				ipvs_group_range_cmd(IP_VS_SO_SET_ADDDEST, &srule, &drule, vsge);
+
+			ipvs_set_vsge_alive_state(IP_VS_SO_SET_ADDDEST, vsge, vs);
 		}
 	}
 }
@@ -1437,11 +1439,12 @@ ipvs_group_remove_entry(virtual_server_t *vs, virtual_server_group_entry_t *vsge
 			}
 			else
 				ipvs_group_range_cmd(IP_VS_SO_SET_DELDEST, &srule, &drule, vsge);
+
+			ipvs_set_vsge_alive_state(IP_VS_SO_SET_DELDEST, vsge, vs);
 		}
 	}
 
 	/* Remove VS entry if this is the last VS using it */
-	unset_vsge_alive(vsge, vs);
 	if (!is_vsge_alive(vsge, vs)) {
 		if (vsge->range)
 			ipvs_group_range_cmd(IP_VS_SO_SET_DEL, &srule, NULL, vsge);
