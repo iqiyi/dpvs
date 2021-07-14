@@ -242,6 +242,11 @@ neigh_defs {
     timeout                    60
 }
 
+! dpvs ipset config
+ipset_defs {
+    <init> ipset_hash_pool_size 131072
+}
+
 ! dpvs ipv4 config
 ipv4_defs {
     forwarding                 off
