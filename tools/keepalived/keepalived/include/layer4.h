@@ -27,6 +27,7 @@
 #include <sys/socket.h>
 #include <net/if.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* local includes */
 #include "scheduler.h"
@@ -49,6 +50,7 @@ typedef struct _conn_opts {
 #ifdef _WITH_SO_MARK_
 	unsigned int			fwmark; /* to mark packets going out of the socket using SO_MARK */
 #endif
+	int             last_errno; /* Errno from last call to connect */
 } conn_opts_t;
 
 /* Prototypes defs */
@@ -98,6 +100,10 @@ tcp_connection_state(int fd, enum connect_result status, thread_ref_t thread,
 {
 	return socket_connection_state(fd, status, thread, func, timeout);
 }
+
+extern enum connect_result udp_bind_connect(int, conn_opts_t *, uint8_t *, uint16_t);
+extern enum connect_result udp_socket_state(int, thread_ref_t, uint8_t *, size_t *);
+extern bool udp_check_state(int, enum connect_result, thread_ref_t, thread_func_t, unsigned long);
 #endif
 
 #endif

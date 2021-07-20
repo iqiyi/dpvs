@@ -77,9 +77,15 @@ TBF QSch can have the following parameters.
 
 ## Cls Objects
 
+Cls object consists of two components: type-specific pattern and a target.
+
+There are two kinds of Cls target: Qsch or Drop. The former classifies matched packets into the queue of specified QSch, and the latter simply discards matched packets. The target Qsch must be a child of the Qsch the Cls is attached to.
+
+There tow types of Cls object: match and ipset:
+
 - **match**
 
-Cls `match` consists of two components: a pattern and a target. Packets from Qsch compare with the pattern, and if matched, the fate of them is determined by the target.
+Packets from Qsch compare with the match pattern, and if matched, the fate of them is determined by the target.
 
 Pattern considers five attributes in a flow:
 
@@ -91,7 +97,11 @@ Pattern considers five attributes in a flow:
 
 One or more attributes of the pattern can be omitted. The omitted attributes are ignored when matching. For example, pattern `tcp,from-192.168.0.1:1-1024,oif-eth1 means to match TCP packets sent out on interface eth1 with source IP address of 192.168.0.1 and source port between 1 and 1024.
 
-There are two kinds of Cls target: Qsch or Drop. The former classifies matched packets into the queue of specified QSch, and the latter simply discards matched packets. The target Qsch must be a child of the Qsch the Cls is attached to.
+- **ipset**
+
+The ipset pattern only contains the setname. The set will test packets from Qsch, and if succeeded, the fate of them is determined by the target. 
+
+The IP set could be any type acccording to your need.
 
 <a id='usage'/>
 
@@ -124,8 +134,13 @@ dpip qsch add dev dpdk0 handle 2: parent ingress bfifo limit 100000             
 **4. Add Cls objects as needed.**
 
 ```bash
+# match
 dpip cls add dev dpdk0 qsch root match pattern 'tcp,oif=dpdk0' target 1:
 dpip cls add dev dpdk0 qsch ingress match pattern 'icmp,iif=dpdk0' target 2:
+# ipset
+dpip ipset add tcs hash:net,iface
+dpip ipset add tcs 0.0.0.0,icmp:0,dpdk0  # match all icmp packets
+dpip cls add dev dpdk0 qsch root ipset tcs target drop:
 ```
 
 **5. Check configurations and statistics.**
@@ -521,11 +536,18 @@ This example implements a simple ACL rule with DPVS TC. Suppose all clients othe
 -+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+-
 ```
 
-Firstly, setup the Qsch and Cls objects.
+Firstly, setup the Qsch and Cls objects. This example shows how to use match and ipset as a Cls.
 
 ```bash
 dpip qsch add dev dpdk0 ingress pfifo_fast
+
+# match
 dpip cls add dev dpdk0 pkttype ipv6 qsch ingress handle 0:1 match pattern 'icmp6,from=2001::0-2001::ff,iif=dpdk0' target drop
+# ipset
+dpip ipset add tc-set hash:net,iface -6
+dpip ipset add tc-set 2001::0/120,icmp6:0,dpdk0
+dpip cls add dev dpdk0 pkttype ipv6 qsch ingress handle 0:1 ipset set=tc-set target drop
+
 dpip link set dpdk0 tc-ingress on
 ```
 
@@ -548,7 +570,10 @@ Check what we have configured.
 [root@dpvs-test]# dpip qsch show dev dpdk0
 qsch pfifo_fast ingress dev dpdk0 parent 0: flags 0x1 cls 1 bands 3 priomap 1 2 2 2 1 2 0 0 1 1 1 1 1 1 1 1
 [root@dpvs-test]# dpip cls show dev dpdk0 qsch ingress
+# match
 cls match 0:1 dev dpdk0 qsch ingress pkttype 0x86dd prio 0 ICMPV6,from=[2001::-2001::ff]:0-0,iif=dpdk0 target drop
+# ipset
+cls match 0:1 dev dpdk0 qsch ingress pkttype 0x86dd prio 0 set=tc-set target drop
 [root@dpvs-test]# dpip addr show
 inet6 2001::112/64 scope global dpdk0
      valid_lft forever preferred_lft forever
@@ -579,7 +604,7 @@ rtt min/avg/max/mdev = 0.041/0.066/0.108/0.030 ms
 
 As expected, ping DPVS IPv6 address 2001::112 failed from 2001::15, and succeeded from 2001::1:15. 
 
-Finally, disable `tc-ingress` for `dpdk0`, and ping from 2001::15, and succeed this time.
+Finally, disable `tc-ingress` for `dpdk0` or remove the entry added to `tc-set`, and ping from 2001::15, and succeed this time.
 
 ```
 [root@dpvs-test]# dpip link set dpdk0 tc-ingress off

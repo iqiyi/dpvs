@@ -1,0 +1,62 @@
+From 9b1bcdc0419328b4a88128922567dacbe5630dd0 Mon Sep 17 00:00:00 2001
+From: yuwenchao <yuwenchao@qiyi.com>
+Date: Tue, 8 Jun 2021 11:45:11 +0800
+Subject: [PATCH 7/7] Fix bonding mode 4 problem caused by LACP failure.
+
+The problem is disscussed in Issue #725 of iqiyi/dpvs in detail.
+https://github.com/iqiyi/dpvs/issues/725
+
+Signed-off-by: yuwenchao <yuwenchao@qiyi.com>
+---
+ drivers/net/bonding/rte_eth_bond_8023ad.c | 20 +++++++++++---------
+ 1 file changed, 11 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_8023ad.c b/drivers/net/bonding/rte_eth_bond_8023ad.c
+index 1e6a3fc..6d1cca5 100644
+--- a/drivers/net/bonding/rte_eth_bond_8023ad.c
++++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
+@@ -811,7 +811,6 @@
+ 	struct port *port;
+ 	struct rte_eth_link link_info;
+ 	struct ether_addr slave_addr;
+-	struct rte_mbuf *lacp_pkt = NULL;
+ 	uint16_t slave_id;
+ 	uint16_t i;
+ 
+@@ -876,6 +875,7 @@
+ 			/* Find LACP packet to this port. Do not check subtype,
+ 			 * it is done in function that queued packet
+ 			 */
++			struct rte_mbuf *lacp_pkt = NULL;
+ 			int retval = rte_ring_dequeue(port->rx_ring,
+ 					(void **)&lacp_pkt);
+ 
+@@ -884,15 +884,17 @@
+ 
+ 			rx_machine_update(internals, slave_id, lacp_pkt);
+ 		} else {
+-			uint16_t rx_count = rte_eth_rx_burst(slave_id,
+-					internals->mode4.dedicated_queues.rx_qid,
+-					&lacp_pkt, 1);
+-
+-			if (rx_count == 1)
+-				bond_mode_8023ad_handle_slow_pkt(internals,
+-						slave_id, lacp_pkt);
+-			else
++			uint16_t rx_count, j;
++			struct rte_mbuf *lacp_pkt[16] = { NULL };
++
++			rx_count = rte_eth_rx_burst(slave_id, internals->mode4.dedicated_queues.rx_qid,
++					&lacp_pkt[0], sizeof(lacp_pkt)/sizeof(struct rte_mbuf *));
++			if (rx_count > 0) {
++				for (j = 0; j < rx_count; j++)
++					 bond_mode_8023ad_handle_slow_pkt(internals, slave_id, lacp_pkt[j]);
++			} else {
+ 				rx_machine_update(internals, slave_id, NULL);
++			}
+ 		}
+ 
+ 		periodic_machine(internals, slave_id);
+-- 
+1.8.3.1
+

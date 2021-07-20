@@ -60,6 +60,10 @@ struct dp_vs_service_conf {
     uint32_t            netmask;        /* persistent netmask */
     unsigned            bps;
     unsigned            limit_proportion;
+    char                *setname;   /* IPset name */
+    int                 type;       /* black/white */
+    int                 direction;  /* ingress/egress */
+    unsigned            priority;
 };
 
 struct dp_vs_service_entry {
@@ -79,6 +83,7 @@ struct dp_vs_service_entry {
 
     unsigned int        num_dests;
     unsigned int        num_laddrs;
+    unsigned int        num_rules;
     lcoreid_t           cid;
 
     struct dp_vs_stats  stats;
@@ -93,6 +98,18 @@ struct dp_vs_get_services {
     lcoreid_t     cid;
     unsigned int        num_services;
     struct dp_vs_service_entry entrytable[0];
+};
+
+struct dp_vs_acl_entry {
+    char setname[32];
+    int type;
+    int direction;
+    unsigned priority;
+};
+
+struct dp_vs_get_acls {
+    unsigned int num_rules;
+    struct dp_vs_acl_entry entrytable[0];
 };
 
 struct dp_vs_service_user {
@@ -114,6 +131,11 @@ struct dp_vs_service_user {
     char              drange[256];
     char              iifname[IFNAMSIZ];
     char              oifname[IFNAMSIZ];
+
+    char              setname[32];
+    int               type;
+    int               direction;
+    unsigned          priority;
 };
 
 struct dp_vs_getinfo {

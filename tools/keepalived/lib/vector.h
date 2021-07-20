@@ -73,6 +73,7 @@ extern void vector_free_r(const vector_t *);
 #ifdef _INCLUDE_UNUSED_CODE_
 extern void vector_dump(FILE *fp, const vector_t *);
 #endif
+extern char *make_strvec_str(const vector_t *v, unsigned start);
 extern void free_strvec(const vector_t *);
 
 #endif

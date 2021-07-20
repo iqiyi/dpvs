@@ -87,6 +87,8 @@ extern blklst_addr_group *ipvs_get_blklst_group_by_name(char *, list);
 extern int ipvs_blklst_remove_entry(virtual_server_t *, blklst_addr_entry *);
 extern whtlst_addr_group *ipvs_get_whtlst_group_by_name(char *, list);
 extern int ipvs_whtlst_remove_entry(virtual_server_t *, whtlst_addr_entry *);
+extern acl_rule_group *ipvs_get_acl_group_by_name(char *, list);
+extern int ipvs_acl_remove_entry(virtual_server_t *, acl_rule_entry *);
 extern int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry);
 
 /* Refresh statistics at most every 5 seconds */

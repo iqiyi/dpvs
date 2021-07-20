@@ -618,8 +618,12 @@ init_service_vs(virtual_server_t * vs)
 		if (!ipvs_cmd(LVS_CMD_ADD_BLKLST, vs, NULL))
 			return 0;
 	}
-    if (vs->whtlst_addr_gname) {
+	if (vs->whtlst_addr_gname) {
 		if (!ipvs_cmd(LVS_CMD_ADD_WHTLST, vs, NULL))
+			return 0;
+	}
+	if (vs->acl_rule_gname) {
+		if (!ipvs_cmd(LVS_CMD_ADD_ACL, vs, NULL))
 			return 0;
 	}
 	/* Processing real server queue */
@@ -1226,6 +1230,71 @@ clear_diff_whtlst(virtual_server_t * old_vs)
         return 0;
 
     return 1;
+}
+
+/* Check if an ACL entry is in list */
+static int __attribute((pure))
+acl_entry_exist(acl_rule_entry *acl_entry, list l)
+{
+	element e;
+	acl_rule_entry *entry;
+
+	LIST_FOREACH(l, entry, e) {
+		if (!strcmp(entry->setname, acl_entry->setname) &&
+				entry->type == acl_entry->type &&
+				entry->priority == acl_entry->priority &&
+				entry->direction == acl_entry->direction) 
+			return 1;
+	}
+	return 0;
+}
+
+/* Clear the diff ACL entry of the old vs */
+static int
+clear_diff_acl_entry(list old, list new, virtual_server_t * old_vs)
+{
+	element e;
+	acl_rule_entry *acl_entry;
+
+	LIST_FOREACH(old, acl_entry, e) {
+		if (!acl_entry_exist(acl_entry, new)) {
+			log_message(LOG_INFO, "VS [%s-%s] in ACL rule group %s no longer exist\n"
+						, acl_entry->setname
+						, acl_entry->type == -1? "blacklist" : "whitelist"
+						, old_vs->acl_rule_gname);
+
+			if (!ipvs_acl_remove_entry(old_vs, acl_entry))
+				return 0;
+		}
+	}
+
+	return 1;
+}
+
+/* Clear the diff ACL rule of the old vs */
+static int
+clear_diff_acl(virtual_server_t * old_vs)
+{
+	acl_rule_group *old;
+	acl_rule_group *new;
+
+	/*
+	 *  If old vs  didn't own ACL rule group, 
+	 * then do nothing and return 
+	 */
+	if (!old_vs->acl_rule_gname)
+		return 1;
+
+	/* Fetch ACL rule group */
+	old = ipvs_get_acl_group_by_name(old_vs->acl_rule_gname,
+						old_check_data->acl_group);
+	new = ipvs_get_acl_group_by_name(old_vs->acl_rule_gname,
+						check_data->acl_group);
+
+	if (!clear_diff_acl_entry(old->acl_rule, new->acl_rule, old_vs))
+		return 0;
+
+	return 1;
 }
 
 /* When reloading configuration, remove negative diff entries */

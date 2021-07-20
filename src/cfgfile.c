@@ -33,6 +33,7 @@
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
 #include "ipvs/synproxy.h"
+#include "ipset/ipset_hash.h"
 #include "scheduler.h"
 
 typedef void (*sighandler_t)(int);
@@ -70,6 +71,8 @@ static vector_t install_keywords(void)
 
     install_ipv4_keywords();
     install_ip4_frag_keywords();
+
+    install_ipset_hash_keywords();
 
     install_control_keywords();
 

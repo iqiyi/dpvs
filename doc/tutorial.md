@@ -22,6 +22,7 @@ DPVS Tutorial
 * [UDP Option of Address (UOA)](#uoa)
 * [Launch DPVS in Virtual Machine (Ubuntu)](#Ubuntu16.04)
 * [Traffic Control(TC)](#tc)
+* [IPset based ACL](#acl)
 * [Debug DPVS](#debug)
   - [Debug with Log](#debug-with-log)
   - [Packet Capture and Tcpdump](#packet-capture)
@@ -431,9 +432,20 @@ virtual_server group 192.168.100.254-80 {
 }
 ```
 
-The keepalived config for backup is the same with Master, except the `state` should be 'BACKUP', and `priority` should be lower.
+The keepalived config for backup is the same with Master, except
+
+* local address is not the same with MASTER,
+* vrrp_instance `state` should be 'BACKUP',
+* vrrp_instance `priority` should be lower.
 
 ```
+local_address_group laddr_g1 {
+    192.168.100.202 dpdk0    # use DPDK interface
+    192.168.100.203 dpdk0    # use DPDK interface
+}
+
+... ...
+
 vrrp_instance VI_1 {
     state BACKUP
     priority 80
@@ -447,12 +459,19 @@ Start `keepalived` on both Master and Backup.
 ./keepalived -f /etc/keepalived/keepalived.conf
 ```
 
-For **test only**, add `VIP` and *routes* to DPDK interface manually on Master. Do not set VIP on both master and backup, in practice they should be added to keepalived configure file.
+Then, add *routes* to DPDK interface manually on both MASTER and BACKUP.
 
 ```bash
-./dpip addr add 192.168.100.254/32 dev dpdk0
 ./dpip route add 192.168.100.0/24 dev dpdk0
 ```
+Lastly, configure dpdk0.kni to make keepalived's vrrp and health-check work properly.
+
+```bash
+ip link set dpdk0.kni up
+ip addr add 192.168.100.28/24 dev dpdk0.kni               # assign an IP to dpdk0.kni
+dpip route add 192.168.100.28/32 scope kni_host dev dpdk0 # route packets target at 192.168.100.28 to dpdk0.kni
+```
+Note the dpdk0.kni's IP addresses should be different for MASTER and BACKUP.
 
 Check if parameters just set are correct:
 
@@ -465,7 +484,7 @@ TCP  192.168.100.254:80 rr
   -> 192.168.100.2:80             FullNat 100    0          0
   -> 192.168.100.3:80             FullNat 100    0          0
 
-$ ./dpip addr show
+$ ./dpip addr show -s
 inet 192.168.100.254/32 scope global dpdk0
      valid_lft forever preferred_lft forever
 inet 192.168.100.201/32 scope global dpdk0
@@ -474,8 +493,10 @@ inet 192.168.100.200/32 scope global dpdk0
      valid_lft forever preferred_lft forever sa_used 0 sa_free 1032176 sa_miss 0
 
 $ ./dpip route show
+inet 192.168.100.28/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope kni_host metric 0 proto auto
 inet 192.168.100.200/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
 inet 192.168.100.201/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
+inet 192.168.100.254/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
 inet 192.168.100.0/24 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope link metric 0 proto auto
 
 $ ./ipvsadm  -G
@@ -492,7 +513,20 @@ client$ curl 192.168.100.254
 Your ip:port : 192.168.100.146:42394
 ```
 
-> We just explain how DPVS works with keepalived, and not verify if the master/backup feature provided by keepalived works. Please refer LVS docs if needed.
+> Note:
+> 1. We just explain how DPVS works with keepalived, and not verify if the master/backup feature provided by keepalived works. Please refer LVS docs if needed.
+> 2. Keepalived master/backup failover may fail if switch enabled the ARP broadcast suppression (unfortunately often is the case). If you don't want to change configurations of your switch, decrease the number of gratuitous ARP packets sent by keepalived (dpvs) on failover may help.
+
+```
+global_defs {
+    ... ...
+   vrrp_garp_master_repeat          1   # repeat counts for master state gratuitous arp
+   vrrp_garp_master_delay           1   # time to relaunch gratuitous arp after failover for master, in second
+   vrrp_garp_master_refresh         600 # time interval to refresh gratuitous arp periodically(0 = none), in second
+   vrrp_garp_master_refresh_repeat  1   # repeat counts to refresh gratuitous arp periodically
+   ... ...
+}
+```
 
 <a id='dr'/>
 
@@ -1157,6 +1191,84 @@ worker_defs {
 # Traffic Control(TC)
 
 Please refer to doc [tc.md](tc.md).
+
+<a id='acl'/>
+
+# IPset based ACL
+An access control list (ACL) is a list of access control entries (ACE). Each ACE in an ACL identifies a trustee and specifies the access rights allowed or denied for that trustee. DPVS implements an ACL mechanism based on [IPset module](IPset.md). <br>
+Each service contains an ACL rule list where you can add rules. All rules should follow the **PATTERN** of `set=NAME,type={black|white}[,prio={1-100},dir={ingress|egress}]` where `set` and `type` are **essential**. Then you can dynamically change the ACL by adding/deleting entries in the set. For a 'black-type' rule, entries in the set will not be able to establish a DPVS conn. And if a packet is not contained in any 'white-type' rule, it will also be dropped.<br>
+
+![fnat-two-arm](./pics/fnat-two-arm.png)
+## use ipvsadm
+
+Based on the [Simple Full-NAT (two-arm)](#simple-fnat) example, the following commands demonstrate how to add a blacklist and a whitelist to the service using `ipvsadm`:
+```
+$ dpip ipset add s1 hash:ip
+$ dpip ipset add s2 hash:net
+$ ipvsadm -K -t 10.0.0.100/32 -3 set=s1,type=black,prio=100,dir=ingress
+$ ipvsadm -K -t 10.0.0.100/32 -3 set=s2,type=white,prio=99,dir=ingress
+```
+Now if we check the rules attached to the service:
+```
+$ ipvsadm -Tn -t 10.0.0.100/32 --verbose
+Prot LocalAddress:Port
+TCP  10.0.0.100:80
+  Prio  SetName                         Type            Direction
+  100   s1                              blacklist       ingress
+        Members:
+
+  99    s2                              whitelist       ingress
+        Members:
+```
+We can find that there is no element in the whitelist. So any request to the VIP will fail at DPVS. Let's add the client subnet to the whitelist:
+```
+$ dpip ipset add s2 10.0.0.0/8
+```
+Then request from the subnet 10.0.0.0/8 will succeed. But if you add the client IP to the blacklist, the request will fail again:
+```
+$ dpip ipset add s1 10.0.0.48
+[client ~] $ curl 10.0.0.100
+curl: (7) Failed connect to 10.0.0.100:80; Connection timed out
+```
+The entire operation of ACL rules by ipvsadm is as follows:
+``` 
+# add a rule
+$ ipvsadm -K -t/u/q $SERVICE -3 $PATTERN
+# delete a rule
+$ ipvsadm -N -t/u/q $SERVICE -3 set=$SETNAME
+# list the rules of a service
+ipvsadm -Tn -t/u/q $SERVICE (--verbose to show the set members)
+# list ACL rules of all services
+$ ipvsadm -Tn (--verbose)
+```
+There is no limitation on the type of IPset. So you can choose any type on demand. There are 9 types supported by now: `bitmap:ip`, `bitmap:ip,mac`, `bitmap:port`, `hash:ip`, `hash:net`, `hash:ip,port`, `hash:ip,port,ip`, `hash:net,iface` and `hash:net,net`. You can also develop a new type according to the [develop guide](IPset.md).
+
+## use keepalived
+
+Currently, you need to create the needed IPset first, then reload `keepalived`. The example configuration is as follows:
+```
+acl_rule_group acl_g1 {
+    #PATTERN [setname type priority direction]
+    s1 black 100 ingress
+    s2 white 99 ingress
+}
+
+virtual_server 10.0.0.100 80 {
+    delay_loop 6
+    lb_algo rr
+    lb_kind FNAT
+    protocol TCP
+
+    laddr_group_name laddr_g1
+    acl_group_name acl_g1
+    real_server 192.168.100.2 80 {
+        weight 100
+    }
+    real_server 192.168.100.3 80 {
+        weight 100
+    }
+}
+```
 
 <a id='debug'/>
 

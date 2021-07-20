@@ -108,6 +108,10 @@ struct port_conf_stream {
     struct list_head port_list_node;
 };
 
+struct bond_options {
+    bool dedicated_queues_enable;
+};
+
 struct bond_conf_stream {
     int port_id;
     char name[32];
@@ -115,6 +119,7 @@ struct bond_conf_stream {
     int mode;
     char primary[32];
     char slaves[NETIF_MAX_BOND_SLAVES][32];
+    struct bond_options options;
     struct list_head bond_list_node;
 };
 
@@ -560,6 +565,7 @@ static void bonding_handler(vector_t tokens)
     RTE_LOG(INFO, NETIF, "netif bonding config: %s\n", str);
     strncpy(bond_cfg->name, str, sizeof(bond_cfg->name));
     bond_cfg->mode = NETIF_BOND_MODE_DEF;
+    bond_cfg->options.dedicated_queues_enable = true;
 
     list_add(&bond_cfg->bond_list_node, &bond_list);
 }
@@ -644,6 +650,59 @@ static void bonding_kni_name_handler(vector_t tokens)
     assert(str);
     RTE_LOG(INFO, NETIF, "bonding %s:kni_name=%s\n", current_bond->name, str);
     strncpy(current_bond->kni_name, str, sizeof(current_bond->kni_name));
+
+    FREE_PTR(str);
+}
+
+static inline char * get_bonding_option_value(char *token)
+{
+    char *ptr, *saveptr = NULL, *ret = token;
+
+    if (!token)
+        return NULL;
+
+    for (ptr = token; ret == token; ptr = NULL)
+        ret = strtok_r(ptr, "=", &saveptr);
+
+    return ret;
+}
+
+static void bonding_options_handler(vector_t tokens)
+{
+    char *str;
+    char *opt, *val, *ptr, *saveptr = NULL;
+
+    str = set_value(tokens);
+    struct bond_conf_stream *current_bond = list_entry(bond_list.next,
+            struct bond_conf_stream, bond_list_node);
+
+    assert(str);
+    RTE_LOG(INFO, NETIF, "bonding %s options: %s\n", current_bond->name, str);
+
+    for (ptr = str; ;ptr = NULL) {
+        opt = strtok_r(ptr, ";", &saveptr);
+        if (opt == NULL)
+            break;
+        val = get_bonding_option_value(opt);
+
+        if (!strcmp(opt, "dedicated_queues")) {
+            if (current_bond->mode != BONDING_MODE_8023AD || !val) {
+                RTE_LOG(WARNING, NETIF, "invalid bonding %s mode 4 option: %s, value: %s\n",
+                        current_bond->name, opt, val ?: "null");
+                continue;
+            }
+            if (!strcasecmp(val, "on") || !strcasecmp(val, "enable"))
+                current_bond->options.dedicated_queues_enable = true;
+            else if (!strcasecmp(val, "off") || !strcasecmp(val, "disable"))
+                current_bond->options.dedicated_queues_enable = false;
+            else
+                RTE_LOG(WARNING, NETIF, "invalid bonding %s option value: %s=%s\n",
+                        current_bond->name, opt, val);
+        } else {
+            RTE_LOG(WARNING, NETIF, "unsupported bonding %s option: %s\n",
+                    current_bond->name, opt);
+        }
+    }
 
     FREE_PTR(str);
 }
@@ -919,6 +978,7 @@ void install_netif_keywords(void)
     install_keyword("slave", bonding_slave_handler, KW_TYPE_INIT);
     install_keyword("primary", bonding_primary_handler, KW_TYPE_INIT);
     install_keyword("kni_name", bonding_kni_name_handler, KW_TYPE_INIT);
+    install_keyword("options", bonding_options_handler, KW_TYPE_INIT);
     install_sublevel_end();
 
     install_keyword_root("worker_defs", worker_defs_handler);
@@ -4254,9 +4314,8 @@ int netif_vdevs_add(void)
         RTE_LOG(INFO, NETIF, "create bondig device %s: mode=%d, primary=%s, socket=%d\n",
                 bond_cfg->name, bond_cfg->mode, bond_cfg->primary, socket_id);
         bond_cfg->port_id = pid; /* relate port_id with port_name, used by netif_rte_port_alloc */
-        if (bond_cfg->mode == BONDING_MODE_8023AD) {
-            if (!rte_eth_bond_8023ad_dedicated_queues_enable(bond_cfg->port_id))
-            {
+        if (bond_cfg->mode == BONDING_MODE_8023AD && bond_cfg->options.dedicated_queues_enable) {
+            if (!rte_eth_bond_8023ad_dedicated_queues_enable(bond_cfg->port_id)) {
                 RTE_LOG(INFO, NETIF, "bonding mode4 dedicated queues enable failed!\n");
             }
         }

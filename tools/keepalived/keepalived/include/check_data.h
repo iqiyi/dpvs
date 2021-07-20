@@ -143,6 +143,19 @@ typedef struct _whtlst_addr_group {
     list range;
 } whtlst_addr_group;
 
+/* ACL rule group */
+typedef struct _acl_rule_entry {
+    char setname[32];
+    int type;
+    int direction;
+    unsigned priority;
+} acl_rule_entry;
+
+typedef struct _acl_rule_group {
+    char *gname;
+    list acl_rule;
+} acl_rule_group;
+
 typedef struct _tunnel_entry {
 	struct sockaddr_storage remote;
 	struct sockaddr_storage local;
@@ -250,6 +263,7 @@ typedef struct _virtual_server {
 	char 	*local_addr_gname; 	/*local ip address group name*/
 	char 	*blklst_addr_gname; 	/*black list ip group name*/	
 	char 	*whtlst_addr_gname; 	/*white list ip group name*/	
+	char    *acl_rule_gname;	/*ACL rule group name*/
 	char 	*vip_bind_dev; 		/*the interface name, vip bindto*/
 } virtual_server_t;
 
@@ -267,6 +281,7 @@ typedef struct _check_data {
 	list laddr_group;
 	list blklst_group;
 	list whtlst_group;
+	list acl_group;
 	list tunnel_group;
 } check_data_t;
 
@@ -364,6 +379,8 @@ extern void alloc_blklst_group(char *);
 extern void alloc_blklst_entry(const vector_t *);
 extern void alloc_whtlst_group(char *);
 extern void alloc_whtlst_entry(const vector_t *);
+extern void alloc_acl_group(char *);
+extern void alloc_acl_entry(const vector_t *);
 
 
 extern void alloc_tunnel_entry(char *name);

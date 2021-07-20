@@ -23,12 +23,53 @@
 
 #include "config.h"
 
+#include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <linux/icmp.h>
+#include <linux/icmpv6.h>
+#ifdef ERRQUEUE_NEEDS_SYS_TIME
+#include <sys/time.h>
+#endif
+#include <linux/errqueue.h>
+#include <netinet/in.h>
 
 #include "layer4.h"
 #include "logger.h"
 #include "scheduler.h"
+#ifdef _WITH_LVS_
+#include "check_api.h"
+#endif
+#include "bitops.h"
+#include "utils.h"
+#include "align.h"
+
+#ifdef _WITH_LVS_
+#define UDP_BUFSIZE	32
+#endif
+
+#ifdef _WITH_LVS_
+void
+set_buf(char *buf, size_t buf_len)
+{
+	const char *str = "keepalived check - ";
+	size_t str_len = strlen(str);
+	char *p = buf;
+
+	/* We need to overwrite the send buffer to avoid leaking
+	 * stack content. */
+
+	while (buf_len >= str_len) {
+		memcpy(p, str, str_len);
+		p += str_len;
+		buf_len -= str_len;
+	}
+
+	if (buf_len)
+		memcpy(p, str, buf_len);
+}
+#endif
 
 #ifndef _WITH_LVS_
 static
@@ -178,4 +219,235 @@ socket_connection_state(int fd, enum connect_result status, thread_ref_t thread,
 
 	return true;
 }
+
+enum connect_result
+udp_bind_connect(int fd, conn_opts_t *co, uint8_t *payload, uint16_t payload_len)
+{
+	socklen_t addrlen;
+	ssize_t ret;
+	const struct sockaddr_storage *addr = &co->dst;
+	const struct sockaddr_storage *bind_addr = &co->bindto;
+	char buf[UDP_BUFSIZE];
+	int on = 1;
+	int err;
+
+	/* Ensure we don't leak our stack */
+	if (!payload) {
+		set_buf(buf, sizeof(buf));
+		payload = PTR_CAST(uint8_t, buf);
+		payload_len = sizeof(buf);
+	}
+
+	/* We want to be able to receive ICMP error responses */
+	if (co->dst.ss_family == AF_INET)
+		err = setsockopt(fd, SOL_IP, IP_RECVERR, PTR_CAST(char, &on), sizeof(on));
+	else
+		err = setsockopt(fd, SOL_IPV6, IPV6_RECVERR, PTR_CAST(char, &on), sizeof(on));
+	if (err)
+		log_message(LOG_INFO, "Error %d setting IP%s_RECVERR for socket %d - %m", errno, co->dst.ss_family == AF_INET ? "" : "V6", fd);
+
+#ifdef _WITH_SO_MARK_
+	if (co->fwmark) {
+		if (setsockopt (fd, SOL_SOCKET, SO_MARK, &co->fwmark, sizeof (co->fwmark)) < 0) {
+			log_message(LOG_ERR, "Error setting fwmark %u to socket: %s", co->fwmark, strerror(errno));
+			return connect_error;
+		}
+	}
+#endif
+
+	/* Bind socket */
+	if (PTR_CAST_CONST(struct sockaddr, bind_addr)->sa_family != AF_UNSPEC) {
+		addrlen = sizeof(*bind_addr);
+		if (bind(fd, PTR_CAST_CONST(struct sockaddr, bind_addr), addrlen) != 0) {
+			log_message(LOG_INFO, "bind failed. errno: %d, error: %s", errno, strerror(errno));
+			return connect_error;
+		}
+	}
+
+	/* Set remote IP and connect */
+	addrlen = sizeof(*addr);
+	ret = connect(fd, PTR_CAST_CONST(struct sockaddr, addr), addrlen);
+
+	if (ret < 0) {
+		/* We want to know about the error, but not repeatedly */
+		if (errno != co->last_errno) {
+			co->last_errno = errno;
+			if (__test_bit(LOG_DETAIL_BIT, &debug))
+				log_message(LOG_INFO, "UDP connect error %d - %m", errno);
+		}
+
+		return connect_error;
+	}
+
+	/* Send udp packet */
+	ret = send(fd, payload, payload_len, 0);
+
+	if (ret == payload_len)
+		return connect_success;
+
+	if (ret == -1) {
+		/* We want to know about the error, but not repeatedly */
+		if (errno != co->last_errno) {
+			co->last_errno = errno;
+			if (__test_bit(LOG_DETAIL_BIT, &debug))
+				log_message(LOG_INFO, "UDP send error %d - %m", errno);
+		}
+	}
+	else if (__test_bit(LOG_DETAIL_BIT, &debug))
+		log_message(LOG_INFO, "udp_bind_connect send - sent %zd bytes instead of %zu", ret, sizeof(buf));
+
+	return connect_error;
+}
+
+static enum connect_result
+udp_socket_error(int fd)
+{
+	struct msghdr msg;
+	char name_buf[128];
+	struct iovec iov;
+	char control[2560] __attribute__((aligned(__alignof__(struct cmsghdr))));
+	struct icmphdr icmph;
+	struct cmsghdr *cmsg;                   /* Control related data */
+	struct sock_extended_err *sock_err;
+	ssize_t n;
+
+	iov.iov_base = &icmph;
+	iov.iov_len = sizeof icmph;
+	msg.msg_name = name_buf;
+	msg.msg_namelen = sizeof(name_buf);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = control;
+	msg.msg_controllen = sizeof control;
+	msg.msg_flags = 0;
+
+	n = recvmsg(fd, &msg, MSG_ERRQUEUE);
+
+	if (n == -1) {
+		log_message(LOG_INFO, "udp_socket_error recvmsg failed - errno %d", errno);
+		return connect_success;
+	}
+
+	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+		sock_err = PTR_CAST(struct sock_extended_err, CMSG_DATA(cmsg));
+		if (cmsg->cmsg_level == SOL_IP && cmsg->cmsg_type == IP_RECVERR) {
+			if (sock_err) {
+				/* We are interested in ICMP errors */
+				if (sock_err->ee_origin == SO_EE_ORIGIN_ICMP && sock_err->ee_type == ICMP_DEST_UNREACH) {
+#ifdef ICMP_DEBUG
+					/* Handle ICMP errors types */
+					switch (sock_err->ee_code)
+					{
+					case ICMP_NET_UNREACH:
+						/* Handle this error */
+						log_message(LOG_INFO, "Network Unreachable Error");
+						break;
+					case ICMP_HOST_UNREACH:
+						/* Handle this error */
+						log_message(LOG_INFO, "Host Unreachable Error");
+						break;
+					case ICMP_PORT_UNREACH:
+						/* Handle this error */
+						log_message(LOG_INFO, "Port Unreachable Error");
+						break;
+					default:
+						log_message(LOG_INFO, "Unreach code %d", sock_err->ee_code);
+					}
+#endif
+					return connect_error;
+#ifndef ICMP_DEBUG
+				}
+			}
+		}
+#else
+				} else
+					log_message(LOG_INFO, "ee_origin %d, ee_type %d", sock_err->ee_origin, sock_err->ee_type);
+			} else
+				log_message(LOG_INFO, "No CMSG_DATA");
+		}
+#endif
+		else if (cmsg->cmsg_level == SOL_IPV6 && cmsg->cmsg_type == IPV6_RECVERR) {
+			if (sock_err) {
+				/* We are interested in ICMP errors */
+				if (sock_err->ee_origin == SO_EE_ORIGIN_ICMP6 && sock_err->ee_type == ICMPV6_DEST_UNREACH) {
+#ifdef ICMP_DEBUG
+					/* Handle ICMP errors types */
+					switch (sock_err->ee_code)
+					{
+					case ICMPV6_NOROUTE:
+						/* Handle this error */
+						log_message(LOG_INFO, "No Route Error");
+						break;
+					case ICMPV6_ADDR_UNREACH:
+						/* Handle this error */
+						log_message(LOG_INFO, "Address Unreachable Error");
+						break;
+					case ICMPV6_PORT_UNREACH:
+						/* Handle this error */
+						log_message(LOG_INFO, "Port Unreachable Error");
+						break;
+					default:
+						log_message(LOG_INFO, "Unreach code %d", sock_err->ee_code);
+					}
+#endif
+					return connect_error;
+#ifndef ICMP_DEBUG
+				}
+			}
+		}
+#else
+				} else
+					log_message(LOG_INFO, "ee_origin %d, ee_type %d", sock_err->ee_origin, sock_err->ee_type);
+			} else
+				log_message(LOG_INFO, "No CMSG_DATA");
+		}
+		else
+			log_message(LOG_INFO, "cmsg_level %d, cmsg->type %d", cmsg->cmsg_level, cmsg->cmsg_type);
+#endif
+	}
+
+	return connect_success;
+}
+
+enum connect_result
+udp_socket_state(int fd, thread_ref_t thread, uint8_t *recv_buf, size_t *len)
+{
+	int ret;
+
+	/* Handle Read timeout, we consider it success unless require_reply is set */
+	if (thread->type == THREAD_READ_TIMEOUT)
+		return recv_buf ? connect_error : connect_success;
+
+	if (thread->type == THREAD_READ_ERROR)
+		return udp_socket_error(fd);
+
+	ret = recv(fd, recv_buf, *len, 0);
+
+	/* Ret less than 0 means the port is unreachable.
+	 * Otherwise, we consider it success.
+	 */
+
+	if (ret < 0)
+		return connect_error;
+
+	*len = ret;
+	return connect_success;
+}
+
+bool
+udp_check_state(int fd, enum connect_result status, thread_ref_t thread,
+					thread_func_t func, unsigned long timeout)
+{
+	checker_t *checker;
+
+	checker = THREAD_ARG(thread);
+
+	if (status == connect_success) {
+		thread_add_read(thread->master, func, checker, fd, timeout, true);
+		return false;
+	}
+
+	return true;
+}
+
 #endif

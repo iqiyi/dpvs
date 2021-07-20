@@ -38,6 +38,7 @@
 #include "check_misc.h"
 #include "check_smtp.h"
 #include "check_tcp.h"
+#include "check_udp.h"
 #include "check_http.h"
 #include "check_ssl.h"
 #include "check_dns.h"
@@ -683,6 +684,7 @@ install_checkers_keyword(void)
 	install_misc_check_keyword();
 	install_smtp_check_keyword();
 	install_tcp_check_keyword();
+	install_udp_check_keyword();
 	install_http_check_keyword();
 	install_ssl_check_keyword();
 	install_dns_check_keyword();

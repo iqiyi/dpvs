@@ -1,7 +1,7 @@
-From 86d8695113517403c59497dc2f43a333fa44316b Mon Sep 17 00:00:00 2001
+From 30a0939aa7c1f2de926b7af1d881144fe8a315bb Mon Sep 17 00:00:00 2001
 From: ywc689 <ywc689@163.com>
 Date: Fri, 28 Jun 2019 16:27:08 +0800
-Subject: [PATCH 2/3] net: support variable IP header len for checksum API.
+Subject: [PATCH 2/7] net: support variable IP header len for checksum API.
 
 IPv4 checksum APIs use fixe IP header length, it will failed if there is
 any IP option. Now calculating header length by "ihl" field, so that we

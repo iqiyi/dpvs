@@ -1,5 +1,18 @@
+From 769e98ca325dee673ff297d5906e5ef3c9632862 Mon Sep 17 00:00:00 2001
+From: yuwenchao <yuwenchao@qiyi.com>
+Date: Tue, 8 Jun 2021 09:52:12 +0800
+Subject: [PATCH 5/7] enable pdump and change dpdk pdump tool for dpvs
+
+Signed-off-by: yuwenchao <yuwenchao@qiyi.com>
+---
+ app/pdump/main.c             | 170 +++++++++++++++++++++++++++++++++++++++++--
+ config/common_base           |   2 +-
+ lib/librte_pdump/rte_pdump.c | 146 ++++++++++++++++++++++++++++++++++++-
+ lib/librte_pdump/rte_pdump.h |  27 +++++++
+ 4 files changed, 332 insertions(+), 13 deletions(-)
+
 diff --git a/app/pdump/main.c b/app/pdump/main.c
-index ccf2a1d..7e72c16 100644
+index ccf2a1d..3913515 100644
 --- a/app/pdump/main.c
 +++ b/app/pdump/main.c
 @@ -26,6 +26,8 @@
@@ -66,59 +79,59 @@ index ccf2a1d..7e72c16 100644
  static int
 +parse_host(const char *key __rte_unused, const char *value, void *extra_args)
 +{
-+        struct pdump_tuples *pt = extra_args;
-+        struct in_addr       inaddr;
-+        struct in6_addr      inaddr6;
-+        union  addr          addr;
-+        int                  af = 0;
++	struct pdump_tuples *pt = extra_args;
++	struct in_addr  inaddr;
++	struct in6_addr inaddr6;
++	union addr      addr;
++	int             af = 0;
 +
-+        if (inet_pton(AF_INET6, value, &inaddr6) > 0) {
-+            af = AF_INET6;
-+            addr.in6 = inaddr6;
-+        } else if (inet_pton(AF_INET, value, &inaddr) > 0){
-+            af = AF_INET;
-+            addr.in = inaddr;
-+        } else {
-+            printf("IP address invaled\n");
-+            return -EINVAL;
-+        }
++	if (inet_pton(AF_INET6, value, &inaddr6) > 0) {
++		af = AF_INET6;
++		addr.in6 = inaddr6;
++	} else if (inet_pton(AF_INET, value, &inaddr) > 0){
++		af = AF_INET;
++		addr.in = inaddr;
++	} else {
++		printf("IP address invaled\n");
++		return -EINVAL;
++	}
 +
-+        if (pt->filter && pt->filter->af != 0 && af != pt->filter->af) {
-+            printf("IPv4 and IPv6 conflict\n");
-+            return -EINVAL;
-+        } else {
-+            pt->filter->af = af;
-+        }
++	if (pt->filter && pt->filter->af != 0 && af != pt->filter->af) {
++		printf("IPv4 and IPv6 conflict\n");
++		return -EINVAL;
++	} else {
++		pt->filter->af = af;
++	}
 +
-+        if (!strcmp(key, PDUMP_HOST_ARG)) {
-+            rte_memcpy(&pt->filter->host_addr, &addr, sizeof(addr));
-+        } else if (!strcmp(key, PDUMP_SRC_ARG)) {
-+            rte_memcpy(&pt->filter->s_addr, &addr, sizeof(addr));
-+        } else if (!strcmp(key, PDUMP_DST_ARG)) {
-+            rte_memcpy(&pt->filter->d_addr, &addr, sizeof(addr));
-+        }
++	if (!strcmp(key, PDUMP_HOST_ARG)) {
++		rte_memcpy(&pt->filter->host_addr, &addr, sizeof(addr));
++	} else if (!strcmp(key, PDUMP_SRC_ARG)) {
++		rte_memcpy(&pt->filter->s_addr, &addr, sizeof(addr));
++	} else if (!strcmp(key, PDUMP_DST_ARG)) {
++		rte_memcpy(&pt->filter->d_addr, &addr, sizeof(addr));
++	}
 +
-+        return 0;
++	return 0;
 +}
 +
 +static int
 +parse_proto(const char *key __rte_unused, const char *value, void *extra_args)
 +{
-+    struct pdump_tuples *pt = extra_args;
++	struct pdump_tuples *pt = extra_args;
 +
-+    if (!strcmp(value, "tcp")) {
-+        pt->filter->proto = IPPROTO_TCP;
-+    } else if (!strcmp(value, "udp")) {
-+        pt->filter->proto = IPPROTO_UDP;
-+    } else if (!strcmp(value, "icmp")) {
-+        pt->filter->proto = IPPROTO_ICMP;
-+    } else {
-+        printf("invalid value:\"%s\" for key:\"%s\", "
-+            "value must be tcp/udp/icmp\n", value, key);
-+        return -EINVAL;
-+    }
++	if (!strcmp(value, "tcp")) {
++		pt->filter->proto = IPPROTO_TCP;
++	} else if (!strcmp(value, "udp")) {
++		pt->filter->proto = IPPROTO_UDP;
++	} else if (!strcmp(value, "icmp")) {
++		pt->filter->proto = IPPROTO_ICMP;
++	} else {
++		printf("invalid value:\"%s\" for key:\"%s\", "
++			"value must be tcp/udp/icmp\n", value, key);
++		return -EINVAL;
++	}
 +
-+    return 0;
++	return 0;
 +}
 +
 +
@@ -130,74 +143,74 @@ index ccf2a1d..7e72c16 100644
  	} else
  		pt->total_num_mbufs = MBUFS_PER_POOL;
  
-+    /* filter parsing and validation */
-+    pt->filter = rte_zmalloc("pdump_filter", 
-+                sizeof(struct pdump_filter), 0);
-+    cnt1 = rte_kvargs_count(kvlist, PDUMP_HOST_ARG);
-+    if (cnt1 == 1) {
-+            ret = rte_kvargs_process(kvlist, PDUMP_HOST_ARG,
-+                                            &parse_host, pt);
-+            if (ret < 0)
-+                    goto free_kvlist;
-+    }
-+    
-+    cnt1 = rte_kvargs_count(kvlist, PDUMP_SRC_ARG);
-+    if (cnt1 == 1) {
-+            ret = rte_kvargs_process(kvlist, PDUMP_SRC_ARG,
-+                                            &parse_host, pt);
-+            if (ret < 0)
-+                    goto free_kvlist;
-+    }
-+    
-+    cnt1 = rte_kvargs_count(kvlist, PDUMP_DST_ARG);
-+    if (cnt1 == 1) {
-+            ret = rte_kvargs_process(kvlist, PDUMP_DST_ARG,
-+                                            &parse_host, pt);
-+            if (ret < 0)
-+                    goto free_kvlist;
-+    }
++	/* filter parsing and validation */
++	pt->filter = rte_zmalloc("pdump_filter",
++		sizeof(struct pdump_filter), 0);
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_HOST_ARG);
++	if (cnt1 == 1) {
++		ret = rte_kvargs_process(kvlist, PDUMP_HOST_ARG,
++		&parse_host, pt);
++		if (ret < 0)
++			goto free_kvlist;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_SRC_ARG);
++	if (cnt1 == 1) {
++		ret = rte_kvargs_process(kvlist, PDUMP_SRC_ARG,
++			&parse_host, pt);
++		if (ret < 0)
++			goto free_kvlist;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_DST_ARG);
++	if (cnt1 == 1) {
++		ret = rte_kvargs_process(kvlist, PDUMP_DST_ARG,
++			&parse_host, pt);
++	if (ret < 0)
++		goto free_kvlist;
++	}
 +
 +
-+    cnt1 = rte_kvargs_count(kvlist, PDUMP_PROTO_PORT_AGE);
-+    if (cnt1 == 1) {
-+            v.min = 1;
-+            v.max = UINT16_MAX;
-+            ret = rte_kvargs_process(kvlist, PDUMP_PROTO_PORT_AGE,
-+                                            &parse_uint_value, &v);
-+            if (ret < 0)
-+                    goto free_kvlist;
-+            pt->filter->proto_port = (uint16_t) v.val;
-+    }
-+    
-+    cnt1 = rte_kvargs_count(kvlist, PDUMP_SPORT_ARG);
-+    if (cnt1 == 1) {
-+            v.min = 1;
-+            v.max = UINT16_MAX;
-+            ret = rte_kvargs_process(kvlist, PDUMP_SPORT_ARG,
-+                                            &parse_uint_value, &v);
-+            if (ret < 0)
-+                    goto free_kvlist;
-+            pt->filter->s_port = (uint16_t) v.val;
-+     }
-+    
-+    cnt1 = rte_kvargs_count(kvlist, PDUMP_DPORT_ARG);
-+    if (cnt1 == 1) {
-+            v.min = 1;
-+            v.max = UINT16_MAX;
-+            ret = rte_kvargs_process(kvlist, PDUMP_DPORT_ARG,
-+                                            &parse_uint_value, &v);
-+            if (ret < 0)
-+                    goto free_kvlist;
-+            pt->filter->d_port = (uint16_t) v.val;
-+    }
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_PROTO_PORT_AGE);
++	if (cnt1 == 1) {
++		v.min = 1;
++		v.max = UINT16_MAX;
++		ret = rte_kvargs_process(kvlist, PDUMP_PROTO_PORT_AGE,
++			&parse_uint_value, &v);
++		if (ret < 0)
++			goto free_kvlist;
++		pt->filter->proto_port = (uint16_t) v.val;
++	}
 +
-+    cnt1 = rte_kvargs_count(kvlist, PDUMP_PROTO_ARG);
-+    if (cnt1 == 1) {
-+            ret = rte_kvargs_process(kvlist, PDUMP_PROTO_ARG,
-+                                            &parse_proto, pt);
-+            if (ret < 0)
-+                    goto free_kvlist;
-+     }
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_SPORT_ARG);
++	if (cnt1 == 1) {
++		v.min = 1;
++		v.max = UINT16_MAX;
++		ret = rte_kvargs_process(kvlist, PDUMP_SPORT_ARG,
++			&parse_uint_value, &v);
++		if (ret < 0)
++			goto free_kvlist;
++		pt->filter->s_port = (uint16_t) v.val;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_DPORT_ARG);
++	if (cnt1 == 1) {
++		v.min = 1;
++		v.max = UINT16_MAX;
++		ret = rte_kvargs_process(kvlist, PDUMP_DPORT_ARG,
++			&parse_uint_value, &v);
++		if (ret < 0)
++			goto free_kvlist;
++		pt->filter->d_port = (uint16_t) v.val;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_PROTO_ARG);
++	if (cnt1 == 1) {
++		ret = rte_kvargs_process(kvlist, PDUMP_PROTO_ARG,
++			&parse_proto, pt);
++		if (ret < 0)
++			goto free_kvlist;
++	}
 +
  	num_tuples++;
  
@@ -272,7 +285,7 @@ index ccf2a1d..7e72c16 100644
  		if (ret < 0 || ret1 < 0) {
  			cleanup_pdump_resources();
 diff --git a/config/common_base b/config/common_base
-index d12ae98..5c15ea0 100644
+index d12ae98..5ac8d11 100644
 --- a/config/common_base
 +++ b/config/common_base
 @@ -451,7 +451,7 @@ CONFIG_RTE_LIBRTE_PMD_NULL=y
@@ -285,7 +298,7 @@ index d12ae98..5c15ea0 100644
  #
  # Compile example software rings based PMD
 diff --git a/lib/librte_pdump/rte_pdump.c b/lib/librte_pdump/rte_pdump.c
-index 6c3a885..d9a3258 100644
+index 6c3a885..971e095 100644
 --- a/lib/librte_pdump/rte_pdump.c
 +++ b/lib/librte_pdump/rte_pdump.c
 @@ -9,6 +9,10 @@
@@ -303,7 +316,7 @@ index 6c3a885..d9a3258 100644
  	return m_dup;
  }
  
-+static int 
++static int
 +inet_addr_equal(int af, const union addr *a1,
 +			const union addr *a2)
 +{
@@ -328,7 +341,7 @@ index 6c3a885..d9a3258 100644
 +	default:
 +		return -1;
 +	}
-+	
++
 +	return -1;
 +}
 +static int
@@ -340,13 +353,13 @@ index 6c3a885..d9a3258 100644
 +	int prepend = 0;
 +	uint16_t type = 0;
 +	uint16_t iph_len = 0;
-+        uint8_t proto = 0;
++	uint8_t proto = 0;
 +
 +	int af;
 +
 +	if (filter->af == 0 && filter->s_port == 0 &&
-+	    filter->d_port == 0 && filter->proto == 0 && 
-+            filter->proto_port == 0)
++		filter->d_port == 0 && filter->proto == 0 &&
++		filter->proto_port == 0)
 +		return 0;
 +
 +	eth_hdr = rte_pktmbuf_mtod(m, struct ether_hdr *);
@@ -374,53 +387,53 @@ index 6c3a885..d9a3258 100644
 +		af = AF_INET;
 +		s_addr.in.s_addr = ip4->src_addr;
 +		d_addr.in.s_addr = ip4->dst_addr;
-+	        proto = ip4->next_proto_id;
-+        	iph_len = (ip4->version_ihl & 0xf) << 2;
++		proto = ip4->next_proto_id;
++		iph_len = (ip4->version_ihl & 0xf) << 2;
 +	} else if (type == rte_cpu_to_be_16(ETHER_TYPE_IPv6)) {
 +		struct ipv6_hdr *ip6 = rte_pktmbuf_mtod(m, struct ipv6_hdr *);
 +		af = AF_INET6;
 +		rte_memcpy(&s_addr.in6, &ip6->src_addr, 16);
 +		rte_memcpy(&d_addr.in6, &ip6->dst_addr, 16);
-+        	proto = ip6->proto;
-+	        iph_len = sizeof(struct ipv6_hdr);
++		proto = ip6->proto;
++		iph_len = sizeof(struct ipv6_hdr);
 +	} else {
 +		goto prepend;
 +	}
 +
 +	/*filter*/
-+	if (!inet_is_addr_any(af, &filter->s_addr) && 
++	if (!inet_is_addr_any(af, &filter->s_addr) &&
 +		!inet_addr_equal(af, &filter->s_addr, &s_addr))
 +		goto prepend;
-+	if (!inet_is_addr_any(af, &filter->d_addr) && 
++	if (!inet_is_addr_any(af, &filter->d_addr) &&
 +		!inet_addr_equal(af, &filter->d_addr, &d_addr))
 +		goto prepend;
-+	if (!inet_is_addr_any(af, &filter->host_addr) && 
++	if (!inet_is_addr_any(af, &filter->host_addr) &&
 +		!inet_addr_equal(af, &filter->host_addr, &s_addr) &&
 +		!inet_addr_equal(af, &filter->host_addr, &d_addr))
 +		goto prepend;
 +
 +	if (filter->proto && filter->proto != proto)
-+        	goto prepend;
-+
-+    	if (filter->s_port || filter->d_port || filter->proto_port) {
-+            if (proto != IPPROTO_TCP && proto != IPPROTO_UDP)
 +		goto prepend;
-+            struct udp_hdr _uh;
-+            const struct udp_hdr *uh;
-+            uh = rte_pktmbuf_read(m, iph_len, sizeof(_uh), &_uh);
-+            if (uh == NULL)
-+                 goto prepend;
-+            if (filter->s_port && filter->s_port != rte_cpu_to_be_16(uh->src_port))
-+                goto prepend;
 +
-+            if (filter->d_port && filter->d_port != rte_cpu_to_be_16(uh->dst_port))
-+                goto prepend;
-+            
-+            if (filter->proto_port &&
-+                filter->proto_port != rte_cpu_to_be_16(uh->src_port) &&
-+                filter->proto_port != rte_cpu_to_be_16(uh->dst_port))
-+                goto prepend;
-+        }
++	if (filter->s_port || filter->d_port || filter->proto_port) {
++		if (proto != IPPROTO_TCP && proto != IPPROTO_UDP)
++			goto prepend;
++		struct udp_hdr _uh;
++		const struct udp_hdr *uh;
++		uh = rte_pktmbuf_read(m, iph_len, sizeof(_uh), &_uh);
++		if (uh == NULL)
++			goto prepend;
++		if (filter->s_port && filter->s_port != rte_cpu_to_be_16(uh->src_port))
++			goto prepend;
++
++		if (filter->d_port && filter->d_port != rte_cpu_to_be_16(uh->dst_port))
++			goto prepend;
++
++		if (filter->proto_port &&
++			filter->proto_port != rte_cpu_to_be_16(uh->src_port) &&
++			filter->proto_port != rte_cpu_to_be_16(uh->dst_port))
++			goto prepend;
++	}
 +
 +	rte_pktmbuf_prepend(m, prepend);
 +	return 0;
@@ -472,7 +485,7 @@ index 6c3a885..d9a3258 100644
  			}
  			cbs->ring = ring;
  			cbs->mp = mp;
-+                        cbs->filter = filter;
++			cbs->filter = filter;
  			cbs->cb = rte_eth_add_tx_callback(port, qid, pdump_tx,
  								cbs);
  			if (cbs->cb == NULL) {
@@ -480,7 +493,7 @@ index 6c3a885..d9a3258 100644
  	uint16_t operation;
  	struct rte_ring *ring;
  	struct rte_mempool *mp;
-+        struct pdump_filter *filter;
++	struct pdump_filter *filter;
  
  	flags = p->flags;
  	operation = p->op;
@@ -488,7 +501,7 @@ index 6c3a885..d9a3258 100644
  		queue = p->data.en_v1.queue;
  		ring = p->data.en_v1.ring;
  		mp = p->data.en_v1.mp;
-+                filter = p->data.en_v1.filter;
++		filter = p->data.en_v1.filter;
  	} else {
  		ret = rte_eth_dev_get_port_by_name(p->data.dis_v1.device,
  				&port);
@@ -496,7 +509,7 @@ index 6c3a885..d9a3258 100644
  		queue = p->data.dis_v1.queue;
  		ring = p->data.dis_v1.ring;
  		mp = p->data.dis_v1.mp;
-+                filter = p->data.dis_v1.filter;
++		filter = p->data.dis_v1.filter;
  	}
  
  	/* validation if packet capture is for all queues */
@@ -519,7 +532,7 @@ index 6c3a885..d9a3258 100644
  			return ret;
  	}
 diff --git a/lib/librte_pdump/rte_pdump.h b/lib/librte_pdump/rte_pdump.h
-index 673a2b0..633b48f 100644
+index 673a2b0..e9568e0 100644
 --- a/lib/librte_pdump/rte_pdump.h
 +++ b/lib/librte_pdump/rte_pdump.h
 @@ -15,6 +15,8 @@
@@ -536,18 +549,18 @@ index 673a2b0..633b48f 100644
  };
  
 +union addr {
-+	struct in_addr      in;  
-+	struct in6_addr     in6; 
++	struct in_addr      in;
++	struct in6_addr     in6;
 +};
 +
 +struct pdump_filter {
-+	int              af;  
++	int              af;
 +	union addr  s_addr;
 +	union addr  d_addr;
 +	union addr  host_addr; //s_addr or d_addr
 +
-+        uint8_t    proto;
-+        uint16_t   proto_port; //s_port or d_port
++	uint8_t    proto;
++	uint16_t   proto_port; //s_port or d_port
 +	uint16_t   s_port;
 +	uint16_t   d_port;
 +};
@@ -563,3 +576,6 @@ index 673a2b0..633b48f 100644
  /**
   * Initialize packet capturing handling
   *
+-- 
+1.8.3.1
+
