@@ -143,7 +143,7 @@ addr_arg_parse(char *arg, struct inet_addr_range *range, uint8_t *cidr)
     return EDPVS_OK;
 }
 
-/* [ tcp | udp: ]port1[-port2] */
+/* [ tcp | udp | icmp: ]port1[-port2] */
 static void
 port_arg_parse(char *arg, struct inet_addr_range *range)
 {
@@ -153,8 +153,21 @@ port_arg_parse(char *arg, struct inet_addr_range *range)
     if ((sep = strchr(arg, ':')) != NULL) {
         *sep++ = '\0';
         arg = sep;
-        if (!strcmp(proto, "udp")) 
+        if (!strcmp(proto, "tcp")) {}
+        else if (!strcmp(proto, "udp")) {
             param.proto = IPPROTO_UDP;
+        } else if (!strcmp(proto, "icmp")) {
+            param.proto = IPPROTO_ICMP;
+            return;
+        }
+        else if (!strcmp(proto, "icmp6")) {
+            param.proto = IPPROTO_ICMPV6;
+            return;
+        }
+        else {
+            fprintf(stderr, "protocol not supported\n");
+            exit(1);
+        }
     }
 
     port1 = arg;
@@ -585,13 +598,27 @@ static int
 netiface_dump_member(char *buf, struct ipset_member *member, int af)
 {
     int n;
-    char addr[INET6_ADDRSTRLEN];
+    char addr[INET6_ADDRSTRLEN], *proto;
     
     inet_ntop(af, &member->addr, addr, INET6_ADDRSTRLEN);
+
+    switch(member->proto) {
+        case IPPROTO_TCP:
+            proto = "tcp";
+            break;
+        case IPPROTO_UDP:
+            proto = "udp";
+            break;
+        case IPPROTO_ICMP:
+            proto = "icmp";
+            break;
+        case IPPROTO_ICMPV6:
+            proto = "icmp6";
+            break;
+    }
    
     n = sprintf(buf, "%s/%d,%s:%d,%s  ", addr, member->cidr,
-                member->proto == IPPROTO_TCP? "tcp" : "udp",
-                member->port, member->iface);
+                proto, member->port, member->iface);
 
     n += dump_comment(buf + n, member->comment);
 

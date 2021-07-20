@@ -24,24 +24,22 @@ typedef struct hash_netnet_elem {
     uint8_t cidr1;
     union inet_addr ip2;
     uint8_t cidr2;
+
+    /* data not evolved in hash calculation */
     uint16_t port1;
     uint16_t port2;
-
     char comment[IPSET_MAXCOMLEN];
 } elem_t;
 
 static bool
-hash_netnet_data_equal4(const void *elem1, const void *elem2)
+hash_netnet_data_equal(const void *elem1, const void *elem2)
 {
     elem_t *e1 = (elem_t *)elem1;
     elem_t *e2 = (elem_t *)elem2;
 
-    return (e1->ip1.in.s_addr == e2->ip1.in.s_addr &&
-            e1->cidr1 == e2->cidr1 &&
-            e1->ip2.in.s_addr == e2->ip2.in.s_addr &&
-            e1->cidr2 == e2->cidr2 &&
-            e1->port1 == e2->port1 &&
-            e1->port2 == e2->port2);
+    return (!memcmp(e1, e2, offsetof(elem_t, port1)) &&
+            (e2->port1 == 0 || e1->port1 == e2->port1) &&
+            (e2->port2 == 0 || e1->port2 == e2->port2));
 }
 
 static void
@@ -65,8 +63,7 @@ hash_netnet_hashkey4(void *data, int len, uint32_t mask)
     elem_t *e = (elem_t *)data;
 
     return (e->ip1.in.s_addr * 31 + e->ip2.in.s_addr * 31 +
-            e->cidr1 * 31 + e->cidr2 * 31 +
-           ((uint32_t )e->port1 << 16 | e->port2)) & mask;
+            e->cidr1 * 31 + e->cidr2 * 31) & mask;
 }
 
 static int
@@ -163,17 +160,11 @@ hash_netnet_test(struct ipset *set, struct ipset_test_param *p)
 struct ipset_type_variant hash_netnet_variant4 = {
     .adt = hash_netnet_adt4,
     .test = hash_netnet_test,
-    .hash.do_compare = hash_netnet_data_equal4,
+    .hash.do_compare = hash_netnet_data_equal,
     .hash.do_netmask = hash_data_netmask4,
     .hash.do_list = hash_netnet_do_list,
     .hash.do_hash = hash_netnet_hashkey4
 };
-
-static bool
-hash_netnet_data_equal6(const void *elem1, const void *elem2)
-{
-    return !memcmp(elem1, elem2, offsetof(elem_t, comment));
-}
 
 static int
 hash_netnet_adt6(int op, struct ipset *set, struct ipset_param *param)
@@ -202,7 +193,7 @@ hash_netnet_adt6(int op, struct ipset *set, struct ipset_param *param)
 struct ipset_type_variant hash_netnet_variant6 = {
     .adt = hash_netnet_adt6,
     .test = hash_netnet_test,
-    .hash.do_compare = hash_netnet_data_equal6,
+    .hash.do_compare = hash_netnet_data_equal,
     .hash.do_netmask = hash_data_netmask6,
     .hash.do_list = hash_netnet_do_list,
     .hash.do_hash = jhash_hashkey
@@ -214,7 +205,7 @@ hash_netnet_create(struct ipset *set, struct ipset_param *param)
     hash_create(set, param);
     set->net_count = 2;
     set->dsize = sizeof(elem_t);
-    set->hash_len = offsetof(elem_t, comment);
+    set->hash_len = offsetof(elem_t, port1);
 
     if (param->option.family == AF_INET)
         set->variant = &hash_netnet_variant4;

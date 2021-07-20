@@ -283,12 +283,31 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
     uint32_t flags = 0;
+    struct dp_vs_acl_rule *rule;
+    struct ipset_test_param tp;
 
     assert(svc && iph && mbuf);
 
     ports = mbuf_header_pointer(mbuf, iph->len, sizeof(_ports), _ports);
     if (!ports)
         return NULL;
+    
+    /* ACL */
+    if (!list_empty(&svc->acl_list)) {
+        list_for_each_entry(rule, &svc->acl_list, list) {
+            tp.mbuf = mbuf;
+            tp.iph = (struct dp_vs_iphdr *)iph;
+            tp.direction = rule->direction;
+            if (elem_in_set(rule->set, &tp)) {
+                if (rule->type == -1)   /* In a blacklist, DROP */
+                    return NULL;
+                else
+                    break;
+            }
+        }
+        if (&rule->list == &svc->acl_list)  /* NOT in any whitelist, DROP */
+            return NULL;
+    }
 
     /* persistent service */
     if (svc->flags & DP_VS_SVC_F_PERSISTENT)

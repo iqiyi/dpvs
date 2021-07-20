@@ -68,7 +68,11 @@ typedef struct dp_vs_service_entry_app {
 	snprintf(X->srange, sizeof(X->srange), "%s", Y->user.srange); \
 	snprintf(X->drange, sizeof(X->drange), "%s", Y->user.drange); \
 	snprintf(X->iifname, sizeof(X->iifname), "%s", Y->user.iifname); \
-	snprintf(X->oifname, sizeof(X->oifname), "%s", Y->user.oifname);}
+	snprintf(X->oifname, sizeof(X->oifname), "%s", Y->user.oifname); \
+	snprintf(X->setname, sizeof(X->setname), "%s", Y->user.setname); \
+	X->type 	    = Y->user.type; 			\
+	X->priority 	    = Y->user.priority;			\
+	X->direction 	    = Y->user.direction;}
 
 // DPVS_2_IPVS(ipvs_service_entry_t, dpvs_service_entry_t)
 #define DPVS_2_IPVS(X, Y) {					\
@@ -496,6 +500,102 @@ int ipvs_del_whtlst(ipvs_service_t *svc, ipvs_whtlst_t *whtlst)
 	return dpvs_setsockopt(SOCKOPT_SET_WHTLST_DEL, &conf, sizeof(conf));
 }
 
+int ipvs_add_aclrule(ipvs_service_t *svc)
+{
+	struct dp_vs_service_user dpvs_svc;
+
+	IPVS_2_DPVS((&dpvs_svc), svc);
+
+	ipvs_func = ipvs_add_aclrule;
+
+	return dpvs_setsockopt(DPVS_SO_SET_ADDACL, &dpvs_svc, sizeof(dpvs_svc));
+}
+
+int ipvs_del_aclrule(ipvs_service_t *svc)
+{
+	struct dp_vs_service_user dpvs_svc;
+
+	IPVS_2_DPVS((&dpvs_svc), svc);
+
+	ipvs_func = ipvs_del_aclrule;
+
+	return dpvs_setsockopt(DPVS_SO_SET_DELACL, &dpvs_svc, sizeof(dpvs_svc));
+}
+
+static FILE *ipset_get_info(char *setname)
+{
+	char cmd[100];
+
+	sprintf(cmd, "dpip ipset list %s", setname);
+
+	return popen(cmd, "r");
+}
+
+char *ipset_get_members(char *setname)
+{
+	int n = 0;
+	bool flag = false;
+	size_t size = 2048;
+	char buf[120], *members, *temp;
+	FILE *f = ipset_get_info(setname);
+
+	if (f == NULL)
+		return NULL;
+
+	members = malloc(size);
+	if (!members)
+		return NULL;
+
+	while (fgets(buf, 120, f) != NULL) {
+		if (flag) {
+			if (size - n < 120) {
+				temp = members;
+				size *= 2;
+				members = malloc(size);
+				if (!members) {
+					free(temp);
+					return NULL;
+				}
+				memcpy(members, temp, n);
+				free(temp);
+			}
+			n += snprintf(members + n, 120, "\t%s", buf);
+		}
+		if (strstr(buf, "Members") != NULL)
+			flag = true;
+	}
+
+	pclose(f);
+	return members;
+}
+
+int ipset_need_dir(char *setname)
+{
+	int i, res = 1;
+	char buf[120], *type;
+	FILE *f = ipset_get_info(setname);
+
+	if (f == NULL)
+		return -1;
+
+	while (fgets(buf, 120, f) != NULL) {
+		if (strstr(buf, "Type") != NULL)
+			type = buf + strlen("Type: ");
+	}
+
+	char *targets[] = {"hash:ip,port,ip", "hash:net,net"};
+	
+	for (i = 0; i < NELEMS(targets); i++) {
+		if (!strcmp(type, targets[i])) {
+			res = 0;
+			break;
+		}
+	}
+
+	pclose(f);
+	return res;
+}
+
 /* for tunnel entry */
 static void ipvs_fill_tunnel_conf(ipvs_tunnel_t *tunnel_entry,
                                  struct ip_tunnel_param *conf)
@@ -604,6 +704,7 @@ struct ip_vs_get_services_app *ipvs_get_services(lcoreid_t cid)
 		ipvs_entry = &get->user.entrytable[i];
 		dpvs_entry = (dpvs_service_entry_t*)&dpvs_get_rcv->entrytable[i];
 		DPVS_2_IPVS(ipvs_entry, dpvs_entry);
+		ipvs_entry->user.num_rules = dpvs_entry->user.num_rules;
 		if (dpvs_get_rcv->entrytable[i].af == AF_INET) {
 			get->user.entrytable[i].user.__addr_v4 = get->user.entrytable[i].nf_addr.ip;
 			get->user.entrytable[i].pe_name[0] = '\0';
@@ -729,6 +830,43 @@ ipvs_get_service(ipvs_service_t *hint, lcoreid_t cid)
 out_err:
 	FREE(svc);
 	return NULL;
+}
+
+struct ip_vs_get_acls_app *
+ipvs_get_acls(ipvs_service_t *hint)
+{
+	int i;
+	size_t len, len_rcv;
+	struct dp_vs_service_user dpvs_svc;
+	struct dp_vs_get_acls *dpvs_get;
+	struct ip_vs_get_acls_app *get;
+	struct ip_vs_acl_entry_app *ipvs_entry;
+
+	ipvs_func = ipvs_get_acls;
+
+	IPVS_2_DPVS((&dpvs_svc), hint);
+
+	if(dpvs_getsockopt(cpu2opt_svc(0, DPVS_SO_GET_ACLS),
+		&dpvs_svc,
+		sizeof(dpvs_svc),
+		(void **)&dpvs_get,
+		&len_rcv)) {
+		return NULL;
+	}
+
+	len = sizeof(*dpvs_get) + dpvs_get->num_rules * sizeof(ipvs_acl_entry_t);
+	if (!(get = calloc(len, 1)))
+		return NULL;
+
+	get->num_rules = dpvs_get->num_rules;
+	for (i = 0; i < dpvs_get->num_rules; i++) {
+		strcpy(get->entrytable[i].setname, dpvs_get->entrytable[i].setname);
+		get->entrytable[i].type = dpvs_get->entrytable[i].type;
+		get->entrytable[i].direction = dpvs_get->entrytable[i].direction;
+		get->entrytable[i].priority = dpvs_get->entrytable[i].priority;
+	}
+
+	return get;
 }
 
 int __attribute__ ((pure))

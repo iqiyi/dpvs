@@ -508,6 +508,9 @@ dump_vs(FILE *fp, const void *data)
 	if (vs->blklst_addr_gname)
 		conf_write(fp, "   BLACK_LIST GROUP = %s", vs->blklst_addr_gname);
 
+	if (vs->acl_rule_gname)
+		conf_write(fp, "   ACL_RULE GROUP = %s", vs->acl_rule_gname);
+
 	if (vs->vip_bind_dev)
 		conf_write(fp, "   vip_bind_dev = %s", vs->blklst_addr_gname);
 
@@ -605,7 +608,8 @@ alloc_vs(const char *param1, const char *param2)
 	new->expire_quiescent_conn = false;
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
-    new->whtlst_addr_gname = NULL;
+    	new->whtlst_addr_gname = NULL;
+	new->acl_rule_gname = NULL;
 	new->vip_bind_dev = NULL;
 	new->hash_target = 0;
 	new->bps = 0;
@@ -773,6 +777,82 @@ alloc_blklst_entry(const vector_t *strvec)
 		list_add(blklst_group->range, new);
 	else
 		log_message(LOG_INFO, "invalid: blacklist IP address range %d", new->range);
+}
+
+static void
+free_acl_group(void *data)
+{ 
+	acl_rule_group *acl_group = data;
+	FREE_PTR(acl_group->gname);
+	free_list(&acl_group->acl_rule);
+	FREE(acl_group);
+}
+
+static void
+dump_acl_group(FILE *fp, const void *data)
+{
+	const acl_rule_group *acl_group = data;
+
+	conf_write(fp, " ACL rule group = %s", acl_group->gname);
+	dump_list(fp, acl_group->acl_rule);
+}
+
+static void
+free_acl_entry(void *data)
+{
+	FREE(data);
+}
+
+static void
+dump_acl_entry(FILE *fp, const void *data)
+{
+	const acl_rule_entry *acl_entry = data;
+
+	conf_write(fp, "   ACL rule = %s-%s", acl_entry->setname, 
+		acl_entry->type == -1? "blacklist" : "whitelist");
+}
+
+void
+alloc_acl_group(char *gname)
+{
+	int size = strlen(gname);
+	acl_rule_group *new;
+
+	new = (acl_rule_group *) MALLOC(sizeof (acl_rule_group));
+	new->gname = (char *) MALLOC(size + 1);
+	memcpy(new->gname, gname, size);
+	new->acl_rule = alloc_list(free_acl_entry, dump_acl_entry);
+
+	list_add(check_data->acl_group, new);
+}
+
+void
+alloc_acl_entry(const vector_t *strvec)
+{
+	acl_rule_group *acl_group = LIST_TAIL_DATA(check_data->acl_group);
+	acl_rule_entry *new;
+
+	new = (acl_rule_entry *) MALLOC(sizeof (acl_rule_entry));
+
+	/* setname type priority direction */
+	snprintf(new->setname, 32, "%s", strvec_slot(strvec, 0));
+	if (!strcmp(strvec_slot(strvec, 1), "black"))
+		new->type = -1;
+	else if (!strcmp(strvec_slot(strvec, 1), "white"))
+		new->type = 1;
+	else
+		report_config_error(CONFIG_MISSING_PARAMETER, "ACL type MUST be specified");
+	new->priority = atoi(strvec_slot(strvec, 2));
+	if(!strcmp(strvec_slot(strvec, 3), "ingress")) {
+	    new->direction = 1;
+	} else if(!strcmp(strvec_slot(strvec, 3), "egress")) {
+	    new->direction = -1;
+	} else{
+	    if (ipset_need_dir(new->setname) == 1)
+	        report_config_error(CONFIG_MISSING_PARAMETER, "Direction MUST be specified for this IPset type");
+	}
+
+	list_add(acl_group->acl_rule, new);
 }
 
 static void
@@ -1051,6 +1131,7 @@ alloc_check_data(void)
 	new->blklst_group = alloc_list(free_blklst_group, dump_blklst_group);
     new->whtlst_group = alloc_list(free_whtlst_group, dump_whtlst_group);
 	new->tunnel_group = alloc_list(free_tunnel_group, dump_tunnel_group);
+	new->acl_group = alloc_list(free_acl_group, dump_acl_group);
 
 	return new;
 }
@@ -1068,6 +1149,7 @@ free_check_data(check_data_t *data)
 	free_list(&data->laddr_group);
 	free_list(&data->blklst_group);
 	free_list(&data->tunnel_group);
+	free_list(&data->acl_group);
 	FREE(data);
 }
 
@@ -1088,6 +1170,8 @@ dump_check_data(FILE *fp, check_data_t *data)
 			dump_list(fp, data->blklst_group);
 		if (!LIST_ISEMPTY(data->vs_group))
 			dump_list(fp, data->vs_group);
+		if (!LIST_ISEMPTY(data->acl_group))
+			dump_list(fp, data->acl_group);
 		dump_list(fp, data->vs);
 	}
 	if (!LIST_ISEMPTY(data->tunnel_group)) {

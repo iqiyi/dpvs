@@ -40,7 +40,7 @@ static void cls_help(void)
         "\n"
         "Parameters:\n"
         "    PKTTYPE    := { ipv4 | ipv6 | vlan }\n"
-        "    CLS_TYPE   := { match }\n"
+        "    CLS_TYPE   := { match | ipset }\n"
         "    COPTIONS   := { MATCH_OPTS }\n"
         "    PRIO       := NUMBER\n"
         "\n"
@@ -48,6 +48,7 @@ static void cls_help(void)
         "    MATCH_OPTS := pattern PATTERN { target { CHILD_QSCH | drop } }\n"
         "    PATTERN    := comma seperated of tokens below,\n"
         "                  { PROTO | SRANGE | DRANGE | IIF | OIF }\n"
+        "    IPSET_OPTS := SETNAME { target { CHILD_QSCH | drop } }\n"
         "    CHILD_QSCH := child qsch handle of the qsch cls attached.\n"
         "    PROTO      := \"{ tcp | udp }\"\n"
         "    SRANGE     := \"from=RANGE\"\n"
@@ -93,6 +94,17 @@ static void cls_dump_param(const char *ifname, const union tc_param *param,
 
         printf("%s target %s",
                dump_match(m->proto, &m->match, patt, sizeof(patt)), result);
+    } else if (strcmp(cls->kind, "ipset") == 0) {
+        char result[32], target[16];
+        const struct tc_cls_ipset_copt *s = &cls->copt.ipset;
+
+        if (s->result.drop)
+            snprintf(result, sizeof(result), "%s", "drop");
+        else
+            snprintf(result, sizeof(result), "%s",
+                     tc_handle_itoa(s->result.sch_id, target, sizeof(target)));
+
+        printf("set=%s target %s", s->setname, result);
     }
 
     printf("\n");
@@ -138,6 +150,8 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
             param->priority = atoi(CURRARG(cf));
         } else if (strcmp(CURRARG(cf), "match") == 0) {
             snprintf(param->kind, TCNAMESIZ, "%s", "match");
+        } else if (strcmp(CURRARG(cf), "ipset") == 0) {
+            snprintf(param->kind, TCNAMESIZ, "%s", "ipset");
         } else { /* kind must be set adead then COPTIONS */
             if (strcmp(param->kind, "match") == 0) {
                 struct tc_cls_match_copt *m = &param->copt.match;
@@ -155,6 +169,19 @@ static int cls_parse(struct dpip_obj *obj, struct dpip_conf *cf)
                         m->result.drop = true;
                     else
                         m->result.sch_id = tc_handle_atoi(CURRARG(cf));
+                }
+            } else if (strcmp(param->kind, "ipset") == 0) {
+                char *name;
+                struct tc_cls_ipset_copt *s = &param->copt.ipset;
+
+                if ((name = strstr(CURRARG(cf), "set=")) != NULL) {
+                    snprintf(s->setname, 32, "%s", name + strlen("set="));
+                } else if (strcmp(CURRARG(cf), "target") == 0) {
+                    NEXTARG_CHECK(cf, CURRARG(cf));
+                    if (strcmp(CURRARG(cf), "drop") == 0)
+                        s->result.drop = true;
+                    else
+                        s->result.sch_id = tc_handle_atoi(CURRARG(cf));
                 }
             } else {
                 fprintf(stderr, "invalid/miss cls type: '%s'\n", param->kind);
@@ -192,6 +219,11 @@ static int cls_check(const struct dpip_obj *obj, dpip_cmd_t cmd)
                 fprintf(stderr, "invalid match pattern.\n");
                 return EDPVS_INVAL;
             }
+        } else if (strcmp(param->kind, "ipset") == 0) {
+            if (strlen(param->copt.ipset.setname) == 0) {
+                fprintf(stderr, "invalid IPset name.\n");
+                return EDPVS_INVAL;
+            }
         } else {
             fprintf(stderr, "invalid cls kind.\n");
             return EDPVS_INVAL;
@@ -212,6 +244,11 @@ static int cls_check(const struct dpip_obj *obj, dpip_cmd_t cmd)
                 fprintf(stderr, "invalid match pattern.\n");
                 return EDPVS_INVAL;
             }
+        } else if (strcmp(param->kind, "ipset") == 0) {
+            if (strlen(param->copt.ipset.setname) == 0) {
+                fprintf(stderr, "invalid IPset name.\n");
+                return EDPVS_INVAL;
+            };
         } else {
             fprintf(stderr, "invalid cls kind.\n");
             return EDPVS_INVAL;

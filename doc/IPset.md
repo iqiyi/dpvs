@@ -153,7 +153,7 @@ true
 
 # Develop
 
-Currently, there are 7 IPset types supported: `bitmap:ip`, `bitmap:ip,mac`, `hash:ip`, `hash:net`, `hash:ip,port,ip`, `hash:net` and `hash:net,net`. And it is convenient to create a custom type.
+Currently, there are 7 IPset types supported: `bitmap:ip`, `bitmap:ip,mac`, `bitmap:port`, `hash:ip`, `hash:net`, `hash:ip,port`, `hash:ip,port,ip`, `hash:net,iface` and `hash:net,net`. And it is convenient to create a custom type.
 
 IPset module follows a "Deduction and Induction" architecture. Take "add an entry to a IPv4 hash:ip set" for example: firstly, the entry will go through the unified API `set->variant->adt()`, which is determined by the type and family of the set. Here it's bound to `hash_ip_adt4()` which will call the common low-level func `hash_adtfn()`. Eventually, type-specific low level funcs `do_hash(), do_compare()...` will do the real work.
 <br>

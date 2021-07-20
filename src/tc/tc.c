@@ -36,6 +36,7 @@ extern struct Qsch_ops bfifo_sch_ops;
 extern struct Qsch_ops pfifo_fast_ops;
 extern struct Qsch_ops tbf_sch_ops;
 extern struct tc_cls_ops match_cls_ops;
+extern struct tc_cls_ops ipset_cls_ops;
 
 static struct list_head qsch_ops_base;
 static struct list_head cls_ops_base;
@@ -333,6 +334,7 @@ int tc_init(void)
     /* classifier */
     INIT_LIST_HEAD(&cls_ops_base);
     tc_register_cls(&match_cls_ops);
+    tc_register_cls(&ipset_cls_ops);
 
     /* per-NUMA socket mempools for queued tc_mbuf{} */
     for (s = 0; s < get_numa_nodes(); s++) {
@@ -363,6 +365,7 @@ int tc_term(void)
     tc_unregister_qsch(&tbf_sch_ops);
 
     tc_unregister_cls(&match_cls_ops);
+    tc_unregister_cls(&ipset_cls_ops);
 
     for (s = 0; s < get_numa_nodes(); s++) {
         if (tc_mbuf_pools[s]) {
