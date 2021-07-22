@@ -37,16 +37,16 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
                                    struct dp_vs_conn *conn,
                                    struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
-    struct ether_hdr *eth;
-    uint16_t packet_type = ETHER_TYPE_IPv4;
+    struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
+    struct rte_ether_hdr *eth;
+    uint16_t packet_type = RTE_ETHER_TYPE_IPV4;
     int err;
 
     if (unlikely(conn->in_dev == NULL))
         return EDPVS_NOROUTE;
 
-    if (unlikely(is_zero_ether_addr(&conn->in_dmac) ||
-                 is_zero_ether_addr(&conn->in_smac)))
+    if (unlikely(rte_is_zero_ether_addr(&conn->in_dmac) ||
+                 rte_is_zero_ether_addr(&conn->in_smac)))
         return EDPVS_NOTSUPP;
 
     /* pre-handler before translation */
@@ -78,10 +78,10 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
         ip4_send_csum(ip4h);
     }
 
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
-                    (uint16_t)sizeof(struct ether_hdr));
-    ether_addr_copy(&conn->in_dmac, &eth->d_addr);
-    ether_addr_copy(&conn->in_smac, &eth->s_addr);
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct rte_ether_hdr));
+    rte_ether_addr_copy(&conn->in_dmac, &eth->d_addr);
+    rte_ether_addr_copy(&conn->in_smac, &eth->s_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
@@ -98,15 +98,15 @@ static int __dp_vs_fast_xmit_fnat6(struct dp_vs_proto *proto,
                                    struct rte_mbuf *mbuf)
 {
     struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-    struct ether_hdr *eth;
-    uint16_t packet_type = ETHER_TYPE_IPv6;
+    struct rte_ether_hdr *eth;
+    uint16_t packet_type = RTE_ETHER_TYPE_IPV6;
     int err;
 
     if (unlikely(conn->in_dev == NULL))
         return EDPVS_NOROUTE;
 
-    if (unlikely(is_zero_ether_addr(&conn->in_dmac) ||
-                 is_zero_ether_addr(&conn->in_smac)))
+    if (unlikely(rte_is_zero_ether_addr(&conn->in_dmac) ||
+                 rte_is_zero_ether_addr(&conn->in_smac)))
         return EDPVS_NOTSUPP;
 
     /* pre-handler before translation */
@@ -131,10 +131,10 @@ static int __dp_vs_fast_xmit_fnat6(struct dp_vs_proto *proto,
             return err;
     }
 
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
-                    (uint16_t)sizeof(struct ether_hdr));
-    ether_addr_copy(&conn->in_dmac, &eth->d_addr);
-    ether_addr_copy(&conn->in_smac, &eth->s_addr);
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct rte_ether_hdr));
+    rte_ether_addr_copy(&conn->in_dmac, &eth->d_addr);
+    rte_ether_addr_copy(&conn->in_smac, &eth->s_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
@@ -159,16 +159,16 @@ static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
                                       struct dp_vs_conn *conn,
                                       struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
-    struct ether_hdr *eth;
-    uint16_t packet_type = ETHER_TYPE_IPv4;
+    struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
+    struct rte_ether_hdr *eth;
+    uint16_t packet_type = RTE_ETHER_TYPE_IPV4;
     int err;
 
     if (unlikely(conn->out_dev == NULL))
         return EDPVS_NOROUTE;
 
-    if (unlikely(is_zero_ether_addr(&conn->out_dmac) ||
-                 is_zero_ether_addr(&conn->out_smac)))
+    if (unlikely(rte_is_zero_ether_addr(&conn->out_dmac) ||
+                 rte_is_zero_ether_addr(&conn->out_smac)))
         return EDPVS_NOTSUPP;
 
     /* pre-handler before translation */
@@ -200,10 +200,10 @@ static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
         ip4_send_csum(ip4h);
     }
 
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
-                    (uint16_t)sizeof(struct ether_hdr));
-    ether_addr_copy(&conn->out_dmac, &eth->d_addr);
-    ether_addr_copy(&conn->out_smac, &eth->s_addr);
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct rte_ether_hdr));
+    rte_ether_addr_copy(&conn->out_dmac, &eth->d_addr);
+    rte_ether_addr_copy(&conn->out_smac, &eth->s_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
@@ -220,15 +220,15 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
                                       struct rte_mbuf *mbuf)
 {
     struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-    struct ether_hdr *eth;
-    uint16_t packet_type = ETHER_TYPE_IPv6;
+    struct rte_ether_hdr *eth;
+    uint16_t packet_type = RTE_ETHER_TYPE_IPV6;
     int err;
 
     if (unlikely(conn->out_dev == NULL))
         return EDPVS_NOROUTE;
 
-    if (unlikely(is_zero_ether_addr(&conn->out_dmac) ||
-                 is_zero_ether_addr(&conn->out_smac)))
+    if (unlikely(rte_is_zero_ether_addr(&conn->out_dmac) ||
+                 rte_is_zero_ether_addr(&conn->out_smac)))
         return EDPVS_NOTSUPP;
 
     /* pre-handler before translation */
@@ -253,10 +253,10 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
             return err;
     }
 
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
-                    (uint16_t)sizeof(struct ether_hdr));
-    ether_addr_copy(&conn->out_dmac, &eth->d_addr);
-    ether_addr_copy(&conn->out_smac, &eth->s_addr);
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct rte_ether_hdr));
+    rte_ether_addr_copy(&conn->out_dmac, &eth->d_addr);
+    rte_ether_addr_copy(&conn->out_smac, &eth->s_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
@@ -285,26 +285,26 @@ static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
                           struct dp_vs_proto *proto,
                           struct dp_vs_conn *conn)
 {
-    struct ether_hdr *eth = NULL;
+    struct rte_ether_hdr *eth = NULL;
     struct netif_port *port = NULL;
 
-    if (!is_zero_ether_addr(&conn->out_dmac) &&
-        !is_zero_ether_addr(&conn->out_smac))
+    if (!rte_is_zero_ether_addr(&conn->out_dmac) &&
+        !rte_is_zero_ether_addr(&conn->out_smac))
         return;
 
-    if (unlikely(mbuf->l2_len != sizeof(struct ether_hdr)))
+    if (unlikely(mbuf->l2_len != sizeof(struct rte_ether_hdr)))
         return;
 
     port = netif_port_get(mbuf->port);
     if (port)
         conn->out_dev = port;
 
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
 
-    ether_addr_copy(&eth->s_addr, &conn->out_dmac);
-    ether_addr_copy(&eth->d_addr, &conn->out_smac);
+    rte_ether_addr_copy(&eth->s_addr, &conn->out_dmac);
+    rte_ether_addr_copy(&eth->d_addr, &conn->out_smac);
 
-    rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr));
+    rte_pktmbuf_adj(mbuf, sizeof(struct rte_ether_hdr));
 }
 
 /*
@@ -314,26 +314,26 @@ static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
                              struct dp_vs_proto *proto,
                              struct dp_vs_conn *conn)
 {
-    struct ether_hdr *eth = NULL;
+    struct rte_ether_hdr *eth = NULL;
     struct netif_port *port = NULL;
 
-    if (!is_zero_ether_addr(&conn->in_dmac) &&
-        !is_zero_ether_addr(&conn->in_smac))
+    if (!rte_is_zero_ether_addr(&conn->in_dmac) &&
+        !rte_is_zero_ether_addr(&conn->in_smac))
         return;
 
-    if (mbuf->l2_len != sizeof(struct ether_hdr))
+    if (mbuf->l2_len != sizeof(struct rte_ether_hdr))
         return;
 
     port = netif_port_get(mbuf->port);
     if (port)
         conn->in_dev = port;
 
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
 
-    ether_addr_copy(&eth->s_addr, &conn->in_dmac);
-    ether_addr_copy(&eth->d_addr, &conn->in_smac);
+    rte_ether_addr_copy(&eth->s_addr, &conn->in_dmac);
+    rte_ether_addr_copy(&eth->d_addr, &conn->in_smac);
 
-    rte_pktmbuf_adj(mbuf, sizeof(struct ether_hdr));
+    rte_pktmbuf_adj(mbuf, sizeof(struct rte_ether_hdr));
 }
 
 /*
@@ -393,7 +393,7 @@ static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
                               struct rte_mbuf *mbuf)
 {
     struct flow4 fl4;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     int err, mtu;
 
@@ -408,10 +408,10 @@ static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route4_put((struct route_entry *)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
@@ -433,14 +433,14 @@ static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
 
     mtu = rt->mtu;
     if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
         err = EDPVS_FRAG;
         goto errout;
     }
 
-    mbuf->userdata = rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -514,10 +514,10 @@ static int __dp_vs_xmit_fnat6(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route6_put((struct route6 *)mbuf->userdata);
+                __func__, MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl6, 0, sizeof(struct flow6));
@@ -546,7 +546,7 @@ static int __dp_vs_xmit_fnat6(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->userdata = rt6;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -599,7 +599,7 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
 {
     struct flow4 fl4;
     struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-    struct ipv4_hdr *ip4h;
+    struct rte_ipv4_hdr *ip4h;
     uint32_t pkt_len;
     struct route_entry *rt;
     int err, mtu;
@@ -608,10 +608,10 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
         RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route6_put((struct route6 *)mbuf->userdata);
+                __func__, MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
@@ -644,7 +644,7 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->userdata = rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
     /* after route lookup and before translation */
     if (xmit_ttl) {
         if (unlikely(ip6h->ip6_hops <= 1)) {
@@ -718,7 +718,7 @@ static int __dp_vs_out_xmit_fnat4(struct dp_vs_proto *proto,
                                   struct rte_mbuf *mbuf)
 {
     struct flow4 fl4;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     int err, mtu;
 
@@ -733,8 +733,8 @@ static int __dp_vs_out_xmit_fnat4(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL))
-        route4_put((struct route_entry *)mbuf->userdata);
+    if (MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
 
     memset(&fl4, 0, sizeof(struct flow4));
     fl4.fl4_daddr = conn->caddr.in;
@@ -755,14 +755,14 @@ static int __dp_vs_out_xmit_fnat4(struct dp_vs_proto *proto,
 
     mtu = rt->mtu;
     if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
         err = EDPVS_FRAG;
         goto errout;
     }
 
-    mbuf->userdata = rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -836,8 +836,8 @@ static int __dp_vs_out_xmit_fnat6(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL))
-        route6_put((struct route6 *)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL))
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
 
     memset(&fl6, 0, sizeof(struct flow6));
     fl6.fl6_daddr = conn->caddr.in6;
@@ -863,7 +863,7 @@ static int __dp_vs_out_xmit_fnat6(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->userdata = rt6;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -915,7 +915,7 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
                                    struct rte_mbuf *mbuf)
 {
     struct flow6 fl6;
-    struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
     uint32_t pkt_len;
     struct route6 *rt6;
     int err, mtu;
@@ -924,10 +924,10 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route4_put((struct route_entry *)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl6, 0, sizeof(struct flow6));
@@ -953,14 +953,14 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
     mtu = rt6->rt6_mtu;
     pkt_len = mbuf_nat4to6_len(mbuf);
     if (pkt_len > mtu
-           && (ip4h->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+           && (ip4h->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
         err = EDPVS_FRAG;
         goto errout;
     }
 
-    mbuf->userdata = rt6;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
     /* after route lookup and before translation */
     if (xmit_ttl) {
         if (unlikely(ip4h->time_to_live <= 1)) {
@@ -1026,10 +1026,10 @@ static void __dp_vs_xmit_icmp4(struct rte_mbuf *mbuf,
                                struct dp_vs_proto *prot,
                                struct dp_vs_conn *conn, int dir)
 {
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
     struct icmphdr *icmph = (struct icmphdr *)
                             ((unsigned char *)ip4_hdr(mbuf) + ip4_hdrlen(mbuf));
-    struct ipv4_hdr *ciph = (struct ipv4_hdr *)(icmph + 1);
+    struct rte_ipv4_hdr *ciph = (struct rte_ipv4_hdr *)(icmph + 1);
     int fullnat = (conn->dest->fwdmode == DPVS_FWD_MODE_FNAT);
     uint16_t csum;
 
@@ -1067,7 +1067,7 @@ static void __dp_vs_xmit_icmp4(struct rte_mbuf *mbuf,
     if (ciph->next_proto_id == IPPROTO_TCP
             || ciph->next_proto_id == IPPROTO_UDP) {
         uint16_t *ports = (void *)ciph + \
-                          ((ciph->version_ihl & IPV4_HDR_IHL_MASK)<<2);
+                          ((ciph->version_ihl & RTE_IPV4_HDR_IHL_MASK)<<2);
 
         if (fullnat) {
             if (dir == DPVS_CONN_DIR_INBOUND) {
@@ -1200,7 +1200,7 @@ static void __dp_vs_xmit_icmp6(struct rte_mbuf *mbuf,
     icmp6h->icmp6_cksum = 0;
     l4_len = ntohs(ip6h->ip6_plen);
     csum = rte_raw_cksum(icmp6h, l4_len);
-    csum += rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6h, 0);
+    csum += rte_ipv6_phdr_cksum((struct rte_ipv6_hdr *)ip6h, 0);
 
     csum = ((csum & 0xffff0000) >> 16) + (csum & 0xffff);
     csum = (~csum) & 0xffff;
@@ -1230,14 +1230,14 @@ static int __dp_vs_xmit_dr4(struct dp_vs_proto *proto,
                             struct rte_mbuf *mbuf)
 {
     struct flow4 fl4;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     int err, mtu;
 
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: Already have route %p ?\n",
-                __func__, mbuf->userdata);
-        route4_put((struct route_entry *)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: Already have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
@@ -1255,14 +1255,14 @@ static int __dp_vs_xmit_dr4(struct dp_vs_proto *proto,
 
     mtu = rt->mtu;
     if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
         err = EDPVS_FRAG;
         goto errout;
     }
 
-    mbuf->packet_type = ETHER_TYPE_IPv4;
+    mbuf->packet_type = RTE_ETHER_TYPE_IPV4;
     err = neigh_output(AF_INET, (union inet_addr *)&conn->daddr.in, mbuf, rt->port);
     route4_put(rt);
     return err;
@@ -1283,10 +1283,10 @@ static int __dp_vs_xmit_dr6(struct dp_vs_proto *proto,
     struct route6 *rt6;
     int err, mtu;
 
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: Already have route %p ?\n",
-                __func__, mbuf->userdata);
-        route6_put((struct route6 *)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: Already have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl6, 0, sizeof(struct flow6));
@@ -1309,7 +1309,7 @@ static int __dp_vs_xmit_dr6(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->packet_type = ETHER_TYPE_IPv6;
+    mbuf->packet_type = RTE_ETHER_TYPE_IPV6;
     err = neigh_output(AF_INET6, (union inet_addr *)&conn->daddr.in6, mbuf, rt6->rt6_dev);
     route6_put(rt6);
     return err;
@@ -1338,7 +1338,7 @@ static int __dp_vs_xmit_snat4(struct dp_vs_proto *proto,
                               struct rte_mbuf *mbuf)
 {
     struct flow4 fl4;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     int err, mtu;
 
@@ -1347,10 +1347,10 @@ static int __dp_vs_xmit_snat4(struct dp_vs_proto *proto,
      * inbound SNAT traffic is hooked at PRE_ROUTING,
      * should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: SNAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route4_put((struct route_entry *)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: SNAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
     }
 
     /*
@@ -1371,14 +1371,14 @@ static int __dp_vs_xmit_snat4(struct dp_vs_proto *proto,
 
     mtu = rt->mtu;
     if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
         err = EDPVS_FRAG;
         goto errout;
     }
 
-    mbuf->userdata = rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -1432,10 +1432,10 @@ static int __dp_vs_xmit_snat6(struct dp_vs_proto *proto,
      * inbound SNAT traffic is hooked at PRE_ROUTING,
      * should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: SNAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route6_put((struct route6 *)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: SNAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route6*, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6*, MBUF_FIELD_ROUTE));
     }
 
     /*
@@ -1461,7 +1461,7 @@ static int __dp_vs_xmit_snat6(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->userdata = rt6;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -1512,8 +1512,8 @@ static int __dp_vs_out_xmit_snat4(struct dp_vs_proto *proto,
 {
     int err;
     struct flow4 fl4;
-    struct route_entry *rt = mbuf->userdata;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
 
     if (!rt) {
         memset(&fl4, 0, sizeof(struct flow4));
@@ -1535,13 +1535,13 @@ static int __dp_vs_out_xmit_snat4(struct dp_vs_proto *proto,
                 goto errout;
             }
         }
-        mbuf->userdata = rt;
+        MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
         dp_vs_conn_cache_rt(conn, rt, false);
     }
 
     if (mbuf->pkt_len > rt->mtu &&
-            (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+            (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG,
                   htonl(rt->mtu));
@@ -1591,15 +1591,15 @@ static int dp_vs_fast_xmit_nat(struct dp_vs_proto *proto,
                     struct dp_vs_conn *conn,
                     struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct ether_hdr *eth;
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ether_hdr *eth;
     int err;
 
     if (unlikely(conn->in_dev == NULL))
         return EDPVS_NOROUTE;
 
-    if (unlikely(is_zero_ether_addr(&conn->in_dmac) ||
-                 is_zero_ether_addr(&conn->in_smac)))
+    if (unlikely(rte_is_zero_ether_addr(&conn->in_dmac) ||
+                 rte_is_zero_ether_addr(&conn->in_smac)))
         return EDPVS_NOTSUPP;
 
     iph->hdr_checksum = 0;
@@ -1617,12 +1617,12 @@ static int dp_vs_fast_xmit_nat(struct dp_vs_proto *proto,
         ip4_send_csum(iph);
     }
 
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
-                    (uint16_t)sizeof(struct ether_hdr));
-    ether_addr_copy(&conn->in_dmac, &eth->d_addr);
-    ether_addr_copy(&conn->in_smac, &eth->s_addr);
-    eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
-    mbuf->packet_type = ETHER_TYPE_IPv4;
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct rte_ether_hdr));
+    rte_ether_addr_copy(&conn->in_dmac, &eth->d_addr);
+    rte_ether_addr_copy(&conn->in_smac, &eth->s_addr);
+    eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
+    mbuf->packet_type = RTE_ETHER_TYPE_IPV4;
 
     err = netif_xmit(mbuf, conn->in_dev);
     if (err != EDPVS_OK)
@@ -1636,15 +1636,15 @@ static int dp_vs_fast_outxmit_nat(struct dp_vs_proto *proto,
                           struct dp_vs_conn *conn,
                           struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct ether_hdr *eth;
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ether_hdr *eth;
     int err;
 
     if (unlikely(conn->out_dev == NULL))
         return EDPVS_NOROUTE;
 
-    if (unlikely(is_zero_ether_addr(&conn->out_dmac) ||
-                 is_zero_ether_addr(&conn->out_smac)))
+    if (unlikely(rte_is_zero_ether_addr(&conn->out_dmac) ||
+                 rte_is_zero_ether_addr(&conn->out_smac)))
         return EDPVS_NOTSUPP;
 
     iph->hdr_checksum = 0;
@@ -1662,12 +1662,12 @@ static int dp_vs_fast_outxmit_nat(struct dp_vs_proto *proto,
         ip4_send_csum(iph);
     }
 
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf,
-                    (uint16_t)sizeof(struct ether_hdr));
-    ether_addr_copy(&conn->out_dmac, &eth->d_addr);
-    ether_addr_copy(&conn->out_smac, &eth->s_addr);
-    eth->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
-    mbuf->packet_type = ETHER_TYPE_IPv4;
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct rte_ether_hdr));
+    rte_ether_addr_copy(&conn->out_dmac, &eth->d_addr);
+    rte_ether_addr_copy(&conn->out_smac, &eth->s_addr);
+    eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
+    mbuf->packet_type = RTE_ETHER_TYPE_IPV4;
 
     err = netif_xmit(mbuf, conn->out_dev);
     if (err != EDPVS_OK)
@@ -1683,7 +1683,7 @@ static int __dp_vs_out_xmit_snat6(struct dp_vs_proto *proto,
 {
     int err;
     struct flow6 fl6;
-    struct route6 *rt6 = mbuf->userdata;
+    struct route6 *rt6 = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
     struct ip6_hdr *ip6h = ip6_hdr(mbuf);
 
     if (!rt6) {
@@ -1696,7 +1696,7 @@ static int __dp_vs_out_xmit_snat6(struct dp_vs_proto *proto,
             goto errout;
         }
 
-        mbuf->userdata = rt6;
+        MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
         dp_vs_conn_cache_rt6(conn, rt6, false);
     }
@@ -1756,7 +1756,7 @@ static int __dp_vs_xmit_nat4(struct dp_vs_proto *proto,
                              struct rte_mbuf *mbuf)
 {
     struct flow4 fl4;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     int err, mtu;
 
@@ -1771,10 +1771,10 @@ static int __dp_vs_xmit_nat4(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * NAT is PREROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route4_put((struct route_entry*)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
@@ -1791,7 +1791,7 @@ static int __dp_vs_xmit_nat4(struct dp_vs_proto *proto,
 
     mtu = rt->mtu;
     if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG,
                   htonl(rt->mtu));
@@ -1799,7 +1799,7 @@ static int __dp_vs_xmit_nat4(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->userdata = rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -1852,10 +1852,10 @@ static int __dp_vs_xmit_nat6(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * NAT is PREROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route6_put((struct route6*)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl6, 0, sizeof(struct flow6));
@@ -1877,7 +1877,7 @@ static int __dp_vs_xmit_nat6(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->userdata = rt6;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -1927,7 +1927,7 @@ static int __dp_vs_out_xmit_nat4(struct dp_vs_proto *proto,
                                  struct rte_mbuf *mbuf)
 {
     struct flow4 fl4;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     int err, mtu;
 
@@ -1942,10 +1942,10 @@ static int __dp_vs_out_xmit_nat4(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * NAT is PREROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route4_put((struct route_entry*)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
@@ -1962,7 +1962,7 @@ static int __dp_vs_out_xmit_nat4(struct dp_vs_proto *proto,
 
     mtu = rt->mtu;
     if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG,
                   htonl(rt->mtu));
@@ -1971,7 +1971,7 @@ static int __dp_vs_out_xmit_nat4(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->userdata = rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -2024,10 +2024,10 @@ static int __dp_vs_out_xmit_nat6(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * NAT is PREROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n",
-                __func__, mbuf->userdata);
-        route6_put((struct route6*)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: NAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl6, 0, sizeof(struct flow6));
@@ -2049,7 +2049,7 @@ static int __dp_vs_out_xmit_nat6(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    mbuf->userdata = rt6;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
     /* after route lookup and before translation */
     if (xmit_ttl) {
@@ -2103,20 +2103,20 @@ static int __dp_vs_xmit_tunnel4(struct dp_vs_proto *proto,
                                 struct rte_mbuf *mbuf)
 {
     struct flow4 fl4;
-    struct ipv4_hdr *new_iph, *old_iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *new_iph, *old_iph = ip4_hdr(mbuf);
     struct route_entry *rt;
     uint8_t tos = old_iph->type_of_service;
-    uint16_t df = old_iph->fragment_offset & htons(IPV4_HDR_DF_FLAG);
+    uint16_t df = old_iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG);
     int err, mtu;
 
     /*
      * drop old route. just for safe, because
      * TUNNEL is PREROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n",
-                __func__, mbuf->userdata);
-        route4_put((struct route_entry*)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
@@ -2131,9 +2131,9 @@ static int __dp_vs_xmit_tunnel4(struct dp_vs_proto *proto,
     dp_vs_conn_cache_rt(conn, rt, true);
 
     mtu = rt->mtu;
-    mbuf->userdata = rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
-    new_iph = (struct ipv4_hdr*)rte_pktmbuf_prepend(mbuf, sizeof(struct ipv4_hdr));
+    new_iph = (struct rte_ipv4_hdr*)rte_pktmbuf_prepend(mbuf, sizeof(struct rte_ipv4_hdr));
     if (!new_iph) {
         RTE_LOG(WARNING, IPVS, "%s: mbuf has not enough headroom"
                 " space for ipvs tunnel\n", __func__);
@@ -2149,7 +2149,7 @@ static int __dp_vs_xmit_tunnel4(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    memset(new_iph, 0, sizeof(struct ipv4_hdr));
+    memset(new_iph, 0, sizeof(struct rte_ipv4_hdr));
     new_iph->version_ihl = 0x45;
     new_iph->type_of_service = tos;
     new_iph->total_length = htons(mbuf->pkt_len);
@@ -2194,10 +2194,10 @@ static int __dp_vs_xmit_tunnel6(struct dp_vs_proto *proto,
      * drop old route. just for safe, because
      * TUNNEL is PREROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n",
-                __func__, mbuf->userdata);
-        route6_put((struct route6*)mbuf->userdata);
+    if (MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL) {
+        RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl6, 0, sizeof(struct flow6));
@@ -2211,7 +2211,7 @@ static int __dp_vs_xmit_tunnel6(struct dp_vs_proto *proto,
     dp_vs_conn_cache_rt6(conn, rt6, true);
 
     mtu = rt6->rt6_mtu;
-    mbuf->userdata = rt6;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
     new_ip6h = (struct ip6_hdr*)rte_pktmbuf_prepend(mbuf, sizeof(struct ip6_hdr));
     if (!new_ip6h) {
@@ -2262,17 +2262,17 @@ static int __dp_vs_xmit_tunnel_6o4(struct dp_vs_proto *proto,
     int err, mtu;
     struct flow4 fl4;
     struct route_entry *rt;
-    struct ipv4_hdr *new_iph;
+    struct rte_ipv4_hdr *new_iph;
     struct ip6_hdr *old_ip6h = ip6_hdr(mbuf);
 
     /*
      * drop old route. just for safe, because
      * TUNNEL is PREROUTING, should not have route.
      */
-    if (unlikely(mbuf->userdata != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n",
-                __func__, mbuf->userdata);
-        route6_put((struct route6*)mbuf->userdata);
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
+        RTE_LOG(WARNING, IPVS, "%s: TUNNEL have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
@@ -2287,9 +2287,9 @@ static int __dp_vs_xmit_tunnel_6o4(struct dp_vs_proto *proto,
     dp_vs_conn_cache_rt(conn, rt, true);
 
     mtu = rt->mtu;
-    mbuf->userdata = rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
-    new_iph = (struct ipv4_hdr*)rte_pktmbuf_prepend(mbuf, sizeof(struct ipv4_hdr));
+    new_iph = (struct rte_ipv4_hdr*)rte_pktmbuf_prepend(mbuf, sizeof(struct rte_ipv4_hdr));
     if (!new_iph) {
         RTE_LOG(WARNING, IPVS, "%s: mbuf has not enough headroom"
                 " space for ipvs tunnel\n", __func__);
@@ -2304,11 +2304,11 @@ static int __dp_vs_xmit_tunnel_6o4(struct dp_vs_proto *proto,
         goto errout;
     }
 
-    memset(new_iph, 0, sizeof(struct ipv4_hdr));
+    memset(new_iph, 0, sizeof(struct rte_ipv4_hdr));
     new_iph->version_ihl = 0x45;
     new_iph->type_of_service = 0;
     new_iph->total_length = htons(mbuf->pkt_len);
-    new_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+    new_iph->fragment_offset = htons(RTE_IPV4_HDR_DF_FLAG);
     new_iph->time_to_live = old_ip6h->ip6_hlim;
     new_iph->next_proto_id = IPPROTO_IPV6;
     new_iph->src_addr = rt->src.s_addr;

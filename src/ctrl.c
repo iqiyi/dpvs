@@ -1058,7 +1058,7 @@ static inline int msg_init(void)
     /* lcore mask init */
     slave_lcore_mask = 0;
     slave_lcore_nb = 0;
-    master_lcore = rte_get_master_lcore();
+    master_lcore = rte_get_main_lcore();
 
     netif_get_slave_lcores(&slave_lcore_nb, &slave_lcore_mask);
     if (slave_lcore_nb > MSG_MAX_LCORE_SUPPORTED) {

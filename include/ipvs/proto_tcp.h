@@ -100,8 +100,8 @@ struct tcp_state {
 #define sSA DPVS_TCP_S_SYNACK
 
 struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf);
-void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th);
-void tcp6_send_csum(struct ipv6_hdr *iph, struct tcphdr *th);
+void tcp4_send_csum(struct rte_ipv4_hdr *iph, struct tcphdr *th);
+void tcp6_send_csum(struct rte_ipv6_hdr *iph, struct tcphdr *th);
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir);
 void install_proto_tcp_keywords(void);
 void tcp_keyword_value_init(void);

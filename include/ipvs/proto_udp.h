@@ -30,7 +30,7 @@ extern int g_defence_udp_drop;
 void install_proto_udp_keywords(void);
 void udp_keyword_value_init(void);
 
-void udp4_send_csum(struct ipv4_hdr *iph, struct udp_hdr *uh);
-void udp6_send_csum(struct ipv6_hdr *iph, struct udp_hdr *uh);
+void udp4_send_csum(struct rte_ipv4_hdr *iph, struct rte_udp_hdr *uh);
+void udp6_send_csum(struct rte_ipv6_hdr *iph, struct rte_udp_hdr *uh);
 
 #endif

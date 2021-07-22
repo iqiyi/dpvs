@@ -45,8 +45,8 @@ int ipv4_output(struct rte_mbuf *mbuf);
  * Transport Protocols
  */
 struct inet_protocol {
-    /* mbuf->userdata can be used to get IPv4 header,
-     * save it if protocols need ->userdata for other purpose. */
+    /* mbuf userdata (MBUF_FIELD_PROTO) can be used to get IPv4 header,
+     * save it if protocols need mbuf userdata (MBUF_FIELD_PROTO) for other purpose. */
     int (*handler)(struct rte_mbuf *mbuf);
 };
 
@@ -117,15 +117,15 @@ struct ip4_stats;
 int ipv4_get_stats(struct ip4_stats *stats);
 int ip4_defrag(struct rte_mbuf *mbuf, int user);
 
-uint32_t ip4_select_id(struct ipv4_hdr *iph);
+uint32_t ip4_select_id(struct rte_ipv4_hdr *iph);
 int ipv4_local_out(struct rte_mbuf *mbuf);
 int ipv4_rcv_fin(struct rte_mbuf *mbuf);
 
 /* helper functions */
-static inline struct ipv4_hdr *ip4_hdr(const struct rte_mbuf *mbuf)
+static inline struct rte_ipv4_hdr *ip4_hdr(const struct rte_mbuf *mbuf)
 {
     /* can only invoked at L3 */
-    return rte_pktmbuf_mtod(mbuf, struct ipv4_hdr *);
+    return rte_pktmbuf_mtod(mbuf, struct rte_ipv4_hdr *);
 }
 
 static inline int ip4_hdrlen(const struct rte_mbuf *mbuf)
@@ -133,16 +133,16 @@ static inline int ip4_hdrlen(const struct rte_mbuf *mbuf)
     return (ip4_hdr(mbuf)->version_ihl & 0xf) << 2;
 }
 
-static inline void ip4_send_csum(struct ipv4_hdr *iph)
+static inline void ip4_send_csum(struct rte_ipv4_hdr *iph)
 {
     iph->hdr_checksum = 0;
     iph->hdr_checksum = rte_ipv4_cksum(iph);
 }
 
-static inline bool ip4_is_frag(struct ipv4_hdr *iph)
+static inline bool ip4_is_frag(struct rte_ipv4_hdr *iph)
 {
     return (iph->fragment_offset
-            & htons(IPV4_HDR_MF_FLAG | IPV4_HDR_OFFSET_MASK)) != 0;
+            & htons(RTE_IPV4_HDR_MF_FLAG | RTE_IPV4_HDR_OFFSET_MASK)) != 0;
 }
 
 #endif /* __DPVS_IPV4_H__ */

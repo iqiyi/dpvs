@@ -88,7 +88,7 @@ struct dpvs_mempool *dpvs_mempool_create(char *name,
     uint32_t obj_num;
     struct dpvs_mempool *mp;
 
-    if (rte_lcore_id() != rte_get_master_lcore()) {
+    if (rte_lcore_id() != rte_get_main_lcore()) {
         RTE_LOG(WARNING, DPVS_MPOOL, "%s could be called on master lcore only!", __func__);
         return NULL;
     }
@@ -152,7 +152,7 @@ void dpvs_mempool_destroy(struct dpvs_mempool *mp)
     if (unlikely(!mp))
         return;
 
-    if (rte_lcore_id() != rte_get_master_lcore()) {
+    if (rte_lcore_id() != rte_get_main_lcore()) {
         RTE_LOG(WARNING, DPVS_MPOOL, "%s could be called on master lcore only!", __func__);
         return;
     }

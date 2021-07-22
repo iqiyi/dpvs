@@ -16,44 +16,19 @@ jobs:
   build-basic:
     runs-on: self-hosted
     env:
-      RTE_SDK: /data/dpdk/intel/dpdk-stable-18.11.2
-      RTE_TARGET: x86_64-native-linuxapp-gcc
+      PKG_CONFIG_PATH: /data/dpdk/dpdklib/lib64/pkgconfig
     steps:
     - uses: actions/checkout@v2
     - name: make
-      run: make -j32
+      run: make -j
       
-  build-mlnx:
-    runs-on: self-hosted
-    env:
-      RTE_SDK: /data/dpdk/mlnx/dpdk-stable-18.11.2
-      RTE_TARGET: x86_64-native-linuxapp-gcc
-    steps:
-    - uses: actions/checkout@v2
-    - name: config
-      run: sed -i 's/^CONFIG_MLX5=./CONFIG_MLX5=y/' src/config.mk
-    - name: make
-      run: make -j32
-
   build-debug:
     runs-on: self-hosted
     env:
-      RTE_SDK: /data/dpdk/intel/dpdk-stable-18.11.2
-      RTE_TARGET: x86_64-native-linuxapp-gcc
+      PKG_CONFIG_PATH: /data/dpdk/dpdklib/lib64/pkgconfig
     steps:
     - uses: actions/checkout@v2
     - name: config
       run: sed -i 's/#CFLAGS +=/CFLAGS +=/' src/config.mk && sed -i 's/^#DEBUG := 1/DEBUG := 1/' src/Makefile
     - name: make
-      run: make -j32
-
-  build-olddpdk:
-    runs-on: self-hosted
-    env:
-      RTE_SDK: /data/dpdk/intel/dpdk-stable-17.11.6
-      RTE_TARGET: x86_64-native-linuxapp-gcc
-    steps:
-    - uses: actions/checkout@v2
-    - name: make
-      run: make -j32
-
+      run: make -j

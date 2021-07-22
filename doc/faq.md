@@ -27,12 +27,12 @@ DPVS Frequently Asked Questions (FAQ)
 
 Please try to follow `README.md` and `doc/tutorial.md` first. And if you still have problem, possible reasons are:
 
-1. NIC do not support DPDK or *flow-director* (`fdir`), please check this [answer](#nic).
-2. DPDK not compatible with Kernel Version, it cause build error, please refer to [DPDK.org](https://www.dpdk.org/) or consider upgrade the Kernel.
+1. NIC does not support DPDK or *flow control* (`rte_flow`), please check this [answer](#nic).
+2. DPDK is not compatible with Kernel Version, it cause build error, please refer to [DPDK.org](https://www.dpdk.org/) or consider upgrade the Kernel.
 3. CPU core (`lcore`) and NIC queue's configure is miss-match.
    Please read `conf/*.sample`, note worker-CPU/NIC-queue are 1:1 mapping and you need one more cpu for master.
 4. DPDK NIC's link is not up ? please check NIC cable first.
-5. `curl` VIP in FullNAT mode fails (or sometime fails)? Please check if NIC support [fdir](#nic).
+5. `curl` VIP in FullNAT mode fails (or sometime fails)? Please check if NIC support [rte_flow](#nic).
 6. `curl` still fails. Please check route and arp by `dpip route show`, `dpip neigh show`.
 6. The patchs in `patch/` are not applied.
 
@@ -42,16 +42,28 @@ And you may find other similar issues and solutions from Github's issues list.
 
 ### Does my NIC support DPVS ?
 
-Actaully, it's the question about if the NIC support DPDK as well as "flow-director (fdir)".
+Actaully, it's the question about if the NIC support DPDK as well as "flow control(rte_flow)".
 
-First, please make sure the NIC support `DPDK`, you can check the [link](https://core.dpdk.org/supported/). Second, DPVS's FullNAT/SNAT mode need flow-director feature, *unless you configure only one worker*. For `fdir` support, this [link](http://doc.dpdk.org/guides/nics/overview.html#id1) can be checked.
+First, please make sure the NIC support `DPDK`, you can check the [link](https://core.dpdk.org/supported/). Second, DPVS's FullNAT/SNAT mode need flow control(rte_flow) feature, *unless you configure only one worker*. For `rte_flow` support, this [link](http://doc.dpdk.org/guides/nics/overview.html#id1) can be checked.
 
-Please find the DPDK driver name according to your NIC by the first link. And check `fdir` support for each drivers from the matrix in the second link.
+Please find the DPDK driver name according to your NIC by the first link. And check `rte_flow` support for each drivers from the matrix in the second link.
 
 1. https://core.dpdk.org/supported/
 2. http://doc.dpdk.org/guides/nics/overview.html#id1
 
-> `Fdir` is replaced with `rte_flow` in the lastest DPDK. DPVS is making efforts to adapt to the change.
+The PMD of your NIC should support the following rte_flow items,
+
+* ipv4
+* ipv6
+* tcp
+* udp
+
+and the following rte_flow actions at least.
+
+* queue
+* drop
+
+> If you are using only one worker, you can turn off dpvs flow control by setting `sa_pool/flow_enable` to `off` in dpvs.conf.
 
 <a id="high-avail" />
 
@@ -106,9 +118,9 @@ Yes, it does support UDP. In order to get the real client IP/port in FullNAT mod
 
 ### Does DPVS support IP fragment ?
 
-No, since connection table is per-lcore (per-CPU), and RSS/fdir are used for FNAT. Assuming RSS mode is TCP and fdir uses L4 info `<lip, lport>`. Considered that IP fragment doesn't have L4 info, it needs reassembling first and re-schedule the pkt to **correct** lcore which the 5-tuple flow (connection) belongs to.
+No, since connection table is per-lcore (per-CPU), and RSS/rte_flow are used for FNAT. Assuming RSS mode is TCP and rte_flow uses L4 info `<lip, lport>`. Considered that IP fragment doesn't have L4 info, it needs reassembling first and re-schedule the packet to **correct** lcore which the 5-tuple flow (connection) belongs to.
 
-May be someday in the future, we will support "pkt re-schedule" on lcores or use L3 (IP) info only for `RSS`/`FDIR`, then we may support fragment. But even we support fragment, it may hurt the performance (reassemble, re-schedule effort) or security.
+May be someday in the future, we will support "packet re-schedule" on lcores or use L3 (IP) info only for `RSS` or `flow control`, then we may support fragment. But even we support fragment, it may hurt the performance (reassemble, re-schedule effort) or security.
 
 Actually, IPv4 fragment is not recommended, while IPv6 even not support fragment by fixed header, and do not allow re-fragment on middle-boxes. The applications, especially for the datagram-oriented apps, like UDP-apps, should perform PMTU discover algorithm to avoid fragment. TCP is sending sliced *segments*, notifying MSS to peer side and *PMTU discover* is built-in, TCP-app should not need worry about fragment.
 
@@ -116,7 +128,7 @@ Actually, IPv4 fragment is not recommended, while IPv6 even not support fragment
 
 ### How to launch DPVS on Virtual Machine ?
 
-Please refer to the [tutorial.md](../doc/tutorial.md), there's an exmaple to run DPVS on `Ubuntu`. Basically, you may need to reduce memory usage. And for VM's NIC, `fdir` is not supported, so if you want to config FullNAT/SNAT mode, you have to configure **only one** worker (cpu), and another CPU core for master.
+Please refer to the [tutorial.md](../doc/tutorial.md), there's an exmaple to run DPVS on `Ubuntu`. Basically, you may need to reduce memory usage. And for VM's NIC, `rte_flow` is not supported, so if you want to config FullNAT/SNAT mode, you have to configure **only one** worker (cpu), and another CPU core for master.
 
 <a id="monitor" />
 

@@ -633,7 +633,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return;
-            tcp6_send_csum((struct ipv6_hdr*)ip6h, th);
+            tcp6_send_csum((struct rte_ipv6_hdr*)ip6h, th);
         }
     } else {
         uint32_t tmpaddr;
@@ -649,17 +649,17 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
             mbuf->l3_len = iphlen;
             mbuf->l4_len = (th->doff << 2);
-            th->check = rte_ipv4_phdr_cksum((struct ipv4_hdr*)iph, mbuf->ol_flags);
+            th->check = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)iph, mbuf->ol_flags);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return;
-            tcp4_send_csum((struct ipv4_hdr*)iph, th);
+            tcp4_send_csum((struct rte_ipv4_hdr*)iph, th);
         }
 
         if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM))
             iph->check = 0;
         else
-            ip4_send_csum((struct ipv4_hdr*)iph);
+            ip4_send_csum((struct rte_ipv4_hdr*)iph);
     }
 }
 
@@ -682,8 +682,8 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
     struct tcphdr *th, _tcph;
     struct dp_vs_synproxy_opt tcp_opt;
     struct netif_port *dev;
-    struct ether_hdr *eth;
-    struct ether_addr ethaddr;
+    struct rte_ether_hdr *eth;
+    struct rte_ether_addr ethaddr;
 
     th = mbuf_header_pointer(mbuf, iph->len, sizeof(_tcph), &_tcph);
     if (unlikely(NULL == th))
@@ -716,7 +716,7 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
 
     /* mbuf will be reused and ether header will be set.
      * FIXME: to support non-ether packets. */
-    if (mbuf->l2_len != sizeof(struct ether_hdr))
+    if (mbuf->l2_len != sizeof(struct rte_ether_hdr))
         goto syn_rcv_out;
 
     /* update statistics */
@@ -743,14 +743,14 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
     /* set L2 header and send the packet out
      * It is noted that "ipv4_xmit" should not used here,
      * because mbuf is reused. */
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
     if (unlikely(!eth)) {
         RTE_LOG(ERR, IPVS, "%s: no memory\n", __func__);
         goto syn_rcv_out;
     }
-    memcpy(&ethaddr, &eth->s_addr, sizeof(struct ether_addr));
-    memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct ether_addr));
-    memcpy(&eth->d_addr, &ethaddr, sizeof(struct ether_addr));
+    memcpy(&ethaddr, &eth->s_addr, sizeof(struct rte_ether_addr));
+    memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct rte_ether_addr));
+    memcpy(&eth->d_addr, &ethaddr, sizeof(struct rte_ether_addr));
 
     if (unlikely(EDPVS_OK != (ret = netif_xmit(mbuf, dev)))) {
         RTE_LOG(ERR, IPVS, "%s: netif_xmit failed -- %s\n",
@@ -842,7 +842,7 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         //RTE_LOG(WARNING, IPVS, "%s: %s\n", __func__, dpvs_strerror(EDPVS_NOMEM));
         return EDPVS_NOMEM;
     }
-    syn_mbuf->userdata = NULL; /* make sure "no route info" */
+    mbuf_userdata_reset(syn_mbuf);  /* make sure "no route info" */
 
     /* Reserve space for tcp header */
     tcp_hdr_size = (sizeof(struct tcphdr) + TCPOLEN_MAXSEG
@@ -899,7 +899,7 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         struct iphdr *syn_iph;
 
         /* Reserve space for ipv4 header */
-        syn_iph = (struct iphdr *)rte_pktmbuf_prepend(syn_mbuf, sizeof(struct ipv4_hdr));
+        syn_iph = (struct iphdr *)rte_pktmbuf_prepend(syn_mbuf, sizeof(struct rte_ipv4_hdr));
         if (!syn_iph) {
             rte_pktmbuf_free(syn_mbuf);
             //RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
@@ -909,7 +909,7 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
         ack_iph = (struct iphdr *)ip4_hdr(mbuf);
         *((uint16_t *) syn_iph) = htons((4 << 12) | (5 << 8) | (ack_iph->tos & 0x1E));
         syn_iph->tot_len = htons(syn_mbuf->pkt_len);
-        syn_iph->frag_off = htons(IPV4_HDR_DF_FLAG);
+        syn_iph->frag_off = htons(RTE_IPV4_HDR_DF_FLAG);
         syn_iph->ttl = 64;
         syn_iph->protocol = IPPROTO_TCP;
         syn_iph->saddr = ack_iph->saddr;
@@ -930,7 +930,7 @@ static int syn_proxy_send_rs_syn(int af, const struct tcphdr *th,
             return EDPVS_NOMEM;
         }
 
-        syn_mbuf_cloned->userdata = NULL;
+        mbuf_userdata_reset(syn_mbuf_cloned);
         cp->syn_mbuf = syn_mbuf_cloned;
         sp_dbg_stats32_inc(sp_syn_saved);
         rte_atomic32_set(&cp->syn_retry_max, dp_vs_synproxy_ctrl_syn_retry);
@@ -1029,7 +1029,7 @@ static int syn_proxy_build_tcp_rst(int af, struct rte_mbuf *mbuf,
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return EDPVS_INVPKT;
-            tcp6_send_csum((struct ipv6_hdr*)ip6h, th);
+            tcp6_send_csum((struct rte_ipv6_hdr*)ip6h, th);
         }
     } else {
         uint32_t tmpaddr;
@@ -1046,17 +1046,17 @@ static int syn_proxy_build_tcp_rst(int af, struct rte_mbuf *mbuf,
         if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
             mbuf->l3_len = l3_len;
             mbuf->l4_len = l4_len;
-            th->check = rte_ipv4_phdr_cksum((struct ipv4_hdr*)ip4h, mbuf->ol_flags);
+            th->check = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)ip4h, mbuf->ol_flags);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
                 return EDPVS_INVPKT;
-            tcp4_send_csum((struct ipv4_hdr*)ip4h, th);
+            tcp4_send_csum((struct rte_ipv4_hdr*)ip4h, th);
         }
 
         if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM))
             ip4h->check = 0;
         else
-            ip4_send_csum((struct ipv4_hdr*)ip4h);
+            ip4_send_csum((struct rte_ipv4_hdr*)ip4h);
     }
 
     return EDPVS_OK;
@@ -1068,8 +1068,8 @@ static int syn_proxy_send_tcp_rst(int af, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
     struct netif_port *dev;
-    struct ether_hdr *eth;
-    struct ether_addr ethaddr;
+    struct rte_ether_hdr *eth;
+    struct rte_ether_addr ethaddr;
     uint32_t l3_len, l4_len;
     void *l3_hdr;
 
@@ -1096,19 +1096,19 @@ static int syn_proxy_send_tcp_rst(int af, struct rte_mbuf *mbuf)
                                             th, l3_len, l4_len))
         return EDPVS_INVPKT;
 
-    if (mbuf->l2_len < sizeof(struct ether_hdr))
+    if (mbuf->l2_len < sizeof(struct rte_ether_hdr))
         return EDPVS_INVPKT;
     /* set L2 header and send the packet out
      * It is noted that "ipv4_xmit" should not used here,
      * because mbuf is reused. */
-    eth = (struct ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
     if (unlikely(!eth)) {
         RTE_LOG(ERR, IPVS, "%s: no memory\n", __func__);
         return EDPVS_NOMEM;
     }
-    memcpy(&ethaddr, &eth->s_addr, sizeof(struct ether_addr));
-    memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct ether_addr));
-    memcpy(&eth->d_addr, &ethaddr, sizeof(struct ether_addr));
+    memcpy(&ethaddr, &eth->s_addr, sizeof(struct rte_ether_addr));
+    memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct rte_ether_addr));
+    memcpy(&eth->d_addr, &ethaddr, sizeof(struct rte_ether_addr));
 
     dev = netif_port_get(mbuf->port);
     if (unlikely(!dev)) {
@@ -1316,7 +1316,7 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
         RTE_LOG(WARNING, IPVS, "%s: %s\n", __func__, dpvs_strerror(EDPVS_NOMEM));
         return EDPVS_NOMEM;
     }
-    ack_mbuf->userdata = NULL;
+    mbuf_userdata_reset(ack_mbuf);
 
     ack_th = (struct tcphdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct tcphdr));
     if (!ack_th) {
@@ -1351,22 +1351,22 @@ static int syn_proxy_send_window_update(int af, struct rte_mbuf *mbuf, struct dp
         ack_ip6h->ip6_nxt = NEXTHDR_TCP;
         ack_mbuf->l3_len = sizeof(*ack_ip6h);
     } else {
-        struct ipv4_hdr *ack_iph;
-        struct ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
+        struct rte_ipv4_hdr *ack_iph;
+        struct rte_ipv4_hdr *reuse_iph = ip4_hdr(mbuf);
         int pkt_ack_len = sizeof(struct tcphdr) + sizeof(struct iphdr);
         /* Reserve space for ipv4 header */
-        ack_iph = (struct ipv4_hdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct ipv4_hdr));
+        ack_iph = (struct rte_ipv4_hdr *)rte_pktmbuf_prepend(ack_mbuf, sizeof(struct rte_ipv4_hdr));
         if (!ack_iph) {
             rte_pktmbuf_free(ack_mbuf);
             RTE_LOG(WARNING, IPVS, "%s:%s\n", __func__, dpvs_strerror(EDPVS_NOROOM));
             return EDPVS_NOROOM;
         }
 
-        memcpy(ack_iph, reuse_iph, sizeof(struct ipv4_hdr));
+        memcpy(ack_iph, reuse_iph, sizeof(struct rte_ipv4_hdr));
         /* version and ip header length */
         ack_iph->version_ihl = 0x45;
         ack_iph->type_of_service = 0;
-        ack_iph->fragment_offset = htons(IPV4_HDR_DF_FLAG);
+        ack_iph->fragment_offset = htons(RTE_IPV4_HDR_DF_FLAG);
         ack_iph->total_length = htons(pkt_ack_len);
         ack_mbuf->l3_len = sizeof(*ack_iph);
     }
