@@ -21,13 +21,14 @@
 #include "dpdk.h"
 #include "ipv4.h"
 #include "ipv6.h"
+#include "nat64.h"
 #include "route.h"
 #include "route6.h"
 #include "icmp.h"
 #include "icmp6.h"
 #include "neigh.h"
 #include "ipvs/xmit.h"
-#include "ipvs/nat64.h"
+#include "ipvs/xoa.h"
 #include "parser/parser.h"
 
 static bool fast_xmit_close = false;
@@ -66,9 +67,9 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
     ip4h->src_addr = conn->laddr.in.s_addr;
     ip4h->dst_addr = conn->daddr.in.s_addr;
 
-    if(proto->fnat_in_handler) {
+    if (proto->fnat_in_handler) {
         err = proto->fnat_in_handler(proto, conn, mbuf);
-        if(err != EDPVS_OK)
+        if (err != EDPVS_OK)
             return err;
     }
 
@@ -151,7 +152,8 @@ static int dp_vs_fast_xmit_fnat(int af,
                                 struct dp_vs_conn *conn,
                                 struct rte_mbuf *mbuf)
 {
-    return af == AF_INET ? __dp_vs_fast_xmit_fnat4(proto, conn, mbuf)
+    return (af == AF_INET)
+        ? __dp_vs_fast_xmit_fnat4(proto, conn, mbuf)
         : __dp_vs_fast_xmit_fnat6(proto, conn, mbuf);
 }
 
@@ -188,9 +190,9 @@ static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
     ip4h->src_addr = conn->vaddr.in.s_addr;
     ip4h->dst_addr = conn->caddr.in.s_addr;
 
-    if(proto->fnat_out_handler) {
+    if (proto->fnat_out_handler) {
         err = proto->fnat_out_handler(proto, conn, mbuf);
-        if(err != EDPVS_OK)
+        if (err != EDPVS_OK)
             return err;
     }
 
@@ -247,9 +249,9 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
     ip6h->ip6_src = conn->vaddr.in6;
     ip6h->ip6_dst = conn->caddr.in6;
 
-    if(proto->fnat_out_handler) {
+    if (proto->fnat_out_handler) {
         err = proto->fnat_out_handler(proto, conn, mbuf);
-        if(err != EDPVS_OK)
+        if (err != EDPVS_OK)
             return err;
     }
 
@@ -269,11 +271,12 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
 }
 
 static int dp_vs_fast_outxmit_fnat(int af,
-                          struct dp_vs_proto *proto,
-                          struct dp_vs_conn *conn,
-                          struct rte_mbuf *mbuf)
+                                   struct dp_vs_proto *proto,
+                                   struct dp_vs_conn *conn,
+                                   struct rte_mbuf *mbuf)
 {
-    return af == AF_INET ? __dp_vs_fast_outxmit_fnat4(proto, conn, mbuf)
+    return (af == AF_INET)
+        ? __dp_vs_fast_outxmit_fnat4(proto, conn, mbuf)
         : __dp_vs_fast_outxmit_fnat6(proto, conn, mbuf);
 }
 
@@ -282,8 +285,8 @@ static int dp_vs_fast_outxmit_fnat(int af,
  * save source mac(client) for output in conn as dest mac
  */
 static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
-                          struct dp_vs_proto *proto,
-                          struct dp_vs_conn *conn)
+                                 struct dp_vs_proto *proto,
+                                 struct dp_vs_conn *conn)
 {
     struct rte_ether_hdr *eth = NULL;
     struct netif_port *port = NULL;
@@ -311,8 +314,8 @@ static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
  * save source mac(rs) for input in conn as dest mac
  */
 static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
-                             struct dp_vs_proto *proto,
-                             struct dp_vs_conn *conn)
+                                    struct dp_vs_proto *proto,
+                                    struct dp_vs_conn *conn)
 {
     struct rte_ether_hdr *eth = NULL;
     struct netif_port *port = NULL;
@@ -364,7 +367,8 @@ static void dp_vs_conn_cache_rt(struct dp_vs_conn *conn, struct route_entry *rt,
     }
 }
 
-static void dp_vs_conn_cache_rt6(struct dp_vs_conn *conn, struct route6 *rt, bool in)
+static void dp_vs_conn_cache_rt6(struct dp_vs_conn *conn,
+                                 struct route6 *rt, bool in)
 {
     if ((in && conn->in_dev && !ipv6_addr_any(&conn->in_nexthop.in6)) ||
         (!in && conn->out_dev && !ipv6_addr_any(&conn->out_nexthop.in6)))
@@ -388,37 +392,278 @@ static void dp_vs_conn_cache_rt6(struct dp_vs_conn *conn, struct route6 *rt, boo
     }
 }
 
-static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
-                              struct dp_vs_conn *conn,
-                              struct rte_mbuf *mbuf)
+static int dp_vs_try_fast_xmit_fnat(int af,
+                                    struct dp_vs_proto *proto,
+                                    struct dp_vs_conn *conn,
+                                    struct rte_mbuf *mbuf, bool in)
 {
-    struct flow4 fl4;
-    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct route_entry *rt;
-    int err, mtu;
-
-    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
-        dp_vs_save_xmit_info(mbuf, proto, conn);
-        if (!dp_vs_fast_xmit_fnat(AF_INET, proto, conn, mbuf)) {
-            return EDPVS_OK;
+    if (!fast_xmit_close && !dp_vs_conn_is_no_fastxmit(conn)) {
+        if (in) {
+            dp_vs_save_xmit_info(mbuf, proto, conn);
+            if (!dp_vs_fast_xmit_fnat(af, proto, conn, mbuf)) {
+                return EDPVS_OK;
+            }
+        } else {
+            dp_vs_save_outxmit_info(mbuf, proto, conn);
+            if (!dp_vs_fast_outxmit_fnat(af, proto, conn, mbuf)) {
+                return EDPVS_OK;
+            }
         }
     }
+
+    return EDPVS_INPROGRESS;
+}
+
+static struct route_entry *dp_vs_xmit_fnat_route(struct dp_vs_conn *conn,
+                                                 struct rte_mbuf *mbuf, bool in)
+{
+    struct flow4 fl4;
+    struct route_entry *rt;
 
     /*
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
      */
-    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *,
+                               MBUF_FIELD_ROUTE) != NULL))
+    {
         RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n", __func__,
                 MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
         route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
     }
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.fl4_daddr = conn->daddr.in;
-    fl4.fl4_saddr = conn->laddr.in;
-    fl4.fl4_tos = iph->type_of_service;
+
+    if (in) {
+        fl4.fl4_saddr = conn->laddr.in;
+        fl4.fl4_daddr = conn->daddr.in;
+    } else {
+        fl4.fl4_saddr = conn->vaddr.in;
+        fl4.fl4_daddr = conn->caddr.in;
+    }
+
     rt = route4_output(&fl4);
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
+
+    return rt;
+}
+
+static struct route6 *dp_vs_xmit_fnat_route6(struct dp_vs_conn *conn,
+                                             struct rte_mbuf *mbuf, bool in)
+{
+    struct flow6 fl6;
+    struct route6 *rt6;
+
+    /*
+     * drop old route. just for safe, because
+     * FNAT is PRE_ROUTING, should not have route.
+     */
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *,
+                               MBUF_FIELD_ROUTE) != NULL))
+    {
+        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n", __func__,
+                MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+    }
+
+    memset(&fl6, 0, sizeof(struct flow6));
+
+    if (in) {
+        fl6.fl6_saddr = conn->laddr.in6;
+        fl6.fl6_daddr = conn->daddr.in6;
+    } else {
+        fl6.fl6_saddr = conn->vaddr.in6;
+        fl6.fl6_daddr = conn->caddr.in6;
+    }
+
+    rt6 = route6_output(mbuf, &fl6);
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
+
+    return rt6;
+}
+
+static int dp_vs_xmit_fnat_frag(struct rte_mbuf *mbuf,
+                                struct rte_ipv4_hdr *ip4h,
+                                uint32_t pkt_len, int mtu)
+{
+    if (pkt_len > mtu
+        && (ip4h->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG)))
+    {
+        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
+        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
+        return EDPVS_FRAG;
+    }
+
+    return EDPVS_OK;
+}
+
+static int dp_vs_xmit_fnat_ttl(struct rte_mbuf *mbuf,
+                               struct rte_ipv4_hdr *ip4h)
+{
+    if (xmit_ttl) {
+        if (unlikely(ip4h->time_to_live <= 1)) {
+            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+            return EDPVS_DROP;
+        }
+
+        ip4h->time_to_live--;
+    }
+
+    return EDPVS_OK;
+}
+
+static int dp_vs_xmit_fnat6_frag(struct rte_mbuf *mbuf,
+                                 uint32_t pkt_len, int mtu)
+{
+    if (pkt_len > mtu) {
+        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, mtu);
+        return EDPVS_FRAG;
+    }
+
+    return EDPVS_OK;
+}
+
+static int dp_vs_xmit_fnat6_ttl(struct rte_mbuf *mbuf,
+                                struct ip6_hdr *ip6h)
+{
+    if (xmit_ttl) {
+        if (unlikely(ip6h->ip6_hops <= 1)) {
+            icmp6_send(mbuf, ICMP6_TIME_EXCEEDED, ICMP6_TIME_EXCEED_TRANSIT, 0);
+            return EDPVS_DROP;
+        }
+
+        ip6h->ip6_hops--;
+    }
+
+    return EDPVS_OK;
+}
+
+/*
+ * pre-handler before translation
+ */
+static int dp_vs_xmit_fnat_pre_handler(int af, struct dp_vs_proto *proto,
+                                       struct dp_vs_conn *conn,
+                                       struct rte_mbuf *mbuf,
+                                       void **iph, bool in)
+{
+    int err = EDPVS_OK;
+
+    if (in) {
+        if (proto->fnat_in_pre_handler) {
+            err = proto->fnat_in_pre_handler(proto, conn, mbuf);
+        }
+    } else {
+        if (proto->fnat_out_pre_handler) {
+            err = proto->fnat_out_pre_handler(proto, conn, mbuf);
+        }
+    }
+
+    if (err == EDPVS_OK) {
+        /*
+         * re-fetch IP header
+         * the offset may changed during pre-handler
+         */
+        if (af == AF_INET) {
+            *iph = ip4_hdr(mbuf);
+        } else {
+            *iph = ip6_hdr(mbuf);
+        }
+    }
+
+    return err;
+}
+
+/*
+ * L3 FNAT translation
+ */
+static void dp_vs_xmit_fnat_l3_xlate(int af, void **iph,
+                                     struct dp_vs_conn *conn, bool in)
+{
+    if (af == AF_INET) {
+        struct rte_ipv4_hdr *ip4h = (struct rte_ipv4_hdr *)*iph;
+
+        if (in) {
+            ip4h->src_addr = conn->laddr.in.s_addr;
+            ip4h->dst_addr = conn->daddr.in.s_addr;
+        } else {
+            ip4h->src_addr = conn->vaddr.in.s_addr;
+            ip4h->dst_addr = conn->caddr.in.s_addr;
+        }
+    } else {
+        struct ip6_hdr *ip6h = (struct ip6_hdr *)*iph;
+
+        if (in) {
+            ip6h->ip6_src = conn->laddr.in6;
+            ip6h->ip6_dst = conn->daddr.in6;
+        } else {
+            ip6h->ip6_src = conn->vaddr.in6;
+            ip6h->ip6_dst = conn->caddr.in6;
+        }
+    }
+}
+
+static int dp_vs_xmit_fnat46_l3_xlate(struct dp_vs_conn *conn,
+                                      struct rte_mbuf *mbuf, bool in)
+{
+    return (in)
+        ? mbuf_4to6(mbuf, &conn->laddr.in6, &conn->daddr.in6)
+        : mbuf_4to6(mbuf, &conn->vaddr.in6, &conn->caddr.in6);
+}
+
+static int dp_vs_xmit_fnat64_l3_xlate(struct dp_vs_conn *conn,
+                                      struct rte_mbuf *mbuf, bool in)
+{
+    return (in)
+        ? mbuf_6to4(mbuf, &conn->laddr.in, &conn->daddr.in)
+        : mbuf_6to4(mbuf, &conn->vaddr.in, &conn->caddr.in);
+}
+
+/*
+ * L4 FNAT translation
+ */
+static int dp_vs_xmit_fnat_l4_xlate(struct dp_vs_proto *proto,
+                                    struct dp_vs_conn *conn,
+                                    struct rte_mbuf *mbuf, bool in)
+{
+    int err = EDPVS_OK;
+
+    if (in) {
+        if (proto->fnat_in_handler) {
+            err = proto->fnat_in_handler(proto, conn, mbuf);
+        }
+    } else {
+        if (proto->fnat_out_handler) {
+            err = proto->fnat_out_handler(proto, conn, mbuf);
+        }
+    }
+
+    return err;
+}
+
+static inline void dp_vs_xmit_fnat_csum(struct rte_mbuf *mbuf,
+                                        struct rte_ipv4_hdr *iph)
+{
+    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+        iph->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(iph);
+    }
+}
+
+static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
+                              struct dp_vs_conn *conn,
+                              struct rte_mbuf *mbuf, bool in)
+{
+    struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
+    struct route_entry *rt;
+    int err;
+
+    if (dp_vs_try_fast_xmit_fnat(AF_INET, proto, conn, mbuf, in) == EDPVS_OK) {
+        return EDPVS_OK;
+    }
+
+    rt = dp_vs_xmit_fnat_route(conn, mbuf, in);
     if (!rt) {
         err = EDPVS_NOROUTE;
         goto errout;
@@ -429,101 +674,59 @@ static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
      * or route can't be deleted when there is conn ref
      * this is for neighbour confirm
      */
-    dp_vs_conn_cache_rt(conn, rt, true);
+    dp_vs_conn_cache_rt(conn, rt, in);
 
-    mtu = rt->mtu;
-    if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
-        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
-        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
-        err = EDPVS_FRAG;
+    if ((err = dp_vs_xmit_fnat_frag(mbuf, ip4h, mbuf->pkt_len, rt->mtu))
+        != EDPVS_OK)
+    {
         goto errout;
     }
 
-    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
-
-    /* after route lookup and before translation */
-    if (xmit_ttl) {
-        if (unlikely(iph->time_to_live <= 1)) {
-            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
-            err = EDPVS_DROP;
-            goto errout;
-        }
-
-        iph->time_to_live--;
+    if ((err = dp_vs_xmit_fnat_ttl(mbuf, ip4h))
+        != EDPVS_OK)
+    {
+        goto errout;
     }
 
-    /* pre-handler before translation */
-    if (proto->fnat_in_pre_handler) {
-        err = proto->fnat_in_pre_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-
-        /*
-         * re-fetch IP header
-         * the offset may changed during pre-handler
-         */
-        iph = ip4_hdr(mbuf);
+    if ((err = dp_vs_xmit_fnat_pre_handler(AF_INET, proto, conn, mbuf,
+                                           (void **)&ip4h, in))
+        != EDPVS_OK)
+    {
+        goto errout;
     }
 
-    /* L3 translation before l4 re-csum */
-    iph->hdr_checksum = 0;
-    iph->src_addr = conn->laddr.in.s_addr;
-    iph->dst_addr = conn->daddr.in.s_addr;
+    dp_vs_xmit_fnat_l3_xlate(AF_INET, (void **)&ip4h, conn, in);
 
-    /* L4 FNAT translation */
-    if (proto->fnat_in_handler) {
-        err = proto->fnat_in_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
+    if ((err = dp_vs_xmit_fnat_l4_xlate(proto, conn, mbuf, in))
+        != EDPVS_OK)
+    {
+        goto errout;
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
-        iph->hdr_checksum = 0;
-    } else {
-        ip4_send_csum(iph);
-    }
+    dp_vs_xmit_fnat_csum(mbuf, ip4h);
 
     return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }
 
 static int __dp_vs_xmit_fnat6(struct dp_vs_proto *proto,
                               struct dp_vs_conn *conn,
-                              struct rte_mbuf *mbuf)
+                              struct rte_mbuf *mbuf, bool in)
 {
-    struct flow6 fl6;
     struct ip6_hdr *ip6h = ip6_hdr(mbuf);
     struct route6 *rt6;
-    int err, mtu;
+    int err;
 
-    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
-        dp_vs_save_xmit_info(mbuf, proto, conn);
-        if (!dp_vs_fast_xmit_fnat(AF_INET6, proto, conn, mbuf)) {
-            return EDPVS_OK;
-        }
+    if (dp_vs_try_fast_xmit_fnat(AF_INET6, proto, conn, mbuf, in) == EDPVS_OK) {
+        return EDPVS_OK;
     }
 
-    /*
-     * drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route.
-     */
-    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n",
-                __func__, MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
-        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
-    }
-
-    memset(&fl6, 0, sizeof(struct flow6));
-    fl6.fl6_daddr = conn->daddr.in6;
-    fl6.fl6_saddr = conn->laddr.in6;
-    rt6 = route6_output(mbuf, &fl6);
+    rt6 = dp_vs_xmit_fnat_route6(conn, mbuf, in);
     if (!rt6) {
         err = EDPVS_NOROUTE;
         goto errout;
@@ -534,90 +737,125 @@ static int __dp_vs_xmit_fnat6(struct dp_vs_proto *proto,
      * or route can't be deleted when there is conn ref
      * this is for neighbour confirm.
      */
-    dp_vs_conn_cache_rt6(conn, rt6, true);
+    dp_vs_conn_cache_rt6(conn, rt6, in);
 
-    // check mtu
-    mtu = rt6->rt6_mtu;
-    if (mbuf->pkt_len > mtu) {
-        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
-        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, mtu);
-
-        err = EDPVS_FRAG;
+    if ((err = dp_vs_xmit_fnat6_frag(mbuf, mbuf->pkt_len, rt6->rt6_mtu))
+        != EDPVS_OK)
+    {
         goto errout;
     }
 
-    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
-
-    /* after route lookup and before translation */
-    if (xmit_ttl) {
-        if (unlikely(ip6h->ip6_hops <= 1)) {
-            icmp6_send(mbuf, ICMP6_TIME_EXCEEDED, ICMP6_TIME_EXCEED_TRANSIT, 0);
-            err = EDPVS_DROP;
-            goto errout;
-        }
-
-        ip6h->ip6_hops--;
+    if ((err = dp_vs_xmit_fnat6_ttl(mbuf, ip6h))
+        != EDPVS_OK)
+    {
+        goto errout;
     }
 
-    /* pre-handler before translation */
-    if (proto->fnat_in_pre_handler) {
-        err = proto->fnat_in_pre_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-
-        /*
-         * re-fetch IP header
-         * the offset may changed during pre-handler
-         */
-        ip6h = ip6_hdr(mbuf);
+    if ((err = dp_vs_xmit_fnat_pre_handler(AF_INET6, proto, conn, mbuf,
+                                           (void **)&ip6h, in))
+        != EDPVS_OK)
+    {
+        goto errout;
     }
 
-    /* L3 translation before l4 re-csum */
-    ip6h->ip6_src = conn->laddr.in6;
-    ip6h->ip6_dst = conn->daddr.in6;
+    dp_vs_xmit_fnat_l3_xlate(AF_INET6, (void **)&ip6h, conn, in);
 
-    /* L4 FNAT translation */
-    if (proto->fnat_in_handler) {
-        err = proto->fnat_in_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
+    if ((err = dp_vs_xmit_fnat_l4_xlate(proto, conn, mbuf, in))
+        != EDPVS_OK)
+    {
+        goto errout;
     }
 
     return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
                      NULL, rt6->rt6_dev, ip6_output);
 
 errout:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     rte_pktmbuf_free(mbuf);
     return err;
 }
 
-static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
+/*
+ * Inbound  direction: fnat46 (wan4 -> lan6)
+ * Outbound direction: fnat64 (lan4 -> wan6)
+ */
+static int __dp_vs_xmit_fnat46(struct dp_vs_proto *proto,
                                struct dp_vs_conn *conn,
-                               struct rte_mbuf *mbuf)
+                               struct rte_mbuf *mbuf, bool in)
 {
-    struct flow4 fl4;
-    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-    struct rte_ipv4_hdr *ip4h;
-    uint32_t pkt_len;
-    struct route_entry *rt;
-    int err, mtu;
+    struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
+    struct route6 *rt6;
+    int err;
 
-    /*
-     * drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route.
-     */
-    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n",
-                __func__, MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
-        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+    rt6 = dp_vs_xmit_fnat_route6(conn, mbuf, in);
+    if (!rt6) {
+        err = EDPVS_NOROUTE;
+        goto errout;
     }
 
-    memset(&fl4, 0, sizeof(struct flow4));
-    fl4.fl4_daddr = conn->daddr.in;
-    fl4.fl4_saddr = conn->laddr.in;
-    rt = route4_output(&fl4);
+    /*
+     * didn't cache the pointer to rt
+     * or route can't be deleted when there is conn ref
+     * this is for neighbour confirm
+     */
+    dp_vs_conn_cache_rt6(conn, rt6, in);
+
+    if ((err = dp_vs_xmit_fnat_frag(mbuf, ip4h,
+                                    mbuf_nat4to6_len(mbuf), rt6->rt6_mtu))
+        != EDPVS_OK)
+    {
+        goto errout;
+    }
+
+    /* after route lookup and before translation */
+    if ((err = dp_vs_xmit_fnat_ttl(mbuf, ip4h))
+        != EDPVS_OK)
+    {
+        goto errout;
+    }
+
+    if ((err = dp_vs_xmit_fnat_pre_handler(AF_INET, proto, conn, mbuf,
+                                           (void **)&ip4h, in))
+        != EDPVS_OK)
+    {
+        goto errout;
+    }
+
+    if ((err = dp_vs_xmit_fnat46_l3_xlate(conn, mbuf, in))
+        != EDPVS_OK)
+    {
+        goto errout;
+    }
+
+    if ((err = dp_vs_xmit_fnat_l4_xlate(proto, conn, mbuf, in))
+        != EDPVS_OK)
+    {
+        goto errout;
+    }
+
+    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
+                     NULL, rt6->rt6_dev, ip6_output);
+
+errout:
+    route6_put(rt6);
+    rte_pktmbuf_free(mbuf);
+    return err;
+}
+
+/*
+ * Inbound  direction: fnat64 (wan6 -> lan4)
+ * Outbound direction: fnat46 (lan6 -> wan4)
+ */
+static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
+                               struct dp_vs_conn *conn,
+                               struct rte_mbuf *mbuf, bool in)
+{
+    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+    struct rte_ipv4_hdr *ip4h;
+    struct route_entry *rt;
+    int err;
+
+    rt = dp_vs_xmit_fnat_route(conn, mbuf, in);
     if (!rt) {
         err = EDPVS_NOROUTE;
         goto errout;
@@ -628,66 +866,47 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
      * or route can't be deleted when there is conn ref
      * this is for neighbour confirm
      */
-    dp_vs_conn_cache_rt(conn, rt, true);
+    dp_vs_conn_cache_rt(conn, rt, in);
 
-    /*
-     * mbuf is from IPv6, icmp should send by icmp6
-     * ext_hdr and
-     */
-    mtu = rt->mtu;
-    pkt_len = mbuf_nat6to4_len(mbuf);
-    if (pkt_len > mtu) {
-        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
-        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, mtu);
-
-        err = EDPVS_FRAG;
+    if ((err = dp_vs_xmit_fnat6_frag(mbuf, mbuf_nat6to4_len(mbuf), rt->mtu))
+        != EDPVS_OK)
+    {
         goto errout;
     }
 
-    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
-    /* after route lookup and before translation */
-    if (xmit_ttl) {
-        if (unlikely(ip6h->ip6_hops <= 1)) {
-            icmp6_send(mbuf, ICMP6_TIME_EXCEEDED, ICMP6_TIME_EXCEED_TRANSIT, 0);
-            err = EDPVS_DROP;
-            goto errout;
-        }
-        ip6h->ip6_hops--;
-    }
-
-    /* pre-handler before translation */
-    if (proto->fnat_in_pre_handler) {
-        err = proto->fnat_in_pre_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-    }
-
-    /* L3 translation before l4 re-csum */
-    err = mbuf_6to4(mbuf, &conn->laddr.in, &conn->daddr.in);
-    if (err)
+    if ((err = dp_vs_xmit_fnat6_ttl(mbuf, ip6h))
+        != EDPVS_OK)
+    {
         goto errout;
+    }
+
+    if ((err = dp_vs_xmit_fnat_pre_handler(AF_INET6, proto, conn, mbuf,
+                                           (void **)&ip6h, in))
+        != EDPVS_OK)
+    {
+        goto errout;
+    }
+
+    if ((err = dp_vs_xmit_fnat64_l3_xlate(conn, mbuf, in))
+        != EDPVS_OK)
+    {
+        goto errout;
+    }
+
+    if ((err = dp_vs_xmit_fnat_l4_xlate(proto, conn, mbuf, in))
+        != EDPVS_OK)
+    {
+        goto errout;
+    }
+
     ip4h = ip4_hdr(mbuf);
-    ip4h->hdr_checksum = 0;
-
-    /* L4 FNAT translation */
-    if (proto->fnat_in_handler) {
-        err = proto->fnat_in_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-    }
-
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
-        ip4h->hdr_checksum = 0;
-    } else {
-        ip4_send_csum(ip4h);
-    }
+    dp_vs_xmit_fnat_csum(mbuf, ip4h);
 
     return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -699,305 +918,24 @@ int dp_vs_xmit_fnat(struct dp_vs_proto *proto,
     int af = conn->af;
     assert(af == AF_INET || af == AF_INET6);
 
-    if (tuplehash_in(conn).af == AF_INET &&
-        tuplehash_out(conn).af == AF_INET)
-        return __dp_vs_xmit_fnat4(proto, conn, mbuf);
-    if (tuplehash_in(conn).af == AF_INET6 &&
-        tuplehash_out(conn).af == AF_INET6)
-        return __dp_vs_xmit_fnat6(proto, conn, mbuf);
-    if (tuplehash_in(conn).af == AF_INET6 &&
-        tuplehash_out(conn).af == AF_INET)
-        return __dp_vs_xmit_fnat64(proto, conn, mbuf);
+    if (dp_vs_conn_is_nat44(conn)) {
+        return __dp_vs_xmit_fnat4(proto, conn, mbuf, true);
+    }
+
+    if (dp_vs_conn_is_nat66(conn)) {
+        return __dp_vs_xmit_fnat6(proto, conn, mbuf, true);
+    }
+
+    if (dp_vs_conn_is_nat46(conn)) {
+        return __dp_vs_xmit_fnat46(proto, conn, mbuf, true);
+    }
+
+    if (dp_vs_conn_is_nat64(conn)) {
+        return __dp_vs_xmit_fnat64(proto, conn, mbuf, true);
+    }
 
     rte_pktmbuf_free(mbuf);
     return EDPVS_NOTSUPP;
-}
-
-static int __dp_vs_out_xmit_fnat4(struct dp_vs_proto *proto,
-                                  struct dp_vs_conn *conn,
-                                  struct rte_mbuf *mbuf)
-{
-    struct flow4 fl4;
-    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct route_entry *rt;
-    int err, mtu;
-
-    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
-        dp_vs_save_outxmit_info(mbuf, proto, conn);
-        if (!dp_vs_fast_outxmit_fnat(AF_INET, proto, conn, mbuf)) {
-            return EDPVS_OK;
-        }
-    }
-
-    /*
-     * drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route.
-     */
-    if (MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)
-        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
-
-    memset(&fl4, 0, sizeof(struct flow4));
-    fl4.fl4_daddr = conn->caddr.in;
-    fl4.fl4_saddr = conn->vaddr.in;
-    fl4.fl4_tos = iph->type_of_service;
-    rt = route4_output(&fl4);
-    if (!rt) {
-        err = EDPVS_NOROUTE;
-        goto errout;
-    }
-
-    /*
-     * didn't cache the pointer to rt
-     * or route can't be deleted when there is conn ref
-     * this is for neighbour confirm
-     */
-    dp_vs_conn_cache_rt(conn, rt, false);
-
-    mtu = rt->mtu;
-    if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
-        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
-        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
-        err = EDPVS_FRAG;
-        goto errout;
-    }
-
-    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
-
-    /* after route lookup and before translation */
-    if (xmit_ttl) {
-        if (unlikely(iph->time_to_live <= 1)) {
-            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
-            err = EDPVS_DROP;
-            goto errout;
-        }
-
-        iph->time_to_live--;
-    }
-
-    /* pre-handler before translation */
-    if (proto->fnat_out_pre_handler) {
-        err = proto->fnat_out_pre_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-
-        /*
-         * re-fetch IP header
-         * the offset may changed during pre-handler
-         */
-        iph = ip4_hdr(mbuf);
-    }
-
-    /* L3 translation before l4 re-csum */
-    iph->hdr_checksum = 0;
-    iph->src_addr = conn->vaddr.in.s_addr;
-    iph->dst_addr = conn->caddr.in.s_addr;
-
-    /* L4 FNAT translation */
-    if (proto->fnat_out_handler) {
-        err = proto->fnat_out_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-    }
-
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
-        iph->hdr_checksum = 0;
-    } else {
-        ip4_send_csum(iph);
-    }
-
-    return INET_HOOK(AF_INET, INET_HOOK_LOCAL_OUT, mbuf,
-                     NULL, rt->port, ipv4_output);
-
-errout:
-    if (rt)
-        route4_put(rt);
-    rte_pktmbuf_free(mbuf);
-    return err;
-}
-
-static int __dp_vs_out_xmit_fnat6(struct dp_vs_proto *proto,
-                                  struct dp_vs_conn *conn,
-                                  struct rte_mbuf *mbuf)
-{
-    struct flow6 fl6;
-    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-    struct route6 *rt6;
-    int err, mtu;
-
-    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
-        dp_vs_save_outxmit_info(mbuf, proto, conn);
-        if (!dp_vs_fast_outxmit_fnat(AF_INET6, proto, conn, mbuf)) {
-            return EDPVS_OK;
-        }
-    }
-
-    /*
-     * drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route.
-     */
-    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL))
-        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
-
-    memset(&fl6, 0, sizeof(struct flow6));
-    fl6.fl6_daddr = conn->caddr.in6;
-    fl6.fl6_saddr = conn->vaddr.in6;
-    rt6 = route6_output(mbuf, &fl6);
-    if (!rt6) {
-        err = EDPVS_NOROUTE;
-        goto errout;
-    }
-
-    /*
-     * didn't cache the pointer to rt
-     * or route can't be deleted when there is conn ref
-     * this is for neighbour confirm.
-     */
-    dp_vs_conn_cache_rt6(conn, rt6, false);
-
-    mtu = rt6->rt6_mtu;
-    if (mbuf->pkt_len > mtu) {
-        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
-        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, mtu);
-        err = EDPVS_FRAG;
-        goto errout;
-    }
-
-    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
-
-    /* after route lookup and before translation */
-    if (xmit_ttl) {
-        if (unlikely(ip6h->ip6_hops <= 1)) {
-            icmp6_send(mbuf, ICMP6_TIME_EXCEEDED, ICMP6_TIME_EXCEED_TRANSIT, 0);
-            err = EDPVS_DROP;
-            goto errout;
-        }
-
-        ip6h->ip6_hops--;
-    }
-
-    /* pre-handler before translation */
-    if (proto->fnat_out_pre_handler) {
-        err = proto->fnat_out_pre_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-
-        /*
-         * re-fetch IP header
-         * the offset may changed during pre-handler
-         */
-        ip6h = ip6_hdr(mbuf);
-    }
-
-    /* L3 translation before l4 re-csum */
-    ip6h->ip6_src = conn->vaddr.in6;
-    ip6h->ip6_dst = conn->caddr.in6;
-
-    /* L4 FNAT translation */
-    if (proto->fnat_out_handler) {
-        err = proto->fnat_out_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-    }
-
-    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
-                     NULL, rt6->rt6_dev, ip6_output);
-
-errout:
-    if (rt6)
-        route6_put(rt6);
-    rte_pktmbuf_free(mbuf);
-    return err;
-}
-
-static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
-                                   struct dp_vs_conn *conn,
-                                   struct rte_mbuf *mbuf)
-{
-    struct flow6 fl6;
-    struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
-    uint32_t pkt_len;
-    struct route6 *rt6;
-    int err, mtu;
-
-    /*
-     * drop old route. just for safe, because
-     * FNAT is PRE_ROUTING, should not have route.
-     */
-    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL)) {
-        RTE_LOG(WARNING, IPVS, "%s: FNAT have route %p ?\n", __func__,
-                MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
-        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
-    }
-
-    memset(&fl6, 0, sizeof(struct flow6));
-    fl6.fl6_daddr = conn->caddr.in6;
-    fl6.fl6_saddr = conn->vaddr.in6;
-    rt6 = route6_output(mbuf, &fl6);
-    if (!rt6) {
-        err = EDPVS_NOROUTE;
-        goto errout;
-    }
-
-    /*
-     * didn't cache the pointer to rt
-     * or route can't be deleted when there is conn ref
-     * this is for neighbour confirm
-     */
-    dp_vs_conn_cache_rt6(conn, rt6, false);
-
-    /*
-     * mbuf is from IPv6, icmp should send by icmp6
-     * ext_hdr and
-     */
-    mtu = rt6->rt6_mtu;
-    pkt_len = mbuf_nat4to6_len(mbuf);
-    if (pkt_len > mtu
-           && (ip4h->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
-        RTE_LOG(DEBUG, IPVS, "%s: frag needed.\n", __func__);
-        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
-        err = EDPVS_FRAG;
-        goto errout;
-    }
-
-    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
-    /* after route lookup and before translation */
-    if (xmit_ttl) {
-        if (unlikely(ip4h->time_to_live <= 1)) {
-            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
-            err = EDPVS_DROP;
-            goto errout;
-        }
-        ip4h->time_to_live--;
-    }
-
-    /* pre-handler before translation */
-    if (proto->fnat_out_pre_handler) {
-        err = proto->fnat_out_pre_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-    }
-
-    /* L3 translation before l4 re-csum */
-    err = mbuf_4to6(mbuf, &conn->vaddr.in6, &conn->caddr.in6);
-    if (err)
-        goto errout;
-
-    /* L4 FNAT translation */
-    if (proto->fnat_out_handler) {
-        err = proto->fnat_out_handler(proto, conn, mbuf);
-        if (err != EDPVS_OK)
-            goto errout;
-    }
-
-    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf,
-                     NULL, rt6->rt6_dev, ip6_output);
-
-errout:
-    if (rt6)
-        route6_put(rt6);
-    rte_pktmbuf_free(mbuf);
-    return err;
 }
 
 int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
@@ -1007,15 +945,21 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *proto,
     int af = conn->af;
     assert(af == AF_INET || af == AF_INET6);
 
-    if (tuplehash_in(conn).af == AF_INET &&
-        tuplehash_out(conn).af == AF_INET)
-        return __dp_vs_out_xmit_fnat4(proto, conn, mbuf);
-    if (tuplehash_in(conn).af == AF_INET6 &&
-        tuplehash_out(conn).af == AF_INET6)
-        return __dp_vs_out_xmit_fnat6(proto, conn, mbuf);
-    if (tuplehash_in(conn).af == AF_INET6 &&
-        tuplehash_out(conn).af == AF_INET)
-        return __dp_vs_out_xmit_fnat46(proto, conn, mbuf);
+    if (dp_vs_conn_is_nat44(conn)) {
+        return __dp_vs_xmit_fnat4(proto, conn, mbuf, false);
+    }
+
+    if (dp_vs_conn_is_nat66(conn)) {
+        return __dp_vs_xmit_fnat6(proto, conn, mbuf, false);
+    }
+
+    if (dp_vs_conn_is_nat46(conn)) {
+        return __dp_vs_xmit_fnat64(proto, conn, mbuf, false);
+    }
+
+    if (dp_vs_conn_is_nat64(conn)) {
+        return __dp_vs_xmit_fnat46(proto, conn, mbuf, false);
+    }
 
     rte_pktmbuf_free(mbuf);
     return EDPVS_NOTSUPP;
@@ -1268,8 +1212,7 @@ static int __dp_vs_xmit_dr4(struct dp_vs_proto *proto,
     return err;
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -1315,8 +1258,7 @@ static int __dp_vs_xmit_dr6(struct dp_vs_proto *proto,
     return err;
 
 errout:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -1412,8 +1354,7 @@ static int __dp_vs_xmit_snat4(struct dp_vs_proto *proto,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -1488,8 +1429,7 @@ static int __dp_vs_xmit_snat6(struct dp_vs_proto *proto,
                      NULL, rt6->rt6_dev, ip6_output);
 
 errout:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -1520,10 +1460,10 @@ static int __dp_vs_out_xmit_snat4(struct dp_vs_proto *proto,
         fl4.fl4_daddr = conn->caddr.in;
         fl4.fl4_saddr = conn->vaddr.in;
         fl4.fl4_tos = iph->type_of_service;
-        
+
 
         if (conn->outwall) {
-	    rt = route_gfw_net_lookup(&conn->caddr.in);
+            rt = route_gfw_net_lookup(&conn->caddr.in);
             if (!rt) {
                 err = EDPVS_NOROUTE;
                 goto errout;
@@ -1581,8 +1521,7 @@ static int __dp_vs_out_xmit_snat4(struct dp_vs_proto *proto,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -1733,8 +1672,7 @@ static int __dp_vs_out_xmit_snat6(struct dp_vs_proto *proto,
                      NULL, rt6->rt6_dev, ip6_output);
 
 errout:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -1833,8 +1771,7 @@ static int __dp_vs_xmit_nat4(struct dp_vs_proto *proto,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -1904,8 +1841,7 @@ static int __dp_vs_xmit_nat6(struct dp_vs_proto *proto,
                      NULL, rt6->rt6_dev, ip6_output);
 
 errout:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -2005,8 +1941,7 @@ static int __dp_vs_out_xmit_nat4(struct dp_vs_proto *proto,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -2076,8 +2011,7 @@ static int __dp_vs_out_xmit_nat6(struct dp_vs_proto *proto,
                      NULL, rt6->rt6_dev, ip6_output);
 
 errout:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -2172,8 +2106,7 @@ static int __dp_vs_xmit_tunnel4(struct dp_vs_proto *proto,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -2251,8 +2184,7 @@ static int __dp_vs_xmit_tunnel6(struct dp_vs_proto *proto,
                      NULL, rt6->rt6_dev, ip6_output);
 
 errout:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     rte_pktmbuf_free(mbuf);
     return err;
 }
@@ -2329,8 +2261,7 @@ static int __dp_vs_xmit_tunnel_6o4(struct dp_vs_proto *proto,
                      NULL, rt->port, ipv4_output);
 
 errout:
-    if (rt)
-        route4_put(rt);
+    route4_put(rt);
     rte_pktmbuf_free(mbuf);
     return err;
 }

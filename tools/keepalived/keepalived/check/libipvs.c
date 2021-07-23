@@ -1,19 +1,19 @@
 /*
- * libipvs:	Library for manipulating IPVS through netlink or [gs]etsockopt
+ * libipvs: Library for manipulating IPVS through netlink or [gs]etsockopt
  *
- *		This code is copied from the ipvsadm sources, with the unused
- *		code removed. It is available at:
- *		https://git.kernel.org/cgit/utils/kernel/ipvsadm/ipvsadm.git
+ *      This code is copied from the ipvsadm sources, with the unused
+ *      code removed. It is available at:
+ *      https://git.kernel.org/cgit/utils/kernel/ipvsadm/ipvsadm.git
  *
- *		The upstream code should periodically be checked for updates,
- *		which should then be applied to this code.
+ *      The upstream code should periodically be checked for updates,
+ *      which should then be applied to this code.
  *
- * Authors:	Wensong Zhang <wensong@linuxvirtualserver.org>
+ * Authors: Wensong Zhang <wensong@linuxvirtualserver.org>
  *
- *		This program is free software; you can redistribute it and/or
- *		modify it under the terms of the GNU General Public License
- *		as published by the Free Software Foundation; either version
- *		2 of the License, or (at your option) any later version.
+ *      This program is free software; you can redistribute it and/or
+ *      modify it under the terms of the GNU General Public License
+ *      as published by the Free Software Foundation; either version
+ *      2 of the License, or (at your option) any later version.
  */
 
 #include "config.h"
@@ -62,7 +62,7 @@ int dpvs_ctrl_init(lcoreid_t cid)
 
     dpvs_ctrl_func = dpvs_ctrl_init;
 
-	dpvs_sockopt_init();
+    dpvs_sockopt_init();
 
 #if !HAVE_DECL_SOCK_CLOEXEC
     if (set_sock_flags(sockfd, F_SETFD, FD_CLOEXEC)) {
@@ -235,7 +235,8 @@ static void dpvs_fill_laddr_conf(dpvs_service_compat_t *svc, dpvs_laddr_table_t 
         laddr->vaddr.in6 = svc->addr.in6;
     }
 
-    return ;
+    /* fnat44/fnat46/fnat66/fnat64 are supported. */
+    conf->laddr.in6 = laddr->addr.in6;
 }
 
 static void dpvs_fill_ipaddr_conf(int is_add, uint32_t flags,
@@ -443,7 +444,7 @@ dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
 }
 
 #ifdef _WITH_SNMP_CHECKER_
-#endif	/* _WITH_SNMP_CHECKER_ */
+#endif  /* _WITH_SNMP_CHECKER_ */
 
 dpvs_dest_table_t* dpvs_get_dests(dpvs_dest_table_t* table)
 {
@@ -882,4 +883,3 @@ const char *ipvs_strerror(int err)
 
     return strerror(err);
 }
-

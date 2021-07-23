@@ -45,6 +45,23 @@ struct dp_vs_seq {
     uint32_t        prev_delta;
 };
 
+static inline uint8_t dp_vs_mbuf_get_af(const struct rte_mbuf *mbuf)
+{
+    unsigned char version, *verp;
+
+    verp = rte_pktmbuf_mtod(mbuf, unsigned char*);
+    version = (*verp >> 4) & 0xf;
+
+    switch (version) {
+    case 4:
+        return AF_INET;
+    case 6:
+        return AF_INET6;
+    default:
+        return AF_UNSPEC;
+    }
+}
+
 int dp_vs_init(void);
 int dp_vs_term(void);
 
@@ -55,5 +72,9 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                                   struct rte_mbuf *mbuf,
                                   bool is_synproxy_on,
                                   bool outwall);
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+void dp_vs_mbuf_show(const char *func, const struct rte_mbuf *mbuf);
+void dp_vs_iphdr_show(const char *func, const struct dp_vs_iphdr *iph);
+#endif
 
 #endif /* __DPVS_IPVS_H__ */

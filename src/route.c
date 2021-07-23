@@ -274,12 +274,12 @@ static int route_add_lcore(struct in_addr* dest,uint8_t netmask, uint32_t flag,
 
     if((flag & RTF_LOCALIN) || (flag & RTF_KNI))
         return route_local_add(dest, netmask, flag, gw,
-			      port, src, mtu, metric);
+                  port, src, mtu, metric);
 
     if((flag & RTF_FORWARD) || (flag & RTF_DEFAULT))
         return route_net_add(dest, netmask, flag, gw,
                              port, src, mtu, metric);
-   
+
 
     return EDPVS_INVAL;
 }
@@ -319,7 +319,7 @@ static int route_del_lcore(struct in_addr* dest,uint8_t netmask, uint32_t flag,
         route4_put(route);
         return EDPVS_OK;
     }
-  
+
     if(flag & RTF_FORWARD || (flag & RTF_DEFAULT)){
         route = route_net_lookup(port, dest, netmask);
         if (!route)
@@ -455,7 +455,6 @@ struct route_entry *route4_output(const struct flow4 *fl4)
 {
     struct route_entry *route;
 
-
     route = route_out_local_lookup(fl4->fl4_daddr.s_addr);
     if(route){
         return route;
@@ -487,7 +486,7 @@ static int route_lcore_flush(void)
         rte_atomic32_dec(&this_num_routes);
         route4_put(route_node);
     }
-    
+
     list_for_each_entry(route_node, &this_gfw_route_table, list){
         list_del(&route_node->list);
         rte_atomic32_dec(&this_num_out_routes);
@@ -618,7 +617,7 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     }
 
     nroute = rte_atomic32_read(&this_num_routes);
-    
+
     if (cf && cf->outwalltb) {
         nroute = rte_atomic32_read(&this_num_out_routes);
         outwall_table = true;
@@ -639,7 +638,7 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
         }
         array->nroute = off;
         return EDPVS_OK;
-    }  
+    }
 
     if (port) {
         for (hash = 0; hash < LOCAL_ROUTE_TAB_SIZE; hash++) {

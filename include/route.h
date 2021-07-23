@@ -63,7 +63,7 @@ int route_flush(void);
 
 static inline void route4_put(struct route_entry *route)
 {
-    if(route){
+    if (route) {
         if (rte_atomic32_dec_and_test(&route->refcnt)) {
             rte_free(route);
         }
@@ -72,7 +72,7 @@ static inline void route4_put(struct route_entry *route)
 
 static inline void route4_get(struct route_entry *route)
 {
-    if(route){
+    if (route) {
         rte_atomic32_inc(&route->refcnt);
     }
 }
@@ -83,8 +83,8 @@ static inline uint32_t __attribute__((pure))
     if (depth>0) {
         return (int)0x80000000 >> (depth - 1);
     }
-    else
-        return (int)0x0;
+
+	return (int)0x0;
 }
 
 static inline bool ip_addr_netcmp(uint32_t dest, uint8_t mask,

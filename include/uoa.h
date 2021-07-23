@@ -162,7 +162,7 @@ struct opphdr {
 #endif
 #endif
     __u8    protocol;    /* IPPROTO_XXX */
-    __be16    length;        /* length of fixed header and options */
+    __be16  length;      /* length of fixed header and options */
     __u8    options[0];
 } __attribute__((__packed__));
 

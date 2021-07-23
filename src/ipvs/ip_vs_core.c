@@ -39,7 +39,7 @@
 #include "route6.h"
 #include "ipvs/redirect.h"
 
-static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
+static inline int dp_vs_iphdr_fill(int af, struct rte_mbuf *mbuf,
                                    struct dp_vs_iphdr *iph)
 {
     if (af == AF_INET) {
@@ -711,7 +711,7 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
     rte_pktmbuf_adj(mbuf, off);
     if (mbuf_may_pull(mbuf, sizeof(struct rte_ipv4_hdr)) != 0)
         return INET_DROP;
-    dp_vs_fill_iphdr(AF_INET, mbuf, &dciph);
+    dp_vs_iphdr_fill(AF_INET, mbuf, &dciph);
 
     conn = prot->conn_lookup(prot, &dciph, mbuf, &dir, true, &drop, &peer_cid);
 
@@ -850,7 +850,7 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
     rte_pktmbuf_adj(mbuf, off);
     if (mbuf_may_pull(mbuf, sizeof(struct ip6_hdr)) != 0)
         return INET_DROP;
-    dp_vs_fill_iphdr(AF_INET6, mbuf, &dcip6h);
+    dp_vs_iphdr_fill(AF_INET6, mbuf, &dcip6h);
 
     prot = dp_vs_proto_lookup(dcip6h.proto);
     if (!prot)
@@ -949,7 +949,7 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
     if (unlikely(etype != ETH_PKT_HOST))
         return INET_ACCEPT;
 
-    if (dp_vs_fill_iphdr(af, mbuf, &iph) != EDPVS_OK)
+    if (dp_vs_iphdr_fill(af, mbuf, &iph) != EDPVS_OK)
         return INET_ACCEPT;
 
     if (unlikely(iph.proto == IPPROTO_ICMP ||
@@ -1092,7 +1092,7 @@ static int __dp_vs_pre_routing(void *priv, struct rte_mbuf *mbuf,
     struct dp_vs_iphdr iph;
     struct dp_vs_service *svc;
 
-    if (EDPVS_OK != dp_vs_fill_iphdr(af, mbuf, &iph))
+    if (EDPVS_OK != dp_vs_iphdr_fill(af, mbuf, &iph))
         return INET_ACCEPT;
 
     /* Drop all ip fragment except ospf */
@@ -1132,6 +1132,67 @@ static int dp_vs_pre_routing6(void *priv, struct rte_mbuf *mbuf,
 {
     return __dp_vs_pre_routing(priv, mbuf, state, AF_INET6);
 }
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+void dp_vs_mbuf_show(const char *func, const struct rte_mbuf *mbuf)
+{
+    uint8_t af = dp_vs_mbuf_get_af(mbuf);
+    char sbuf[64], dbuf[64];
+    const char *saddr, *daddr;
+
+    switch (af) {
+    case AF_INET:
+        {
+            struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
+
+            saddr = inet_ntop(af, &ip4h->src_addr, sbuf, sizeof(sbuf)) ? sbuf : "::";
+            daddr = inet_ntop(af, &ip4h->dst_addr, dbuf, sizeof(dbuf)) ? dbuf : "::";
+
+            RTE_LOG(DEBUG, IPVS,
+                    "%s: %s=>%s, version_ihl 0x%x, total_len %d, hdr_len %d, "
+                    "next_prot %d, ttl %d",
+                    func, saddr, daddr,
+                    ip4h->version_ihl, ntohs(ip4h->total_length), ip4_hdrlen(mbuf),
+                    ip4h->next_proto_id, ip4h->time_to_live);
+        }
+        break;
+
+    case AF_INET6:
+        {
+            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+
+            saddr = inet_ntop(af, &ip6h->ip6_src, sbuf, sizeof(sbuf)) ? sbuf : "::";
+            daddr = inet_ntop(af, &ip6h->ip6_dst, dbuf, sizeof(dbuf)) ? dbuf : "::";
+
+            RTE_LOG(DEBUG, IPVS,
+                    "%s: %s=>%s, ip6_vfc 0x%x, ip6_plen %d, ipv6_nxt %d, ip6_hlim %d",
+                    func, saddr, daddr, ip6h->ip6_vfc, ntohs(ip6h->ip6_plen),
+                    ip6h->ip6_nxt, ip6h->ip6_hlim);
+        }
+        break;
+
+    default:
+        return;
+    }
+}
+
+void dp_vs_iphdr_show(const char *func,
+                      const struct dp_vs_iphdr *iph)
+{
+    char sbuf[64], dbuf[64];
+    const char *saddr, *daddr;
+
+    saddr = inet_ntop(iph->af, &iph->saddr, sbuf, sizeof(sbuf)) ? sbuf : "::";
+    daddr = inet_ntop(iph->af, &iph->daddr, dbuf, sizeof(dbuf)) ? dbuf : "::";
+
+    RTE_LOG(DEBUG, IPVS,
+            "%s: [%02d]: %d/%s %s->%s\n",
+            func, rte_lcore_id(),
+            iph->proto, inet_proto_name(iph->proto),
+            saddr, daddr);
+}
+
+#endif
 
 static struct inet_hook_ops dp_vs_ops[] = {
     {

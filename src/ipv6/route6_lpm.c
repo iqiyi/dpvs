@@ -224,8 +224,7 @@ static struct route6 *rt6_lpm_input(const struct rte_mbuf *mbuf, struct flow6 *f
     return rt6;
 
 miss:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     return NULL;
 }
 
@@ -245,8 +244,7 @@ static struct route6 *rt6_lpm_output(const struct rte_mbuf *mbuf, struct flow6 *
     return rt6;
 
 miss:
-    if (rt6)
-        route6_put(rt6);
+    route6_put(rt6);
     return NULL;
 }
 

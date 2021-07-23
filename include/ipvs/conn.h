@@ -294,6 +294,48 @@ static inline void dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn 
     rte_atomic32_inc(&ctl_conn->n_control);
 }
 
+static inline uint8_t
+dp_vs_conn_get_inbound_af(const struct dp_vs_conn *conn)
+{
+    return tuplehash_in(conn).af;
+}
+
+static inline uint8_t
+dp_vs_conn_get_outbound_af(const struct dp_vs_conn *conn)
+{
+    return tuplehash_out(conn).af;
+}
+
+static inline bool
+dp_vs_conn_is_nat44(const struct dp_vs_conn *conn)
+{
+    return (dp_vs_conn_get_inbound_af(conn) == AF_INET
+            && dp_vs_conn_get_outbound_af(conn) == AF_INET) ? true : false;
+}
+
+static inline bool
+dp_vs_conn_is_nat66(const struct dp_vs_conn *conn)
+{
+    return (dp_vs_conn_get_inbound_af(conn) == AF_INET6
+            && dp_vs_conn_get_outbound_af(conn) == AF_INET6) ? true : false;
+}
+
+/* inbound direction: wan4 -> lan6 */
+static inline bool
+dp_vs_conn_is_nat46(const struct dp_vs_conn *conn)
+{
+    return (dp_vs_conn_get_inbound_af(conn) == AF_INET
+            && dp_vs_conn_get_outbound_af(conn) == AF_INET6) ? true : false;
+}
+
+/* inbound direction: wan6 -> lan4 */
+static inline bool
+dp_vs_conn_is_nat64(const struct dp_vs_conn *conn)
+{
+    return (dp_vs_conn_get_inbound_af(conn) == AF_INET6
+            && dp_vs_conn_get_outbound_af(conn) == AF_INET) ? true : false;
+}
+
 static inline bool
 dp_vs_conn_is_template(struct dp_vs_conn *conn)
 {
@@ -304,6 +346,12 @@ static inline void
 dp_vs_conn_set_template(struct dp_vs_conn *conn)
 {
     conn->flags |= DPVS_CONN_F_TEMPLATE;
+}
+
+static inline bool
+dp_vs_conn_is_no_fastxmit(const struct dp_vs_conn *conn)
+{
+    return (conn->flags & DPVS_CONN_F_NOFASTXMIT) ? true : false;
 }
 
 static inline bool

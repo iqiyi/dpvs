@@ -373,8 +373,7 @@ int ip6_output(struct rte_mbuf *mbuf)
     iftraf_pkt_out(AF_INET6, mbuf, dev);
     if (unlikely(conf_ipv6_disable)) {
         IP6_INC_STATS(outdiscards);
-        if (rt)
-            route6_put(rt);
+        route6_put(rt);
         rte_pktmbuf_free(mbuf);
         return EDPVS_OK;
     }

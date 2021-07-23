@@ -249,12 +249,16 @@ repeat:
         }
     }
 
-    if (verdict == INET_ACCEPT || verdict == INET_STOP) {
+    switch (verdict) {
+    case INET_ACCEPT:
+    case INET_STOP:
         return okfn(mbuf);
-    } else if (verdict == INET_DROP) {
+
+    case INET_DROP:
         rte_pktmbuf_free(mbuf);
         return EDPVS_DROP;
-    } else { /* INET_STOLEN */
+
+    default: /* INET_STOLEN */
         return EDPVS_OK;
     }
 }

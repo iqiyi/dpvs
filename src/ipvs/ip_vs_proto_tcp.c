@@ -21,6 +21,7 @@
 #include "dpdk.h"
 #include "ipv4.h"
 #include "ipv6.h"
+#include "nat64.h"
 #include "route6.h"
 #include "neigh.h"
 #include "ipvs/ipvs.h"
@@ -32,6 +33,7 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/blklst.h"
 #include "ipvs/whtlst.h"
+#include "ipvs/xoa.h"
 #include "parser/parser.h"
 /* we need more detailed fields than dpdk tcp_hdr{},
  * like tcphdr.syn, so use standard definition. */
@@ -39,7 +41,15 @@
 #include <openssl/sha.h>
 #include "ipvs/redirect.h"
 
+enum toa_mode {
+    TOA_M_NORMAL, /* ipv4 and ipv6: [cip/cport] included in tcp option */
+    TOA_M_EXTRA,  /* ipv4 only: [cip/cport, vip/vport] included in tcp option */
+    TOA_M_XOA,    /* ipv4 and ipv6: [cip/cport, vip/vport] included in ipv4 option
+                     or ipv6 dst option */
+};
+
 static int g_defence_tcp_drop = 0;
+static int g_toa_mode = TOA_M_NORMAL; /* by default */
 
 static int tcp_timeouts[DPVS_TCP_S_LAST + 1] = {
     [DPVS_TCP_S_NONE]           = 2,    /* in seconds */
@@ -108,27 +118,41 @@ static uint32_t tcp_secret;
  */
 inline struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf)
 {
+    uint8_t af = dp_vs_mbuf_get_af(mbuf);
     int iphdrlen;
-    unsigned char version, *verp;
 
-    verp = rte_pktmbuf_mtod(mbuf, unsigned char*);
-    version = (*verp >> 4) & 0xf;
+    switch (af) {
+    case AF_INET:
+        {
+            iphdrlen = ip4_hdrlen(mbuf);
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+            dp_vs_mbuf_show(__func__, mbuf);
+#endif
+        }
+        break;
 
-    if (4 == version) {
-        iphdrlen = ip4_hdrlen(mbuf);
-    } else if (6 == version) {
-        struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-        uint8_t ip6nxt = ip6h->ip6_nxt;
-        iphdrlen = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
-        if (iphdrlen < 0)
-            return NULL;
-    } else {
+    case AF_INET6:
+        {
+            struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+            uint8_t ip6nxt = ip6h->ip6_nxt;
+
+#ifdef CONFIG_DPVS_IPVS_DEBUG
+            dp_vs_mbuf_show(__func__, mbuf);
+#endif
+            iphdrlen = ip6_skip_exthdr(mbuf, sizeof(struct ip6_hdr), &ip6nxt);
+        }
+        break;
+
+    default:
         return NULL;
     }
 
     /* do not support frags */
-    if (unlikely(mbuf->data_len < iphdrlen + sizeof(struct tcphdr)))
+    if (iphdrlen < 0
+        || unlikely(mbuf->data_len < iphdrlen + sizeof(struct tcphdr)))
+    {
         return NULL;
+    }
 
     return rte_pktmbuf_mtod_offset(mbuf, struct tcphdr *, iphdrlen);
 }
@@ -305,37 +329,148 @@ static void tcp_in_remove_ts(struct tcphdr *tcph)
     }
 }
 
-static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
-                          struct tcphdr *tcph)
+static int tcp_in_get_mtu(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+                          int af, uint32_t *mtu)
 {
-    uint32_t mtu;
-    struct tcpopt_addr *toa;
-    uint32_t tcp_opt_len;
-    uint8_t *p, *q, *tail;
     struct route_entry *rt;
     struct route6 *rt6;
 
-    if (unlikely(conn->af != AF_INET && conn->af != AF_INET6))
-        return EDPVS_NOTSUPP;
+    if (af == AF_INET
+        && (rt = MBUF_USERDATA(mbuf, struct route_entry *,
+                               MBUF_FIELD_ROUTE)) != NULL)
+    {
+        *mtu = rt->mtu;
+        return EDPVS_OK;
+    }
 
-    tcp_opt_len = conn->af == AF_INET ? TCP_OLEN_IP4_ADDR : TCP_OLEN_IP6_ADDR;
+    if (af == AF_INET6
+        && (rt6 = MBUF_USERDATA(mbuf, struct route6 *,
+                                MBUF_FIELD_ROUTE)) != NULL)
+    {
+        *mtu = rt6->rt6_mtu;
+        return EDPVS_OK;
+    }
+
+    if (conn->in_dev) { /* no route for fast-xmit */
+        *mtu = conn->in_dev->mtu;
+        return EDPVS_OK;
+    }
+
+    RTE_LOG(INFO, IPVS, "add toa: MTU unknown.\n");
+
+    return EDPVS_NOROUTE;
+}
+
+static int tcp_in_add_xoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
+{
+    int iaf  = dp_vs_conn_get_inbound_af(conn);
+    int oaf = dp_vs_conn_get_outbound_af(conn);
+    uint32_t mtu = 0;
+    int iphdrlen, iptot_len, xoa_len;
+    int err;
+    void *iph, *niph = NULL;
+    struct dp_vs_xoa_hdr *xoah;
+    struct tcphdr *th;
+    uint16_t src_port, dst_port;
+
+    iphdrlen = iptot_len = xoa_len = 0;
+
+    err = tcp_in_get_mtu(conn, mbuf, oaf, &mtu);
+    if (err != EDPVS_OK) {
+        return err;
+    }
+
+    err = dp_vs_xoa_get_iplen(conn, mbuf,
+                              &iphdrlen, &iptot_len, &xoa_len, mtu);
+    if (err != EDPVS_OK) {
+        return err;
+    }
+
+    if (iaf == AF_INET6) {
+        iph = ip6_hdr(mbuf);
+    } else {
+        iph = ip4_hdr(mbuf);
+    }
+
+    /* get source and dest ports before moving some part of the packet */
+    th = rte_pktmbuf_mtod_offset(mbuf, struct tcphdr *, iphdrlen);
+    src_port = th->source;
+    dst_port = th->dest;
+
+    /* get the new ipvx header */
+    niph = dp_vs_xoa_insert(mbuf, iph, iptot_len, iphdrlen, xoa_len);
+    if (!niph) {
+        return EDPVS_FRAG;
+    }
+
+    /* fill xoa */
+    xoah = (struct dp_vs_xoa_hdr *)((void *)niph + iphdrlen);
+
+   if (iaf == AF_INET6) {
+        struct ip6_hdr *ip6h = (struct ip6_hdr *)niph;
+
+        dp_vs_xoa6_fill(xoah, iaf,
+                        (union inet_addr *)&ip6h->ip6_src,
+                        (union inet_addr *)&ip6h->ip6_dst,
+                        src_port, dst_port, ip6h->ip6_nxt, false);
+
+        /* update ipv6 header */
+        ip6h->ip6_nxt = IPPROTO_DSTOPTS;
+        ip6h->ip6_plen = htons(ntohs(ip6h->ip6_plen) + xoa_len);
+
+        mbuf->l3_len += DPVS_XOA_HDRLEN_V6;
+    } else {
+        struct iphdr *iph = (struct iphdr *)niph;
+
+        dp_vs_xoa4_fill(xoah, iaf,
+                        (union inet_addr *)&iph->saddr,
+                        (union inet_addr *)&iph->daddr,
+                        src_port, dst_port, false);
+
+        /* update ipv4 header */
+        iph->ihl += xoa_len >> 2;
+        iph->tot_len = htons(iptot_len + xoa_len);
+
+        mbuf->l3_len += DPVS_XOA_HDRLEN_V4;
+    }
+
+    /* ip/tcp checksum will be recalculated later */
+    return EDPVS_OK;
+}
+
+static inline int tcp_in_add_toa(struct dp_vs_conn *conn,
+                                 struct rte_mbuf *mbuf,
+                                 struct tcphdr *tcph)
+{
+    int err;
+    uint32_t mtu = 0;
+    uint32_t v4_tcpopt_len;
+    struct tcpopt_addr *toa;
+    uint32_t tcp_opt_len;
+    uint8_t *p, *q, *tail;
+
+    if (g_toa_mode != TOA_M_NORMAL && g_toa_mode != TOA_M_EXTRA) {
+        return EDPVS_NOTSUPP;
+    }
+
+    if (unlikely(conn->af != AF_INET && conn->af != AF_INET6)) {
+        return EDPVS_NOTSUPP;
+    }
+
+    v4_tcpopt_len = ((g_toa_mode == TOA_M_NORMAL)
+                     ? TCP_OLEN_IP4_ADDR : TCP_OLEN_IP4_ADDR_EXTRA);
+    tcp_opt_len = ((conn->af == AF_INET)
+                   ? v4_tcpopt_len : TCP_OLEN_IP6_ADDR);
+
     /*
      * check if we can add the new option
      */
-    /* skb length and tcp option length checking */
-    if (tuplehash_out(conn).af == AF_INET && (rt = MBUF_USERDATA(mbuf,
-                    struct route_entry *, MBUF_FIELD_ROUTE)) != NULL) {
-        mtu = rt->mtu;
-    } else if (tuplehash_out(conn).af == AF_INET6 && (rt6 = MBUF_USERDATA(mbuf,
-                    struct route6 *, MBUF_FIELD_ROUTE)) != NULL) {
-        mtu = rt6->rt6_mtu;
-    } else if (conn->in_dev) { /* no route for fast-xmit */
-        mtu = conn->in_dev->mtu;
-    } else {
-        RTE_LOG(DEBUG, IPVS, "add toa: MTU unknown.\n");
-        return EDPVS_NOROUTE;
+    err = tcp_in_get_mtu(conn, mbuf, dp_vs_conn_get_outbound_af(conn), &mtu);
+    if (err != EDPVS_OK) {
+        return err;
     }
 
+    /* skb length and tcp option length checking */
     if (unlikely(mbuf->pkt_len > (mtu - tcp_opt_len))) {
         RTE_LOG(DEBUG, IPVS, "add toa: need fragment, tcp opt len : %u.\n",
                 tcp_opt_len);
@@ -351,8 +486,10 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
 
     /* check tail room and expand mbuf.
      * have to pull all bits in segments for later operation. */
-    if (unlikely(mbuf_may_pull(mbuf, mbuf->pkt_len) != 0))
+    if (unlikely(mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)) {
         return EDPVS_INVPKT;
+    }
+
     tail = (uint8_t *)rte_pktmbuf_append(mbuf, tcp_opt_len);
     if (unlikely(!tail)) {
         RTE_LOG(DEBUG, IPVS, "add toa: no mbuf tail room, tcp opt len : %u.\n",
@@ -381,14 +518,21 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     toa->port = conn->cport;
 
     if (conn->af == AF_INET) {
-        struct tcpopt_ip4_addr *toa_ip4 = (struct tcpopt_ip4_addr *)(tcph + 1);
-        toa_ip4->addr = conn->caddr.in;
-    }
-    else {
+        if (g_toa_mode == TOA_M_NORMAL) {
+            struct tcpopt_ip4_addr *toa_ip4;
+            toa_ip4 = (struct tcpopt_ip4_addr *)(tcph + 1);
+            toa_ip4->addr = conn->caddr.in;
+        } else {
+            struct tcpopt_ip4_addr_extra *toa_extra;
+            toa_extra = (struct tcpopt_ip4_addr_extra *)(tcph + 1);
+            toa_extra->src_addr = conn->caddr.in;
+            toa_extra->dst_port = conn->vport;
+            toa_extra->dst_addr = conn->vaddr.in;
+        }
+    } else {
         struct tcpopt_ip6_addr *toa_ip6 = (struct tcpopt_ip6_addr *)(tcph + 1);
         toa_ip6->addr = conn->caddr.in6;
     }
-
 
     /* reset tcp header length */
     tcph->doff += tcp_opt_len >> 2;
@@ -688,6 +832,34 @@ tcp_conn_lookup(struct dp_vs_proto *proto, const struct dp_vs_iphdr *iph,
     }
 
     return conn;
+}
+
+static int tcp_fnat_in_pre_handler(struct dp_vs_proto *proto,
+                                   struct dp_vs_conn *conn,
+                                   struct rte_mbuf *mbuf)
+{
+    struct tcphdr *th = tcp_hdr(mbuf);
+
+    if (g_toa_mode != TOA_M_XOA) {
+        goto out;
+    }
+
+    /* add xoa to syn packet */
+    if (th->syn && !th->ack) {
+        tcp_in_add_xoa(conn, mbuf);
+        goto out;
+    }
+
+    /* add toa to first data packet */
+    if (!th->syn && !th->rst && !th->fin
+        && ntohl(th->ack_seq) == conn->fnat_seq.fdata_seq)
+    {
+        tcp_in_add_xoa(conn, mbuf);
+        goto out;
+    }
+
+out:
+    return EDPVS_OK;
 }
 
 static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
@@ -1173,6 +1345,26 @@ static void defence_tcp_drop_handler(vector_t tokens)
     g_defence_tcp_drop = 1;
 }
 
+static void toa_mode_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+
+    assert(str);
+
+    if (strcmp(str, "normal") == 0)
+        g_toa_mode = TOA_M_NORMAL;
+    else if (strcmp(str, "extra") == 0)
+        g_toa_mode = TOA_M_EXTRA;
+    else if (strcmp(str, "xoa") == 0)
+        g_toa_mode = TOA_M_XOA;
+    else
+        RTE_LOG(WARNING, IPVS, "invalid toa_mode: %s\n", str);
+
+    RTE_LOG(INFO, IPVS, "toa_mode = %s\n", str);
+
+    FREE_PTR(str);
+}
+
 static inline void timeout_handler_template(vector_t tokens,
         const char *tcp_state, int idx, int default_timeout)
 {
@@ -1277,6 +1469,7 @@ void tcp_keyword_value_init(void)
 void install_proto_tcp_keywords(void)
 {
     install_keyword("defence_tcp_drop", defence_tcp_drop_handler, KW_TYPE_NORMAL);
+    install_keyword("toa_mode", toa_mode_handler, KW_TYPE_NORMAL);
     install_keyword("timeout", NULL, KW_TYPE_NORMAL);
     install_sublevel();
     install_keyword("none", timeout_none_handler, KW_TYPE_NORMAL);
@@ -1317,6 +1510,7 @@ struct dp_vs_proto dp_vs_proto_tcp = {
     .conn_expire_quiescent = tcp_conn_expire_quiescent,
     .nat_in_handler        = tcp_snat_in_handler,
     .nat_out_handler       = tcp_snat_out_handler,
+    .fnat_in_pre_handler   = tcp_fnat_in_pre_handler,
     .fnat_in_handler       = tcp_fnat_in_handler,
     .fnat_out_handler      = tcp_fnat_out_handler,
     .snat_in_handler       = tcp_snat_in_handler,

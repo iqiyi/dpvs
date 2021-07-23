@@ -34,6 +34,7 @@ enum {
 #define TCP_OLEN_MSS                4
 #define TCP_OLEN_TIMESTAMP          10
 #define TCP_OLEN_IP4_ADDR           8
+#define TCP_OLEN_IP4_ADDR_EXTRA     16
 #define TCP_OLEN_IP6_ADDR           20
 
 #define TCP_OLEN_TSTAMP_ALIGNED     12
@@ -52,6 +53,16 @@ struct tcpopt_ip4_addr {
     uint8_t opsize;
     __be16 port;
     struct in_addr  addr;
+} __attribute__((__packed__));
+
+struct tcpopt_ip4_addr_extra {
+    uint8_t opcode;
+    uint8_t opsize;
+    __be16  src_port;
+    struct in_addr  src_addr;
+    uint8_t  padding[2];
+    __be16   dst_port;
+    struct in_addr  dst_addr;
 } __attribute__((__packed__));
 
 struct tcpopt_ip6_addr {
