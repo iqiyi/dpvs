@@ -35,7 +35,7 @@ DATE_STRING := $(shell date +%Y.%m.%d.%H:%M:%S)
 SRCDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
 # Addtional libs below are needed when using dynamic link.
-# LIBS += -lpthread -lnuma -lrt -lm -ldl -lcrypto -lpcap
+LIBS += -lpthread -lnuma -lrt -lm -ldl -lcrypto
 
 include $(SRCDIR)/config.mk
 include $(SRCDIR)/dpdk.mk
