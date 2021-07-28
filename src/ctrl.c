@@ -1198,8 +1198,16 @@ static inline int sockopts_exist(struct dpvs_sockopts *sockopts)
                 judge_id_betw(sockopts->set_opt_max, skopt->set_opt_min, skopt->set_opt_max)) {
             return 1;
         }
+        if (judge_id_betw(skopt->set_opt_min, sockopts->set_opt_min, sockopts->set_opt_max) ||
+                judge_id_betw(skopt->set_opt_max, sockopts->set_opt_min, sockopts->set_opt_max)) {
+            return 1;
+        }
         if (judge_id_betw(sockopts->get_opt_min, skopt->get_opt_min, skopt->get_opt_max) ||
                 judge_id_betw(sockopts->get_opt_max, skopt->get_opt_min, skopt->get_opt_max)) {
+            return 1;
+        }
+        if (judge_id_betw(skopt->get_opt_min, sockopts->get_opt_min, sockopts->get_opt_max) ||
+                judge_id_betw(skopt->get_opt_max, sockopts->get_opt_min, sockopts->get_opt_max)) {
             return 1;
         }
     }
