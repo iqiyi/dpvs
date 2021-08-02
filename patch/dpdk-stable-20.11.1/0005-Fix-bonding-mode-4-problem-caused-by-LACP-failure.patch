@@ -1,7 +1,7 @@
-From ad725a88c0acbd795646cf1d6280c5de7a012044 Mon Sep 17 00:00:00 2001
+From 0d0ba57681393cd9c11a0ac069c6f676b9f34707 Mon Sep 17 00:00:00 2001
 From: huangyichen <huangyichen@iqiyi.com>
 Date: Fri, 2 Jul 2021 11:57:03 +0800
-Subject: [PATCH 5/5] Fix bonding mode 4 problem caused by LACP failure.
+Subject: [PATCH 5/6] Fix bonding mode 4 problem caused by LACP failure.
 
 The problem is disscussed in Issue #725 of iqiyi/dpvs in detail.
 https://github.com/iqiyi/dpvs/issues/725
