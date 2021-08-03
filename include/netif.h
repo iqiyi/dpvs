@@ -193,6 +193,7 @@ struct netif_ops {
     int (*op_open)(struct netif_port *dev);
     int (*op_stop)(struct netif_port *dev);
     int (*op_xmit)(struct rte_mbuf *m, struct netif_port *dev);
+    int (*op_update_addr)(struct netif_port *dev);
     int (*op_set_mc_list)(struct netif_port *dev);
     int (*op_get_queue)(struct netif_port *dev, lcoreid_t cid, queueid_t *qid);
     int (*op_get_link)(struct netif_port *dev, struct rte_eth_link *link);

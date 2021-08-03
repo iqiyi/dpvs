@@ -852,7 +852,7 @@ int msg_type_table_print(char *buf, int len)
             rte_rwlock_read_lock(&mt_lock[ii][jj]);
             list_for_each_entry(mt, &mt_array[ii][jj], list) {
                 memset(line, 0, sizeof(line));
-                snprintf(line, sizeof(line), "mt_array[%-2d][%-4d] type %-8d  mode %-12s"
+                snprintf(line, sizeof(line), "mt_array[%-2d][%-2d] type %-8d  mode %-12s"
                         "  unicast_cb %p    multicast_cb %p\n", ii, jj, mt->type,
                         mt->mode == DPVS_MSG_UNICAST ? "UNICAST" : "MULITICAST",
                         mt->unicast_msg_cb, mt->multicast_msg_cb);

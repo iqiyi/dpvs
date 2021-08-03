@@ -2652,15 +2652,17 @@ static int update_bond_macaddr(struct netif_port *port)
 {
     assert(port->type == PORT_TYPE_BOND_MASTER);
 
-    int ret = EDPVS_OK;
-    rte_eth_macaddr_get(port->id, &port->addr);
+    if (rte_eth_macaddr_get(port->id, &port->addr))
+        return EDPVS_NOTEXIST;
+
     if (kni_dev_exist(port)) {
-        ret = linux_set_if_mac(port->kni.name, (unsigned char *)&port->addr);
-        if (ret == EDPVS_OK)
-            rte_ether_addr_copy(&port->addr, &port->kni.addr);
+        /* if kni device isn't link up, linux_set_if_mac would fail(Timer expired),
+         * and in this case the warning can be ingored.*/
+        linux_set_if_mac(port->kni.name, (unsigned char *)&port->addr);
+        rte_ether_addr_copy(&port->addr, &port->kni.addr);
     }
 
-    return ret;
+    return EDPVS_OK;
 }
 
 static inline void free_mbufs(struct rte_mbuf **pkts, unsigned num)
@@ -3003,6 +3005,7 @@ static struct netif_ops dpdk_netif_ops = {
 };
 
 static struct netif_ops bond_netif_ops = {
+    .op_update_addr      = update_bond_macaddr,
     .op_set_mc_list      = bond_set_mc_list,
 };
 
@@ -3094,7 +3097,7 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
     if (port->socket == SOCKET_ID_ANY)
         port->socket = rte_socket_id();
     port->mbuf_pool = pktmbuf_pool[port->socket];
-    rte_eth_macaddr_get((uint8_t)id, &port->addr);
+    rte_eth_macaddr_get((uint8_t)id, &port->addr); // bonding mac is zero here
     rte_eth_dev_get_mtu((uint8_t)id, &port->mtu);
     rte_eth_dev_info_get((uint8_t)id, &port->dev_info);
     port->dev_conf = *conf;
@@ -3452,10 +3455,6 @@ static int add_bond_slaves(struct netif_port *port)
                 __func__, port->name, port->bond->master.primary->name);
     }
 
-    if (update_bond_macaddr(port) != EDPVS_OK) {
-        RTE_LOG(ERR, NETIF, "%s: fail to update %s's macaddr!\n", __func__, port->name);
-        return EDPVS_INVAL;
-    }
     /* Add a MAC address to an internal array of addresses used to enable whitelist
      * * filtering to accept packets only if the destination MAC address matches */
     for (ii = 0; ii < port->bond->master.slave_nb; ii++) {
@@ -3589,7 +3588,7 @@ int netif_port_start(struct netif_port *port)
     }
 
     netif_print_port_conf(&port->dev_conf, buf, &buflen);
-    RTE_LOG(INFO, NETIF, "device %s configuration:\n%s\n\n", port->name, buf);
+    RTE_LOG(INFO, NETIF, "device %s configuration:\n%s\n", port->name, buf);
 
     // build port-queue-lcore mapping array
     build_port_queue_lcore_map();
@@ -3627,10 +3626,9 @@ int netif_port_start(struct netif_port *port)
         rte_eth_promiscuous_enable(port->id);
     }
 
-    /* bonding device's macaddr is updated by its primary device when start,
-     * so we should update its macaddr after start. */
-    if (port->type == PORT_TYPE_BOND_MASTER)
-        update_bond_macaddr(port);
+     /* update mac addr to netif_port and netif_kni after start */
+    if (port->netif_ops->op_update_addr)
+        port->netif_ops->op_update_addr(port);
 
     /* add in6_addr multicast address */
     int cid = 0;
@@ -3789,8 +3787,10 @@ static int relate_bonding_device(void)
                 return EDPVS_EXIST;
             }
             mport->bond->master.slaves[i] = sport;
-            if (!strcmp(bond_conf->slaves[i], bond_conf->primary))
+            if (!strcmp(bond_conf->slaves[i], bond_conf->primary)) {
                 mport->bond->master.primary = sport;
+                rte_ether_addr_copy(&sport->addr, &mport->addr);  /* use primary slave's macaddr for bonding */
+            }
             assert(sport->type == PORT_TYPE_GENERAL);
             if (sport->socket != mport->socket) {
                 /* FIXME: all slaves share the same socket with master, otherwise kernel crash */
@@ -4900,9 +4900,10 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
                 port->bond->master.slave_nb--;
             }
         }
-        /* ATTENITON: neighbor get macaddr from port->addr, thus it should be updated */
-        if (update_bond_macaddr(port) != EDPVS_OK)
-            RTE_LOG(ERR, NETIF, "%s: fail to update %s's macaddr!\n", __func__, port->name);
+        if (port->netif_ops->op_update_addr) {
+            if (port->netif_ops->op_update_addr(port) != EDPVS_OK)
+                RTE_LOG(ERR, NETIF, "%s: fail to update %s's mac address!\n", __func__, port->name);
+        }
         break;
     }
     case OPT_PRIMARY:
@@ -4916,9 +4917,10 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
                     port->name, port->bond->master.primary->name, primary->name);
             port->bond->master.primary = primary;
         }
-        /* ATTENITON: neighbor get macaddr from port->addr, thus it should be updated */
-        if (update_bond_macaddr(port) != EDPVS_OK)
-            RTE_LOG(ERR, NETIF, "%s: fail to update %s's macaddr!\n", __func__, port->name);
+        if (port->netif_ops->op_update_addr) {
+            if (port->netif_ops->op_update_addr(port) != EDPVS_OK)
+                RTE_LOG(ERR, NETIF, "%s: fail to update %s's mac address!\n", __func__, port->name);
+        }
         break;
     }
     case OPT_XMIT_POLICY:
