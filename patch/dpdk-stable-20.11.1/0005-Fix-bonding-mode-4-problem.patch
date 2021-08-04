@@ -1,13 +1,14 @@
-From 0d0ba57681393cd9c11a0ac069c6f676b9f34707 Mon Sep 17 00:00:00 2001
+From b6d30dfa410c5515ecc153dbe68df374f148ee76 Mon Sep 17 00:00:00 2001
 From: huangyichen <huangyichen@iqiyi.com>
-Date: Fri, 2 Jul 2021 11:57:03 +0800
-Subject: [PATCH 5/6] Fix bonding mode 4 problem caused by LACP failure.
+Date: Wed, 4 Aug 2021 14:02:09 +0800
+Subject: [PATCH 5/6] Fix bonding mode 4 problem:
 
-The problem is disscussed in Issue #725 of iqiyi/dpvs in detail.
-https://github.com/iqiyi/dpvs/issues/725
+1. Faulted lacp negotiation, The problem is disscussed in Issue [#725](https://github.com/iqiyi/dpvs/issues/725) of iqiyi/dpvs in detail.
+2. Multicast packet miss fetch caused by slow protocol process.
 ---
  drivers/net/bonding/rte_eth_bond_8023ad.c | 20 +++++++++++---------
- 1 file changed, 11 insertions(+), 9 deletions(-)
+ drivers/net/bonding/rte_eth_bond_pmd.c    |  9 +++++++++
+ 2 files changed, 20 insertions(+), 9 deletions(-)
 
 diff --git a/drivers/net/bonding/rte_eth_bond_8023ad.c b/drivers/net/bonding/rte_eth_bond_8023ad.c
 index 5fe004e..52bd960 100644
@@ -55,6 +56,26 @@ index 5fe004e..52bd960 100644
  		}
  
  		periodic_machine(internals, slave_id);
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 057b1ad..37973ce 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -322,6 +322,15 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+ 
+ 		/* Handle slow protocol packets. */
+ 		while (j < num_rx_total) {
++                        /* If packet is not pure L2 and is known: 
++ 			* Such as OSPF protocol multcast packet,
++ 			* we want to handle it in user mode by ourselves, 
++ 			* skip slow protocol flow*/
++                        if ((bufs[j]->packet_type & ~RTE_PTYPE_L2_ETHER) != 0) {
++                                j++;
++                                continue;
++                        }
++
+ 			if (j + 3 < num_rx_total)
+ 				rte_prefetch0(rte_pktmbuf_mtod(bufs[j + 3], void *));
+ 
 -- 
 1.8.3.1
 
