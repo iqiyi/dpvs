@@ -1,6 +1,6 @@
-From 256eb959c5a3ae3661568028271367f2facd709b Mon Sep 17 00:00:00 2001
+From ca13a127a220fecbcc080f208339c455e12a61a8 Mon Sep 17 00:00:00 2001
 From: huangyichen <huangyichen@iqiyi.com>
-Date: Wed, 4 Aug 2021 14:27:34 +0800
+Date: Wed, 4 Aug 2021 15:16:04 +0800
 Subject: [PATCH 6/6] bonding: allow slaves from different numa nodes
 
 Note the patch may have a negative influnce on performance.
@@ -10,7 +10,7 @@ It's not a good practice to bonding slaves across numa nodes.
  1 file changed, 16 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
-index 37973ce..f31cd4d 100644
+index 27f35fb..7184e0b 100644
 --- a/drivers/net/bonding/rte_eth_bond_pmd.c
 +++ b/drivers/net/bonding/rte_eth_bond_pmd.c
 @@ -1771,7 +1771,14 @@ slave_configure(struct rte_eth_dev *bonded_eth_dev,
