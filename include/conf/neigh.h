@@ -34,7 +34,6 @@ enum {
 
 struct dp_vs_neigh_conf {
     int                     af;
-    uint8_t                 flag;
     uint32_t                state;
     union inet_addr         ip_addr;
 #ifdef __DPVS__
@@ -44,6 +43,7 @@ struct dp_vs_neigh_conf {
 #endif
     uint32_t                que_num;
     char                    ifname[IFNAMSIZ];
+    uint8_t                 flag;
     uint8_t                 cid;
 }__attribute__((__packed__));
 

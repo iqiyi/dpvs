@@ -56,11 +56,12 @@ netif_defs {
     !    kni_name               dpdk1.kni
     }
 
-    <init> device bond0 {
+    <init> bonding bond0 {
         mode                    4           <0-6>
         slave                   dpdk0       <device name>
         slave                   dpdk1       <device name>
         primary                 dpdk0       <device name, use primary slave queue conf for bond>
+        numa_node               0           <0, int value from /sys/bus/pci/devices/[pci_bus]/numa_node>
         kni_name                bond0.kni   <char[32]>
 
         ! supported options:

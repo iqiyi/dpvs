@@ -139,7 +139,7 @@ static void ip6_conf_disable(vector_t tokens)
     else
         RTE_LOG(WARNING, IPV6, "invalid ipv6:disable %s\n", str);
 
-    RTE_LOG(INFO, IPV6, "ipv6:disable = %s", conf_ipv6_disable ? "on" : "off");
+    RTE_LOG(INFO, IPV6, "ipv6:disable = %s\n", conf_ipv6_disable ? "on" : "off");
 
     FREE_PTR(str);
 }

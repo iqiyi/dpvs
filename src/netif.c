@@ -85,7 +85,8 @@ static uint16_t g_nports;
 /*for arp process*/
 static struct rte_ring *arp_ring[DPVS_MAX_LCORE];
 
-#define NETIF_BOND_MODE_DEF     BONDING_MODE_ROUND_ROBIN
+#define NETIF_BOND_MODE_DEF         BONDING_MODE_ROUND_ROBIN
+#define NETIF_BOND_NUMA_NODE_DEF    0
 
 struct port_conf_stream {
     int port_id;
@@ -114,6 +115,7 @@ struct bond_conf_stream {
     char name[32];
     char kni_name[32];
     int mode;
+    int numa_node;
     char primary[32];
     char slaves[NETIF_MAX_BOND_SLAVES][32];
     struct bond_options options;
@@ -468,6 +470,7 @@ static void bonding_handler(vector_t tokens)
     RTE_LOG(INFO, NETIF, "netif bonding config: %s\n", str);
     strncpy(bond_cfg->name, str, sizeof(bond_cfg->name));
     bond_cfg->mode = NETIF_BOND_MODE_DEF;
+    bond_cfg->numa_node = NETIF_BOND_NUMA_NODE_DEF;
     bond_cfg->options.dedicated_queues_enable = true;
 
     list_add(&bond_cfg->bond_list_node, &bond_list);
@@ -539,6 +542,27 @@ static void bonding_primary_handler(vector_t tokens)
     } else {
         RTE_LOG(WARNING, NETIF, "invalid bonding %s:primary %s, skip ...\n",
                 current_bond->name, str);
+    }
+
+    FREE_PTR(str);
+}
+
+static void bonding_numa_node_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    int numa_node;
+    struct bond_conf_stream *current_bond = list_entry(bond_list.next,
+            struct bond_conf_stream, bond_list_node);
+    assert(str);
+
+    numa_node = atoi(str);
+    if (numa_node >= get_numa_nodes()) {
+        RTE_LOG(WARNING, NETIF, "invalid bonding %s:numa_node %d, using default %d\n",
+                current_bond->name, numa_node, NETIF_BOND_NUMA_NODE_DEF);
+        current_bond->mode = NETIF_BOND_NUMA_NODE_DEF;
+    } else {
+        RTE_LOG(INFO, NETIF, "bonding %s:numa_node=%d\n", current_bond->name, numa_node);
+        current_bond->numa_node = numa_node;
     }
 
     FREE_PTR(str);
@@ -879,6 +903,7 @@ void install_netif_keywords(void)
     install_keyword("mode", bonding_mode_handler, KW_TYPE_INIT);
     install_keyword("slave", bonding_slave_handler, KW_TYPE_INIT);
     install_keyword("primary", bonding_primary_handler, KW_TYPE_INIT);
+    install_keyword("numa_node", bonding_numa_node_handler, KW_TYPE_INIT);
     install_keyword("kni_name", bonding_kni_name_handler, KW_TYPE_INIT);
     install_keyword("options", bonding_options_handler, KW_TYPE_INIT);
     install_sublevel_end();
@@ -2627,15 +2652,17 @@ static int update_bond_macaddr(struct netif_port *port)
 {
     assert(port->type == PORT_TYPE_BOND_MASTER);
 
-    int ret = EDPVS_OK;
-    rte_eth_macaddr_get(port->id, &port->addr);
+    if (rte_eth_macaddr_get(port->id, &port->addr))
+        return EDPVS_NOTEXIST;
+
     if (kni_dev_exist(port)) {
-        ret = linux_set_if_mac(port->kni.name, (unsigned char *)&port->addr);
-        if (ret == EDPVS_OK)
-            rte_ether_addr_copy(&port->addr, &port->kni.addr);
+        /* if kni device isn't link up, linux_set_if_mac would fail(Timer expired),
+         * and in this case the warning can be ingored.*/
+        linux_set_if_mac(port->kni.name, (unsigned char *)&port->addr);
+        rte_ether_addr_copy(&port->addr, &port->kni.addr);
     }
 
-    return ret;
+    return EDPVS_OK;
 }
 
 static inline void free_mbufs(struct rte_mbuf **pkts, unsigned num)
@@ -2978,6 +3005,7 @@ static struct netif_ops dpdk_netif_ops = {
 };
 
 static struct netif_ops bond_netif_ops = {
+    .op_update_addr      = update_bond_macaddr,
     .op_set_mc_list      = bond_set_mc_list,
 };
 
@@ -3069,7 +3097,7 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
     if (port->socket == SOCKET_ID_ANY)
         port->socket = rte_socket_id();
     port->mbuf_pool = pktmbuf_pool[port->socket];
-    rte_eth_macaddr_get((uint8_t)id, &port->addr);
+    rte_eth_macaddr_get((uint8_t)id, &port->addr); // bonding mac is zero here
     rte_eth_dev_get_mtu((uint8_t)id, &port->mtu);
     rte_eth_dev_info_get((uint8_t)id, &port->dev_info);
     port->dev_conf = *conf;
@@ -3427,10 +3455,6 @@ static int add_bond_slaves(struct netif_port *port)
                 __func__, port->name, port->bond->master.primary->name);
     }
 
-    if (update_bond_macaddr(port) != EDPVS_OK) {
-        RTE_LOG(ERR, NETIF, "%s: fail to update %s's macaddr!\n", __func__, port->name);
-        return EDPVS_INVAL;
-    }
     /* Add a MAC address to an internal array of addresses used to enable whitelist
      * * filtering to accept packets only if the destination MAC address matches */
     for (ii = 0; ii < port->bond->master.slave_nb; ii++) {
@@ -3564,7 +3588,7 @@ int netif_port_start(struct netif_port *port)
     }
 
     netif_print_port_conf(&port->dev_conf, buf, &buflen);
-    RTE_LOG(INFO, NETIF, "device %s configuration:\n%s\n\n", port->name, buf);
+    RTE_LOG(INFO, NETIF, "device %s configuration:\n%s\n", port->name, buf);
 
     // build port-queue-lcore mapping array
     build_port_queue_lcore_map();
@@ -3602,10 +3626,9 @@ int netif_port_start(struct netif_port *port)
         rte_eth_promiscuous_enable(port->id);
     }
 
-    /* bonding device's macaddr is updated by its primary device when start,
-     * so we should update its macaddr after start. */
-    if (port->type == PORT_TYPE_BOND_MASTER)
-        update_bond_macaddr(port);
+     /* update mac addr to netif_port and netif_kni after start */
+    if (port->netif_ops->op_update_addr)
+        port->netif_ops->op_update_addr(port);
 
     /* add in6_addr multicast address */
     int cid = 0;
@@ -3764,11 +3787,18 @@ static int relate_bonding_device(void)
                 return EDPVS_EXIST;
             }
             mport->bond->master.slaves[i] = sport;
-            if (!strcmp(bond_conf->slaves[i], bond_conf->primary))
+            if (!strcmp(bond_conf->slaves[i], bond_conf->primary)) {
                 mport->bond->master.primary = sport;
+                rte_ether_addr_copy(&sport->addr, &mport->addr);  /* use primary slave's macaddr for bonding */
+            }
             assert(sport->type == PORT_TYPE_GENERAL);
-            /* FIXME: all slaves share the same socket with master, otherwise kernel crash */
-            sport->socket = mport->socket;
+            if (sport->socket != mport->socket) {
+                /* FIXME: all slaves share the same socket with master, otherwise kernel crash */
+                RTE_LOG(WARNING, NETIF, "%s: %s is created on numa node %d, while its slave %s"
+                        " is on numa node %d\n", __func__, mport->name, mport->socket,
+                        sport->name, sport->socket);
+                sport->socket = mport->socket;
+            }
             sport->type = PORT_TYPE_BOND_SLAVE;
             sport->bond->slave.master = mport;
         }
@@ -3963,88 +3993,91 @@ static int obtain_dpdk_bond_name(char *dst, const char *ori, size_t size)
 }
 
 /*
- * netif_virtual_devices_add must be called before lcore_init and port_init, so calling the
- * function immediately after cfgfile_init is recommended.
+ * netif_virtual_devices_add must be called before lcore_init and port_init,
+ * so it's recommended to call this function immediately after cfgfile_init.
  */
 int netif_vdevs_add(void)
 {
-    portid_t pid;
-    int socket_id;
+    int ret;
     struct bond_conf_stream *bond_cfg;
 
 #ifdef NETIF_BONDING_DEBUG
-    int ii;
+    int ii, len = 0;
+    char slavenames[NETIF_MAX_BOND_SLAVES*IFNAMSIZ];
     list_for_each_entry_reverse(bond_cfg, &bond_list, bond_list_node) {
-        if (!bond_cfg->primary[0])
-            strncpy(bond_cfg->primary, bond_cfg->slaves[0], sizeof(bond_cfg->primary));
-        printf("Add bonding device \"%s\": mode=%d, primary=%s, slaves=\"",
-                bond_cfg->name, bond_cfg->mode, bond_cfg->primary);
-        for (ii = 0; ii < NETIF_MAX_BOND_SLAVES && bond_cfg->slaves[ii][0]; ii++)
-            printf("%s ", bond_cfg->slaves[ii]);
-        printf("\"\n");
+        for (ii = 0; ii < NETIF_MAX_BOND_SLAVES && bond_cfg->slaves[ii][0]; ii++) {
+            ret = snprintf(&slavenames[len], sizeof(slavenames)-len-1, "%s ", bond_cfg->slaves[ii]);
+            if (ret >= 0)
+                len += ret;
+        }
+        RTE_LOG(DEBUG, NETIF, "Add bonding device \"%s\""
+                "\n\tmode: %d"
+                "\n\tprimary: %s"
+                "\n\tnuma_node: %d"
+                "\n\tslaves: %s\n",
+                bond_cfg->name,
+                bond_cfg->mode,
+                bond_cfg->primary[0] ? bond_cfg->primary : ii > 0 ? bond_cfg->slaves[0] : "",
+                bond_cfg->numa_node,
+                slavenames);
     }
 #endif
 
+    /* set phy_pid_end/bond_pid_base before create bonding device */
     phy_pid_end = dpvs_rte_eth_dev_count();
-
     port_id_end = max(port_id_end, phy_pid_end);
-    /* set bond_pid_offset before create bonding device */
     if (!list_empty(&bond_list))
         bond_pid_base = phy_pid_end;
 
     list_for_each_entry_reverse(bond_cfg, &bond_list, bond_list_node) {
+        char bondname[IFNAMSIZ] = {'\0'};
+
         if (!bond_cfg->slaves[0][0]) {
             RTE_LOG(WARNING, NETIF, "%s: no slaves configured for %s, skip ...\n",
                     __func__, bond_cfg->name);
             return EDPVS_INVAL;
         }
+
         /* use the first slave as primary if not configured */
-        if (!bond_cfg->primary[0])
+        if (!bond_cfg->primary[0]) {
+            RTE_LOG(INFO, NETIF, "%s: %s primary slave is not configured, using %s\n",
+                    __func__, bond_cfg->name, bond_cfg->slaves[0]);
             strncpy(bond_cfg->primary, bond_cfg->slaves[0], sizeof(bond_cfg->primary));
-        /* FIXME: which socket should bonding device located on? Ideally, socket of the primary
-         * bonding slave. But here we cannot obtain slave port id from its name by
-         * "rte_lcore_to_socket_id" due to the uninitialized netif_port list.
-         * Here we use master lcore's socket as the compromise. Another solution is to appoint
-         * the socket id in the cfgfile.
-         * */
-        socket_id = rte_lcore_to_socket_id(rte_lcore_id());
-        if (socket_id < 0) {
-            RTE_LOG(ERR, NETIF, "%s: fail to get socket id for %s\n",
+        }
+
+        ret = obtain_dpdk_bond_name(bondname, bond_cfg->name, IFNAMSIZ);
+        if (ret != EDPVS_OK) {
+            RTE_LOG(ERR, NETIF, "%s: invalid bonding device name in config file %s\n",
                     __func__, bond_cfg->name);
             return EDPVS_INVAL;
         }
 
-        char dummy_name[IFNAMSIZ] = {'\0'};
-        int rc = obtain_dpdk_bond_name(dummy_name, bond_cfg->name, IFNAMSIZ);
-        if (rc != EDPVS_OK) {
-            RTE_LOG(ERR, NETIF, "%s: wrong bond device name in config file %s\n",
-                    __func__, bond_cfg->name);
-            return EDPVS_INVAL;
-        }
-        /* int pid_rc = rte_eth_bond_create(bond_cfg->name, bond_cfg->mode, socket_id); */
-        int pid_rc = rte_eth_bond_create(dummy_name, bond_cfg->mode, socket_id);
-        if (pid_rc < 0) {
-            RTE_LOG(ERR, NETIF, "%s: fail to create bonding device %s(mode=%d, socket=%d)\n",
-                    __func__, bond_cfg->name, bond_cfg->mode, socket_id);
+        /* Note that all slaves' numa nodes should be the same as the one of bonding,
+         * otherwise the bonding and slaves cannot link up. Nevertheless, if you are
+         * to use slaves from different numa nodes, the dpdk patch
+         *      [bonding: allow slaves from different numa nodes]
+         * should be applied, which may cause negative influence on performance. */
+        ret = rte_eth_bond_create(bondname, bond_cfg->mode, bond_cfg->numa_node);
+        if (ret < 0) {
+            RTE_LOG(ERR, NETIF, "%s: fail to create bonding device %s: mode=%d, numa_node=%d\n",
+                    __func__, bond_cfg->name, bond_cfg->mode, bond_cfg->numa_node);
             return EDPVS_CALLBACKFAIL;
         }
-        pid = pid_rc;
-        RTE_LOG(INFO, NETIF, "create bondig device %s: mode=%d, primary=%s, socket=%d\n",
-                bond_cfg->name, bond_cfg->mode, bond_cfg->primary, socket_id);
-        bond_cfg->port_id = pid; /* relate port_id with port_name, used by netif_rte_port_alloc */
+        bond_cfg->port_id = ret; /* relate port_id with port_name, used by netif_rte_port_alloc */
+        RTE_LOG(INFO, NETIF, "created bondig device %s: mode=%d, primary=%s, numa_node=%d\n",
+                bond_cfg->name, bond_cfg->mode, bond_cfg->primary, bond_cfg->numa_node);
+
         if (bond_cfg->mode == BONDING_MODE_8023AD && bond_cfg->options.dedicated_queues_enable) {
             if (!rte_eth_bond_8023ad_dedicated_queues_enable(bond_cfg->port_id)) {
-                RTE_LOG(INFO, NETIF, "bonding mode4 dedicated queues enable failed!\n");
+                RTE_LOG(INFO, NETIF, "%s: bonding mode4 dedicated queues enable failed!\n", __func__);
             }
         }
     }
 
     if (!list_empty(&bond_list)) {
         bond_pid_end = dpvs_rte_eth_dev_count();
-
         port_id_end = max(port_id_end, bond_pid_end);
-        RTE_LOG(INFO, NETIF, "bonding device port id range: [%d, %d)\n",
-                bond_pid_base, bond_pid_end);
+        RTE_LOG(INFO, NETIF, "bonding device port id range: [%d, %d)\n", bond_pid_base, bond_pid_end);
     }
 
     return EDPVS_OK;
@@ -4867,9 +4900,10 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
                 port->bond->master.slave_nb--;
             }
         }
-        /* ATTENITON: neighbor get macaddr from port->addr, thus it should be updated */
-        if (update_bond_macaddr(port) != EDPVS_OK)
-            RTE_LOG(ERR, NETIF, "%s: fail to update %s's macaddr!\n", __func__, port->name);
+        if (port->netif_ops->op_update_addr) {
+            if (port->netif_ops->op_update_addr(port) != EDPVS_OK)
+                RTE_LOG(ERR, NETIF, "%s: fail to update %s's mac address!\n", __func__, port->name);
+        }
         break;
     }
     case OPT_PRIMARY:
@@ -4883,9 +4917,10 @@ static int set_bond(struct netif_port *port, const netif_bond_set_t *bond_cfg)
                     port->name, port->bond->master.primary->name, primary->name);
             port->bond->master.primary = primary;
         }
-        /* ATTENITON: neighbor get macaddr from port->addr, thus it should be updated */
-        if (update_bond_macaddr(port) != EDPVS_OK)
-            RTE_LOG(ERR, NETIF, "%s: fail to update %s's macaddr!\n", __func__, port->name);
+        if (port->netif_ops->op_update_addr) {
+            if (port->netif_ops->op_update_addr(port) != EDPVS_OK)
+                RTE_LOG(ERR, NETIF, "%s: fail to update %s's mac address!\n", __func__, port->name);
+        }
         break;
     }
     case OPT_XMIT_POLICY:
