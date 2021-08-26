@@ -3498,6 +3498,7 @@ static int config_fdir_conf(struct rte_fdir_conf *fdir_conf)
 int netif_port_start(struct netif_port *port)
 {
     int ii, ret;
+    lcoreid_t cid;
     queueid_t qid;
     char promisc_on;
     char buf[512];
@@ -3633,7 +3634,6 @@ int netif_port_start(struct netif_port *port)
         port->netif_ops->op_update_addr(port);
 
     /* add in6_addr multicast address */
-    int cid = 0;
     rte_eal_mp_remote_launch(idev_add_mcast_init, port, CALL_MAIN);
     RTE_LCORE_FOREACH_WORKER(cid) {
         if ((ret = rte_eal_wait_lcore(cid)) < 0) {
@@ -3641,13 +3641,6 @@ int netif_port_start(struct netif_port *port)
                     __func__, cid, port->name);
             return ret;
         }
-    }
-
-    /* flush rte_flows */
-    ret = netif_flow_flush(port);
-    if (ret != EDPVS_OK) {
-        RTE_LOG(WARNING, NETIF, "fail to flush rte_flows on device %s\n", port->name);
-        return ret;
     }
 
     return EDPVS_OK;
