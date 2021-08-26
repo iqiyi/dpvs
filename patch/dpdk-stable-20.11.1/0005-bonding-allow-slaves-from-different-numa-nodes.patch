@@ -1,4 +1,4 @@
-From fc6f70475f8c4cf6870e0e19d4976aebc4ba1a94 Mon Sep 17 00:00:00 2001
+From a6393a8d04f1c8a4b324782aa5e242e10043a197 Mon Sep 17 00:00:00 2001
 From: huangyichen <huangyichen@iqiyi.com>
 Date: Wed, 4 Aug 2021 15:16:04 +0800
 Subject: [PATCH 5/6] bonding: allow slaves from different numa nodes

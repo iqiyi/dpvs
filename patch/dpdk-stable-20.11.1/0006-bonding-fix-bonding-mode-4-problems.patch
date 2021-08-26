@@ -1,14 +1,15 @@
-From 05e8db13b7bb119d99760ae8cac33f8c5543eae7 Mon Sep 17 00:00:00 2001
+From 38db21e38a36527a0e2e26f01a4b1f1bfd10c3d6 Mon Sep 17 00:00:00 2001
 From: huangyichen <huangyichen@iqiyi.com>
 Date: Wed, 4 Aug 2021 15:14:04 +0800
-Subject: [PATCH 6/6] fix bonding mode 4 problems
+Subject: [PATCH 6/6] bonding: fix bonding mode 4 problems
 
-1. Faulted lacp negotiation that is disscussed in Issue [#725](https://github.com/iqiyi/dpvs/issues/725) of iqiyi/dpvs in detail.
+1. Fix lacp packet receipt problem that is disscussed in issue [#725](https://github.com/iqiyi/dpvs/issues/725) of iqiyi/dpvs in detail.
 2. Don't drop multicast/broadcast packets when all-multicast isn't enabled in rx_burst_8023ad.
+3. Don't drop lacp packets received from worker queues when dedicated queue enabled.
 ---
- drivers/net/bonding/rte_eth_bond_8023ad.c | 20 +++++++++++---------
- drivers/net/bonding/rte_eth_bond_pmd.c    | 23 +++++++++++++----------
- 2 files changed, 24 insertions(+), 19 deletions(-)
+ drivers/net/bonding/rte_eth_bond_8023ad.c | 20 ++++++++------
+ drivers/net/bonding/rte_eth_bond_pmd.c    | 46 +++++++++++++++++++------------
+ 2 files changed, 40 insertions(+), 26 deletions(-)
 
 diff --git a/drivers/net/bonding/rte_eth_bond_8023ad.c b/drivers/net/bonding/rte_eth_bond_8023ad.c
 index 5fe004e..52bd960 100644
@@ -57,7 +58,7 @@ index 5fe004e..52bd960 100644
  
  		periodic_machine(internals, slave_id);
 diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
-index 53f8ba3..72acb61 100644
+index 53f8ba3..42e436c 100644
 --- a/drivers/net/bonding/rte_eth_bond_pmd.c
 +++ b/drivers/net/bonding/rte_eth_bond_pmd.c
 @@ -291,7 +291,6 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
@@ -84,7 +85,7 @@ index 53f8ba3..72acb61 100644
  			if (j + 3 < num_rx_total)
  				rte_prefetch0(rte_pktmbuf_mtod(bufs[j + 3], void *));
  
-@@ -331,10 +339,8 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+@@ -331,24 +339,26 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
  			/* Remove packet from array if:
  			 * - it is slow packet but no dedicated rxq is present,
  			 * - slave is not in collecting state,
@@ -96,22 +97,48 @@ index 53f8ba3..72acb61 100644
 +			 *   packet is unicast and address does not match,
  			 */
  			if (unlikely(
- 				(!dedicated_rxq &&
-@@ -342,12 +348,9 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
- 						 bufs[j])) ||
- 				!collecting ||
- 				(!promisc &&
+-				(!dedicated_rxq &&
+-				 is_lacp_packets(hdr->ether_type, subtype,
+-						 bufs[j])) ||
+-				!collecting ||
+-				(!promisc &&
 -				 ((rte_is_unicast_ether_addr(&hdr->d_addr) &&
-+				 (rte_is_unicast_ether_addr(&hdr->d_addr) &&
- 				   !rte_is_same_ether_addr(bond_mac,
+-				   !rte_is_same_ether_addr(bond_mac,
 -						       &hdr->d_addr)) ||
 -				  (!allmulti &&
 -				   rte_is_multicast_ether_addr(&hdr->d_addr)))))) {
 -
-+						       &hdr->d_addr))))) {
++				(is_lacp_packets(hdr->ether_type, subtype, bufs[j])) ||
++				!collecting || (!promisc &&
++				 (rte_is_unicast_ether_addr(&hdr->d_addr) &&
++				   !rte_is_same_ether_addr(bond_mac, &hdr->d_addr))))) {
  				if (hdr->ether_type == ether_type_slow_be) {
++					if (dedicated_rxq) {
++						/* Error! Lacp packets should never appear here if
++						 * dedicated queue enabled. This can be caused by
++						 * a lack of support for ethertype rte_flow. Just
++						 * issue a warning rather than dropping the packets
++						 * so that the lacp state machine can work properly.
++						 */
++						RTE_BOND_LOG(WARNING, "receive lacp packets from queue %d "
++								"of port %d when dedicated queue enabled",
++								bd_rx_q->queue_id, slaves[idx]);
++					}
  					bond_mode_8023ad_handle_slow_pkt(
  					    internals, slaves[idx], bufs[j]);
+ 				} else
+@@ -1271,8 +1281,10 @@ skip_tx_ring:
+ 					slave_port_ids[i];
+ 	}
+ 
+-	if (unlikely(dist_slave_count < 1))
++	if (unlikely(dist_slave_count < 1)) {
++		RTE_BOND_LOG(WARNING, "no distributing slaves on bonding port %d", internals->port_id);
+ 		return 0;
++	}
+ 
+ 	return tx_burst_balance(queue, bufs, nb_bufs, dist_slave_port_ids,
+ 				dist_slave_count);
 -- 
 1.8.3.1
 
