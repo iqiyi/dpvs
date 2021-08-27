@@ -1,4 +1,4 @@
-From 8e66b7600c7d8d0e59dd85565986436c0e03a2c8 Mon Sep 17 00:00:00 2001
+From 5b032cc0d59f9fe2e9607423a92399254e30a8f7 Mon Sep 17 00:00:00 2001
 From: huangyichen <huangyichen@iqiyi.com>
 Date: Thu, 1 Jul 2021 21:21:16 +0800
 Subject: [PATCH 1/6] kni: use netlink event for multicast (driver part)

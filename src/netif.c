@@ -2008,7 +2008,7 @@ static int netif_print_isol_lcore_conf(lcoreid_t cid, char *buf, int *len, bool 
 
 static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
 {
-    int ntx, ii;
+    int ntx;
     struct netif_queue_conf *txq;
     unsigned i = 0;
     struct rte_mbuf *mbuf_copied = NULL;
@@ -2024,7 +2024,7 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
         for (; i < txq->len; i++) {
             if (NULL == (mbuf_copied = mbuf_copy(txq->mbufs[i],
                 pktmbuf_pool[dev->socket])))
-                RTE_LOG(WARNING, NETIF, "%s: Failed to copy mbuf\n", __func__);
+                RTE_LOG(WARNING, NETIF, "%s: fail to copy outbound mbuf into kni\n", __func__);
             else
                 kni_ingress(mbuf_copied, dev);
         }
@@ -2034,10 +2034,12 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
     lcore_stats[cid].opackets += ntx;
     /* do not calculate obytes here in consideration of efficency */
     if (unlikely(ntx < txq->len)) {
-        RTE_LOG(DEBUG, NETIF, "Fail to send %d packets on dpdk%d tx%d\n", ntx,pid, txq->id);
+        RTE_LOG(INFO, NETIF, "fail to send %d of %d packets on dpdk port %d txq %d\n",
+                txq->len - ntx, txq->len, pid, txq->id);
         lcore_stats[cid].dropped += txq->len - ntx;
-        for (ii = ntx; ii < txq->len; ii++)
-            rte_pktmbuf_free(txq->mbufs[ii]);
+        do {
+            rte_pktmbuf_free(txq->mbufs[ntx]);
+        } while (++ntx < txq->len);
     }
 }
 
@@ -3496,6 +3498,7 @@ static int config_fdir_conf(struct rte_fdir_conf *fdir_conf)
 int netif_port_start(struct netif_port *port)
 {
     int ii, ret;
+    lcoreid_t cid;
     queueid_t qid;
     char promisc_on;
     char buf[512];
@@ -3631,7 +3634,6 @@ int netif_port_start(struct netif_port *port)
         port->netif_ops->op_update_addr(port);
 
     /* add in6_addr multicast address */
-    int cid = 0;
     rte_eal_mp_remote_launch(idev_add_mcast_init, port, CALL_MAIN);
     RTE_LCORE_FOREACH_WORKER(cid) {
         if ((ret = rte_eal_wait_lcore(cid)) < 0) {
@@ -3639,13 +3641,6 @@ int netif_port_start(struct netif_port *port)
                     __func__, cid, port->name);
             return ret;
         }
-    }
-
-    /* flush rte_flows */
-    ret = netif_flow_flush(port);
-    if (ret != EDPVS_OK) {
-        RTE_LOG(WARNING, NETIF, "fail to flush rte_flows on device %s\n", port->name);
-        return ret;
     }
 
     return EDPVS_OK;
@@ -4068,7 +4063,7 @@ int netif_vdevs_add(void)
                 bond_cfg->name, bond_cfg->mode, bond_cfg->primary, bond_cfg->numa_node);
 
         if (bond_cfg->mode == BONDING_MODE_8023AD && bond_cfg->options.dedicated_queues_enable) {
-            if (!rte_eth_bond_8023ad_dedicated_queues_enable(bond_cfg->port_id)) {
+            if (rte_eth_bond_8023ad_dedicated_queues_enable(bond_cfg->port_id)) {
                 RTE_LOG(INFO, NETIF, "%s: bonding mode4 dedicated queues enable failed!\n", __func__);
             }
         }
