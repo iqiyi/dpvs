@@ -143,7 +143,7 @@ $ ./usertools/dpdk-devbind.py -b uio_pci_generic 0000:06:00.0
 
 ## Build DPVS
 
-It's simple, just set `RTE_SDK` and build it.
+It's simple, just set `PKG_CONFIG_PATH` and build it.
 
 ```bash
 $ export PKG_CONFIG_PATH=<path-of-libdpdk.pc>  # normally located at dpdklib/lib64/pkgconfig/libdpdk.pc
