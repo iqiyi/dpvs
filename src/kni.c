@@ -55,6 +55,14 @@ static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
     conf->group_id = dev->id;
     conf->mbuf_size = KNI_DEF_MBUF_SIZE;
 
+    /*
+     * kni device should use same mac as real device,
+     * because it may config same IP of real device.
+     * diff mac means kni cannot accept packets sent
+     * to real-device.
+     */
+    memcpy(conf->mac_addr, dev->addr.addr_bytes, sizeof(conf->mac_addr));
+
     if (dev->type == PORT_TYPE_GENERAL) { /* dpdk phy device */
         rte_eth_dev_info_get(dev->id, &info);
 #if RTE_VERSION < RTE_VERSION_NUM(18, 11, 0, 0)
@@ -83,17 +91,17 @@ static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
 }
 
 static int kni_mc_list_cmp_set(struct netif_port *dev,
-                               struct ether_addr *addrs, size_t naddr)
+                               struct rte_ether_addr *addrs, size_t naddr)
 {
     int err = EDPVS_INVAL, i, j;
-    struct ether_addr addrs_old[NETIF_MAX_HWADDR];
+    struct rte_ether_addr addrs_old[NETIF_MAX_HWADDR];
     size_t naddr_old;
     char mac[64];
     struct mc_change_list {
-        size_t              naddr;
-        struct ether_addr   addrs[NETIF_MAX_HWADDR*2];
+        size_t                  naddr;
+        struct rte_ether_addr   addrs[NETIF_MAX_HWADDR*2];
         /* state: 0 - unchanged, 1 - added, 2 deleted. */
-        int                 states[NETIF_MAX_HWADDR*2];
+        int                     states[NETIF_MAX_HWADDR*2];
     } chg_lst = {0};
 
     rte_rwlock_write_lock(&dev->dev_lock);
@@ -116,7 +124,7 @@ static int kni_mc_list_cmp_set(struct netif_port *dev,
     /* add all addrs from netlink(linux) to change-list and
      * assume they're all new added by default. */
     for (i = 0; i < naddr; i++) {
-        ether_addr_copy(&addrs[i], &chg_lst.addrs[i]);
+        rte_ether_addr_copy(&addrs[i], &chg_lst.addrs[i]);
         chg_lst.states[i] = 1;
 
         RTE_LOG(DEBUG, Kni, "    new [%02d] %s\n", i,
@@ -140,7 +148,7 @@ static int kni_mc_list_cmp_set(struct netif_port *dev,
             /* deleted */
             assert(chg_lst.naddr < NETIF_MAX_HWADDR * 2);
 
-            ether_addr_copy(&addrs_old[i], &chg_lst.addrs[chg_lst.naddr]);
+            rte_ether_addr_copy(&addrs_old[i], &chg_lst.addrs[chg_lst.naddr]);
             chg_lst.states[chg_lst.naddr] = 2;
             chg_lst.naddr++;
         }
@@ -188,7 +196,7 @@ static int kni_update_maddr(struct netif_port *dev)
     char line[1024];
     int ifindex, users, st; /* @st for static */
     char ifname[IFNAMSIZ], hexa[256]; /* hex address */
-    struct ether_addr ma_list[NETIF_MAX_HWADDR];
+    struct rte_ether_addr ma_list[NETIF_MAX_HWADDR];
     int n_ma;
 
     fp = fopen("/proc/net/dev_mcast", "r");
@@ -359,20 +367,6 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
     if (err != EDPVS_OK) {
         rte_kni_release(kni);
         return err;
-    }
-
-    /*
-     * kni device should use same mac as real device,
-     * because it may config same IP of real device.
-     * diff mac means kni cannot accept packets sent
-     * to real-device.
-     */
-    err = linux_set_if_mac(conf.name, (unsigned char *)&dev->addr);
-    if (err != EDPVS_OK) {
-        char mac[18];
-        ether_format_addr(mac, sizeof(mac), &dev->addr);
-        RTE_LOG(WARNING, Kni, "%s: fail to set mac %s for %s: %s\n",
-                __func__, mac, conf.name, strerror(errno));
     }
 
     snprintf(ring_name, sizeof(ring_name), "kni_rx_ring_%s",

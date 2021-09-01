@@ -23,10 +23,10 @@
  * ways to achieve the goal. one is to calc RSS the same way of
  * NIC to select the correct CPU for connect.
  *
- * the way we use is based on Flow-Director (fdir), allocate
+ * the way we use is based on DPDK Generic Flow(rte_flow), allocate
  * local source (e.g., <ip, port>) for each CPU core in advance.
- * and redirect the back traffic to that CPU by fdir. it does not
- * need two many fdir rules, the number of rules can be equal to
+ * and redirect the back traffic to that CPU by rte_flow. it does not
+ * need two many flow rules, the number of rules can be equal to
  * the number of CPU core.
  *
  * LVS use laddr and try <laddr,lport> to see if is used when
@@ -42,9 +42,10 @@
 #ifndef __DPVS_SA_POOL__
 #define __DPVS_SA_POOL__
 
-#define MAX_PORT            65536
+#include "netif_flow.h"
 
-#define MAX_FDIR_PROTO      2
+#define MAX_PORT            65536
+#define MAX_SA_FLOW         4
 
 struct sa_pool_stats {
     uint32_t used_cnt;
@@ -58,8 +59,7 @@ struct sa_pool_stats {
  * 2. use uint8_t flag
  * 3. remove sa_entry.addr, and get IP from sa_pool->ifa
  * 4. to __packed__ sa_entry.
- * 5. alloc sa_entries[] for 65536/cpu_num only.
- * 6. create sa_entry_pool only if pool_hash hit.
+ * 5. create sa_entry_pool only if pool_hash hit.
  *    since when dest (like RS) num may small.
  */
 
@@ -87,21 +87,21 @@ struct sa_entry_pool {
 /* no lock needed because inet_ifaddr.sa_pool
  * is per-lcore. */
 struct sa_pool {
-    struct inet_ifaddr      *ifa;       /* back-pointer */
+    struct inet_ifaddr          *ifa;       /* back-pointer */
 
-    uint16_t                low;        /* min port */
-    uint16_t                high;       /* max port */
-    rte_atomic32_t          refcnt;
+    uint16_t                    low;        /* min port */
+    uint16_t                    high;       /* max port */
+    rte_atomic32_t              refcnt;
 
     /* hashed pools by dest's <ip/port>. if no dest provided,
      * just use first pool. it's not need create/destroy pool
      * for each dest, that'll be too complicated. */
-    struct sa_entry_pool    *pool_hash;
-    uint8_t                 pool_hash_sz;
-    uint32_t                flags;      /* SA_POOL_F_XXX */
+    struct sa_entry_pool        *pool_hash;
+    uint8_t                     pool_hash_sz;
+    uint32_t                    flags;      /* SA_POOL_F_XXX */
 
-    /* fdir filter ID */
-    uint32_t                filter_id[MAX_FDIR_PROTO];
+    int                         flow_num;
+    struct netif_flow_handler   flows[MAX_SA_FLOW];
 };
 
 int sa_pool_init(void);

@@ -53,7 +53,7 @@
  *
  * Undefined if no bit exists, so code should check against 0 first.
  */
-inline unsigned long __ffs(unsigned long word);
+unsigned long __ffs(unsigned long word);
 
 /**
  * fls - find last (most-significant) bit set
@@ -62,7 +62,7 @@ inline unsigned long __ffs(unsigned long word);
  * This is defined the same way as ffs.
  * Note fls(0) = 0, fls(1) = 1, fls(0x80000000) = 32.
  */
-inline int fls(unsigned int x);
+int fls(unsigned int x);
 
 /**
  * taken from definition in include/linux/gcd.h

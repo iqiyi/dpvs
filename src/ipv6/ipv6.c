@@ -139,7 +139,7 @@ static void ip6_conf_disable(vector_t tokens)
     else
         RTE_LOG(WARNING, IPV6, "invalid ipv6:disable %s\n", str);
 
-    RTE_LOG(INFO, IPV6, "ipv6:disable = %s", conf_ipv6_disable ? "on" : "off");
+    RTE_LOG(INFO, IPV6, "ipv6:disable = %s\n", conf_ipv6_disable ? "on" : "off");
 
     FREE_PTR(str);
 }
@@ -159,14 +159,14 @@ static int ip6_local_in_fin(struct rte_mbuf *mbuf)
      * and set it to IPv6 fixed header for upper layer.
      */
     if (!ipv6_addr_is_multicast(&hdr->ip6_dst)) {
-        struct route6 *rt = mbuf->userdata;
+        struct route6 *rt = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
         if (rt) {
             route6_put(rt);
-            mbuf->userdata = NULL;
+            MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = NULL;
         }
     }
 
-    mbuf->userdata = (void *)hdr;
+    MBUF_USERDATA(mbuf, struct ip6_hdr *, MBUF_FIELD_PROTO) = hdr;
     nexthdr = hdr->ip6_nxt;
 
     /* parse extension headers */
@@ -292,7 +292,7 @@ static inline unsigned int ip6_mtu_forward(struct route6 *rt)
 static int ip6_fragment(struct rte_mbuf *mbuf, uint32_t mtu,
                         int (*out)(struct rte_mbuf *))
 {
-    struct route6 *rt = mbuf->userdata;
+    struct route6 *rt = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
 
     /* TODO: */
 
@@ -319,16 +319,16 @@ static int ip6_output_fin2(struct rte_mbuf *mbuf)
             return EDPVS_INVAL;
         }
 
-        dev = mbuf->userdata;
+        dev = MBUF_USERDATA(mbuf, struct netif_port *, MBUF_FIELD_ROUTE);
         /* only support linklocal! */
         nexthop = &hdr->ip6_dst;
 
     } else {
-        rt = mbuf->userdata;
+        rt = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
         dev = rt->rt6_dev;
         nexthop = ip6_rt_nexthop(rt, &hdr->ip6_dst);
     }
-    mbuf->packet_type = ETHER_TYPE_IPv6;
+    mbuf->packet_type = RTE_ETHER_TYPE_IPV6;
 
     err = neigh_output(AF_INET6, (union inet_addr *)nexthop, mbuf, dev);
 
@@ -344,9 +344,9 @@ static int ip6_output_fin(struct rte_mbuf *mbuf)
     struct ip6_hdr *hdr = ip6_hdr(mbuf);
 
     if (ipv6_addr_is_multicast(&hdr->ip6_dst))
-        mtu = ((struct netif_port *)mbuf->userdata)->mtu;
+        mtu = MBUF_USERDATA(mbuf, struct netif_port *, MBUF_FIELD_ROUTE)->mtu;
     else
-        mtu = ((struct route6 *)mbuf->userdata)->rt6_mtu;
+        mtu = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE)->rt6_mtu;
 
     if (mbuf->pkt_len > mtu)
         return ip6_fragment(mbuf, mtu, ip6_output_fin2);
@@ -361,9 +361,9 @@ int ip6_output(struct rte_mbuf *mbuf)
     struct ip6_hdr *hdr = ip6_hdr(mbuf);
 
     if (ipv6_addr_is_multicast(&hdr->ip6_dst)) {
-        dev = mbuf->userdata;
+        dev = MBUF_USERDATA(mbuf, struct netif_port *, MBUF_FIELD_ROUTE);
     } else {
-        rt = mbuf->userdata;
+        rt = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
         dev = rt->rt6_dev;
     }
 
@@ -389,12 +389,11 @@ int ip6_local_out(struct rte_mbuf *mbuf)
     struct ip6_hdr *hdr = ip6_hdr(mbuf);
 
     if (ipv6_addr_is_multicast(&hdr->ip6_dst))
-        dev = mbuf->userdata;
+        dev = MBUF_USERDATA(mbuf, struct netif_port *, MBUF_FIELD_ROUTE);
     else
-        dev = ((struct route6 *)mbuf->userdata)->rt6_dev;
+        dev = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE)->rt6_dev;
 
-    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf, NULL,
-                     dev, ip6_output);
+    return INET_HOOK(AF_INET6, INET_HOOK_LOCAL_OUT, mbuf, NULL, dev, ip6_output);
 }
 
 static int ip6_forward_fin(struct rte_mbuf *mbuf)
@@ -408,7 +407,7 @@ static int ip6_forward_fin(struct rte_mbuf *mbuf)
 static int ip6_forward(struct rte_mbuf *mbuf)
 {
     struct ip6_hdr *hdr = ip6_hdr(mbuf);
-    struct route6 *rt = mbuf->userdata;
+    struct route6 *rt = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
     int addrtype;
     uint32_t mtu;
 
@@ -502,7 +501,7 @@ static int ip6_rcv_fin(struct rte_mbuf *mbuf)
      * someday, we may use extended mbuf if have more L3 info
      * then route need to be saved into mbuf.
      */
-    mbuf->userdata = (void *)rt;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt;
 
     if (rt->rt6_flags & RTF_LOCALIN) {
         return ip6_local_in(mbuf);
@@ -521,7 +520,7 @@ static int ip6_rcv_fin(struct rte_mbuf *mbuf)
 kni:
     if (rt) {
         route6_put(rt);
-        mbuf->userdata = NULL;
+        MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = NULL;
     }
     return EDPVS_KNICONTINUE;
 }
@@ -613,7 +612,7 @@ static int ip6_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
      * @userdata is used to save route info in L3.
      */
     mbuf->l3_len = sizeof(*hdr);
-    mbuf->userdata = NULL;
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = NULL;
 
     /* hop-by-hop option header */
     if (hdr->ip6_nxt == NEXTHDR_HOP) {
@@ -655,7 +654,7 @@ int ipv6_init(void)
         return err;
 
     /* htons, cpu_to_be16 not work when struct initialization :( */
-    ip6_pkt_type.type = htons(ETHER_TYPE_IPv6);
+    ip6_pkt_type.type = htons(RTE_ETHER_TYPE_IPV6);
 
     err = netif_register_pkt(&ip6_pkt_type);
     if (err)
@@ -720,7 +719,8 @@ int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6)
             return EDPVS_NOTSUPP;
         }
         assert(fl6->fl6_oif);
-        mbuf->userdata = (void *)fl6->fl6_oif;
+        /* use mbuf userdata type MBUF_FIELD_ROUTE for saving spaces */
+        MBUF_USERDATA(mbuf, struct netif_port *, MBUF_FIELD_ROUTE) = fl6->fl6_oif;
         dev = fl6->fl6_oif;
 
     } else {
@@ -731,7 +731,7 @@ int ipv6_xmit(struct rte_mbuf *mbuf, struct flow6 *fl6)
             rte_pktmbuf_free(mbuf);
             return EDPVS_NOROUTE;
         }
-        mbuf->userdata = (void *)rt;
+        MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt;
         dev = rt->rt6_dev;
     }
 
@@ -868,7 +868,7 @@ uint16_t ip6_phdr_cksum(struct ip6_hdr *ip6h, uint64_t ol_flags,
     }
     /*FIXME: what if NEXTHDR_ROUTING is not the first exthdr? */
 
-    csum = rte_ipv6_phdr_cksum((struct ipv6_hdr *)ip6h, ol_flags);
+    csum = rte_ipv6_phdr_cksum((struct rte_ipv6_hdr *)ip6h, ol_flags);
 
     /* restore original ip6h header */
     ip6h->ip6_nxt = ip6nxt;
@@ -905,7 +905,7 @@ uint16_t ip6_udptcp_cksum(struct ip6_hdr *ip6h, const void *l4_hdr,
     }
     /*FIXME: what if NEXTHDR_ROUTING is not the first exthdr? */
 
-    csum = rte_ipv6_udptcp_cksum((struct ipv6_hdr *)ip6h, l4_hdr);
+    csum = rte_ipv6_udptcp_cksum((struct rte_ipv6_hdr *)ip6h, l4_hdr);
 
     /* restore original ip6h header */
     ip6h->ip6_nxt = ip6nxt;

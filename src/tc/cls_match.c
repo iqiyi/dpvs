@@ -49,7 +49,7 @@ static int match_classify(struct tc_cls *cls, struct rte_mbuf *mbuf,
 {
     struct match_cls_priv *priv = tc_cls_priv(cls);
     struct dp_vs_match *m = &priv->match;
-    struct ether_hdr *eh = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
+    struct rte_ether_hdr *eh = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
     struct iphdr *iph = NULL;
     struct ip6_hdr *ip6h = NULL;
     struct tcphdr *th;

@@ -34,7 +34,6 @@ lcoreid_t g_dpvs_log_core = 0;
 log_stats_t log_stats_info[DPVS_MAX_LCORE];
 struct rte_ring *log_ring;
 bool g_dpvs_log_async_mode = 0;
-extern struct rte_logs rte_logs;
 static struct rte_mempool *dp_vs_log_pool;
 static int log_pool_size  = DPVS_LOG_POOL_SIZE_DEF;
 static int log_pool_cache = DPVS_LOG_CACHE_SIZE_DEF;
@@ -194,7 +193,7 @@ int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const
     int len = 0;
     int off = g_dpvs_log_time_off;
 
-    if (level > rte_logs.level)
+    if (level > rte_log_get_global_level())
         return -1;
 
     va_start(ap, format);
@@ -261,7 +260,7 @@ static int log_slave_process(void)
 {
     struct dpvs_log *msg_log;
     int ret = EDPVS_OK;
-    FILE *f = rte_logs.file;
+    FILE *f = rte_log_get_stream();
 
     /* dequeue LOG from ring, no lock for ring and w_buf */
     while (0 == rte_ring_dequeue(log_ring, (void **)&msg_log)) {
@@ -297,7 +296,7 @@ static void log_signal_handler(int signum)
                 signum);
     }
     log_slave_process();
-    log_buf_flush(rte_logs.file);
+    log_buf_flush(rte_log_get_stream());
     signal(signum, SIG_DFL);
     kill(getpid(), signum);
 }
@@ -306,14 +305,14 @@ static int __log_slave_init(void)
 {
     char ring_name[16];
     int lcore_id;
-    FILE *f = rte_logs.file;
+    FILE *f = rte_log_get_stream();
     char log_pool_name[32];
 
     if (f != NULL) {
         g_dpvs_log_time_off = LOG_SYS_TIME_LEN;
     }
 
-    RTE_LCORE_FOREACH_SLAVE(lcore_id) {
+    RTE_LCORE_FOREACH_WORKER(lcore_id) {
         if (rte_eal_get_lcore_state(lcore_id) == FINISHED) {
             rte_eal_wait_lcore(lcore_id);
             dpvs_log_thread_lcore_set(lcore_id);

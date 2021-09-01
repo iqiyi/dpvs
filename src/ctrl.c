@@ -852,7 +852,7 @@ int msg_type_table_print(char *buf, int len)
             rte_rwlock_read_lock(&mt_lock[ii][jj]);
             list_for_each_entry(mt, &mt_array[ii][jj], list) {
                 memset(line, 0, sizeof(line));
-                snprintf(line, sizeof(line), "mt_array[%-2d][%-4d] type %-8d  mode %-12s"
+                snprintf(line, sizeof(line), "mt_array[%-2d][%-2d] type %-8d  mode %-12s"
                         "  unicast_cb %p    multicast_cb %p\n", ii, jj, mt->type,
                         mt->mode == DPVS_MSG_UNICAST ? "UNICAST" : "MULITICAST",
                         mt->unicast_msg_cb, mt->multicast_msg_cb);
@@ -1058,7 +1058,7 @@ static inline int msg_init(void)
     /* lcore mask init */
     slave_lcore_mask = 0;
     slave_lcore_nb = 0;
-    master_lcore = rte_get_master_lcore();
+    master_lcore = rte_get_main_lcore();
 
     netif_get_slave_lcores(&slave_lcore_nb, &slave_lcore_mask);
     if (slave_lcore_nb > MSG_MAX_LCORE_SUPPORTED) {
@@ -1198,8 +1198,16 @@ static inline int sockopts_exist(struct dpvs_sockopts *sockopts)
                 judge_id_betw(sockopts->set_opt_max, skopt->set_opt_min, skopt->set_opt_max)) {
             return 1;
         }
+        if (judge_id_betw(skopt->set_opt_min, sockopts->set_opt_min, sockopts->set_opt_max) ||
+                judge_id_betw(skopt->set_opt_max, sockopts->set_opt_min, sockopts->set_opt_max)) {
+            return 1;
+        }
         if (judge_id_betw(sockopts->get_opt_min, skopt->get_opt_min, skopt->get_opt_max) ||
                 judge_id_betw(sockopts->get_opt_max, skopt->get_opt_min, skopt->get_opt_max)) {
+            return 1;
+        }
+        if (judge_id_betw(skopt->get_opt_min, sockopts->get_opt_min, sockopts->get_opt_max) ||
+                judge_id_betw(skopt->get_opt_max, sockopts->get_opt_min, sockopts->get_opt_max)) {
             return 1;
         }
     }

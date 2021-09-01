@@ -130,34 +130,83 @@ bool is_power2(int num, int offset, int *lower)
     return ret;
 }
 
-int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN])
+int linux_get_link_status(const char *ifname, int *if_flags, char *if_flags_str, size_t len)
 {
     int sock_fd;
     struct ifreq ifr = {};
 
-    if (!ifname || !mac || !strncmp(ifname, "lo", 2))
+    if (!ifname || !if_flags)
         return EDPVS_INVAL;
+
+    *if_flags= 0;
 
     sock_fd = socket(PF_INET, SOCK_DGRAM, 0);
     if (sock_fd < 0)
         return EDPVS_SYSCALL;
 
     snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", ifname);
+    if (ioctl(sock_fd, SIOCGIFFLAGS, &ifr)) {
+        fprintf(stderr, "%s: fail to get %s's flags -- %s\n",
+                __func__, ifname, strerror(errno));
+        close(sock_fd);
+        return EDPVS_IO;
+    }
+    close(sock_fd);
+
+    *if_flags = ifr.ifr_flags;
+
+    if (if_flags_str) {
+        int idx = 0;
+        idx += snprintf(&if_flags_str[idx], len-idx-1, "%s:", ifname);
+        if(*if_flags & IFF_UP)
+            idx += snprintf(&if_flags_str[idx], len-idx-1, " UP");
+        if(*if_flags & IFF_MULTICAST)
+           idx += snprintf(&if_flags_str[idx], len-idx-1, " MULTICAST");
+        if(*if_flags & IFF_BROADCAST)
+            idx += snprintf(&if_flags_str[idx], len-idx-1, " BROADCAST");
+        if(*if_flags & IFF_LOOPBACK)
+            idx += snprintf(&if_flags_str[idx], len-idx-1, " LOOPBACK");
+        if(*if_flags & IFF_POINTOPOINT)
+            idx += snprintf(&if_flags_str[idx], len-idx-1, " P2P");
+    }
+
+    return EDPVS_OK;
+}
+
+int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN])
+{
+    int err;
+    int sock_fd, if_flags;
+    struct ifreq ifr = {};
+
+    if (!ifname || !mac || !strncmp(ifname, "lo", 2))
+        return EDPVS_INVAL;
+
+    err = linux_get_link_status(ifname, &if_flags, NULL, 0);
+    if (err != EDPVS_OK)
+        return err;
+
+    if (!(if_flags & IFF_UP)) {
+        fprintf(stderr, "%s: skip MAC address update of link down device %s\n",
+                __func__, ifname);
+        return EDPVS_RESOURCE;
+    }
+
+    sock_fd = socket(PF_INET, SOCK_DGRAM, 0);
+    if (sock_fd < 0)
+        return EDPVS_SYSCALL;
+    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", ifname);
     ifr.ifr_hwaddr.sa_family = 1;
     memcpy(ifr.ifr_hwaddr.sa_data, mac, ETH_ALEN);
 
     if (ioctl(sock_fd, SIOCSIFHWADDR, &ifr)) {
-        /* DPDK 18.11, 'kni_net_process_request' is called when updating
-         * device's mac address, in which 'wait_event_interruptible_timeout'
-         * is used to wait for setting results, which may easily get timeout and
-         * return fail. We ignore the error here and return OK nevertheless.*/
-        fprintf(stderr, "%s: fail to set %s's MAC address: %s\n",
+        fprintf(stderr, "%s: fail to set %s's MAC address -- %s\n",
                 __func__, ifname, strerror(errno));
         close(sock_fd);
-        return EDPVS_OK;
+        return EDPVS_IO;
     }
-
     close(sock_fd);
+
     return EDPVS_OK;
 }
 

@@ -15,46 +15,35 @@
 # GNU General Public License for more details.
 #
 
-ifeq ($(RTE_SDK),)
-$(error "The variable RTE_SDK is not defined.")
+# If the dpdklib isn't installed to the default location on your system,
+# please specify PKG_CONFIG_PATH explicitly as below.
+#
+# LIBDPDKPC_PATH := /path/to/dpdk/build/lib/pkgconfig
+
+define PKG_CONFIG_ERR_MSG
+DPDK library was not found.
+If dpdk has installed already, please ensure the libdpdk.pc file could be found by `pkg-config`.
+You may fix the problem by setting LIBDPDKPC_PATH (in file src/dpdk.mk) to the path of libdpdk.pc file explicitly
+endef
+
+# It's noted that pkg-config version 0.29.2 is recommended,
+# pkg-config 0.27.1 would mess up the ld flags when linking dpvs.
+PKGCONFIG_VERSION=$(shell pkg-config pkg-config --version)
+ifneq "v$(PKGCONFIG_VERSION)" "v0.29.2"
+$(warning "The pkg-config version is $(PKGCONFIG_VERSION) but 0.29.2 is recommended.")
+ifeq "v$(PKGCONFIG_VERSION)" "v0.27.1"
+$(error "pkg-config version $(PKGCONFIG_VERSION) isn't supported by dpvs, please use 0.29.2 instead.")
 endif
-# default target, may be overriden.
-RTE_TARGET ?= build
-
-DPDKDIR := $(RTE_SDK)/$(RTE_TARGET)
-
-INCDIRS += -I $(DPDKDIR)/include
-
-CFLAGS += -include $(DPDKDIR)/include/rte_config.h
-
-LIBS += -L $(DPDKDIR)/lib
-
-LIBS += -Wl,--no-as-needed -fvisibility=default \
-        -Wl,--whole-archive -lrte_pmd_vmxnet3_uio -lrte_pmd_i40e -lrte_pmd_ixgbe -lrte_pmd_ena \
-		-lrte_pmd_e1000 -lrte_pmd_bnxt -lrte_pmd_ring -lrte_pmd_bond -lrte_ethdev -lrte_ip_frag \
-		-Wl,--whole-archive -lrte_hash -lrte_kvargs -Wl,-lrte_mbuf -lrte_eal \
-		-Wl,-lrte_mempool -lrte_ring -lrte_cmdline -lrte_cfgfile -lrte_kni \
-		-lrte_mempool_ring -lrte_timer -lrte_net -Wl,-lrte_pmd_virtio \
-		-lrte_pci -lrte_bus_pci -lrte_bus_vdev -lrte_lpm -lrte_pdump \
-		-Wl,--no-whole-archive -lrt -lm -ldl -lcrypto
-
-ifeq ($(CONFIG_PDUMP), y)
-LIBS += -Wl,--whole-archive -lrte_acl -lrte_member -lrte_eventdev -lrte_reorder -lrte_cryptodev \
-		-lrte_vhost -lrte_pmd_pcap
-
-ifneq ("$(wildcard $(RTE_SDK)/$(RTE_TARGET)/lib/librte_bus_vmbus.a)", "")
-	LIBS += -lrte_bus_vmbus
 endif
 
-ifneq ("$(wildcard $(RTE_SDK)/$(RTE_TARGET)/lib/librte_pmd_netvsc.a)", "")
-	LIBS += -lrte_pmd_netvsc
+ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
+CFLAGS += -DALLOW_EXPERIMENTAL_API $(shell pkg-config --cflags libdpdk)
+LIBS += $(shell pkg-config --static --libs libdpdk)
+else
+ifneq ($(wildcard $(LIBDPDKPC_PATH)),)
+CFLAGS += -DALLOW_EXPERIMENTAL_API $(shell PKG_CONFIG_PATH=$(LIBDPDKPC_PATH) pkg-config --cflags libdpdk)
+LIBS += $(shell PKG_CONFIG_PATH=$(LIBDPDKPC_PATH) pkg-config --static --libs libdpdk)
+else
+$(error $(PKG_CONFIG_ERR_MSG))
 endif
-
-LIBS += -Wl,--no-whole-archive -lpcap
 endif
-
-ifeq ($(CONFIG_MLX5), y)
-LIBS += -Wl,--whole-archive -lrte_pmd_mlx5 -Wl,--no-whole-archive
-LIBS += -libverbs -lmlx5 -lmnl
-endif
-

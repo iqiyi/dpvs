@@ -27,7 +27,6 @@ struct dp_vs_iphdr;
 struct dp_vs_scheduler {
     struct list_head    n_list;
     char                *name;
-//    rte_atomic32_t      refcnt;
 
     struct dp_vs_dest *
         (*schedule)(struct dp_vs_service *svc,
@@ -51,6 +50,8 @@ int dp_vs_bind_scheduler(struct dp_vs_service *svc,
 int dp_vs_unbind_scheduler(struct dp_vs_service *svc);
 
 int dp_vs_gcd_weight(struct dp_vs_service *svc);
+
+struct list_head * dp_vs_sched_first_dest(const struct dp_vs_service *svc);
 
 void dp_vs_scheduler_put(struct dp_vs_scheduler *scheduler);
 

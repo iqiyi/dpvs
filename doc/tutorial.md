@@ -431,9 +431,20 @@ virtual_server group 192.168.100.254-80 {
 }
 ```
 
-The keepalived config for backup is the same with Master, except the `state` should be 'BACKUP', and `priority` should be lower.
+The keepalived config for backup is the same with Master, except
+
+* local address is not the same with MASTER,
+* vrrp_instance `state` should be 'BACKUP',
+* vrrp_instance `priority` should be lower.
 
 ```
+local_address_group laddr_g1 {
+    192.168.100.202 dpdk0    # use DPDK interface
+    192.168.100.203 dpdk0    # use DPDK interface
+}
+
+... ...
+
 vrrp_instance VI_1 {
     state BACKUP
     priority 80
@@ -447,12 +458,19 @@ Start `keepalived` on both Master and Backup.
 ./keepalived -f /etc/keepalived/keepalived.conf
 ```
 
-For **test only**, add `VIP` and *routes* to DPDK interface manually on Master. Do not set VIP on both master and backup, in practice they should be added to keepalived configure file.
+Then, add *routes* to DPDK interface manually on both MASTER and BACKUP.
 
 ```bash
-./dpip addr add 192.168.100.254/32 dev dpdk0
 ./dpip route add 192.168.100.0/24 dev dpdk0
 ```
+Lastly, configure dpdk0.kni to make keepalived's vrrp and health-check work properly.
+
+```bash
+ip link set dpdk0.kni up
+ip addr add 192.168.100.28/24 dev dpdk0.kni               # assign an IP to dpdk0.kni
+dpip route add 192.168.100.28/32 scope kni_host dev dpdk0 # route packets target at 192.168.100.28 to dpdk0.kni
+```
+Note the dpdk0.kni's IP addresses should be different for MASTER and BACKUP.
 
 Check if parameters just set are correct:
 
@@ -465,7 +483,7 @@ TCP  192.168.100.254:80 rr
   -> 192.168.100.2:80             FullNat 100    0          0
   -> 192.168.100.3:80             FullNat 100    0          0
 
-$ ./dpip addr show
+$ ./dpip addr show -s
 inet 192.168.100.254/32 scope global dpdk0
      valid_lft forever preferred_lft forever
 inet 192.168.100.201/32 scope global dpdk0
@@ -474,8 +492,10 @@ inet 192.168.100.200/32 scope global dpdk0
      valid_lft forever preferred_lft forever sa_used 0 sa_free 1032176 sa_miss 0
 
 $ ./dpip route show
+inet 192.168.100.28/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope kni_host metric 0 proto auto
 inet 192.168.100.200/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
 inet 192.168.100.201/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
+inet 192.168.100.254/32 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope host metric 0 proto auto
 inet 192.168.100.0/24 via 0.0.0.0 src 0.0.0.0 dev dpdk0 mtu 1500 tos 0 scope link metric 0 proto auto
 
 $ ./ipvsadm  -G
@@ -492,7 +512,20 @@ client$ curl 192.168.100.254
 Your ip:port : 192.168.100.146:42394
 ```
 
-> We just explain how DPVS works with keepalived, and not verify if the master/backup feature provided by keepalived works. Please refer LVS docs if needed.
+> Note:
+> 1. We just explain how DPVS works with keepalived, and not verify if the master/backup feature provided by keepalived works. Please refer LVS docs if needed.
+> 2. Keepalived master/backup failover may fail if switch enabled the ARP broadcast suppression (unfortunately often is the case). If you don't want to change configurations of your switch, decrease the number of gratuitous ARP packets sent by keepalived (dpvs) on failover may help.
+
+```
+global_defs {
+    ... ...
+   vrrp_garp_master_repeat          1   # repeat counts for master state gratuitous arp
+   vrrp_garp_master_delay           1   # time to relaunch gratuitous arp after failover for master, in second
+   vrrp_garp_master_refresh         600 # time interval to refresh gratuitous arp periodically(0 = none), in second
+   vrrp_garp_master_refresh_repeat  1   # repeat counts to refresh gratuitous arp periodically
+   ... ...
+}
+```
 
 <a id='dr'/>
 
@@ -606,9 +639,9 @@ A strict limitation exists for DPVS NAT mode: **DPVS `NAT` mode can only work in
 * DPVS session entries are splited and distributed on lcores by RSS.
 * NAT forwarding requires both inbound and outbound traffic go through DPVS.
 * Only dest IP/port is translated in NAT forwarding, source IP/port is not changed.
-* Very limited maximum flow director rules can be set for a NIC.
+* Very limited maximum rte_flow rules can be set for a NIC.
 
-So, if no other control of the traffic flow, outbound packets may arrive at different lcore from inbound packets. If so, outbound packets would be dropped because session lookup miss. Full-NAT fixes the problem by using Flow Director(FDIR). However, there are very limited rules can be added for a NIC, i.e. 8K for XT-540. Unlike Full-NAT, NAT does not have local IP/port, so FDIR rules can only be set on source IP/port, which means only thousands concurrency is supported. Therefore, FDIR is not feasible for NAT.
+So, if no other control of the traffic flow, outbound packets may arrive at different lcore from inbound packets. If so, outbound packets would be dropped because session lookup miss. Full-NAT fixes the problem by using Flow Control (rte_flow). However, there are very limited rules can be added for a NIC, i.e. 8K for XT-540. Unlike Full-NAT, NAT does not have local IP/port, so flow rules can only be set on source IP/port, which means only thousands concurrency is supported. Therefore, rte_flow is not feasible for NAT.
 
 Whatever, we give a simple example for NAT mode. Remind it only works single lcore.
 
@@ -961,31 +994,28 @@ DPVS supports IPv6-IPv4 for fullnat, which means VIP/client IP can be IPv6 and l
 ```
 OSPF can just be configured like IPv6-IPv6. If you prefer keepalived, you can configure it like IPv6-IPv6 except real_server/local_address_group.
 
-**IPv6 and Flow Director**
+**IPv6 and Flow Control**
 
-We found there exists some NICs do not (fully) support Flow Director for IPv6.
-For example, 82599 10GE Controller do not support IPv6 *perfect mode*, and IPv4/IPv6 *signature mode* supports only one locall IP.
-
-If you would like to use Flow Director signature mode, add the following lines into the device configs of `dpvs.conf`:
+We found there exists some NICs do not (fully) support Flow Control of IPv6 required by IPv6.
+For example, the rte_flow of 82599 10GE Controller (ixgbe PMD) relies on an old fashion flow type `flow director` (fdir), which doesn't support IPv6 in its *perfect mode*, and support only one local IPv4 or IPv6 in its *signature mode*. DPVS supports the fdir mode config for compatibility.
 
 ```
-fdir {
+netif_defs {
+    ...
     mode                signature
-    pballoc             64k
-    status              matched
 }
 ```
 
-Another method to avoid Flow Director problem is to use the redirect forwarding, which forwards the recieved packets to the right lcore where the session resides by using lockless DPDK rings.
+Another method to avoid not (fully) supported rte_flow problem is to use the redirect forwarding, which forwards the recieved packets to the correct worker lcore where the session resides by using lockless DPDK rings.
 If you want to try this method, turn on the `redirect` switch in the `dpvs.conf`.
 
 ```
 ipvs_defs {
     conn {
-        ......
+        ...
         redirect    on
     }
-    ......
+    ...
 }
 ```
 It should note that the redirect forwarding may harm performance to a certain degree. Keep it in `off` state unless you have no other solutions.
@@ -1057,7 +1087,7 @@ Please also check `dpip tunnel help` for details.
 > Notes:
 > 1. RSS schedule all packets to same queue/CPU since underlay source IP may the same.
 >    If one lcore's `sa_pool` gets full, `sa_miss` happens. This is not a problem for some NICs which support inner RSS for tunnelling.
-> 2. `fdir`/`rss` won't works well on tunnel deivce, do not use tunnel for FNAT.
+> 2. `rte_flow`/`rss` won't works well on tunnel deivce, do not use tunnel for FNAT.
 
 <a id='vdev-kni'/>
 
@@ -1128,7 +1158,7 @@ Now, `dpvs.conf` must be put at `/etc/dpvs.conf`, just copy it from `conf/dpvs.c
 $ cp conf/dpvs.conf.single-nic.sample /etc/dpvs.conf
 ```
 
-The NIC for Ubuntu may not support flow-director(fdir),for that case ,please use 'single worker',may decrease conn_pool_size .
+The NIC for Ubuntu may not support flow control(rte_flow) required by DPVS. For that case, please use 'single worker', and disable flow control.
 
 ```bash
 queue_number        1
@@ -1150,6 +1180,9 @@ worker_defs {
         }
     }
 
+    sa_pool {
+        flow_enable      off
+    }
 ```
 
 <a id='tc'/>

@@ -34,10 +34,8 @@ DATE_STRING := $(shell date +%Y.%m.%d.%H:%M:%S)
 # same path of THIS Makefile
 SRCDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-ifeq ($(RTE_SDK),)
-	$(error "The variable RTE_SDK is not defined.")
-endif
-include $(RTE_SDK)/mk/rte.vars.mk
+# Addtional libs below are needed when using dynamic link.
+LIBS += -lpthread -lnuma -lrt -lm -ldl -lcrypto
 
 include $(SRCDIR)/config.mk
 include $(SRCDIR)/dpdk.mk
@@ -62,9 +60,8 @@ else
 	CFLAGS += -rdynamic
 endif
 
-LIBS += -lpthread -lnuma
 
-CFLAGS += $(INCDIRS) $(LIBS)
+CFLAGS += $(INCDIRS)
 
 OBJS := $(shell find $(SRCDIR) -name '*.c' | sort)
 OBJS := $(patsubst %.c,%.o,$(OBJS))
@@ -73,7 +70,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	@echo "  $(notdir $@)"
-	$(Q)$(CC) $(CFLAGS) $^ -o $@
+	$(Q)$(CC) $(CFLAGS) $^ $(LIBS) -o $@
 
 %.o: %.c
 	@echo "  $(notdir $@)"

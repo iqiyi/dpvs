@@ -22,6 +22,7 @@ global_defs {
 netif_defs {
     <init> pktpool_size     1048575
     <init> pktpool_cache    256
+    <init> fdir_mode        perfect
 
     <init> device dpdk0 {
         rx {
@@ -32,11 +33,6 @@ netif_defs {
         tx {
             queue_number        8
             descriptor_number   1024
-        }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
         }
         ! mtu                   1500
         ! promisc_mode
@@ -53,11 +49,6 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
         ! mtu                   1500
         ! promisc_mode
         kni_name                dpdk1.kni
@@ -69,6 +60,7 @@ netif_defs {
     !    slave       dpdk1
     !    primary     dpdk0
     !    kni_name    bond0.kni
+    !    options     dedicated_queues=off  # for mode 4 only
     !}
 }
 
@@ -201,7 +193,7 @@ worker_defs {
     <init> worker   cpu8 {
         type        slave
         cpu_id      8
-        icmp_redirect_core
+        ! icmp_redirect_core
         port        dpdk0 {
             rx_queue_ids     7
             tx_queue_ids     7
@@ -337,5 +329,6 @@ ipvs_defs {
 
 ! sa_pool config
 sa_pool {
-    pool_hash_size   16
+    pool_hash_size  16
+    flow_enable     on
 }

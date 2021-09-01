@@ -172,7 +172,7 @@ static struct ipv4_frag ip4_frags[DPVS_MAX_LCORE];
 int ipv4_reassamble(struct rte_mbuf *mbuf)
 {
     struct rte_mbuf *asm_mbuf, *next, *seg, *prev;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
 
     assert(mbuf->l3_len > 0);
 
@@ -199,7 +199,7 @@ int ipv4_reassamble(struct rte_mbuf *mbuf)
         rte_pktmbuf_free(asm_mbuf);
         return EDPVS_NOMEM;
     }
-    seg->userdata = NULL;
+    mbuf_userdata_reset(seg);
     for (prev = asm_mbuf; prev; prev = prev->next)
         if (prev->next == mbuf)
             break;
@@ -259,15 +259,16 @@ int ipv4_reassamble(struct rte_mbuf *mbuf)
 int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
           int (*output)(struct rte_mbuf *))
 {
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct route_entry *rt = mbuf->userdata;
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct route_entry *rt = MBUF_USERDATA(mbuf,
+            struct route_entry *, MBUF_FIELD_ROUTE);
     struct rte_mbuf *frag;
     unsigned int left, len, hlen;
     int offset, err, from;
     void *to;
     assert(rt);
 
-    if (iph->fragment_offset & IPV4_HDR_DF_FLAG) {
+    if (iph->fragment_offset & RTE_IPV4_HDR_DF_FLAG) {
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
               htonl(mtu));
         err = EDPVS_FRAG;
@@ -295,11 +296,12 @@ int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
             err = EDPVS_NOMEM;
             goto out;
         }
-        frag->userdata = NULL;
+        mbuf_userdata_reset(frag);
 
         /* copy metadata from orig pkt */
         route4_get(rt);
-        frag->userdata = rt; /* no need to hold before consume mbuf */
+        /* no need to hold before consume mbuf */
+        MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
         frag->port = mbuf->port;
         frag->ol_flags = 0; /* do not offload csum for frag */
         frag->l2_len = mbuf->l2_len;
@@ -330,7 +332,7 @@ int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
         /* TODO: if (offset == 0) ip_fragment_options(frag); */
 
         if (left > 0)
-            iph->fragment_offset |= htons(IPV4_HDR_MF_FLAG);
+            iph->fragment_offset |= htons(RTE_IPV4_HDR_MF_FLAG);
         offset += len;
         from += len;
 

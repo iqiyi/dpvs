@@ -1,33 +1,33 @@
 #!/bin/sh -
 # program: dpvs
-# Apr 26, 2021
+# Jul 28, 2021
 #
-# Features
-# ----------
-# - CI: Enable CI workflow.
-# - Dpvs: TC stability and performance enhancement.
-# - Dpvs: TC supports ipv6 and ingress traffic.
-# - Dpvs: Add document and examples for dpvs tc.
-# - Dpvs: Add supports for ipvs whitelist.
-# - Dpvs: Support icmp forwarding with icmp_fwd_core.
-# - Dpvs: Support mtu config.
-# - Dpvs: Obsolete dpdk 16.07 and 17.05.02.
-# - Patch: Add eal memory debug patch for dpdk-stable-18.11.2.
-# 
-# # Bugfix
-# --------
-# - Dpvs: Fix traceroute problem of dpvs ip address.
-# - Dpvs: Fix flags conflicts for ipvs conn/service/dest.
-# - Dpvs: Reset tcp connection when syn-cookie check fails.
-# - Dpvs: Use correct mbuf:l4_len for checkout offload.
-# - Dpvs: Fix udp checksum problem for uoa when checksum offload is off.
-# - Dpvs: Simplify checksum calculations and remove superfluous checksum functions.
-# - Dpvs: Refactor netif recv procedure.
-# - Dpvs: Fix debug level log problem.
-# - Keepalived: Fix problem that local ip config doesn't take effect when restart.
-# - Keepalived: Fix crash problem when tunnel is configured.
+# Major changes:
+#   - Adapt dpvs to dpdk 20.11 (dpdk-stable-20.11.1).
+#   - Create branch DPVS-1.8-LTS to support dpdk 18.11.
+#   - Obsolete supports for dpdk 17.11.
+#
+# Featurs:
+#   - Dpvs: Add netif_flow module using generic flow api (rte_flow), and replace flow director with rte_flow.
+#   - Dpvs: Replace mbuf userdata with mbuf dynfields.
+#   - Dpvs: Adapt dpvs to several renamed type names in dpdk 20.11.
+#   - Dpvs: Update Makefiles to support dpdk 20.11.
+#   - Dpvs: Add config option "dedicated_queues" for bonding mode 4 (802.3ad).
+#   - Dpdk: Add helper script to facilitate dpdk build.
+#   - Dpdk: Porting patches to dpdk 20.11 and remove patches of previous dpdk versions (18.11, 17.11).
+#   - Dpdk: Patch dpdk ixgbe pmd driver to support dpvs's flow api.
+#   - Dpdk: Patch dpdk bonding mode 4 for mlx5 to fix crash problem when debug.
+#   - Keeaplived: Add UDP_CHECK health checker.
+#   - Docs: Refine tutorial doc of section 'Full-NAT with Keepalived (one-arm)'.
+#   - Docs: Update docs for dpvs use with dpdk 20.11.
+#   - Ci: Update dpvs ci to support dpdk 20.11.
+#
+# Bugfix:
+#   - Dpvs: Fix ipvs rr/wrr/wlc problem of uneven load distribution across dests.
+#   - Dpvs: Fix bonding mode 4 problem caused by LACP failure.
+#
 
-export VERSION=1.8
-export RELEASE=10
+export VERSION=1.9
+export RELEASE=0
 
 echo $VERSION-$RELEASE

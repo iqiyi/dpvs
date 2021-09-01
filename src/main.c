@@ -59,6 +59,13 @@ extern bool g_dpvs_pdump;
 extern int log_slave_init(void);
 
 
+static void inline dpdk_version_check(void)
+{
+#if RTE_VERSION < RTE_VERSION_NUM(20, 11, 1, 0)
+    rte_panic("The current DPVS needs dpdk-stable-20.11.1 or higher. "
+            "Try old releases if you are using earlier dpdk versions.");
+#endif
+}
 
 /*
  * the initialization order of all the modules
@@ -68,6 +75,8 @@ extern int log_slave_init(void);
                     dpvs_scheduler_init, dpvs_scheduler_term),  \
         DPVS_MODULE(MODULE_GLOBAL_DATA, "global data",          \
                     global_data_init,    global_data_term),     \
+        DPVS_MODULE(MODULE_MBUF,        "mbuf",                 \
+                    mbuf_init,           NULL),                 \
         DPVS_MODULE(MODULE_CFG,         "config file",          \
                     cfgfile_init,        cfgfile_term),         \
         DPVS_MODULE(MODULE_PDUMP,        "pdump",               \
@@ -250,6 +259,8 @@ int main(int argc, char *argv[])
     struct timeval tv;
     char pql_conf_buf[LCORE_CONF_BUFFER_LEN];
     int pql_conf_buf_len = LCORE_CONF_BUFFER_LEN;
+
+    dpdk_version_check();
 
     /**
      * add application agruments parse before EAL ones.

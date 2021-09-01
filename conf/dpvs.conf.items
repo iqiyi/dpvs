@@ -22,6 +22,7 @@ global_defs {
 netif_defs {
     <init> pktpool_size     2097151 <65535, 1023-134217728>
     <init> pktpool_cache    256     <256, 32-8192>
+    <init> fdir_mode        perfect <perfect, perfect|signature> # only for ixgbe
 
     <init> device dpdk0 {
         rx {
@@ -33,12 +34,6 @@ netif_defs {
         tx {
             queue_number        6           <16, 0-16>
             descriptor_number   512         <512, 16-8192>
-        }
-        fdir {
-            <init> filter       on          <on, on/off>
-            mode                perfect     <perfect, none|signature|perfect|perfect_mac_vlan|perfect_tunnel>
-            pballoc             64k         <64k, 64k|128k|256k>
-            status              matched     <matched, close|matched|always>
         }
     !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>
@@ -61,12 +56,17 @@ netif_defs {
     !    kni_name               dpdk1.kni
     }
 
-    <init> device bond0 {
+    <init> bonding bond0 {
         mode                    4           <0-6>
         slave                   dpdk0       <device name>
         slave                   dpdk1       <device name>
         primary                 dpdk0       <device name, use primary slave queue conf for bond>
+        numa_node               0           <0, int value from /sys/bus/pci/devices/[pci_bus]/numa_node>
         kni_name                bond0.kni   <char[32]>
+
+        ! supported options:
+        !   dedicated_queues=on|enable|off|disable, default on
+        options                 OPT1=VAL1;OPT2=VAL2;...
     }
 }
 
@@ -262,4 +262,5 @@ ipvs_defs {
 
 sa_pool {
     <init> pool_hash_size   16  <16, 1-128>
+    <init> flow_enable      on  <on, on|off>
 }

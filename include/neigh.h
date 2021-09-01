@@ -54,7 +54,7 @@ struct neighbour_entry {
     int                 af;
     struct list_head    neigh_list;
     union inet_addr     ip_addr;
-    struct ether_addr   eth_addr;
+    struct rte_ether_addr   eth_addr;
     struct netif_port   *port;
     struct dpvs_timer   timer;
     struct list_head    queue_list;
@@ -89,7 +89,7 @@ struct neighbour_entry *neigh_lookup_entry(int af, const union inet_addr *key,
 void neigh_send_mbuf_cach(struct neighbour_entry *neighbour);
 
 int neigh_edit(struct neighbour_entry *neighbour,
-               struct ether_addr *eth_addr);
+               struct rte_ether_addr *eth_addr);
 
 int neigh_init(void);
 
@@ -105,7 +105,7 @@ int neigh_output(int af,
                  struct netif_port *port);
 
 struct neighbour_entry *neigh_add_table(int af, const union inet_addr *ipaddr,
-                                        const struct ether_addr *eth_addr,
+                                        const struct rte_ether_addr *eth_addr,
                                         struct netif_port *port,
                                         unsigned int hashkey, int flag);
 
@@ -118,7 +118,7 @@ void neigh_confirm(int af, union inet_addr *nexthop, struct netif_port *port);
 int neigh_sync_core(const void *param, bool add_del, enum param_kind kind);
 
 static inline void ipv6_mac_mult(const struct in6_addr *mult_target,
-                                 struct ether_addr *mult_eth)
+                                 struct rte_ether_addr *mult_eth)
 {
     uint8_t *w = (uint8_t *)mult_eth;
     w[0] = 0x33;
