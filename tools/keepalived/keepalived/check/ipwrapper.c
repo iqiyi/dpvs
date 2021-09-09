@@ -309,6 +309,9 @@ clear_laddr_group(local_addr_group *laddr_group, virtual_server_t *vs)
 	element e;
 	local_addr_entry *laddr_entry;
 
+	if (!laddr_group)
+		return;
+
 	LIST_FOREACH(laddr_group->addr_ip, laddr_entry, e) {
 		if (!ipvs_laddr_remove_entry(vs, laddr_entry))
 			return;
@@ -323,9 +326,6 @@ clear_laddr_group(local_addr_group *laddr_group, virtual_server_t *vs)
 void
 clear_services(void)
 {
-	if (!check_data)
-		return;
-
 	element e;
 	virtual_server_t *vs;
 	local_addr_group *laddr_group;
