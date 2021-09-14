@@ -268,7 +268,7 @@ static int tbf_dump(struct Qsch *sch, void *arg)
 
     priv = qsch_priv(sch);
 
-    memset(qopt, 0, sizeof(&qopt));
+    memset(qopt, 0, sizeof(*qopt));
     qopt->rate.rate     = priv->rate.rate_bytes_ps * 8;
     qopt->peakrate.rate = priv->peak.rate_bytes_ps * 8;
     qopt->limit         = priv->limit;
