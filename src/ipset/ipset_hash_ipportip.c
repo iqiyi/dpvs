@@ -16,6 +16,7 @@
  *
  */
 #include "ipset/ipset_hash.h"
+#include "ipset/pfxlen.h"
 
 typedef struct hash_ipportip_elem4 {
     uint32_t ip1;
@@ -26,7 +27,7 @@ typedef struct hash_ipportip_elem4 {
     char comment[IPSET_MAXCOMLEN];
 } elem4_t;
 
-static bool
+static int
 hash_ipportip_data_equal4(const void *elem1, const void *elem2)
 {
     elem4_t *e1 = (elem4_t *)elem1;
@@ -63,7 +64,7 @@ hash_ipportip_adt4(int opcode, struct ipset *set, struct ipset_param *param)
     elem4_t e;
     int ret;
     uint16_t port;
-    uint32_t ip, ip_to;
+    uint32_t ip, ip_to, ip2, ip2_to;
     ipset_adtfn adtfn = set->type->adtfn[opcode];
 
     if (set->family != param->option.family)
@@ -80,29 +81,37 @@ hash_ipportip_adt4(int opcode, struct ipset *set, struct ipset_param *param)
         return adtfn(set, &e, 0);
     }
 
+    e.proto = param->proto;
+    if (set->comment && opcode == IPSET_OP_ADD)
+        rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
+
     ip = ntohl(param->range.min_addr.in.s_addr);
-    ip_to = ntohl(param->range.max_addr.in.s_addr);
+    if (param->cidr) {
+        ip_set_mask_from_to(ip, ip_to, param->cidr);
+    } else {
+        ip_to = ntohl(param->range.max_addr.in.s_addr);
+    }
     for (; ip <= ip_to; ip++) {
         e.ip1 = htonl(ip);
-        e.ip2 = param->range2.min_addr.in.s_addr;
-        e.proto = param->proto;
 
-        for (port = param->range.min_port;
-             port >= param->range.min_port &&
-             port <= param->range.max_port; port++) {
-
+        for (port = param->range.min_port; port >= param->range.min_port &&
+                port <= param->range.max_port; port++) {
             e.port = htons(port);
 
-            if (set->comment && opcode == IPSET_OP_ADD)
-                rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
-
-            ret = adtfn(set, &e, param->flag);
-
-            if (ret)
-                return ret;
+            ip2 = ntohl(param->range2.min_addr.in.s_addr);
+            if (param->cidr2) {
+                ip_set_mask_from_to(ip2, ip2_to, param->cidr2);
+            } else {
+                ip2_to = ntohl(param->range2.max_addr.in.s_addr);
+            }
+            for (; ip2 <= ip2_to; ip2++) {
+                e.ip2 = ntohl(ip2);
+                ret = adtfn(set, &e, param->flag);
+                if (ret)
+                    return ret;
+            }
         }
     }
-
     return EDPVS_OK;
 }
 
@@ -145,7 +154,7 @@ typedef struct hash_ipportip_elem6 {
     char comment[IPSET_MAXCOMLEN];
 } elem6_t;
 
-static bool
+static int
 hash_ipportip_data_equal6(const void *elem1, const void *elem2)
 {
     elem6_t *e1 = (elem6_t *)elem1;
@@ -173,6 +182,8 @@ hash_ipportip_do_list6(struct ipset_member *member, void *elem, bool comment)
 static int
 hash_ipportip_adt6(int opcode, struct ipset *set, struct ipset_param *param)
 {
+    int ret;
+    uint16_t port;
     elem6_t e;
     ipset_adtfn adtfn = set->type->adtfn[opcode];
 
@@ -183,13 +194,25 @@ hash_ipportip_adt6(int opcode, struct ipset *set, struct ipset_param *param)
 
     e.ip1 = param->range.min_addr.in6;
     e.ip2 = param->range2.min_addr.in6;
-    e.port = htons(param->range.min_port);
     e.proto = param->proto;
+
+    if (opcode == IPSET_OP_TEST) {
+        e.port = htons(param->range.min_port);
+        return adtfn(set, &e, 0);
+    }
 
     if (set->comment && opcode == IPSET_OP_ADD)
         rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
+
+    for (port = param->range.min_port; port >= param->range.min_port &&
+            port <= param->range.max_port; port++) {
+        e.port = htons(port);
+        ret = adtfn(set, &e, param->flag);
+        if (ret)
+            return ret;
+    }
         
-    return adtfn(set, &e, param->flag);
+    return EDPVS_OK;
 }
 
 static int

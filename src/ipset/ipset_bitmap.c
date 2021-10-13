@@ -27,40 +27,45 @@ bitmap_add(struct ipset *set, void *value, uint16_t flag)
     struct bitmap_elem *e = value;
     int ret = do(test, value, map, set->dsize);
 
+    if (e->id >= map->elements)
+        return EDPVS_INVAL;
+
     /* To avoid same IP, different MAC or other elements */
     if (ret || test_bit(e->id, map->members)) {
         if (flag & IPSET_F_FORCE)    
-            goto overwrite;
-        else
-            return EDPVS_EXIST;
+            return EDPVS_OK;
+        return EDPVS_EXIST;
     }
 
     set_bit(e->id, map->members);
     set->elements++;
-
     return EDPVS_OK;
-
-    overwrite:
-        return EDPVS_OK;
 }
 
 static int
 bitmap_del(struct ipset *set, void *value, uint16_t flag)
 {
     struct bitmap_map *map = set->data;
+    struct bitmap_elem *e = value;
+
+    if (e->id >= map->elements)
+        return EDPVS_INVAL;
 
     if (!do(del, value, map))
         return EDPVS_NOTEXIST;
 
     set->elements--;
-
-    return 0;
+    return EDPVS_OK;
 }
 
 static int
 bitmap_test(struct ipset *set, void *value, uint16_t flag)
 {
     struct bitmap_map *map = set->data;
+    struct bitmap_elem *e = value;
+
+    if (e->id >= map->elements)
+        return 0;
 
     return do(test, value, map, set->dsize);
 }

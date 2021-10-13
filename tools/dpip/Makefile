@@ -27,8 +27,14 @@ CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes
 CFLAGS += -I ../../include
 CFLAGS += -I ../keepalived/keepalived/include
 
+ifneq ("$(wildcard ../../src/VERSION)","")
+VERSION_STRING := $(shell ../../src/VERSION)
+else
+VERSION_STRING := $(shell git describe --tags --always)
+endif
+
 LIBS = -lnuma
-DEFS = -D DPVS_MAX_LCORE=64
+DEFS = -D DPVS_MAX_LCORE=64 -D DPIP_VERSION=\"$(VERSION_STRING)\"
 
 CFLAGS += $(DEFS)
 

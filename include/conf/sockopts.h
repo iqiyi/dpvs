@@ -125,7 +125,8 @@ enum {
 
     /* ipset */
     SOCKOPT_SET_IPSET = 3300,
-    SOCKOPT_GET_IPSET_LIST = 3300,
+    SOCKOPT_GET_IPSET_TEST = 3300,
+    SOCKOPT_GET_IPSET_LIST,
 
     /* route6 */
     SOCKOPT_SET_ROUTE6_ADD_DEL = 6300,

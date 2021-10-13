@@ -42,12 +42,18 @@ enum ipset_op {
     IPSET_OP_MAX
 };
 
-struct ipset_create_option {
-    bool comment;
-
-    int hashsize;
-    int maxelem;
+struct ipset_option {
     int family;
+    union {
+        struct {
+            bool comment;
+            int hashsize;
+            int maxelem;
+        } create;
+        struct {
+            bool nomatch;
+        } add;
+    };
 };
 
 struct ipset_param {
@@ -55,7 +61,7 @@ struct ipset_param {
     char                        name[IPSET_MAXNAMELEN];
     char                        comment[IPSET_MAXCOMLEN];
     int                         opcode;
-    struct ipset_create_option  option;
+    struct ipset_option         option;
     uint16_t                    flag;
 
     uint8_t                     proto;
@@ -67,6 +73,7 @@ struct ipset_param {
     /* for type with 2 nets */
     uint8_t                     cidr2;
     struct inet_addr_range      range2;
+    //uint8_t                     mac[2];
 };
 
 struct ipset_member {
@@ -78,6 +85,7 @@ struct ipset_member {
     uint16_t                    port;
     uint8_t                     mac[6];
     char                        iface[IFNAMSIZ];
+    bool                        nomatch;
     
     /* second net */
     union inet_addr             addr2;

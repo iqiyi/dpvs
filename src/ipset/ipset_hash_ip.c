@@ -16,6 +16,7 @@
  *
  */
 #include "ipset/ipset_hash.h"
+#include "ipset/pfxlen.h"
 
 typedef struct hash_ip_elem4 {
     uint32_t ip;
@@ -23,7 +24,7 @@ typedef struct hash_ip_elem4 {
     char comment[IPSET_MAXCOMLEN];
 } elem4_t;
 
-static bool
+static int
 hash_ip_data_equal4(const void *e1, const void *e2)
 {
     return ((elem4_t *)e1)->ip == ((elem4_t *)e2)->ip;
@@ -63,15 +64,18 @@ hash_ip_adt4(int opcode, struct ipset *set, struct ipset_param *param)
         return adtfn(set, &e, 0);
     }
 
+    if (set->comment && opcode == IPSET_OP_ADD)
+        rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
+
     ip = ntohl(param->range.min_addr.in.s_addr);
-    ip_to = ntohl(param->range.max_addr.in.s_addr);
+    if (param->cidr) {
+        ip_set_mask_from_to(ip, ip_to, param->cidr);
+    } else {
+        ip_to = ntohl(param->range.max_addr.in.s_addr);
+    }
     for (; ip <= ip_to; ip++) {
         e.ip = htonl(ip);
-        if (set->comment && opcode == IPSET_OP_ADD)
-            rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
-
         ret = adtfn(set, &e, param->flag);
-
         if (ret)
             return ret;
     }
@@ -107,7 +111,7 @@ typedef struct hash_ip_elem6 {
     char comment[IPSET_MAXNAMELEN];
 } elem6_t;
 
-static bool
+static int
 hash_ip_data_equal6(const void *e1, const void *e2)
 {
     return inet_addr_equal(AF_INET6, e1, e2);
