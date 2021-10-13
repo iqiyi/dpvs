@@ -26,6 +26,29 @@ static uint32_t ipset_msg_seq(void)
     return counter++;
 }
 
+static int ipset_sockopt_check(const void *conf, size_t size, void **out, size_t *outsize)
+{
+    int *result;
+    struct ipset_param *param = (struct ipset_param *)conf;
+
+    if (!conf || size < sizeof(struct ipset_param))
+        return EDPVS_INVAL;
+
+    if (unlikely(param->opcode != IPSET_OP_TEST))
+        return EDPVS_INVAL;
+
+    result = rte_zmalloc(NULL, sizeof(int), 0);
+    if (unlikely(result == NULL))
+        return EDPVS_NOMEM;
+
+    /* check on master lcore only */
+    *result = ipset_local_action(param);
+
+    *out = result;
+    *outsize = sizeof(*result);
+    return EDPVS_OK;
+}
+
 static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
     struct ipset_param *param = (struct ipset_param *)conf;
@@ -35,16 +58,11 @@ static int ipset_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (!conf || size < sizeof(struct ipset_param))
         return EDPVS_INVAL;
 
+    if (unlikely(param->opcode == IPSET_OP_TEST))
+        return EDPVS_INVAL;
+
     /* set master lcore */
     err = ipset_local_action(param);
-
-    if (param->opcode == IPSET_OP_TEST) {
-        if (err == 1)
-            return EDPVS_OK;
-        else
-            return EDPVS_NOTEXIST;
-    }
-
     if (err != EDPVS_OK)
         return err;
 
@@ -70,6 +88,8 @@ static int ipset_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     switch(opt) {
         case SOCKOPT_GET_IPSET_LIST:
             return ipset_do_list(conf, out, outsize);
+        case SOCKOPT_GET_IPSET_TEST:
+            return ipset_sockopt_check(conf, size, out, outsize);
         default:
             return EDPVS_NOTSUPP;
     }
@@ -82,7 +102,7 @@ static struct dpvs_sockopts ipset_sockopts = {
     .set_opt_min    = SOCKOPT_SET_IPSET,
     .set_opt_max    = SOCKOPT_SET_IPSET,
     .set            = ipset_sockopt_set,
-    .get_opt_min    = SOCKOPT_GET_IPSET_LIST,
+    .get_opt_min    = SOCKOPT_GET_IPSET_TEST,
     .get_opt_max    = SOCKOPT_GET_IPSET_LIST,
     .get            = ipset_sockopt_get,
 };

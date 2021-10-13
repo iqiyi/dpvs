@@ -168,7 +168,7 @@ bitmap_port_create(struct ipset *set, struct ipset_param *param)
 
     /* TCP and UDP both included */
     elements = (last_port - first_port + 1) * 2;
-    set->comment = param->option.comment? true : false;
+    set->comment = param->option.create.comment? true : false;
     set->dsize = set->comment? sizeof(ext_t) : 0;
     set->variant = &bitmap_port_variant;
 
