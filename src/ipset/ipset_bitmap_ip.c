@@ -164,7 +164,7 @@ bitmap_ip_create(struct ipset *set, struct ipset_param *param)
     }
 
     elements = last_ip - first_ip + 1;
-    set->comment = param->option.comment? true : false;
+    set->comment = param->option.create.comment? true : false;
     set->dsize = set->comment? sizeof(ext_t) : 0;
     set->variant = &bitmap_ip_variant;
 

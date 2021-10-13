@@ -95,9 +95,9 @@ static int iftraf_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         return EDPVS_INVAL;
 
     switch (conf->cmd) {
-    case DPIP_CMD_ADD:
+    case DPIP_CMD_ENABLE:
         return dpvs_setsockopt(SOCKOPT_SET_IFTRAF_ADD, &iftraf_param, sizeof(iftraf_param));
-    case DPIP_CMD_DEL:
+    case DPIP_CMD_DISABLE:
         return dpvs_setsockopt(SOCKOPT_SET_IFTRAF_DEL, &iftraf_param, sizeof(iftraf_param));
     case DPIP_CMD_SHOW:
         err = dpvs_getsockopt(SOCKOPT_GET_IFTRAF_SHOW, &iftraf_conf, sizeof(iftraf_conf),

@@ -21,9 +21,15 @@
 #include "utils.h"
 
 #define DPIP_NAME           "dpip"
+#ifndef DPIP_VERSION
 #define DPIP_VERSION        "v1.0.0"
+#endif
 
 typedef enum dpip_cmd_e {
+    DPIP_CMD_ENABLE,
+    DPIP_CMD_DISABLE,
+    DPIP_CMD_CREATE,
+    DPIP_CMD_DESTROY,
     DPIP_CMD_ADD,
     DPIP_CMD_DEL,
     DPIP_CMD_SET,
@@ -41,7 +47,6 @@ struct dpip_conf {
     int         interval;
     int         count;
     bool        color;
-    bool        destroy;
     bool        force;
     char        *obj;
     dpip_cmd_t  cmd;

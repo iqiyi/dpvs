@@ -35,7 +35,8 @@ static void usage(void)
         "Parameters:\n"
         "    OBJECT  := { link | addr | route | neigh | vlan | tunnel |\n"
         "                 qsch | cls | ipv6 | iftraf | eal-mem | ipset }\n"
-        "    COMMAND := { add | del | change | replace | show | flush | enable | disable }\n"
+        "    COMMAND := { create | destroy | add | del | show (list) | set (change) |\n"
+        "                 replace | flush | test | enable | disable }\n"
         "Options:\n"
         "    -v, --verbose\n"
         "    -h, --help\n"
@@ -44,7 +45,6 @@ static void usage(void)
         "    -6, --family=inet6\n"
         "    -s, --stats, statistics\n"
         "    -C, --color\n"
-        "    -D, --destroy\n"
         "    -F, --force\n"
         );
 }
@@ -76,7 +76,6 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         {"color",  no_argument, NULL, 'C'},
         {"interval", required_argument, NULL, 'i'},
         {"count", required_argument, NULL, 'c'},
-        {"destroy", no_argument, NULL, 'D'},
         {"force", no_argument, NULL, 'F'},
         {NULL, 0, NULL, 0},
     };
@@ -128,9 +127,6 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         case 'C':
             conf->color = true;
             break;
-        case 'D':
-            conf->destroy = true;
-            break;
         case 'F':
             conf->force = true;
             break;
@@ -163,11 +159,17 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         exit(1);
     }
 
-    if (strcmp(argv[1], "add") == 0 ||
-            strcmp(argv[1], "enable") == 0)
+    if (strcmp(argv[1], "create") == 0)
+        conf->cmd = DPIP_CMD_CREATE;
+    else if (strcmp(argv[1], "destroy") == 0)
+        conf->cmd = DPIP_CMD_DESTROY;
+    else if (strcmp(argv[1], "enable") == 0)
+        conf->cmd = DPIP_CMD_ENABLE;
+    else if (strcmp(argv[1], "disable") == 0)
+        conf->cmd = DPIP_CMD_DISABLE;
+    else if (strcmp(argv[1], "add") == 0)
         conf->cmd = DPIP_CMD_ADD;
-    else if (strcmp(argv[1], "del") == 0 ||
-            strcmp(argv[1], "disable") == 0)
+    else if (strcmp(argv[1], "del") == 0)
         conf->cmd = DPIP_CMD_DEL;
     else if (strcmp(argv[1], "set") == 0 ||
              strcmp(argv[1], "change") == 0)
@@ -179,10 +181,10 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         conf->cmd = DPIP_CMD_REPLACE;
     else if (strcmp(argv[1], "flush") == 0)
         conf->cmd = DPIP_CMD_FLUSH;
-    else if (strcmp(argv[1], "help") == 0)
-        conf->cmd = DPIP_CMD_HELP;
     else if (strcmp(argv[1], "test") == 0)
         conf->cmd = DPIP_CMD_TEST;
+    else if (strcmp(argv[1], "help") == 0)
+        conf->cmd = DPIP_CMD_HELP;
     else {
         fprintf(stderr, "invalid command %s\n", argv[1]);
         exit(1);

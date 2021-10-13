@@ -25,16 +25,23 @@ typedef struct hash_net_elem {
     uint8_t cidr;
 
     char comment[IPSET_MAXCOMLEN];
+    bool nomatch;
 } elem_t;
 
-static bool
+static int
 hash_net_data_equal4(const void *elem1, const void *elem2)
 {
     elem_t *e1 = (elem_t *)elem1;
     elem_t *e2 = (elem_t *)elem2;
 
-    return e1->ip.in.s_addr == e2->ip.in.s_addr &&
-           e1->cidr == e2->cidr;
+    if (e1->ip.in.s_addr == e2->ip.in.s_addr &&
+            e1->cidr == e2->cidr) {
+        if (e2->nomatch)
+            return COMPARE_EQUAL_REJECT;
+        else
+            return COMPARE_EQUAL_ACCEPT;
+    }
+    return COMPARE_INEQUAL;
 }
 
 static void
@@ -44,6 +51,7 @@ hash_net_do_list(struct ipset_member *member, void *elem, bool comment)
 
     member->addr = e->ip;
     member->cidr = e->cidr;
+    member->nomatch = e->nomatch;
     
     if (comment)
         rte_strlcpy(member->comment, e->comment, IPSET_MAXCOMLEN);
@@ -77,8 +85,14 @@ hash_net_adt4(int op, struct ipset *set, struct ipset_param *param)
         return adtfn(set, &e, 0);
     }
 
-    ip = ntohl(param->range.min_addr.in.s_addr);
+    if (param->opcode == IPSET_OP_ADD) {
+        if (set->comment)
+            rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
+        if (param->option.add.nomatch)
+            e.nomatch = true;
+    }
 
+    ip = ntohl(param->range.min_addr.in.s_addr);
     if (e.cidr) {
         ip_set_mask_from_to(ip, ip_to, e.cidr);
     } else {
@@ -86,12 +100,8 @@ hash_net_adt4(int op, struct ipset *set, struct ipset_param *param)
     }
 
     do {
-        if (set->comment && param->opcode == IPSET_OP_ADD)
-            rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
-
         e.ip.in.s_addr = htonl(ip);
         ip = ip_set_range_to_cidr(ip, ip_to, &e.cidr);
-
         ret = adtfn(set, &e, param->flag);
         if (ret)
             return ret;
@@ -124,10 +134,15 @@ struct ipset_type_variant hash_net_variant4 = {
     .hash.do_hash = hash_net_hashkey4,
 };
 
-static bool
+static int
 hash_net_data_equal6(const void *elem1, const void *elem2)
 {
-    return !memcmp(elem1, elem2, offsetof(elem_t, comment));
+    if (!memcmp(elem1, elem2, offsetof(elem_t, comment))) {
+        if (((elem_t *)elem2)->nomatch)
+            return COMPARE_EQUAL_REJECT;
+        return COMPARE_EQUAL_ACCEPT;
+    }
+    return COMPARE_INEQUAL;
 }
 
 static int
@@ -143,9 +158,15 @@ hash_net_adt6(int op, struct ipset *set, struct ipset_param *param)
 
     e.ip = param->range.min_addr;
     e.cidr = param->cidr;
+    if (e.cidr)
+        ip6_netmask(&e.ip, e.cidr);
 
-    if (set->comment && param->opcode == IPSET_OP_ADD)
-        rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
+    if (param->opcode == IPSET_OP_ADD) {
+        if (set->comment)
+            rte_strlcpy(e.comment, param->comment, IPSET_MAXCOMLEN);
+        if (param->option.add.nomatch)
+            e.nomatch = true;
+    }
 
     return adtfn(set, &e, param->flag);
 }

@@ -35,7 +35,7 @@ struct bitmap_map {
 
 /* common bitmap elemnt difinition */
 struct bitmap_elem {
-    uint16_t id;
+    uint32_t id;
 };
 
 extern ipset_adtfn bitmap_adtfn[IPSET_ADT_MAX];
