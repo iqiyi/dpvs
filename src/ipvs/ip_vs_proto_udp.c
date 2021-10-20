@@ -78,11 +78,9 @@ inline void udp6_send_csum(struct rte_ipv6_hdr *iph, struct rte_udp_hdr *uh)
 
 static inline int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
                                 const struct dp_vs_conn *conn,
-                                struct rte_mbuf *mbuf, const struct opphdr *opp)
+                                struct rte_mbuf *mbuf, const struct opphdr *opp, struct netif_port *dev)
 {
     /* leverage HW TX UDP csum offload if possible */
-
-    struct netif_port *dev = NULL;
 
     if (AF_INET6 == af) {
         /* UDP checksum is mandatory for IPv6.[RFC 2460] */
@@ -91,10 +89,12 @@ static inline int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
             udp6_send_csum((struct rte_ipv6_hdr*)ip6h, uh);
         } else {
             struct route6 *rt6 = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
-            if (rt6 && rt6->rt6_dev)
-                dev = rt6->rt6_dev;
-            else if (conn->out_dev)
-                dev = conn->out_dev;
+            if (!dev) {
+                if (rt6 && rt6->rt6_dev)
+                    dev = rt6->rt6_dev;
+                else if (conn->out_dev)
+                    dev = conn->out_dev;
+            }
             if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
                 mbuf->l3_len = iphdrlen;
                 mbuf->l4_len = sizeof(struct rte_udp_hdr);
@@ -124,10 +124,12 @@ static inline int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
             uh->dgram_cksum = 0;
         } else {
             struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
-            if (rt && rt->port)
-                dev = rt->port;
-            else if (conn->out_dev)
-                dev = conn->out_dev;
+            if (!dev) {
+                if (rt && rt->port)
+                    dev = rt->port;
+                else if (conn->out_dev)
+                    dev = conn->out_dev;
+            }
             if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
                 mbuf->l3_len = iphdrlen;
                 mbuf->l4_len = sizeof(struct rte_udp_hdr);
@@ -718,7 +720,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
     uh->src_port = conn->lport;
     uh->dst_port = conn->dport;
 
-    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, opp);
+    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, opp, conn->in_dev);
 }
 
 static int udp_fnat_out_handler(struct dp_vs_proto *proto,
@@ -740,7 +742,7 @@ static int udp_fnat_out_handler(struct dp_vs_proto *proto,
     uh->src_port = conn->vport;
     uh->dst_port = conn->cport;
 
-    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL);
+    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL, conn->out_dev);
 }
 
 static int udp_fnat_in_pre_handler(struct dp_vs_proto *proto,
@@ -772,7 +774,7 @@ static int udp_snat_in_handler(struct dp_vs_proto *proto,
 
     uh->dst_port = conn->dport;
 
-    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL);
+    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL, conn->in_dev);
 }
 
 static int udp_snat_out_handler(struct dp_vs_proto *proto,
@@ -792,7 +794,7 @@ static int udp_snat_out_handler(struct dp_vs_proto *proto,
 
     uh->src_port = conn->vport;
 
-    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL);
+    return udp_send_csum(af, iphdrlen, uh, conn, mbuf, NULL, conn->out_dev);
 }
 
 struct dp_vs_proto dp_vs_proto_udp = {
