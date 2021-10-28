@@ -289,3 +289,100 @@ if [ $? -eq 0 ]; then
 else
     echo -e "port dpdk0 not found, skipping hash:net,port,iface test"
 fi
+
+# hash:net,port
+echo -e "hash:net,port"
+ipset create foo hash:net,port comment
+ipset add foo  192.168.100.0-192.168.102.30,tcp:10240
+ipset test foo 192.168.100.111,tcp:10240 EXPECT true
+ipset test foo 192.168.101.111,tcp:10240 EXPECT true
+ipset test foo 192.168.101.111,tcp:10241 EXPECT false
+ipset test foo 192.168.102.111,tcp:10241 EXPECT false
+ipset test foo 192.168.102.30,tcp:10240  EXPECT true
+ipset test foo 192.168.102.30,10240      EXPECT false
+ipset test foo 192.168.102.31,tcp:10240  EXPECT false
+ipset add  foo 192.168.100.101/25,tcp:10240 nomatch comment "bad-guys"
+ipset test foo 192.168.100.111,tcp:10240 EXPECT false
+ipset flush foo
+ipset add  foo 10.128.34.211-10.128.37.189,3000-3001
+ipset test foo 10.128.35.141,3001 EXPECT true
+ipset add  foo 10.128.35.100-10.128.35.150,3000-3001 nomatch
+ipset test foo 10.128.34.210,3000 EXPECT false
+ipset test foo 10.128.34.211,3000 EXPECT true
+ipset test foo 10.128.37.185,3001 EXPECT true
+ipset test foo 10.128.37.190,3001 EXPECT false
+ipset test foo 10.128.35.141,3001 EXPECT false
+ipset destroy foo
+ipset -6 create bar hash:net,port maxelem 1024
+ipset add  bar 2001::/64,tcp:80-88
+ipset test bar 2001::1:2:3:4,tcp:85 EXPECT true
+ipset test bar 2001::1111:2222:3333:4444,tcp:88 EXPECT true
+ipset test bar 2001::1:2:3:4,tcp:89 EXPECT false
+ipset test bar 2001::1:2:3:4:5,tcp:85 EXPECT false
+ipset test bar 2001::eeee:aaaa:1:6,tcp:85 EXPECT true
+ipset add bar 2001::eeee:aaaa:1243:6789/96,tcp:84-86 nomatch
+ipset test bar 2001::eeee:aaaa:1:6,tcp:85 EXPECT false
+ipset destroy bar
+
+# hash:net,port,net
+echo -e "hash:net,port,net"
+ipset create foo hash:net,port,net
+ipset add  foo 192.168.188.20-192.168.190.36,2021-2022,192.168.33.223-192.168.34.123
+ipset flush foo
+ipset add  foo 10.60.0.0/16,tcp:10240-10242,10.130.0.0/16
+ipset test foo 10.60.12.34,tcp:10241,10.130.56.78 EXPECT true
+ipset test foo 10.60.0.0,tcp:10242,10.130.255.255 EXPECT true
+ipset test foo 10.61.0.0,tcp:10240,10.130.255.255 EXPECT false
+ipset test foo 10.60.0.0,udp:10240,10.130.255.255 EXPECT false
+ipset test foo 10.60.100.168,tcp:10242,10.130.100.192 EXPECT true
+ipset add foo 10.60.100.100-10.60.100.200,tcp:10242,10.130.100.100-10.130.100.200 nomatch
+ipset test foo 10.60.100.168,tcp:10242,10.130.100.192 EXPECT false
+ipset test foo 10.60.100.168,tcp:10241,10.130.100.192 EXPECT true
+ipset test foo 10.60.100.201,tcp:10242,10.130.100.192 EXPECT true
+ipset destroy foo
+ipset -6 create bar hash:net,port,net hashsize 1024 maxelem 4096 comment
+ipset add  bar 210e:36a9::aa:bbbb/96,udp:8080-8082,2408:a91e::cc:dddd/96 comment "test-entries"
+ipset test bar 210e:36a9::12:3456,udp:8080,2408:a91e::78:9abc EXPECT true
+ipset test bar 210e:36a9::ff:ffff,udp:8080,2408:a91e:: EXPECT true
+ipset test bar 210e:36a9::,udp:8082,2408:a91e::ff:ffff EXPECT true
+ipset add  bar 210e:36a9::12:3456/102,udp:8080,2408:a91e::78:9abc/102 nomatch
+ipset test bar 210e:36a9::12:3456,udp:8080,2408:a91e::78:9abc EXPECT false
+ipset del  bar 210e:36a9::12:3456/102,udp:8080,2408:a91e::78:9abc/102
+ipset test bar 210e:36a9::ff:ffff,udp:8080,2408:a91e:: EXPECT true
+ipset test bar 210e:36a9::12:3456,udp:8080,2408:a91e::78:9abc EXPECT true
+ipset destroy bar
+
+# hash:ip,port,net
+echo -e "hash:ip,port,net"
+ipset create foo hash:ip,port,net comment
+ipset add  foo 192.168.12.1/24,tcp:8080,192.168.100.0/24
+ipset test foo 192.168.12.211,tcp:8080,192.168.100.211 EXPECT true
+ipset test foo 192.168.12.0,tcp:8080,192.168.100.255 EXPECT true
+ipset test foo 192.168.12.211,tcp:8080,192.168.101.0 EXPECT false
+ipset test foo 192.168.13.0,tcp:8080,192.168.100.211 EXPECT false
+ipset test foo 192.168.12.211,8080,192.168.100.211 EXPECT false
+ipset add foo 192.168.12.200-192.168.12.255,tcp:8080,192.168.100.200-192.168.100.255 nomatch
+ipset list -v
+ipset test foo 192.168.12.211,tcp:8080,192.168.100.111 EXPECT true
+ipset test foo 192.168.12.211,tcp:8080,192.168.100.211 EXPECT false
+ipset add  foo 192.168.12.211,tcp:8080,192.168.100.211/32 comment "I'm-innocent"
+ipset test foo 192.168.12.211,tcp:8080,192.168.100.211 EXPECT true
+ipset del  foo 192.168.12.200-192.168.12.255,tcp:8080,192.168.100.200-192.168.100.255
+ipset flush foo
+ipset add foo 10.61.240.1-10.61.240.9,udp:10240-10242,10.110.123.102/21
+ipset test foo 10.61.240.3,udp:10240,10.110.123.123 EXPECT true
+ipset test foo 10.61.240.6,udp:10241,10.110.120.1 EXPECT true
+ipset test foo 10.61.240.9,udp:10242,10.110.127.255 EXPECT true
+ipset test foo 10.61.240.3,udp:10243,10.110.123.123 EXPECT false
+ipset destroy foo
+ipset -6 create bar hash:ip,port,net
+ipset add bar 2001::1,8080-8082,2002::/64
+ipset add bar 2001::2,8080-8082,2002::/64
+ipset add bar 2001::3,8080-8082,2002::/64
+ipset add bar 2001::1,8080-8082,2002::aaaa:bbbb:ccc1:2222/108 nomatch
+ipset test bar 2001::1,8081,2002::1:2:3:4 EXPECT true
+ipset test bar 2001::1,8081,2002::1:2:3:4:5 EXPECT false
+ipset test bar 2001::2,8080,2002:: EXPECT true
+ipset test bar 2001::1,8081,2002::aaaa:bbbb:ccc1:2345 EXPECT false
+ipset test bar 2001::1,8081,2002::aaaa:bbbb:cc11:2345 EXPECT true
+ipset destroy bar

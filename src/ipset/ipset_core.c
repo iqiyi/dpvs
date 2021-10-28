@@ -260,9 +260,9 @@ ipset_type_register(struct ipset_type *type)
 
 /* IPset types */
 extern struct ipset_type bitmap_ip_type, bitmap_ipmac_type, bitmap_port_type,
-                         hash_ip_type, hash_net_type, hash_ipport_type,
-                         hash_netportiface_type, hash_ipportip_type,
-                         hash_netportnetport_type;
+       hash_ip_type, hash_net_type, hash_ipport_type, hash_netport_type,
+       hash_netportiface_type, hash_ipportip_type, hash_netportnet_type,
+       hash_ipportnet_type, hash_netportnetport_type;
 
 int ipset_init(void)
 {
@@ -277,8 +277,11 @@ int ipset_init(void)
     ipset_type_register(&hash_ip_type);
     ipset_type_register(&hash_net_type);
     ipset_type_register(&hash_ipport_type);
+    ipset_type_register(&hash_netport_type);
     ipset_type_register(&hash_netportiface_type);
     ipset_type_register(&hash_ipportip_type);
+    ipset_type_register(&hash_netportnet_type);
+    ipset_type_register(&hash_ipportnet_type);
     ipset_type_register(&hash_netportnetport_type);
 
     if ((err = ipset_ctrl_init()) < 0) {
