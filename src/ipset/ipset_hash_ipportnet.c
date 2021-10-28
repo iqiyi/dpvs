@@ -20,25 +20,24 @@
 #include "ipset/ipset_hash.h"
 #include "ipset/pfxlen.h"
 
-typedef struct hash_netportiface_elem {
+typedef struct hash_ipportnet_elem {
     union inet_addr ip;
     uint8_t cidr;
+    union inet_addr ip2;
     uint8_t proto;
     uint16_t port;
-    uint16_t iface;
 
     /* data not evolved in hash calculation */
-    struct netif_port *dev;
     char comment[IPSET_MAXCOMLEN];
     bool nomatch;
 } elem_t;
 
 static int
-hash_netportiface_data_equal(const void *elem1, const void *elem2)
+hash_ipportnet_data_equal(const void *elem1, const void *elem2)
 {
     elem_t *e2 = (elem_t *)elem2;
 
-    if (memcmp(elem1, elem2, offsetof(elem_t, dev)))
+    if (memcmp(elem1, elem2, offsetof(elem_t, comment)))
         return COMPARE_INEQUAL;
     if (e2->nomatch)
         return COMPARE_EQUAL_REJECT;
@@ -46,7 +45,7 @@ hash_netportiface_data_equal(const void *elem1, const void *elem2)
 }
 
 static void
-hash_netportiface_do_list(struct ipset_member *member, void *elem, bool comment)
+hash_ipportnet_do_list(struct ipset_member *member, void *elem, bool comment)
 {
     elem_t *e = (elem_t *)elem;
 
@@ -55,28 +54,28 @@ hash_netportiface_do_list(struct ipset_member *member, void *elem, bool comment)
     member->port = ntohs(e->port);
     member->proto = e->proto;
     member->nomatch = e->nomatch;
-    rte_strlcpy(member->iface, e->dev->name, IFNAMSIZ);
+    member->addr2 = e->ip2;
     
     if (comment)
         rte_strlcpy(member->comment, e->comment, IPSET_MAXCOMLEN);
 }
 
 static uint32_t
-hash_netportiface_hashkey4(void *data, int len, uint32_t mask)
+hash_ipportnet_hashkey4(void *data, int len, uint32_t mask)
 {
     elem_t *e = (elem_t *)data;
 
-    return (e->ip.in.s_addr * 31 + e->cidr * 31 +
-            ((e->port << 16) | (e->iface | e->proto))) & mask;
+    return (e->ip.in.s_addr * 31 + (((uint32_t)e->port << 16) |
+                (((uint32_t)e->proto) << 8) | (uint32_t)e->cidr)) & mask;
 }
 
 static int
-hash_netportiface_adt4(int op, struct ipset *set, struct ipset_param *param)
+hash_ipportnet_adt4(int op, struct ipset *set, struct ipset_param *param)
 {
     elem_t e;
     int ret;
     uint16_t port;
-    uint32_t ip, ip_to;
+    uint32_t ip, ip_to, ip2, ip2_to, ip2_from; 
     ipset_adtfn adtfn = set->type->adtfn[op];
 
     if (set->family != param->option.family)
@@ -86,13 +85,10 @@ hash_netportiface_adt4(int op, struct ipset *set, struct ipset_param *param)
 
     e.cidr = param->cidr;
     e.proto = param->proto;
-    e.dev = netif_port_get_by_name(param->iface);
-    if (unlikely(e.dev == NULL))
-        return EDPVS_INVAL;
-    e.iface = e.dev->id;
 
     if (op == IPSET_OP_TEST) {
         e.ip.in.s_addr = param->range.min_addr.in.s_addr;
+        e.ip2.in.s_addr = param->range2.min_addr.in.s_addr;
         e.port = htons(param->range.min_port);
         return adtfn(set, &e, 0);
     }
@@ -110,17 +106,26 @@ hash_netportiface_adt4(int op, struct ipset *set, struct ipset_param *param)
     } else {
         ip_to = ntohl(param->range.max_addr.in.s_addr);
     }
+    
+    ip2_from = ntohl(param->range2.min_addr.in.s_addr);;
+    if (param->cidr2) {
+        ip_set_mask_from_to(ip2_from, ip2_to, param->cidr2);
+    } else {
+        ip2_to = ntohl(param->range2.max_addr.in.s_addr);
+    }
 
     do {
         e.ip.in.s_addr = htonl(ip);
         ip = ip_set_range_to_cidr(ip, ip_to, &e.cidr);
-        for (port = param->range.min_port; 
-             port >= param->range.min_port &&
-             port <= param->range.max_port; port++) {
-            e.port = htons(port);
-            ret = adtfn(set, &e, param->flag);
-            if (ret)
-                return ret;
+        for (ip2 = ip2_from; ip2 <= ip2_to; ip2++) {
+            e.ip2.in.s_addr = htonl(ip2);
+            for (port = param->range.min_port; port >= param->range.min_port
+                    && port <= param->range.max_port; port++) {
+                e.port = htons(port);
+                ret = adtfn(set, &e, param->flag);
+                if (ret)
+                    return ret;
+            }
         }
     } while(ip++ < ip_to);
 
@@ -128,7 +133,7 @@ hash_netportiface_adt4(int op, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-hash_netportiface_test(struct ipset *set, struct ipset_test_param *p)
+hash_ipportnet_test(struct ipset *set, struct ipset_test_param *p)
 {
     elem_t e;
     uint16_t *ports, _ports[2];
@@ -138,30 +143,31 @@ hash_netportiface_test(struct ipset *set, struct ipset_test_param *p)
 
     ports = mbuf_header_pointer(p->mbuf, iph->len, sizeof(_ports), _ports);
 
-    e.iface = p->mbuf->port;
     e.proto = iph->proto;
     if (p->direction == 1) {
-        e.ip = iph->saddr;
-        e.port = ports[0];
+        e.ip2 = iph->saddr;
+        e.port = ports[0];  // match for source
+        e.ip = iph->daddr;
     } else {
         e.ip = iph->daddr;
-        e.port = ports[1];
+        e.port = ports[1]; // match for dest
+        e.ip2 = iph->saddr;
     }
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }
 
-struct ipset_type_variant hash_netportiface_variant4 = {
-    .adt = hash_netportiface_adt4,
-    .test = hash_netportiface_test,
-    .hash.do_compare = hash_netportiface_data_equal,
+struct ipset_type_variant hash_ipportnet_variant4 = {
+    .adt = hash_ipportnet_adt4,
+    .test = hash_ipportnet_test,
+    .hash.do_compare = hash_ipportnet_data_equal,
     .hash.do_netmask = hash_data_netmask4,
-    .hash.do_list = hash_netportiface_do_list,
-    .hash.do_hash = hash_netportiface_hashkey4,
+    .hash.do_list = hash_ipportnet_do_list,
+    .hash.do_hash = hash_ipportnet_hashkey4,
 };
 
 static int
-hash_netportiface_adt6(int op, struct ipset *set, struct ipset_param *param)
+hash_ipportnet_adt6(int op, struct ipset *set, struct ipset_param *param)
 {
     int ret;
     uint16_t port;
@@ -173,13 +179,10 @@ hash_netportiface_adt6(int op, struct ipset *set, struct ipset_param *param)
 
     memset(&e, 0, sizeof(e));
 
+    e.ip2 = param->range2.min_addr;
     e.ip = param->range.min_addr;
     e.cidr = param->cidr;
     e.proto = param->proto;
-    e.dev = netif_port_get_by_name(param->iface);
-    if (unlikely(e.dev == NULL))
-        return EDPVS_NOTEXIST;
-    e.iface = e.dev->id;
 
     if (op == IPSET_OP_TEST) {
         e.port = htons(param->range.min_port);
@@ -207,34 +210,34 @@ hash_netportiface_adt6(int op, struct ipset *set, struct ipset_param *param)
     return EDPVS_OK;
 }
 
-struct ipset_type_variant hash_netportiface_variant6 = {
-    .adt = hash_netportiface_adt6,
-    .test = hash_netportiface_test,
-    .hash.do_compare = hash_netportiface_data_equal,
+struct ipset_type_variant hash_ipportnet_variant6 = {
+    .adt = hash_ipportnet_adt6,
+    .test = hash_ipportnet_test,
+    .hash.do_compare = hash_ipportnet_data_equal,
     .hash.do_netmask = hash_data_netmask6,
-    .hash.do_list = hash_netportiface_do_list,
+    .hash.do_list = hash_ipportnet_do_list,
     .hash.do_hash = jhash_hashkey
 };
 
 static int
-hash_netportiface_create(struct ipset *set, struct ipset_param *param)
+hash_ipportnet_create(struct ipset *set, struct ipset_param *param)
 {
     hash_create(set, param);
     set->net_count = 1;
     set->dsize = sizeof(elem_t);
-    set->hash_len = offsetof(elem_t, dev);
+    set->hash_len = offsetof(elem_t, comment);
 
     if (param->option.family == AF_INET)
-        set->variant = &hash_netportiface_variant4;
+        set->variant = &hash_ipportnet_variant4;
     else
-        set->variant = &hash_netportiface_variant6;
+        set->variant = &hash_ipportnet_variant6;
 
     return EDPVS_OK;
 }
 
-struct ipset_type hash_netportiface_type = {
-    .name       = "hash:net,port,iface",
-    .create     = hash_netportiface_create,
+struct ipset_type hash_ipportnet_type = {
+    .name       = "hash:ip,port,net",
+    .create     = hash_ipportnet_create,
     .destroy    = hash_destroy,
     .flush      = hash_flush,
     .list       = hash_list,
