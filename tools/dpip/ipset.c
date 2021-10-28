@@ -185,7 +185,7 @@ addr_arg_parse(char *arg, struct inet_addr_range *range, uint8_t *cidr)
         if (ip2 && strlen(ip2)) {
             if (inet_pton(AF_INET, ip2, &range->max_addr.in) <= 0)
                 return EDPVS_INVAL;
-            if (range->max_addr.in.s_addr < range->min_addr.in.s_addr)
+            if (ntohl(range->max_addr.in.s_addr) < ntohl(range->min_addr.in.s_addr))
                 range->max_addr = range->min_addr;
         } else {
             range->max_addr = range->min_addr;
@@ -355,6 +355,26 @@ port_parse(char *arg)
     return EDPVS_OK;
 }
 
+static int
+netport_parse(char *arg)
+{
+    int segnum;
+    char *segs[2];
+
+    if (seg_parse(arg, 2, &segnum, segs) < 0)
+        return EDPVS_INVAL;
+    if (segnum != 2)
+        return EDPVS_INVAL;
+
+    if (addr_arg_parse(segs[0], &param.range, &param.cidr) < 0)
+        return EDPVS_INVAL;
+
+    if (port_arg_parse(segs[1], &param.range) < 0)
+        return EDPVS_INVAL;
+
+    return EDPVS_OK;
+}
+
 /* net, port, iface */
 static int
 netportiface_parse(char *arg)
@@ -414,6 +434,29 @@ ipportip_parse(char *arg)
         return EDPVS_INVAL;
 
     if (addr_arg_parse(segs[2], &param.range2, &param.cidr2) < 0)
+        return EDPVS_INVAL;
+
+    return EDPVS_OK;
+}
+
+static int
+ipportnet_parse(char *arg)
+{
+    int segnum;
+    char *segs[3];
+
+    if (seg_parse(arg, 3, &segnum, segs) < 0)
+        return EDPVS_INVAL;
+    if (segnum != 3)
+        return EDPVS_INVAL;
+
+    if (addr_arg_parse(segs[2], &param.range, &param.cidr) < 0)
+        return EDPVS_INVAL;
+
+    if (port_arg_parse(segs[1], &param.range) < 0)
+        return EDPVS_INVAL;
+
+    if (addr_arg_parse(segs[0], &param.range2, &param.cidr2) < 0)
         return EDPVS_INVAL;
 
     return EDPVS_OK;
@@ -636,7 +679,7 @@ hash_ip_check(void)
         return EDPVS_OK;
 
     if (param.option.family == AF_INET6) {
-        if (param.cidr) {
+        if (param.cidr || param.cidr2) {
             fprintf(stderr, "hash:ip,port doesn't support ipv6 cidr\n");
             return EDPVS_INVAL;
         }
@@ -693,6 +736,39 @@ hash_net_check(void)
             if (ntohl(param.range2.max_addr.in.s_addr) <
                     ntohl(param.range2.min_addr.in.s_addr)) {
                 fprintf(stderr, "invalid ipv4 range\n");
+                return EDPVS_INVAL;
+            }
+        }
+    }
+
+    return EDPVS_OK;
+}
+
+static int
+hash_ipnet_check(void)
+{
+    if (param.opcode != IPSET_OP_ADD && param.opcode != IPSET_OP_DEL)
+        return EDPVS_OK;
+
+    if (param.option.family == AF_INET6) {
+        if (param.cidr2) {
+            fprintf(stderr, "hash:ip,port doesn't support ipv6 cidr\n");
+            return EDPVS_INVAL;
+        }
+    } else if (param.option.family == AF_INET) {
+        if (param.cidr > 0 && param.cidr < 16) {
+            fprintf(stderr, "ipv4 cidr shouldn't be less than 16\n");
+            return EDPVS_INVAL;
+        }
+        if (ntohl(param.range.max_addr.in.s_addr) != 0) {
+            if (ntohl(param.range.max_addr.in.s_addr) <
+                    ntohl(param.range.min_addr.in.s_addr)) {
+                fprintf(stderr, "invalid ipv4 range\n");
+                return EDPVS_INVAL;
+            }
+            if (ntohl(param.range.max_addr.in.s_addr) -
+                    ntohl(param.range.min_addr.in.s_addr) > 65536) {
+                fprintf(stderr, "ipv6 range shouldn't be greater than 65536\n");
                 return EDPVS_INVAL;
             }
         }
@@ -873,6 +949,25 @@ ipport_dump_member(char *buf, struct ipset_member *member, int af)
     return n;
 }
 
+static int
+netport_dump_member(char *buf, struct ipset_member *member, int af)
+{
+    int n;
+    char addr[INET6_ADDRSTRLEN];
+
+    inet_ntop(af, &member->addr, addr, INET6_ADDRSTRLEN);
+
+    n = sprintf(buf, "%s/%d,%s:%d ", addr, member->cidr,
+                proto_string(member->proto), member->port);
+
+    if (member->nomatch)
+        n += sprintf(buf + n, "nomatch ");
+    n += sprintf(buf + n , " ");
+
+    n += dump_comment(buf + n, member->comment);
+
+    return n;
+}
 
 static int
 netportiface_dump_member(char *buf, struct ipset_member *member, int af)
@@ -906,6 +1001,48 @@ ipportip_dump_member(char *buf, struct ipset_member *member, int af)
 
     n = sprintf(buf, "%s,%s:%d,%s  ", addr,
             proto_string(member->proto), member->port, addr2);
+
+    n += dump_comment(buf + n, member->comment);
+
+    return n;
+}
+
+static int
+ipportnet_dump_member(char *buf, struct ipset_member *member, int af)
+{
+    int n;
+    char addr[INET6_ADDRSTRLEN], addr2[INET6_ADDRSTRLEN];
+
+    inet_ntop(af, &member->addr, addr, INET6_ADDRSTRLEN);
+    inet_ntop(af, &member->addr2, addr2, INET6_ADDRSTRLEN);
+
+    n = sprintf(buf, "%s,%s:%d,%s/%d ", addr2,
+            proto_string(member->proto), member->port, addr, member->cidr);
+
+    if (member->nomatch)
+        n += sprintf(buf + n, "nomatch ");
+    n += sprintf(buf + n , " ");
+
+    n += dump_comment(buf + n, member->comment);
+
+    return n;
+}
+
+static int
+netportnet_dump_member(char *buf, struct ipset_member *member, int af)
+{
+    int n;
+    char addr[INET6_ADDRSTRLEN], addr2[INET6_ADDRSTRLEN];
+
+    inet_ntop(af, &member->addr, addr, INET6_ADDRSTRLEN);
+    inet_ntop(af, &member->addr2, addr2, INET6_ADDRSTRLEN);
+
+    n = sprintf(buf, "%s/%d,%s:%d,%s/%d ", addr, member->cidr,
+            proto_string(member->proto), member->port, addr2, member->cidr2);
+
+    if (member->nomatch)
+        n += sprintf(buf + n, "nomatch ");
+    n += sprintf(buf + n , " ");
 
     n += dump_comment(buf + n, member->comment);
 
@@ -1158,6 +1295,22 @@ ipportip_sort_compare(int af, const struct ipset_member *m1, const struct ipset_
 }
 
 static int
+netport_sort_compare(int af, const struct ipset_member *m1, const struct ipset_member *m2)
+{
+    int res;
+
+    res = cidr_compare(m1->cidr, m2->cidr);
+    if (res)
+        return -1 * res;
+
+    res = ip_addr_compare(af, &m1->addr, &m2->addr);
+    if (res)
+        return res;
+
+    return port_compare(m1->port, m2->port);
+}
+
+static int
 netportiface_sort_compare(int af, const struct ipset_member *m1, const struct ipset_member *m2)
 {
     int res;
@@ -1170,7 +1323,55 @@ netportiface_sort_compare(int af, const struct ipset_member *m1, const struct ip
     if (res)
         return res;
 
+    res = port_compare(m1->port, m2->port);
+    if (res)
+        return res;
+
     return strncmp(m1->iface, m2->iface, IFNAMSIZ);
+}
+
+static int
+ipportnet_sort_compare(int af, const struct ipset_member *m1, const struct ipset_member *m2)
+{
+    int res;
+
+    res = ip_addr_compare(af, &m1->addr2, &m2->addr2);
+    if (res)
+        return res;
+
+    res = cidr_compare(m1->cidr, m2->cidr);
+    if (res)
+        return -1 * res;
+
+    res = ip_addr_compare(af, &m1->addr, &m2->addr);
+    if (res)
+        return res;
+
+    return port_compare(m1->port, m2->port);
+}
+
+static int
+netportnet_sort_compare(int af, const struct ipset_member *m1, const struct ipset_member *m2)
+{
+    int res;
+
+    res = cidr_compare(m1->cidr, m2->cidr);
+    if (res)
+        return -1 * res;
+
+    res = cidr_compare(m1->cidr2, m2->cidr2);
+    if (res)
+        return -1 * res;
+
+    res = ip_addr_compare(af, &m1->addr, &m2->addr);
+    if (res)
+        return res;
+
+    res = ip_addr_compare(af, &m1->addr2, &m2->addr2);
+    if (res)
+        return res;
+
+    return port_compare(m1->port, m2->port);
 }
 
 static int
@@ -1248,6 +1449,14 @@ struct ipset_type types[MAX_TYPE_NUM] = {
         .sort_compare = ipport_sort_compare
     },
     {
+        .name = "hash:net,port",
+        .parse = netport_parse,
+        .check = hash_net_check,
+        .dump_header = hash_dump_header,
+        .dump_member = netport_dump_member,
+        .sort_compare = netport_sort_compare
+    },
+    {
         .name = "hash:net,port,iface",
         .parse = netportiface_parse,
         .check = hash_net_check,
@@ -1262,6 +1471,22 @@ struct ipset_type types[MAX_TYPE_NUM] = {
         .dump_header = hash_dump_header,
         .dump_member = ipportip_dump_member,
         .sort_compare = ipportip_sort_compare
+    },
+    {
+        .name = "hash:ip,port,net",
+        .parse = ipportnet_parse,
+        .check = hash_ipnet_check,
+        .dump_header = hash_dump_header,
+        .dump_member = ipportnet_dump_member,
+        .sort_compare = ipportnet_sort_compare
+    },
+    {
+        .name = "hash:net,port,net",
+        .parse = ipportip_parse,
+        .check = hash_net_check,
+        .dump_header = hash_dump_header,
+        .dump_member = netportnet_dump_member,
+        .sort_compare = netportnet_sort_compare
     },
     {
         .name = "hash:net,port,net,port",
