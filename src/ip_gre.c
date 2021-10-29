@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2018 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -271,7 +271,7 @@ static int gre_rcv(struct rte_mbuf *mbuf)
     if (hlen < 0)
         goto drop;
 
-    iph = mbuf->userdata; /* see ipv4_local_in_fin */
+    iph = MBUF_USERDATA(mbuf, struct iphdr *, MBUF_FIELD_PROTO); /* see ipv4_local_in_fin */
     assert(iph->version == 4 && iph->protocol == IPPROTO_GRE);
 
     tnl = ip_tunnel_lookup(&gre_tunnel_tab, mbuf->port, tpi.flags,

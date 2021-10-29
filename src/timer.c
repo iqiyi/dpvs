@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -34,6 +34,10 @@
 #include "rte_spinlock.h"
 #include "parser/parser.h"
 #include "global_data.h"
+
+#ifdef CONFIG_TIMER_DEBUG
+#include "debug.h"
+#endif
 
 #define DTIMER
 #define RTE_LOGTYPE_DTIMER      RTE_LOGTYPE_USER1
@@ -179,8 +183,8 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
      * and it will never stopped (periodic) or never triggered (one-shut).
      */
     if (unlikely(!timer->delay)) {
-        RTE_LOG(WARNING, DTIMER, "schedule 0 timeout timer.\n");
-        return EDPVS_INVAL;
+        RTE_LOG(INFO, DTIMER, "trigger 0 delay timer at next tick.\n");
+        timer->delay = 1;
     }
 
     /* add to corresponding wheel, from higher level to lower. */
@@ -232,8 +236,9 @@ static void timer_expire(struct timer_scheduler *sched, struct dpvs_timer *timer
         char trace[8192];
         dpvs_backtrace(trace, sizeof(trace));
         RTE_LOG(WARNING, DTIMER, "[%02d]: invalid timer(%p) handler "
-                "-- handler:%p, priv:%p, trace:\n%s", rte_lcore_id(),
-                timer, timer->handler, timer->priv, trace);
+                "-- name:%s, handler:%p, priv:%p, trace:\n%s",
+                rte_lcore_id(), timer, timer->name, timer->handler,
+                timer->priv, trace);
     }
 #endif
 
@@ -422,8 +427,8 @@ int dpvs_timer_init(void)
     int err;
 
     /* per-lcore timer */
-    rte_eal_mp_remote_launch(timer_lcore_init, NULL, SKIP_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(timer_lcore_init, NULL, SKIP_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         err = rte_eal_wait_lcore(cid);
         if (err < 0) {
             RTE_LOG(ERR, DTIMER, "%s: lcore %d: %s.\n",
@@ -433,7 +438,7 @@ int dpvs_timer_init(void)
     }
 
     /* global timer */
-    return timer_init_schedler(&g_timer_sched, rte_get_master_lcore());
+    return timer_init_schedler(&g_timer_sched, rte_get_main_lcore());
 }
 
 int dpvs_timer_term(void)
@@ -442,8 +447,8 @@ int dpvs_timer_term(void)
     int err;
 
     /* per-lcore timer */
-    rte_eal_mp_remote_launch(timer_lcore_term, NULL, SKIP_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(timer_lcore_term, NULL, SKIP_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         err = rte_eal_wait_lcore(cid);
         if (err < 0) {
             RTE_LOG(WARNING, DTIMER, "%s: lcore %d: %s.\n",
@@ -459,7 +464,7 @@ static inline struct timer_scheduler *this_lcore_sched(bool global)
 {
     /* any lcore (including master and slaves) can use global timer,
      * but only slave lcores can use per-lcore timer. */
-    if (!global && rte_lcore_id() == rte_get_master_lcore()) {
+    if (!global && rte_lcore_id() == rte_get_main_lcore()) {
         RTE_LOG(ERR, DTIMER, "try get per-lcore timer from master\n");
         return NULL;
     }

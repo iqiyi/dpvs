@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -39,8 +39,13 @@ typedef uint32_t            tc_handle_t;
 #define TC
 #define RTE_LOGTYPE_TC      RTE_LOGTYPE_USER1
 
-#define TC_ALIGNTO          64
+#define TC_ALIGNTO          RTE_CACHE_LINE_SIZE
 #define TC_ALIGN(len)       (((len) + TC_ALIGNTO-1) & ~(TC_ALIGNTO-1))
+
+typedef enum tc_hook_type {
+    TC_HOOK_EGRESS  = 1,
+    TC_HOOK_INGRESS = 2,
+} tc_hook_type_t;
 
 /* need a wrapper to save mbuf list,
  * since there's no way to link mbuf by it's own elem.
@@ -58,7 +63,6 @@ struct tc_mbuf {
 struct netif_tc {
     struct netif_port       *dev;
     struct rte_mempool      *tc_mbuf_pool;
-    rte_rwlock_t            lock;
 
     /*
      * Qsch section
@@ -80,25 +84,23 @@ struct Qsch_ops;
 struct tc_cls_ops;
 
 int tc_init(void);
+int tc_term(void);
 int tc_ctrl_init(void);
+int tc_ctrl_term(void);
 
 int tc_init_dev(struct netif_port *dev);
 int tc_destroy_dev(struct netif_port *dev);
 
 int tc_register_qsch(struct Qsch_ops *ops);
 int tc_unregister_qsch(struct Qsch_ops *ops);
-
 struct Qsch_ops *tc_qsch_ops_lookup(const char *name);
-void tc_qsch_ops_get(struct Qsch_ops *ops);
-void tc_qsch_ops_put(struct Qsch_ops *ops);
 
 int tc_register_cls(struct tc_cls_ops *ops);
 int tc_unregister_cls(struct tc_cls_ops *ops);
-struct tc_cls_ops *tc_cls_ops_get(const char *name);
-void tc_cls_ops_put(struct tc_cls_ops *ops);
+struct tc_cls_ops *tc_cls_ops_lookup(const char *name);
 
-struct rte_mbuf *tc_handle_egress(struct netif_tc *tc,
-                                  struct rte_mbuf *mbuf, int *ret);
+struct rte_mbuf *tc_hook(struct netif_tc *tc, struct rte_mbuf *mbuf,
+                         tc_hook_type_t type, int *ret);
 
 static inline int64_t tc_get_ns(void)
 {

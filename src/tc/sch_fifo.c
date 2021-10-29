@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -30,7 +30,7 @@ extern struct Qsch_ops bfifo_sch_ops;
 
 static int pfifo_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 {
-    if (likely(sch->this_q.qlen < sch->limit))
+    if (likely(sch->q.qlen < sch->limit))
         return qsch_enqueue_tail(sch, mbuf);
 
 #if defined(CONFIG_TC_DEBUG)
@@ -41,7 +41,7 @@ static int pfifo_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 
 static int bfifo_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 {
-    if (likely(sch->this_qstats.backlog + mbuf->pkt_len <= sch->limit))
+    if (likely(sch->qstats.backlog + mbuf->pkt_len <= sch->limit))
         return qsch_enqueue_tail(sch, mbuf);
 
 #if defined(CONFIG_TC_DEBUG)
@@ -68,7 +68,7 @@ static int fifo_init(struct Qsch *sch, const void *arg)
 #if 0
         limit = dev->txq_desc_nb;
 #else
-        limit = 128;
+        limit = 1024;
 #endif
 
         if (is_bfifo)
@@ -113,32 +113,3 @@ struct Qsch_ops bfifo_sch_ops = {
     .reset      = qsch_reset_queue,
     .dump       = fifo_dump,
 };
-
-int fifo_set_limit(struct Qsch *sch, unsigned int limit)
-{
-    struct tc_fifo_qopt qopt = { .limit = limit };
-
-    if (strncmp(sch->ops->name + 1, "fifo", 4) != 0)
-        return EDPVS_INVAL;
-
-    return sch->ops->change(sch, &qopt);
-}
-
-struct Qsch *fifo_create_dflt(struct Qsch *sch, struct Qsch_ops *ops,
-                              unsigned int limit)
-{
-    struct Qsch *q;
-    int err;
-
-    q = qsch_create_dflt(qsch_dev(sch), ops, sch->handle);
-    if (!q)
-        return NULL;
-
-    err = fifo_set_limit(q, limit);
-    if (err != EDPVS_OK) {
-        qsch_destroy(q);
-        return NULL;
-    }
-
-    return q;
-}

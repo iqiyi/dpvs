@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -52,6 +52,9 @@ static int mp_elem_create(char *name_pref, struct dpvs_mp_elem *mp_elt, uint32_t
     if (cache_size >= obj_num * 2/3)
         cache_size = obj_num / 2;
 
+    is_power2((int)obj_num, 1, (int *)&obj_num);
+    --obj_num;
+
     snprintf(name, sizeof(name), "%s_s%d_n%d", name_pref, obj_sz, obj_num);
     pool = rte_mempool_create(name, obj_num, obj_sz, cache_size, 0, NULL, NULL,
             NULL, NULL, SOCKET_ID_ANY, 0);
@@ -85,7 +88,7 @@ struct dpvs_mempool *dpvs_mempool_create(char *name,
     uint32_t obj_num;
     struct dpvs_mempool *mp;
 
-    if (rte_lcore_id() != rte_get_master_lcore()) {
+    if (rte_lcore_id() != rte_get_main_lcore()) {
         RTE_LOG(WARNING, DPVS_MPOOL, "%s could be called on master lcore only!", __func__);
         return NULL;
     }
@@ -149,7 +152,7 @@ void dpvs_mempool_destroy(struct dpvs_mempool *mp)
     if (unlikely(!mp))
         return;
 
-    if (rte_lcore_id() != rte_get_master_lcore()) {
+    if (rte_lcore_id() != rte_get_main_lcore()) {
         RTE_LOG(WARNING, DPVS_MPOOL, "%s could be called on master lcore only!", __func__);
         return;
     }

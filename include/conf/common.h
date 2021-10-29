@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -23,6 +23,8 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <linux/if_ether.h>
+
+typedef uint32_t sockoptid_t;
 
 #ifndef NELEMS
 #define NELEMS(a)       (sizeof(a) / sizeof((a)[0]))
@@ -75,6 +77,13 @@ typedef uint32_t    __u32;
 typedef uint8_t lcoreid_t;
 #endif
 
+#ifndef portid_t
+typedef uint16_t portid_t;
+#endif
+
+#ifndef queueid_t
+typedef uint16_t queueid_t;
+#endif
 
 #define DPVS_WAIT_WHILE(expr) while(expr){;}
 
@@ -129,6 +138,7 @@ extern const char *dpvs_strerror(int err);
 
 int get_numa_nodes(void);
 
+int linux_get_link_status(const char *ifname, int *if_flags, char *if_flags_str, size_t len);
 int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN]);
 int linux_hw_mc_add(const char *ifname, const uint8_t hwma[ETH_ALEN]);
 int linux_hw_mc_del(const char *ifname, const uint8_t hwma[ETH_ALEN]);

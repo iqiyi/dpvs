@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,12 +18,21 @@
 
 #include <rte_cycles.h>
 #include "global_data.h"
-#include "conf/common.h"
+
+RTE_DEFINE_PER_LCORE(uint32_t, g_dpvs_poll_tick);
 
 uint64_t g_cycles_per_sec;
+
 dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
 int g_lcore_index[DPVS_MAX_LCORE];
+
 int g_lcore_num;
+lcoreid_t g_master_lcore_id;
+lcoreid_t g_kni_lcore_id = 0; /* By default g_kni_lcore_id is 0 and it indicates KNI core is not configured. */
+uint8_t g_slave_lcore_num;
+uint8_t g_isol_rx_lcore_num;
+uint64_t g_slave_lcore_mask;
+uint64_t g_isol_rx_lcore_mask;
 
 int global_data_init(void)
 {

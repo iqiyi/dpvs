@@ -268,9 +268,6 @@ typedef struct _data {
 	unsigned			vrrp_startup_delay;
 	bool				log_unknown_vrids;
 #endif
-#ifdef _WITH_LVS_
-	unsigned			checker_queue_num;
-#endif
 } data_t;
 
 /* Global vars exported */

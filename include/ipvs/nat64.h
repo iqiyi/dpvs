@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -28,7 +28,7 @@ static inline int mbuf_nat6to4_len(struct rte_mbuf *mbuf)
     int len;
 
     offset = ip6_skip_exthdr(mbuf, offset, &nexthdr);
-    len = mbuf->pkt_len - offset + sizeof(struct ipv4_hdr);
+    len = mbuf->pkt_len - offset + sizeof(struct rte_ipv4_hdr);
 
     return len;
 }

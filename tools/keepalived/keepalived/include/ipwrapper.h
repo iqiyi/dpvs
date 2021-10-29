@@ -44,6 +44,8 @@
 #define LVS_CMD_DEL_LADDR	IP_VS_SO_SET_DELLADDR
 #define LVS_CMD_ADD_BLKLST	IP_VS_SO_SET_ADDBLKLST
 #define LVS_CMD_DEL_BLKLST	IP_VS_SO_SET_DELBLKLST
+#define LVS_CMD_ADD_WHTLST	IP_VS_SO_SET_ADDWHTLST
+#define LVS_CMD_DEL_WHTLST	IP_VS_SO_SET_DELWHTLST
 #define LVS_CMD_ADD_TUNNEL	IP_VS_SO_SET_ADDTUNNEL
 #define LVS_CMD_DEL_TUNNEL	IP_VS_SO_SET_DELTUNNEL
 
@@ -53,6 +55,7 @@ extern void set_checker_state(checker_t *, bool);
 extern void update_svr_checker_state(bool, checker_t *);
 extern bool init_services(void);
 extern void clear_services(void);
+extern void clear_tunnels(void);
 extern void set_quorum_states(void);
 extern void clear_diff_services(list);
 extern void check_new_rs_state(void);

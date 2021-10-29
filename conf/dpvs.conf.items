@@ -15,12 +15,14 @@ global_defs {
     log_level         INFO              <none>
     log_file          /var/log/dpvs.log <none>
     <init> log_async_mode    off        <off, on|off>
+    <init> pdump      off               <off, on|off>
 }
 
 ! netif config
 netif_defs {
     <init> pktpool_size     2097151 <65535, 1023-134217728>
     <init> pktpool_cache    256     <256, 32-8192>
+    <init> fdir_mode        perfect <perfect, perfect|signature> # only for ixgbe
 
     <init> device dpdk0 {
         rx {
@@ -33,11 +35,7 @@ netif_defs {
             queue_number        6           <16, 0-16>
             descriptor_number   512         <512, 16-8192>
         }
-        fdir {
-            mode                perfect     <perfect, none|signature|perfect|perfect_mac_vlan|perfect_tunnel>
-            pballoc             64k         <64k, 64k|128k|256k>
-            status              matched     <matched, close|matched|always>
-        }
+    !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
     }
@@ -53,16 +51,22 @@ netif_defs {
             queue_number        4
             descriptor_number   256
         }
+    !    mtu                    1500
     !    promisc_mode
     !    kni_name               dpdk1.kni
     }
 
-    <init> device bond0 {
+    <init> bonding bond0 {
         mode                    4           <0-6>
         slave                   dpdk0       <device name>
         slave                   dpdk1       <device name>
         primary                 dpdk0       <device name, use primary slave queue conf for bond>
+        numa_node               0           <0, int value from /sys/bus/pci/devices/[pci_bus]/numa_node>
         kni_name                bond0.kni   <char[32]>
+
+        ! supported options:
+        !   dedicated_queues=on|enable|off|disable, default on
+        options                 OPT1=VAL1;OPT2=VAL2;...
     }
 }
 
@@ -125,6 +129,20 @@ worker_defs {
         port        dpdk1 {
             rx_queue_ids     3
             tx_queue_ids     3
+        }
+    }
+
+    ! kni worker config, optional
+    ! if not configure, kni packets are processed on master lcore
+    <init> worker cpu5 {
+        type    kni
+        cpu_id  5
+        icmp_redirect_core
+        port dpdk0 {
+            tx_queue_ids 6
+        }
+        port dpdk1 {
+            tx_queue_ids 4
         }
     }
 }
@@ -244,4 +262,5 @@ ipvs_defs {
 
 sa_pool {
     <init> pool_hash_size   16  <16, 1-128>
+    <init> flow_enable      on  <on, on|off>
 }

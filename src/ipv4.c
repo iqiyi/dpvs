@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -107,7 +107,7 @@ static void ip4_show_hdr(const char *func, const struct rte_mbuf *mbuf)
 {
     portid_t port;
     lcoreid_t lcore;
-    struct ipv4_hdr *iph;
+    struct rte_ipv4_hdr *iph;
     char saddr[16], daddr[16];
 
     port = mbuf->port;
@@ -122,7 +122,7 @@ static void ip4_show_hdr(const char *func, const struct rte_mbuf *mbuf)
 
     RTE_LOG(DEBUG, IPV4, "%s: [%d] port %u ipv4 hl %u tos %u tot %u "
             "id %u ttl %u prot %u src %s dst %s\n",
-            func, lcore, port, IPV4_HDR_IHL_MASK & iph->version_ihl,
+            func, lcore, port, RTE_IPV4_HDR_IHL_MASK & iph->version_ihl,
             iph->type_of_service, ntohs(iph->total_length),
             ntohs(iph->packet_id), iph->time_to_live,
             iph->next_proto_id, saddr, daddr);
@@ -155,8 +155,8 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
 {
     int err, hlen;
     const struct inet_protocol *prot;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct route_entry *rt = mbuf->userdata;
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
     int (*handler)(struct rte_mbuf *mbuf) = NULL;
 
     /* remove network header */
@@ -165,7 +165,7 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
 
     if (rt) {
         route4_put(rt);
-        mbuf->userdata = NULL;
+        MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = NULL;
     }
 
     /*
@@ -174,13 +174,11 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
      * but mbuf do not. Consider the length of header is variable
      * (e.g., IPv4 options), it's not make sence for every layer
      * to parse lower layer's headers.
-     * note if mbuf->userdata is not suitable, we can use 'extened'
-     * mbuf to save offsets like skb.
      *
      * BTW, if netif_port_get() called too many times we can also
      * use 'extend' mbuf to save 'netif_port *dev'.
      */
-    mbuf->userdata = iph;
+    MBUF_USERDATA(mbuf, struct rte_ipv4_hdr *, MBUF_FIELD_PROTO) = iph;
 
     /* deliver to upper layer */
     rte_spinlock_lock(&inet_prot_lock);
@@ -203,8 +201,9 @@ static int ipv4_local_in_fin(struct rte_mbuf *mbuf)
 static int ipv4_local_in(struct rte_mbuf *mbuf)
 {
     int err;
-    struct route_entry *rt = mbuf->userdata;
+    struct route_entry *rt;
 
+    rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
     if (ip4_is_frag(ip4_hdr(mbuf))) {
         if ((err = ip4_defrag(mbuf, IP_DEFRAG_LOCAL_IN)) != EDPVS_OK) {
             route4_put(rt);
@@ -218,10 +217,11 @@ static int ipv4_local_in(struct rte_mbuf *mbuf)
 
 static int ipv4_output_fin2(struct rte_mbuf *mbuf)
 {
-    struct route_entry *rt = mbuf->userdata;
+    struct route_entry *rt;
     int err;
     struct in_addr nexthop;
 
+    rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
     if (rt->gw.s_addr == htonl(INADDR_ANY))
         nexthop.s_addr = ip4_hdr(mbuf)->dst_addr;
     else
@@ -236,11 +236,8 @@ static int ipv4_output_fin2(struct rte_mbuf *mbuf)
      * note it was used in RX path for eth_type_t.
      * really confusing.
      */
-    mbuf->packet_type = ETHER_TYPE_IPv4;
+    mbuf->packet_type = RTE_ETHER_TYPE_IPV4;
     mbuf->l3_len = ip4_hdrlen(mbuf);
-
-    /* reuse @userdata/@udata64 for prio (used by tc:pfifo_fast) */
-    mbuf->udata64 = ((ip4_hdr(mbuf)->type_of_service >> 1) & 15);
 
     err = neigh_output(AF_INET, (union inet_addr *)&nexthop, mbuf, rt->port);
     route4_put(rt);
@@ -249,7 +246,7 @@ static int ipv4_output_fin2(struct rte_mbuf *mbuf)
 
 static int ipv4_output_fin(struct rte_mbuf *mbuf)
 {
-    struct route_entry *rt = mbuf->userdata;
+    struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
 
     if (mbuf->pkt_len > rt->mtu)
         return ipv4_fragment(mbuf, rt->mtu, ipv4_output_fin2);
@@ -259,7 +256,7 @@ static int ipv4_output_fin(struct rte_mbuf *mbuf)
 
 int ipv4_output(struct rte_mbuf *mbuf)
 {
-    struct route_entry *rt = mbuf->userdata;
+    struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
     assert(rt);
 
     IP4_UPD_PO_STATS(out, mbuf->pkt_len);
@@ -280,8 +277,8 @@ static int ipv4_forward_fin(struct rte_mbuf *mbuf)
 
 static int ipv4_forward(struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct route_entry *rt = mbuf->userdata;
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
     uint32_t mtu, csum;
 
     assert(rt && rt->port);
@@ -294,7 +291,7 @@ static int ipv4_forward(struct rte_mbuf *mbuf)
 
     mtu = rt->mtu;
     if (mbuf->pkt_len > mtu
-            && (iph->fragment_offset & htons(IPV4_HDR_DF_FLAG))) {
+            && (iph->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
         IP4_INC_STATS(fragfails);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
         goto drop;
@@ -326,11 +323,11 @@ static int ip4_rcv_options(struct rte_mbuf *mbuf)
     return EDPVS_OK;
 }
 
-static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
+int ipv4_rcv_fin(struct rte_mbuf *mbuf)
 {
     int err;
     struct route_entry *rt = NULL;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
 
     /* input route decision */
@@ -349,7 +346,7 @@ static int ipv4_rcv_fin(struct rte_mbuf *mbuf)
     }
 
     /* use extended mbuf if have more data then @rt */
-    mbuf->userdata = (void *)rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
     if (rt->flag & RTF_LOCALIN) {
         return ipv4_local_in(mbuf);
@@ -378,7 +375,10 @@ drop:
 
 static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 {
-    struct ipv4_hdr *iph;
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+        struct icmphdr *ich, _icmph;
+#endif
+    struct rte_ipv4_hdr *iph;
     uint16_t hlen, len;
     eth_type_t etype = mbuf->packet_type; /* FIXME: use other field ? */
     assert(mbuf);
@@ -390,13 +390,13 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 
     IP4_UPD_PO_STATS(in, mbuf->pkt_len);
     iftraf_pkt_in(AF_INET, mbuf, port);
-    if (mbuf_may_pull(mbuf, sizeof(struct ipv4_hdr)) != 0)
+    if (mbuf_may_pull(mbuf, sizeof(struct rte_ipv4_hdr)) != 0)
         goto inhdr_error;
 
     iph = ip4_hdr(mbuf);
 
     hlen = ip4_hdrlen(mbuf);
-    if (((iph->version_ihl) >> 4) != 4 || hlen < sizeof(struct ipv4_hdr))
+    if (((iph->version_ihl) >> 4) != 4 || hlen < sizeof(struct rte_ipv4_hdr))
         goto inhdr_error;
 
     if (mbuf_may_pull(mbuf, hlen) != 0)
@@ -421,7 +421,7 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
             goto drop;
         }
     }
-    mbuf->userdata = NULL;
+    mbuf_userdata_reset(mbuf);
     mbuf->l3_len = hlen;
 
 #ifdef CONFIG_DPVS_IP_HEADER_DEBUG
@@ -430,6 +430,18 @@ static int ipv4_rcv(struct rte_mbuf *mbuf, struct netif_port *port)
 
     if (unlikely(iph->next_proto_id == IPPROTO_OSPF))
         return EDPVS_KNICONTINUE;
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+    else if (unlikely(iph->next_proto_id == IPPROTO_ICMP)) {
+        ich = mbuf_header_pointer(mbuf, hlen, sizeof(_icmph), &_icmph);
+        if (unlikely(!ich))
+            goto drop;
+        if (ich->type == ICMP_ECHOREPLY || ich->type == ICMP_ECHO) {
+            rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct rte_ether_hdr));
+            icmp_recv_proc(mbuf);
+            return EDPVS_OK;
+        }
+    }
+#endif
 
     return INET_HOOK(AF_INET, INET_HOOK_PRE_ROUTING,
                      mbuf, port, NULL, ipv4_rcv_fin);
@@ -444,7 +456,7 @@ drop:
 }
 
 static struct pkt_type ip4_pkt_type = {
-    //.type       = rte_cpu_to_be_16(ETHER_TYPE_IPv4),
+    //.type       = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4),
     .func       = ipv4_rcv,
     .port       = NULL,
 };
@@ -474,7 +486,7 @@ int ipv4_init(void)
     if ((err = ipv4_frag_init()) != EDPVS_OK)
         return err;
 
-    ip4_pkt_type.type = htons(ETHER_TYPE_IPv4);
+    ip4_pkt_type.type = htons(RTE_ETHER_TYPE_IPV4);
     if ((err = netif_register_pkt(&ip4_pkt_type)) != EDPVS_OK) {
         ipv4_frag_term();
         return err;
@@ -497,7 +509,7 @@ int ipv4_term(void)
     return EDPVS_OK;
 }
 
-uint32_t ip4_select_id(struct ipv4_hdr *iph)
+uint32_t ip4_select_id(struct rte_ipv4_hdr *iph)
 {
     uint32_t hash, id;
     rte_atomic32_t *p_id;
@@ -514,8 +526,9 @@ uint32_t ip4_select_id(struct ipv4_hdr *iph)
 
 int ipv4_local_out(struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct route_entry *rt = mbuf->userdata;
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct route_entry *rt = MBUF_USERDATA(mbuf,
+            struct route_entry *, MBUF_FIELD_ROUTE);
 
     iph->total_length = htons(mbuf->pkt_len);
 
@@ -531,9 +544,9 @@ int ipv4_local_out(struct rte_mbuf *mbuf)
 int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
 {
     struct route_entry *rt;
-    struct ipv4_hdr *iph;
+    struct rte_ipv4_hdr *iph;
 
-    if (!mbuf || !fl4 || fl4->fl4_saddr.s_addr == htonl(INADDR_ANY)) {
+    if (!mbuf || !fl4) {
         if (mbuf)
             rte_pktmbuf_free(mbuf);
         return EDPVS_INVAL;
@@ -547,9 +560,9 @@ int ipv4_xmit(struct rte_mbuf *mbuf, const struct flow4 *fl4)
         IP4_INC_STATS(outnoroutes);
         return EDPVS_NOROUTE;
     }
-    mbuf->userdata = (void *)rt;
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = (void *)rt;
 
-    iph = (struct ipv4_hdr *)rte_pktmbuf_prepend(mbuf, sizeof(struct ipv4_hdr));
+    iph = (struct rte_ipv4_hdr *)rte_pktmbuf_prepend(mbuf, sizeof(struct rte_ipv4_hdr));
     if (!iph) {
         rte_pktmbuf_free(mbuf);
         route4_put(rt);

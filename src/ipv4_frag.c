@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -172,7 +172,7 @@ static struct ipv4_frag ip4_frags[DPVS_MAX_LCORE];
 int ipv4_reassamble(struct rte_mbuf *mbuf)
 {
     struct rte_mbuf *asm_mbuf, *next, *seg, *prev;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
 
     assert(mbuf->l3_len > 0);
 
@@ -199,7 +199,7 @@ int ipv4_reassamble(struct rte_mbuf *mbuf)
         rte_pktmbuf_free(asm_mbuf);
         return EDPVS_NOMEM;
     }
-    seg->userdata = NULL;
+    mbuf_userdata_reset(seg);
     for (prev = asm_mbuf; prev; prev = prev->next)
         if (prev->next == mbuf)
             break;
@@ -259,15 +259,16 @@ int ipv4_reassamble(struct rte_mbuf *mbuf)
 int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
           int (*output)(struct rte_mbuf *))
 {
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct route_entry *rt = mbuf->userdata;
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct route_entry *rt = MBUF_USERDATA(mbuf,
+            struct route_entry *, MBUF_FIELD_ROUTE);
     struct rte_mbuf *frag;
     unsigned int left, len, hlen;
     int offset, err, from;
     void *to;
     assert(rt);
 
-    if (iph->fragment_offset & IPV4_HDR_DF_FLAG) {
+    if (iph->fragment_offset & RTE_IPV4_HDR_DF_FLAG) {
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
               htonl(mtu));
         err = EDPVS_FRAG;
@@ -295,11 +296,12 @@ int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
             err = EDPVS_NOMEM;
             goto out;
         }
-        frag->userdata = NULL;
+        mbuf_userdata_reset(frag);
 
         /* copy metadata from orig pkt */
         route4_get(rt);
-        frag->userdata = rt; /* no need to hold before consume mbuf */
+        /* no need to hold before consume mbuf */
+        MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
         frag->port = mbuf->port;
         frag->ol_flags = 0; /* do not offload csum for frag */
         frag->l2_len = mbuf->l2_len;
@@ -330,7 +332,7 @@ int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
         /* TODO: if (offset == 0) ip_fragment_options(frag); */
 
         if (left > 0)
-            iph->fragment_offset |= htons(IPV4_HDR_MF_FLAG);
+            iph->fragment_offset |= htons(RTE_IPV4_HDR_MF_FLAG);
         offset += len;
         from += len;
 
@@ -365,7 +367,12 @@ static void ipv4_frag_job(void *arg)
     return;
 }
 
-static struct dpvs_lcore_job frag_job;
+static struct dpvs_lcore_job frag_job = {
+    .name = "ipv4_frag",
+    .type = LCORE_JOB_SLOW,
+    .func = ipv4_frag_job,
+    .skip_loops = IP4_FRAG_FREE_DEATH_ROW_INTERVAL,
+};
 
 int ipv4_frag_init(void)
 {
@@ -410,11 +417,6 @@ int ipv4_frag_init(void)
         }
     }
 
-    snprintf(frag_job.name, sizeof(frag_job.name) - 1, "%s", "ipv4_frag");
-    frag_job.func = ipv4_frag_job;
-    frag_job.data = NULL;
-    frag_job.type = LCORE_JOB_SLOW;
-    frag_job.skip_loops = IP4_FRAG_FREE_DEATH_ROW_INTERVAL;
     err = dpvs_lcore_job_register(&frag_job, LCORE_ROLE_FWD_WORKER);
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IP4FRAG, "fail to register loop job.\n");

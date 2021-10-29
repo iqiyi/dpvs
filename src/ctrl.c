@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -852,7 +852,7 @@ int msg_type_table_print(char *buf, int len)
             rte_rwlock_read_lock(&mt_lock[ii][jj]);
             list_for_each_entry(mt, &mt_array[ii][jj], list) {
                 memset(line, 0, sizeof(line));
-                snprintf(line, sizeof(line), "mt_array[%-2d][%-4d] type %-8d  mode %-12s"
+                snprintf(line, sizeof(line), "mt_array[%-2d][%-2d] type %-8d  mode %-12s"
                         "  unicast_cb %p    multicast_cb %p\n", ii, jj, mt->type,
                         mt->mode == DPVS_MSG_UNICAST ? "UNICAST" : "MULITICAST",
                         mt->unicast_msg_cb, mt->multicast_msg_cb);
@@ -860,6 +860,7 @@ int msg_type_table_print(char *buf, int len)
                 rem_len = len - strlen(buf) - 1;
                 if (strlen(line) > rem_len) {
                     RTE_LOG(WARNING, MSGMGR, "%s: buffer not enough\n", __func__);
+		      rte_rwlock_read_unlock(&mt_lock[ii][jj]);
                     return EDPVS_INVAL;
                 }
                 strncat(buf, line, rem_len);
@@ -1008,27 +1009,25 @@ static inline void slave_lcore_loop_func(__rte_unused void *dummy)
 }
 
 static struct dpvs_lcore_job msg_master_job = {
-    .func = master_lcore_loop_func,
-    .data = NULL,
+    .name = "msg_master_job",
     .type = LCORE_JOB_LOOP,
+    .func = master_lcore_loop_func,
 };
 
 static struct dpvs_lcore_job msg_slave_job = {
-    .func = slave_lcore_loop_func,
-    .data = NULL,
+    .name = "msg_slave_job",
     .type = LCORE_JOB_LOOP,
+    .func = slave_lcore_loop_func,
 };
 
 static inline int msg_lcore_job_register(void)
 {
     int ret;
 
-    snprintf(msg_master_job.name, sizeof(msg_master_job.name), "%s", "msg_master_job");
     ret = dpvs_lcore_job_register(&msg_master_job, LCORE_ROLE_MASTER);
     if (ret < 0)
         return ret;
 
-    snprintf(msg_slave_job.name, sizeof(msg_slave_job.name), "%s", "msg_slave_job");
     ret = dpvs_lcore_job_register(&msg_slave_job, LCORE_ROLE_FWD_WORKER);
     if (ret < 0) {
         dpvs_lcore_job_unregister(&msg_master_job, LCORE_ROLE_MASTER);
@@ -1059,7 +1058,7 @@ static inline int msg_init(void)
     /* lcore mask init */
     slave_lcore_mask = 0;
     slave_lcore_nb = 0;
-    master_lcore = rte_get_master_lcore();
+    master_lcore = rte_get_main_lcore();
 
     netif_get_slave_lcores(&slave_lcore_nb, &slave_lcore_mask);
     if (slave_lcore_nb > MSG_MAX_LCORE_SUPPORTED) {
@@ -1199,8 +1198,16 @@ static inline int sockopts_exist(struct dpvs_sockopts *sockopts)
                 judge_id_betw(sockopts->set_opt_max, skopt->set_opt_min, skopt->set_opt_max)) {
             return 1;
         }
+        if (judge_id_betw(skopt->set_opt_min, sockopts->set_opt_min, sockopts->set_opt_max) ||
+                judge_id_betw(skopt->set_opt_max, sockopts->set_opt_min, sockopts->set_opt_max)) {
+            return 1;
+        }
         if (judge_id_betw(sockopts->get_opt_min, skopt->get_opt_min, skopt->get_opt_max) ||
                 judge_id_betw(sockopts->get_opt_max, skopt->get_opt_min, skopt->get_opt_max)) {
+            return 1;
+        }
+        if (judge_id_betw(skopt->get_opt_min, sockopts->get_opt_min, sockopts->get_opt_max) ||
+                judge_id_betw(skopt->get_opt_max, sockopts->get_opt_min, sockopts->get_opt_max)) {
             return 1;
         }
     }
@@ -1413,9 +1420,9 @@ static inline void sockopt_job_func(void *dummy)
 }
 
 static struct dpvs_lcore_job sockopt_job = {
-    .func = sockopt_job_func,
-    .data = NULL,
+    .name = "sockopt_job",
     .type = LCORE_JOB_LOOP,
+    .func = sockopt_job_func,
 };
 
 static inline int sockopt_init(void)
@@ -1461,7 +1468,6 @@ static inline int sockopt_init(void)
         return EDPVS_IO;
     }
 
-    snprintf(sockopt_job.name, sizeof(sockopt_job.name), "%s", "sockopt_job");
     if ((err = dpvs_lcore_job_register(&sockopt_job, LCORE_ROLE_MASTER)) != EDPVS_OK) {
         RTE_LOG(ERR, MSGMGR, "%s: Fail to register sockopt_job into master\n", __func__);
         close(srv_fd);

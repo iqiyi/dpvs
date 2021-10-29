@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -35,13 +35,14 @@
 #include "ctrl.h"
 #include "conf/conn.h"
 #include "sys_time.h"
+#include "global_data.h"
 
 #define DPVS_CONN_TBL_BITS          20
 #define DPVS_CONN_TBL_SIZE          (1 << DPVS_CONN_TBL_BITS)
 #define DPVS_CONN_TBL_MASK          (DPVS_CONN_TBL_SIZE - 1)
 
 /* too big ? adjust according to free mem ?*/
-#define DPVS_CONN_POOL_SIZE_DEF     2097152
+#define DPVS_CONN_POOL_SIZE_DEF     2097151
 #define DPVS_CONN_POOL_SIZE_MIN     65536
 #define DPVS_CONN_CACHE_SIZE_DEF    256
 
@@ -129,6 +130,9 @@ static void dp_vs_conn_attach_timer(struct dp_vs_conn *conn, bool lock)
     if (dp_vs_conn_is_in_timer(conn))
         return;
 
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        return;
+    }
     if (dp_vs_conn_is_template(conn)) {
         if (lock)
             rc = dpvs_timer_sched(&conn->timer, &conn->timeout,
@@ -176,6 +180,10 @@ static void dp_vs_conn_refresh_timer(struct dp_vs_conn *conn, bool lock)
 {
     if (!dp_vs_conn_is_in_timer(conn))
         return;
+
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        return;
+    }
 
     if (dp_vs_conn_is_template(conn)) {
         if (lock)
@@ -263,6 +271,10 @@ static inline int dp_vs_conn_hash(struct dp_vs_conn *conn)
 {
     int err;
 
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        return EDPVS_OK;
+    }
+
 #ifdef CONFIG_DPVS_IPVS_CONN_LOCK
     rte_spinlock_lock(&this_conn_lock);
 #endif
@@ -305,6 +317,8 @@ static inline int dp_vs_conn_unhash(struct dp_vs_conn *conn)
 
             err = EDPVS_OK;
         }
+    } else if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        return EDPVS_OK;
     } else {
         err = EDPVS_NOTEXIST;
     }
@@ -489,17 +503,24 @@ static inline void conn_stats_dump(const char *msg, struct dp_vs_conn *conn)
 
 static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn);
 
-static void dp_vs_conn_set_timeout(struct dp_vs_conn *conn,
-                                   struct dp_vs_proto *pp)
+unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn)
+{
+    if (conn && conn->dest)
+        return conn->dest->conn_timeout;
+
+    return 0;
+}
+
+void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp)
 {
     unsigned conn_timeout = 0;
 
     /* set proper timeout */
     if ((conn->proto == IPPROTO_TCP && conn->state == DPVS_TCP_S_ESTABLISHED)
         || (conn->proto == IPPROTO_UDP && conn->state == DPVS_UDP_S_NORMAL)) {
-        conn_timeout = dp_vs_get_conn_timeout(conn);
+        conn_timeout = dp_vs_conn_get_timeout(conn);
 
-        if (unlikely(conn_timeout > 0)) {
+        if (conn_timeout > 0) {
             conn->timeout.tv_sec = conn_timeout;
             return;
         }
@@ -509,8 +530,6 @@ static void dp_vs_conn_set_timeout(struct dp_vs_conn *conn,
         conn->timeout.tv_sec = pp->timeout_table[conn->state];
     else
         conn->timeout.tv_sec = 60;
-
-    dpvs_time_rand_delay(&conn->timeout, 1000000);
 }
 
 /*
@@ -537,7 +556,7 @@ static int dp_vs_conn_resend_packets(struct dp_vs_conn *conn,
                             "%s: no memory for syn_proxy rs's syn retransmit\n",
                             __func__);
                 } else {
-                    cloned_syn_mbuf->userdata = NULL;
+                    MBUF_USERDATA(cloned_syn_mbuf, void *, MBUF_FIELD_ROUTE) = NULL;
                     conn->packet_xmit(pp, conn, cloned_syn_mbuf);
                 }
             }
@@ -626,8 +645,11 @@ static int dp_vs_conn_expire(void *priv)
 
     pp = dp_vs_proto_lookup(conn->proto);
     dp_vs_conn_set_timeout(conn, pp);
+    dpvs_time_rand_delay(&conn->timeout, 1000000);
 
-    rte_atomic32_inc(&conn->refcnt);
+    if (!(conn->flags & DPVS_CONN_F_ONE_PACKET)) {
+        rte_atomic32_inc(&conn->refcnt);
+    }
 
     if (dp_vs_conn_resend_packets(conn, pp) == EDPVS_OK) {
         /* expire later */
@@ -684,6 +706,24 @@ static int dp_vs_conn_expire(void *priv)
 
     rte_atomic32_dec(&conn->refcnt);
     return DTIMER_OK;
+}
+
+void dp_vs_conn_expire_now(struct dp_vs_conn *conn)
+{
+    if (unlikely(!dp_vs_conn_is_in_timer(conn)))
+        return;
+
+    /* template quiescent connections are controlled by global
+     * config 'expire_quiescent_template' */
+    if (unlikely(dp_vs_conn_is_template(conn)))
+        return;
+
+    conn->timeout.tv_sec = 0;
+    conn->timeout.tv_usec = 0;
+
+    /* no need to call 'dpvs_timer_update', because timer would
+     * be updated in 'dp_vs_conn_put' later */
+    return;
 }
 
 static void conn_flush(void)
@@ -933,6 +973,9 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     }
 
     /* schedule conn timer */
+#ifdef CONFIG_TIMER_DEBUG
+    snprintf(new->timer.name, sizeof(new->timer.name), "%s", "conn");
+#endif
     dpvs_time_rand_delay(&new->timeout, 1000000);
     dp_vs_conn_attach_timer(new, true);
 
@@ -1123,6 +1166,10 @@ void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn)
 /* put back the conn and reset it's timer */
 void dp_vs_conn_put(struct dp_vs_conn *conn)
 {
+    if (conn->flags & DPVS_CONN_F_ONE_PACKET) {
+        dp_vs_conn_expire(conn);
+        return;
+    }
     dp_vs_conn_refresh_timer(conn, true);
 
     assert(rte_atomic32_read(&conn->refcnt) > 0);
@@ -1145,12 +1192,12 @@ static int conn_init_lcore(void *arg)
     if (!rte_lcore_is_enabled(rte_lcore_id()))
         return EDPVS_DISABLED;
 
-    if (netif_lcore_is_idle(rte_lcore_id()))
+    if (!netif_lcore_is_fwd_worker(rte_lcore_id()))
         return EDPVS_IDLE;
 
-    this_conn_tbl = rte_malloc_socket(NULL,
+    this_conn_tbl = rte_malloc(NULL,
                         sizeof(struct list_head) * DPVS_CONN_TBL_SIZE,
-                        RTE_CACHE_LINE_SIZE, rte_socket_id());
+                        RTE_CACHE_LINE_SIZE);
     if (!this_conn_tbl)
         return EDPVS_NOMEM;
 
@@ -1193,8 +1240,6 @@ struct ip_vs_conn_array_list {
     ipvs_conn_entry_t array[0];
 };
 
-static uint8_t g_slave_lcore_nb;
-static uint64_t g_slave_lcore_mask;
 static struct list_head conn_to_dump;
 
 static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
@@ -1431,7 +1476,7 @@ again:
     }
 
     if ((conn_req->flag & GET_IPVS_CONN_FLAG_TEMPLATE)
-            && (cid == rte_get_master_lcore())) { /* persist conns */
+            && (cid == rte_get_main_lcore())) { /* persist conns */
         rte_spinlock_lock(&dp_vs_ct_lock);
         res = __lcore_conn_table_dump(dp_vs_ct_tbl);
         rte_spinlock_unlock(&dp_vs_ct_lock);
@@ -1549,8 +1594,8 @@ static int sockopt_conn_get(sockoptid_t opt, const void *in, size_t inlen,
 
 static struct dpvs_sockopts conn_sockopts = {
     .version        = SOCKOPT_VERSION,
-    .set_opt_min    = 0,
-    .set_opt_max    = 0,
+    .set_opt_min    = SOCKOPT_SET_CONN,
+    .set_opt_max    = SOCKOPT_SET_CONN,
     .set            = NULL,
     .get_opt_min    = SOCKOPT_GET_CONN_ALL,
     .get_opt_max    = SOCKOPT_GET_CONN_SPECIFIED,
@@ -1691,7 +1736,6 @@ static int conn_ctrl_init(void)
     int err;
 
     INIT_LIST_HEAD(&conn_to_dump);
-    netif_get_slave_lcores(&g_slave_lcore_nb, &g_slave_lcore_mask);
 
     if ((err = register_conn_get_msg()) != EDPVS_OK)
         return err;
@@ -1725,8 +1769,14 @@ int dp_vs_conn_init(void)
     char poolname[32];
 
     /* init connection template table */
-    dp_vs_ct_tbl = rte_malloc_socket(NULL, sizeof(struct list_head) * DPVS_CONN_TBL_SIZE,
-            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    dp_vs_ct_tbl = rte_malloc(NULL, sizeof(struct list_head) * DPVS_CONN_TBL_SIZE,
+            RTE_CACHE_LINE_SIZE);
+    if (!dp_vs_ct_tbl) {
+        err = EDPVS_NOMEM;
+        RTE_LOG(WARNING, IPVS, "%s: %s.\n",
+            __func__, dpvs_strerror(err));
+        return err;
+    }
 
     for (i = 0; i < DPVS_CONN_TBL_SIZE; i++)
         INIT_LIST_HEAD(&dp_vs_ct_tbl[i]);
@@ -1737,8 +1787,8 @@ int dp_vs_conn_init(void)
      * RTE_PER_LCORE() can only access own instances.
      * it make codes looks strange.
      */
-    rte_eal_mp_remote_launch(conn_init_lcore, NULL, SKIP_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(lcore) {
+    rte_eal_mp_remote_launch(conn_init_lcore, NULL, SKIP_MAIN);
+    RTE_LCORE_FOREACH_WORKER(lcore) {
         if ((err = rte_eal_wait_lcore(lcore)) < 0) {
             RTE_LOG(WARNING, IPVS, "%s: lcore %d: %s.\n",
                     __func__, lcore, dpvs_strerror(err));
@@ -1777,8 +1827,8 @@ int dp_vs_conn_term(void)
 
     /* no API opposite to rte_mempool_create() */
 
-    rte_eal_mp_remote_launch(conn_term_lcore, NULL, SKIP_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(lcore) {
+    rte_eal_mp_remote_launch(conn_term_lcore, NULL, SKIP_MAIN);
+    RTE_LCORE_FOREACH_WORKER(lcore) {
         rte_eal_wait_lcore(lcore);
     }
 
@@ -1811,9 +1861,9 @@ static void conn_pool_size_handler(vector_t tokens)
                 str, DPVS_CONN_POOL_SIZE_DEF);
         conn_pool_size = DPVS_CONN_POOL_SIZE_DEF;
     } else {
-        is_power2(pool_size, 0, &pool_size);
-        RTE_LOG(INFO, IPVS, "conn_pool_size = %d (round to 2^n)\n", pool_size);
-        conn_pool_size = pool_size;
+        is_power2(pool_size, 1, &pool_size);
+        RTE_LOG(INFO, IPVS, "conn_pool_size = %d (round to 2^n-1)\n", pool_size);
+        conn_pool_size = pool_size - 1;
     }
 
     FREE_PTR(str);

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -26,7 +26,8 @@
 #include "tc/sch.h"
 #include "tc/cls.h"
 
-static inline tc_handle_t cls_alloc_handle(struct Qsch *sch)
+/* for master lcore only */
+tc_handle_t cls_alloc_handle(struct Qsch *sch)
 {
     int i = 0x8000;
     static uint32_t autohandle = TC_H_MAKE(0x80000000U, 0);
@@ -37,7 +38,7 @@ static inline tc_handle_t cls_alloc_handle(struct Qsch *sch)
             autohandle = TC_H_MAKE(0x80000000U, 0);
         if (!tc_cls_lookup(sch, autohandle))
             return autohandle;
-    } while    (--i > 0);
+    } while (--i > 0);
 
     return 0;
 }
@@ -71,28 +72,30 @@ struct tc_cls *tc_cls_create(struct Qsch *sch, const char *kind,
 {
     struct tc_cls_ops *ops = NULL;
     struct tc_cls *cls = NULL;
-    int err;
+    int err = EDPVS_INVAL;
 
     assert(sch && kind && errp);
 
-    err = EDPVS_NOTSUPP;
-    ops = tc_cls_ops_get(kind);
-    if (!ops)
+    /* handle must be set */
+    if (unlikely(!handle)) {
+        err = EDPVS_INVAL;
         goto errout;
-
-    cls = cls_alloc(sch, ops);
-    if (!cls)
-        goto errout;
-
-    if (handle == 0) {
-        handle = cls_alloc_handle(sch);
-        if (handle == 0)
-            goto errout;
     }
 
-    /* must check since handle may not zero. */
+    ops = tc_cls_ops_lookup(kind);
+    if (!ops) {
+        err = EDPVS_NOTSUPP;
+        goto errout;
+    }
+
     if (tc_cls_lookup(sch, handle)) {
         err = EDPVS_EXIST;
+        goto errout;
+    }
+
+    cls = cls_alloc(sch, ops);
+    if (!cls) {
+        err = EDPVS_NOMEM;
         goto errout;
     }
 
@@ -126,8 +129,8 @@ struct tc_cls *tc_cls_create(struct Qsch *sch, const char *kind,
     return cls;
 
 errout:
-    if (ops)
-        tc_cls_ops_put(ops);
+    if (cls)
+        cls_free(cls);
     *errp = err;
     return NULL;
 }
@@ -143,7 +146,6 @@ void tc_cls_destroy(struct tc_cls *cls)
     if (ops->destroy)
         ops->destroy(cls);
 
-    tc_cls_ops_put(ops);
     cls_free(cls);
 }
 

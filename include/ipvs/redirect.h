@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -54,7 +54,7 @@ struct dp_vs_redirect *dp_vs_redirect_get(int af, uint16_t proto,
 void dp_vs_redirect_init(struct dp_vs_conn *conn);
 int dp_vs_redirect_table_init(void);
 int dp_vs_redirect_pkt(struct rte_mbuf *mbuf, lcoreid_t peer_cid);
-void dp_vs_redirect_ring_proc(struct netif_queue_conf *qconf, lcoreid_t cid);
+void dp_vs_redirect_ring_proc(lcoreid_t cid);
 int dp_vs_redirects_init(void);
 int dp_vs_redirects_term(void);
 

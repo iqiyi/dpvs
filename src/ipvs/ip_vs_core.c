@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -34,6 +34,7 @@
 #include "ipvs/xmit.h"
 #include "ipvs/synproxy.h"
 #include "ipvs/blklst.h"
+#include "ipvs/whtlst.h"
 #include "ipvs/proto_udp.h"
 #include "route6.h"
 #include "ipvs/redirect.h"
@@ -42,7 +43,7 @@ static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
                                    struct dp_vs_iphdr *iph)
 {
     if (af == AF_INET) {
-        struct ipv4_hdr *ip4h = ip4_hdr(mbuf);
+        struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
         iph->af     = AF_INET;
         iph->len    = ip4_hdrlen(mbuf);
         iph->proto  = ip4h->next_proto_id;
@@ -111,7 +112,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
         ct = dp_vs_ct_in_get(svc->af, iph->proto, &snet, &iph->daddr, 0, ports[1]);
         if (!ct || !dp_vs_check_template(ct)) {
             /* no template found, or the dest of the conn template is not available */
-            dest = svc->scheduler->schedule(svc, mbuf);
+            dest = svc->scheduler->schedule(svc, mbuf, iph);
             if (unlikely(NULL == dest)) {
                 RTE_LOG(WARNING, IPVS, "%s: persist-schedule: no dest found.\n", __func__);
                 return NULL;
@@ -135,7 +136,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
          * fw-mark based service: not support */
         ct = dp_vs_ct_in_get(svc->af, iph->proto, &snet, &iph->daddr, 0, 0);
         if (!ct || !dp_vs_check_template(ct)) {
-            dest = svc->scheduler->schedule(svc, mbuf);
+            dest = svc->scheduler->schedule(svc, mbuf, iph);
             if (unlikely(NULL == dest)) {
                 RTE_LOG(WARNING, IPVS, "%s: persist-schedule: no dest found.\n", __func__);
                 return NULL;
@@ -281,6 +282,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     struct dp_vs_dest *dest;
     struct dp_vs_conn *conn;
     struct dp_vs_conn_param param;
+    uint32_t flags = 0;
 
     assert(svc && iph && mbuf);
 
@@ -292,7 +294,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     if (svc->flags & DP_VS_SVC_F_PERSISTENT)
         return dp_vs_sched_persist(svc, iph,  mbuf, is_synproxy_on);
 
-    dest = svc->scheduler->schedule(svc, mbuf);
+    dest = svc->scheduler->schedule(svc, mbuf, iph);
     if (!dest) {
         RTE_LOG(WARNING, IPVS, "%s: no dest found.\n", __func__);
 #ifdef CONFIG_DPVS_MBUF_DEBUG
@@ -337,8 +339,13 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                               ports[0], ports[1], 0, &param);
     }
 
-    conn = dp_vs_conn_new(mbuf, iph, &param, dest,
-            is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
+    if (is_synproxy_on) {
+        flags |= DPVS_CONN_F_SYNPROXY;
+    }
+    if (svc->flags & DP_VS_SVC_F_ONEPACKET && iph->proto == IPPROTO_UDP) {
+        flags |= DPVS_CONN_F_ONE_PACKET;
+    }
+    conn = dp_vs_conn_new(mbuf, iph, &param, dest, flags);
     if (!conn)
         return NULL;
 
@@ -418,7 +425,7 @@ static int __xmit_outbound_icmp4(struct rte_mbuf *mbuf,
 {
     struct flow4 fl4;
     struct route_entry *rt = NULL;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
 
     /* no translation needed for DR/TUN. */
     if (conn->dest->fwdmode != DPVS_FWD_MODE_FNAT &&
@@ -444,7 +451,7 @@ static int __xmit_outbound_icmp4(struct rte_mbuf *mbuf,
     }
 
     if ((mbuf->pkt_len > rt->mtu)
-            && (ip4_hdr(mbuf)->fragment_offset & IPV4_HDR_DF_FLAG)) {
+            && (ip4_hdr(mbuf)->fragment_offset & RTE_IPV4_HDR_DF_FLAG)) {
         route4_put(rt);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG,
                   htonl(rt->mtu));
@@ -452,9 +459,9 @@ static int __xmit_outbound_icmp4(struct rte_mbuf *mbuf,
         return EDPVS_FRAG;
     }
 
-    if (unlikely(mbuf->userdata != NULL))
-        route4_put((struct route_entry *)mbuf->userdata);
-    mbuf->userdata = rt;
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL))
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
     /* translation for outer L3, ICMP, and inner L3 and L4 */
     dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_OUTBOUND);
@@ -500,9 +507,9 @@ static int __xmit_outbound_icmp6(struct rte_mbuf *mbuf,
         return EDPVS_FRAG;
     }
 
-    if (unlikely(mbuf->userdata != NULL))
-        route6_put((struct route6 *)mbuf->userdata);
-    mbuf->userdata = rt6;
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL))
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
     /* translation for outer L3, ICMP, and inner L3 and L4 */
     dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_OUTBOUND);
@@ -531,7 +538,7 @@ static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
 {
     struct flow4 fl4;
     struct route_entry *rt = NULL;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
 
     /* no translation needed for DR/TUN. */
     if (conn->dest->fwdmode != DPVS_FWD_MODE_NAT  &&
@@ -557,7 +564,7 @@ static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
     }
 
     if ((mbuf->pkt_len > rt->mtu)
-            && (ip4_hdr(mbuf)->fragment_offset & IPV4_HDR_DF_FLAG)) {
+            && (ip4_hdr(mbuf)->fragment_offset & RTE_IPV4_HDR_DF_FLAG)) {
         route4_put(rt);
         icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG,
                   htonl(rt->mtu));
@@ -565,9 +572,9 @@ static int __xmit_inbound_icmp4(struct rte_mbuf *mbuf,
         return EDPVS_FRAG;
     }
 
-    if (unlikely(mbuf->userdata != NULL))
-        route4_put((struct route_entry *)mbuf->userdata);
-    mbuf->userdata = rt;
+    if (unlikely(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) != NULL))
+        route4_put(MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE));
+    MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
     /* translation for outer L3, ICMP, and inner L3 and L4 */
     dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_INBOUND);
@@ -614,9 +621,9 @@ static int __xmit_inbound_icmp6(struct rte_mbuf *mbuf,
         return EDPVS_FRAG;
     }
 
-    if (unlikely(mbuf->userdata != NULL))
-        route6_put((struct route6 *)mbuf->userdata);
-    mbuf->userdata = rt6;
+    if (unlikely(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) != NULL))
+        route6_put(MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE));
+    MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE) = rt6;
 
     /* translation for outer L3, ICMP, and inner L3 and L4 */
     dp_vs_xmit_icmp(mbuf, prot, conn, DPVS_CONN_DIR_INBOUND);
@@ -643,8 +650,8 @@ static int xmit_inbound_icmp(struct rte_mbuf *mbuf,
 static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
 {
     struct icmphdr *ich, _icmph;
-    struct ipv4_hdr *iph = ip4_hdr(mbuf);
-    struct ipv4_hdr *ciph, _ciph;
+    struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
+    struct rte_ipv4_hdr *ciph, _ciph;
     struct dp_vs_iphdr dciph;
     struct dp_vs_proto *prot;
     struct dp_vs_conn *conn;
@@ -689,7 +696,7 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
     if (!prot)
         return INET_ACCEPT;
 
-    if (unlikely((ciph->fragment_offset & htons(IPV4_HDR_OFFSET_MASK)))) {
+    if (unlikely((ciph->fragment_offset & htons(RTE_IPV4_HDR_OFFSET_MASK)))) {
         RTE_LOG(WARNING, IPVS, "%s: frag needed.\n", __func__);
         return INET_DROP;
     }
@@ -700,7 +707,7 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
      * and restore it later. although it looks strange.
      */
     rte_pktmbuf_adj(mbuf, off);
-    if (mbuf_may_pull(mbuf, sizeof(struct ipv4_hdr)) != 0)
+    if (mbuf_may_pull(mbuf, sizeof(struct rte_ipv4_hdr)) != 0)
         return INET_DROP;
     dp_vs_fill_iphdr(AF_INET, mbuf, &dciph);
 
@@ -712,7 +719,7 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
      */
     if (cid != peer_cid) {
         /* recover mbuf.data_off to outer Ether header */
-        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr) + off);
+        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct rte_ether_hdr) + off);
 
         return dp_vs_redirect_pkt(mbuf, peer_cid);
     }
@@ -855,7 +862,7 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
      */
     if (cid != peer_cid) {
         /* recover mbuf.data_off to outer Ether header */
-        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr) + off);
+        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct rte_ether_hdr) + off);
 
         return dp_vs_redirect_pkt(mbuf, peer_cid);
     }
@@ -988,7 +995,7 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
      */
     if (cid != peer_cid) {
         /* recover mbuf.data_off to outer Ether header */
-        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct ether_hdr));
+        rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct rte_ether_hdr));
 
         return dp_vs_redirect_pkt(mbuf, peer_cid);
     }
@@ -1005,6 +1012,19 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
             dir = DPVS_CONN_DIR_OUTBOUND;
         else
             dir = DPVS_CONN_DIR_INBOUND;
+    } else {
+        /* assert(conn->dest->svc != NULL); */
+        if (conn->dest && conn->dest->svc &&
+                prot->conn_expire_quiescent &&
+                (conn->dest->svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT)) {
+            if (rte_atomic16_read(&conn->dest->weight) == 0) {
+                RTE_LOG(INFO, IPVS, "%s: the conn is quiescent, expire it right now,"
+                        " and drop the packet!\n", __func__);
+                prot->conn_expire_quiescent(conn);
+                dp_vs_conn_put(conn);
+                return INET_DROP;
+            }
+        }
     }
 
     if (conn->flags & DPVS_CONN_F_SYNPROXY) {
@@ -1192,6 +1212,12 @@ int dp_vs_init(void)
         goto err_blklst;
     }
 
+    err = dp_vs_whtlst_init();
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, IPVS, "fail to init whtlst: %s\n", dpvs_strerror(err));
+        goto err_whtlst;
+    }
+
     err = dp_vs_stats_init();
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "fail to init stats: %s\n", dpvs_strerror(err));
@@ -1210,6 +1236,8 @@ int dp_vs_init(void)
 err_hooks:
     dp_vs_stats_term();
 err_stats:
+    dp_vs_whtlst_term();
+err_whtlst:
     dp_vs_blklst_term();
 err_blklst:
     dp_vs_service_term();
@@ -1240,6 +1268,10 @@ int dp_vs_term(void)
     err = dp_vs_stats_term();
     if (err != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "fail to terminate term: %s\n", dpvs_strerror(err));
+
+    err = dp_vs_whtlst_term();
+    if (err != EDPVS_OK)
+        RTE_LOG(ERR, IPVS, "fail to terminate whtlst: %s\n", dpvs_strerror(err));
 
     err = dp_vs_blklst_term();
     if (err != EDPVS_OK)

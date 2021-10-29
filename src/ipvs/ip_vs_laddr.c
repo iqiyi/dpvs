@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -307,8 +307,8 @@ int dp_vs_laddr_add(struct dp_vs_service *svc,
     if (!svc || !addr)
         return EDPVS_INVAL;
 
-    new = rte_malloc_socket(NULL, sizeof(*new),
-                            RTE_CACHE_LINE_SIZE, rte_socket_id());
+    new = rte_malloc(NULL, sizeof(*new),
+                            RTE_CACHE_LINE_SIZE);
     if (!new)
         return EDPVS_NOMEM;
 
@@ -373,8 +373,8 @@ static int dp_vs_laddr_getall(struct dp_vs_service *svc,
 
     if (svc->num_laddrs > 0) {
         *naddr = svc->num_laddrs;
-        *addrs = rte_malloc_socket(0, sizeof(struct dp_vs_laddr_entry) * svc->num_laddrs,
-                RTE_CACHE_LINE_SIZE, rte_socket_id());
+        *addrs = rte_malloc(0, sizeof(struct dp_vs_laddr_entry) * svc->num_laddrs,
+                RTE_CACHE_LINE_SIZE);
         if (!(*addrs)) {
             return EDPVS_NOMEM;
         }
@@ -439,7 +439,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     lcoreid_t cid = rte_lcore_id();
 
     // send to slave core
-    if (cid == rte_get_master_lcore()) {
+    if (cid == rte_get_main_lcore()) {
         struct dpvs_msg *msg;
 
         msg = msg_make(set_opt_so2msg(opt), laddr_msg_seq(), DPVS_MSG_MULTICAST, cid, size, conf);
@@ -608,7 +608,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                 return EDPVS_MSG_FAIL;
             }
 
-            if (cid == rte_get_master_lcore()) {
+            if (cid == rte_get_main_lcore()) {
                 if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
                                       laddr_conf->iifname, laddr_conf->oifname,
                                       laddr_conf->af_s, &match) != EDPVS_OK) {
@@ -630,7 +630,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                 }
                 
                 *outsize = sizeof(*laddr_conf) + naddr * sizeof(struct dp_vs_laddr_entry);
-                *out = rte_malloc_socket(0, *outsize, RTE_CACHE_LINE_SIZE, rte_socket_id());
+                *out = rte_malloc(0, *outsize, RTE_CACHE_LINE_SIZE);
                 if (!*out) {
                     if (addrs)
                         rte_free(addrs);
@@ -671,7 +671,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                     if (cid == get_msg->cid) {
                         *outsize = sizeof(*laddr_conf) + \
                                    get_msg->nladdrs * sizeof(struct dp_vs_laddr_entry);
-                        *out = rte_malloc_socket(0, *outsize, RTE_CACHE_LINE_SIZE, rte_socket_id());
+                        *out = rte_malloc(0, *outsize, RTE_CACHE_LINE_SIZE);
                         if (!*out) {
                             msg_destroy(&msg);
                             return EDPVS_NOMEM;

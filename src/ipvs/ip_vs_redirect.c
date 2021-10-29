@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -243,7 +243,7 @@ int dp_vs_redirect_pkt(struct rte_mbuf *mbuf, lcoreid_t peer_cid)
     return INET_STOLEN;
 }
 
-void dp_vs_redirect_ring_proc(struct netif_queue_conf *qconf, lcoreid_t cid)
+void dp_vs_redirect_ring_proc(lcoreid_t cid)
 {
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     uint16_t nb_rb;
@@ -261,7 +261,7 @@ void dp_vs_redirect_ring_proc(struct netif_queue_conf *qconf, lcoreid_t cid)
                                            (void**)mbufs,
                                            NETIF_MAX_PKT_BURST, NULL);
             if (nb_rb > 0) {
-                lcore_process_packets(qconf, mbufs, cid, nb_rb, 1);
+                lcore_process_packets(mbufs, cid, nb_rb, 1);
             }
         }
     }
@@ -314,8 +314,8 @@ static int dp_vs_redirect_table_create(void)
 
     /* allocate the global redirect hash table, per socket? */
     dp_vs_cr_tbl =
-        rte_malloc_socket(NULL, sizeof(struct list_head ) * DPVS_CR_TBL_SIZE,
-                          RTE_CACHE_LINE_SIZE, rte_socket_id());
+        rte_malloc(NULL, sizeof(struct list_head ) * DPVS_CR_TBL_SIZE,
+                          RTE_CACHE_LINE_SIZE);
     if (!dp_vs_cr_tbl) {
         goto cache_free;
     }
@@ -355,13 +355,12 @@ static int dp_vs_redirect_ring_create(void)
     socket_id = rte_socket_id();
 
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
-        if (cid == rte_get_master_lcore() || netif_lcore_is_idle(cid)) {
+        if (!netif_lcore_is_fwd_worker(cid)) {
             continue;
         }
 
         for (peer_cid = 0; peer_cid < DPVS_MAX_LCORE; peer_cid++) {
-            if (netif_lcore_is_idle(peer_cid)
-                || peer_cid == rte_get_master_lcore()
+            if (!netif_lcore_is_fwd_worker(peer_cid)
                 || cid == peer_cid) {
                 continue;
             }

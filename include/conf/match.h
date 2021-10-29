@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -58,6 +58,10 @@ static inline int parse_match(const char *pattern, uint8_t *proto,
             *proto = IPPROTO_TCP;
         } else if (strcmp(tok, "udp") == 0) {
             *proto = IPPROTO_UDP;
+        } else if (strcmp(tok, "icmp") == 0) {
+            *proto = IPPROTO_ICMP;
+        } else if (strcmp(tok, "icmp6") == 0) {
+            *proto = IPPROTO_ICMPV6;
         } else if (strncmp(tok, "from=", strlen("from=")) == 0) {
             tok += strlen("from=");
 

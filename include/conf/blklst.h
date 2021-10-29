@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -21,16 +21,9 @@
  */
 #ifndef __DPVS_BLKLST_CONF_H__
 #define __DPVS_BLKLST_CONF_H__
-#include "inet.h"
 
-enum {
-    /* set */
-    SOCKOPT_SET_BLKLST_ADD  = 700,
-    SOCKOPT_SET_BLKLST_DEL,
-    SOCKOPT_SET_BLKLST_FLUSH,
-    /* get */
-    SOCKOPT_GET_BLKLST_GETALL,
-};
+#include "inet.h"
+#include "conf/sockopts.h"
 
 struct dp_vs_blklst_entry {
     union inet_addr addr;

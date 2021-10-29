@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -24,6 +24,7 @@
 #include "ipvs/wlc.h"
 #include "ipvs/conhash.h"
 #include "ipvs/fo.h"
+#include "ipvs/mh.h"
 
 /*
  *  IPVS scheduler list
@@ -84,6 +85,61 @@ int dp_vs_unbind_scheduler(struct dp_vs_service *svc)
 
     svc->scheduler = NULL;
     return EDPVS_OK;
+}
+
+/*
+ *    Get the gcd of server weights
+ */
+static int gcd(int a, int b)
+{
+    int c;
+
+    while ((c = a % b)) {
+        a = b;
+        b = c;
+    }
+    return b;
+}
+
+int dp_vs_gcd_weight(struct dp_vs_service *svc)
+{
+    struct dp_vs_dest *dest;
+    int weight;
+    int g = 0;
+
+    list_for_each_entry(dest, &svc->dests, n_list) {
+        weight = rte_atomic16_read(&dest->weight);
+        if (weight > 0) {
+            if (g > 0)
+                g = gcd(weight, g);
+            else
+                g = weight;
+        }
+    }
+    return g ? g : 1;
+}
+
+/*
+ * Different workers should start schedule algorith from the dests that are evenly distributed
+ * across the whole dest list. It can avoid the clustering of connections across dests on the
+ * early phase after the service setup, especially for such scheduling methods as rr/wrr/wlc.
+ */
+struct list_head * dp_vs_sched_first_dest(const struct dp_vs_service *svc)
+{
+    int i, cid, loc;
+    struct list_head *ini;
+
+    cid = rte_lcore_id();
+    ini = svc->dests.next;
+    loc = (svc->num_dests / g_slave_lcore_num ?: 1) * g_lcore_index[cid] % (svc->num_dests ?: 1);
+
+    for (i = 0; i < loc; i++) {
+        ini = ini->next;
+        if (unlikely(ini == &svc->dests))
+            ini = ini->next;
+    }
+
+    return ini;
 }
 
 /*
@@ -185,6 +241,7 @@ int dp_vs_sched_init(void)
     dp_vs_wlc_init();
     dp_vs_conhash_init();
     dp_vs_fo_init();
+    dp_vs_mh_init();
 
     return EDPVS_OK;
 }
@@ -194,8 +251,9 @@ int dp_vs_sched_term(void)
     dp_vs_rr_term();
     dp_vs_wrr_term();
     dp_vs_wlc_term();
-    dp_vs_conhash_term();    
+    dp_vs_conhash_term();
     dp_vs_fo_term();
+    dp_vs_mh_term();
 
     return EDPVS_OK;
 }

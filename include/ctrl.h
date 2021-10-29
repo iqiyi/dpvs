@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -195,7 +195,6 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_BLKLST_ADD                 9
 #define MSG_TYPE_BLKLST_DEL                 10
 #define MSG_TYPE_STATS_GET                  11
-#define MSG_TYPE_TC_STATS                   13
 #define MSG_TYPE_CONN_GET                   14
 #define MSG_TYPE_CONN_GET_ALL               15
 #define MSG_TYPE_IPV6_STATS                 16
@@ -207,23 +206,30 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_IFA_GET                    22
 #define MSG_TYPE_IFA_SET                    23
 #define MSG_TYPE_IFA_SYNC                   24
+#define MSG_TYPE_WHTLST_ADD                 25
+#define MSG_TYPE_WHTLST_DEL                 26
+#define MSG_TYPE_TC_QSCH_GET                27
+#define MSG_TYPE_TC_QSCH_SET                28
+#define MSG_TYPE_TC_CLS_GET                 29
+#define MSG_TYPE_TC_CLS_SET                 30
+#define MSG_TYPE_IPVS_RANGE_START           100
 
 /* for svc per_core, refer to service.h*/
 enum {
-    MSG_TYPE_SVC_SET_FLUSH = MSG_TYPE_IFA_SYNC + 1,
-    MSG_TYPE_SVC_SET_ZERO,    
-    MSG_TYPE_SVC_SET_ADD,      
-    MSG_TYPE_SVC_SET_EDIT,    
-    MSG_TYPE_SVC_SET_DEL,     
-    MSG_TYPE_SVC_SET_ADDDEST, 
+    MSG_TYPE_SVC_SET_FLUSH = MSG_TYPE_IPVS_RANGE_START,
+    MSG_TYPE_SVC_SET_ZERO,
+    MSG_TYPE_SVC_SET_ADD,
+    MSG_TYPE_SVC_SET_EDIT,
+    MSG_TYPE_SVC_SET_DEL,
+    MSG_TYPE_SVC_SET_ADDDEST,
     MSG_TYPE_SVC_SET_EDITDEST,
     MSG_TYPE_SVC_SET_DELDEST,
     MSG_TYPE_LADDR_SET_ADD,
     MSG_TYPE_LADDR_SET_DEL,
     MSG_TYPE_LADDR_SET_FLUSH,
-    MSG_TYPE_SVC_GET_INFO,    
+    MSG_TYPE_SVC_GET_INFO,
     MSG_TYPE_SVC_GET_SERVICES,
-    MSG_TYPE_SVC_GET_SERVICE, 
+    MSG_TYPE_SVC_GET_SERVICE,
     MSG_TYPE_SVC_GET_DESTS,
     MSG_TYPE_LADDR_GET_ALL,
 };
@@ -239,8 +245,6 @@ enum {
 
 //#define SOCKOPT_MSG_BUFFER_SIZE             (1UL << 12)
 #define SOCKOPT_ERRSTR_LEN                  64
-
-typedef uint32_t sockoptid_t;
 
 enum sockopt_type {
     SOCKOPT_GET = 0,

@@ -15,12 +15,14 @@ global_defs {
     log_level   WARNING
     ! log_file    /var/log/dpvs.log
     ! log_async_mode    off
+    ! pdump       off
 }
 
 ! netif config
 netif_defs {
     <init> pktpool_size     1048575
     <init> pktpool_cache    256
+    <init> fdir_mode        perfect
 
     <init> device dpdk0 {
         rx {
@@ -32,13 +34,9 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
+        ! mtu                   1500
         ! promisc_mode
-        ! kni_name                dpdk0.kni
+        ! kni_name              dpdk0.kni
     }
 
     <init> device dpdk1 {
@@ -51,11 +49,7 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
+        ! mtu                   1500
         ! promisc_mode
         ! kni_name                dpdk1.kni
     }
@@ -71,13 +65,9 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
+        ! mtu                   1500
         ! promisc_mode
-        ! kni_name                dpdk2.kni
+        ! kni_name              dpdk2.kni
     }
 
     <init> device dpdk3 {
@@ -90,13 +80,9 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
+        ! mtu                   1500
         ! promisc_mode
-        ! kni_name                dpdk3.kni
+        ! kni_name              dpdk3.kni
     } 
 
     <init> bonding bond0 {
@@ -104,6 +90,7 @@ netif_defs {
         slave                   dpdk0
         slave                   dpdk1
         primary                 dpdk0
+        ! numa_node             1          ! /sys/bus/pci/devices/[slaves' pci]/numa_node
         kni_name                bond0.kni
     }
 
@@ -112,6 +99,7 @@ netif_defs {
         slave                   dpdk2
         slave                   dpdk3
         primary                 dpdk2
+        ! numa_node             1          ! /sys/bus/pci/devices/[slaves' pci]/numa_node
         kni_name                bond1.kni
     }
 }
@@ -245,6 +233,7 @@ worker_defs {
     <init> worker cpu8 {
         type    slave
         cpu_id  8
+        ! icmp_redirect_core
         port    bond0 {
             rx_queue_ids     7
             tx_queue_ids     7
@@ -258,6 +247,17 @@ worker_defs {
             ! isol_rxq_ring_sz 1048576
         }
     }
+
+    !<init> worker cpu9 {
+    !    type    kni
+    !    cpu_id  9
+    !    port    bond0 {
+    !        tx_queue_ids     8
+    !    }
+    !    port    bond1 {
+    !        tx_queue_ids     8
+    !    }
+    !}
 
 }
 
@@ -369,5 +369,6 @@ ipvs_defs {
 
 ! sa_pool config
 sa_pool {
-    pool_hash_size   16
+    pool_hash_size  16
+    flow_enable     on
 }

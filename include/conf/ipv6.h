@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -22,14 +22,9 @@
  */
 #ifndef __DPVS_IPV6_CONF_H__
 #define __DPVS_IPV6_CONF_H__
-#include "inet.h"
 
-enum {
-    /* set */
-    SOCKOPT_IP6_SET = 1100,
-    /* get */
-    SOCKOPT_IP6_STATS,
-};
+#include "inet.h"
+#include "conf/sockopts.h"
 
 struct ip6_stats_param {
     struct inet_stats stats;

@@ -1,7 +1,7 @@
 #
 # DPVS is a software load balancer (Virtual Server) based on DPDK.
 #
-# Copyright (C) 2017 iQIYI (www.iqiyi.com).
+# Copyright (C) 2021 iQIYI (www.iqiyi.com).
 # All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or
@@ -33,7 +33,7 @@ DEFS = -D DPVS_MAX_LCORE=64
 CFLAGS += $(DEFS)
 
 OBJS = dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
-	   qsch.o cls.o tunnel.o ipset.o ipv6.o iftraf.o ../../src/common.o \
+	   qsch.o cls.o tunnel.o ipset.o ipv6.o iftraf.o eal_mem.o ../../src/common.o \
 	   ../keepalived/keepalived/check/sockopt.o
 
 all: $(TARGET)

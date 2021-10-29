@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -31,6 +31,13 @@
 extern struct Qsch_ops bfifo_sch_ops;
 extern struct Qsch_ops tbf_sch_ops;
 
+struct tbf_sch_shared {
+    int64_t                 tokens;     /* current tokens, in time */
+    int64_t                 ptokens;    /* current peak tokens, in time */
+    int64_t                 t_c;        /* Time check-point */
+    rte_spinlock_t          lock;
+};
+
 struct tbf_sch_priv {
     /* parameters */
     uint32_t                limit;      /* Maximal length of backlog: bytes */
@@ -43,10 +50,7 @@ struct tbf_sch_priv {
     struct qsch_rate        peak;       /* max burst rate */
 
     /* internal variables */
-    int64_t                 tokens;     /* current tokens, in time */
-    int64_t                 ptokens;    /* current peak tokens, in time */
-    int64_t                 t_c;        /* Time check-point */
-    struct Qsch             *qsch;      /* backlog queue */
+    struct tbf_sch_shared   *shm;
 };
 
 static inline bool tbf_peak_present(const struct tbf_sch_priv *priv)
@@ -57,29 +61,21 @@ static inline bool tbf_peak_present(const struct tbf_sch_priv *priv)
 static int tbf_enqueue(struct Qsch *sch, struct rte_mbuf *mbuf)
 {
     struct tbf_sch_priv *priv = qsch_priv(sch);
-    int err;
 
     if (unlikely(mbuf->pkt_len > priv->max_size)) {
         RTE_LOG(WARNING, TC, "%s: packet too big.\n", __func__);
         return qsch_drop(sch, mbuf);
     }
 
-    assert(priv->qsch);
-
     /*
      * enqueue is simple: just put into inner backlog queue,
      * if it's full then drop the packet (by inner queue).
      */
-    err = priv->qsch->ops->enqueue(priv->qsch, mbuf);
-    if (err != EDPVS_OK) {
-        sch->this_qstats.drops++;
-        return err;
+    if (unlikely(sch->qstats.backlog + mbuf->pkt_len > priv->limit)) {
+        return qsch_drop(sch, mbuf);
     }
 
-    sch->this_qstats.backlog += mbuf->pkt_len;
-    sch->this_qstats.qlen++;
-    sch->this_q.qlen++;
-    return EDPVS_OK;
+    return qsch_enqueue_tail(sch, mbuf);
 }
 
 static struct rte_mbuf *tbf_dequeue(struct Qsch *sch)
@@ -89,23 +85,30 @@ static struct rte_mbuf *tbf_dequeue(struct Qsch *sch)
     int64_t now, toks, ptoks; /* need "signed" to compare with 0 */
     unsigned int pkt_len;
 
-    assert(priv->qsch);
-
-    mbuf = priv->qsch->ops->peek(priv->qsch);
+    mbuf = qsch_peek_head(sch);
     if (unlikely(!mbuf))
         return NULL;
     pkt_len = mbuf->pkt_len;
 
+    if (!rte_spinlock_trylock(&priv->shm->lock))
+        return NULL;  // Someone is doing what I want to, let it go.
+
     now = tc_get_ns();
     /* "tokens" arrived since last check point, not exceed bucket depth.
      * note all of them are present in time manner. */
-    toks = min_t(int64_t, now - priv->t_c, priv->buffer);
+    toks = min_t(int64_t, now - priv->shm->t_c, priv->buffer);
     ptoks = 0;
+
+    if (unlikely(toks < 0)) {
+        rte_spinlock_unlock(&priv->shm->lock);
+        RTE_LOG(WARNING, TC, "[%d] %s：token producer bug?\n", rte_lcore_id(), __func__);
+        return NULL;
+    }
 
     if (tbf_peak_present(priv)) {
         /* calc peak-tokens with new arrived tokens plus remaining peak-tokens
          * should not exceed mtu ("minburst") */
-        ptoks = toks + priv->ptokens;
+        ptoks = toks + priv->shm->ptokens;
         if (ptoks > priv->mtu)
             ptoks = priv->mtu;
         /* minus current pkt size to check if ptoks is enough later */
@@ -114,7 +117,7 @@ static struct rte_mbuf *tbf_dequeue(struct Qsch *sch)
 
     /* calc tokens with new arrived tokens plus remaining tokens
      * should not exceed bucket depth ("burst") */
-    toks += priv->tokens;
+    toks += priv->shm->tokens;
     if (toks > priv->buffer)
         toks = priv->buffer;
     /* minus current pkt size to check if toks is enough later */
@@ -124,26 +127,21 @@ static struct rte_mbuf *tbf_dequeue(struct Qsch *sch)
      * current toks/ptoks was subtracted by pkt_len inadvance.
      * so < zero means not enough and >= 0 means enough. */
     if ((toks|ptoks) >= 0) {
-        mbuf = qsch_dequeue_head(priv->qsch);
+        mbuf = qsch_dequeue_head(sch);
         if (unlikely(!mbuf))
             return NULL;
 
         /* update variables */
-        priv->t_c = now; /* only need update time checkpoint when consumed */
-        priv->tokens = toks;
-        priv->ptokens = ptoks;
-
-        sch->this_qstats.backlog -= pkt_len;
-        sch->this_qstats.qlen--;
-        sch->this_q.qlen--;
-        sch->this_bstats.bytes += pkt_len;
-        sch->this_bstats.packets++;
-
+        priv->shm->t_c = now; /* only need to update time checkpoint when consumed */
+        priv->shm->tokens = toks;
+        priv->shm->ptokens = ptoks;
+        rte_spinlock_unlock(&priv->shm->lock);
         return mbuf;
     }
+    rte_spinlock_unlock(&priv->shm->lock);
 
     /* token not enough */
-    sch->this_qstats.overlimits++;
+    sch->qstats.overlimits++;
     return NULL;
 }
 
@@ -155,7 +153,6 @@ static int tbf_change(struct Qsch *sch, const void *arg)
     uint64_t max_size;
     uint32_t limit;
     struct qsch_rate rate = {}, peak = {};
-    struct Qsch *child = NULL;
 
     /* set new values or used original */
     if (qopt->rate.rate)
@@ -203,18 +200,6 @@ static int tbf_change(struct Qsch *sch, const void *arg)
             return EDPVS_INVAL;
     }
 
-    /* set or create inner backlog queue */
-    if (priv->qsch) {
-        fifo_set_limit(priv->qsch, limit);
-    } else {
-        child = fifo_create_dflt(sch, &bfifo_sch_ops, limit);
-        if (!child)
-            return EDPVS_INVAL;
-
-        priv->qsch = child;
-        qsch_hash_add(child, true);
-    }
-
     /* save values to sch */
     priv->limit = limit; /* could be zero (no backlog queue, drop if no token) */
     priv->max_size = max_size;
@@ -222,8 +207,16 @@ static int tbf_change(struct Qsch *sch, const void *arg)
     priv->mtu = mtu;
     priv->rate = rate;
     priv->peak = peak;
-    priv->tokens = priv->buffer;
-    priv->ptokens = priv->mtu;
+
+    if (rte_lcore_id() != g_master_lcore_id)
+        return EDPVS_OK;
+
+    assert(priv->shm);
+    rte_spinlock_lock(&priv->shm->lock);
+    priv->shm->t_c = tc_get_ns();
+    priv->shm->tokens = priv->buffer;
+    priv->shm->ptokens = priv->mtu;
+    rte_spinlock_unlock(&priv->shm->lock);
 
     return EDPVS_OK;
 }
@@ -236,33 +229,33 @@ static int tbf_init(struct Qsch *sch, const void *arg)
     if (!qopt)
         return EDPVS_OK;
 
-    priv->t_c = tc_get_ns();
+    priv->shm = qsch_shm_get_or_create(sch, sizeof(struct tbf_sch_shared));
+    if (!priv->shm)
+        return EDPVS_NOMEM;
+
     return tbf_change(sch, qopt);
 }
 
 static void tbf_destroy(struct Qsch *sch)
 {
-    struct tbf_sch_priv *priv = qsch_priv(sch);
-    if (priv->qsch)
-        qsch_destroy(priv->qsch);
+    qsch_shm_put_or_destroy(sch);
 }
 
 static void tbf_reset(struct Qsch *sch)
 {
-    lcoreid_t cid;
-    struct tbf_sch_priv *priv = qsch_priv(sch);
+    struct tbf_sch_priv *priv;
 
-    qsch_reset(priv->qsch);
-    for (cid = 0; cid < NELEMS(sch->q); cid++) {
-        sch->qstats[cid].backlog = 0;
-        sch->qstats[cid].qlen = 0;
-        sch->q[cid].qlen = 0;
-    }
+    qsch_reset_queue(sch);
 
-    priv->t_c = tc_get_ns();
-    priv->tokens = priv->buffer;
-    priv->ptokens = priv->mtu;
-    return;
+    if (rte_lcore_id() != g_master_lcore_id)
+        return;
+    priv = qsch_priv(sch);
+
+    rte_spinlock_lock(&priv->shm->lock);
+    priv->shm->t_c = tc_get_ns();
+    priv->shm->tokens = priv->buffer;
+    priv->shm->ptokens = priv->mtu;
+    rte_spinlock_unlock(&priv->shm->lock);
 }
 
 static int tbf_dump(struct Qsch *sch, void *arg)

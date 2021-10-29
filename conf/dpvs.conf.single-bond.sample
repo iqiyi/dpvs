@@ -32,13 +32,9 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
+        ! mtu                   1500
         ! promisc_mode
-        ! kni_name                dpdk0.kni
+        ! kni_name              dpdk0.kni
     }
 
     <init> device dpdk2 {
@@ -51,21 +47,19 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
+        ! mtu                   1500
         ! promisc_mode
-        ! kni_name                dpdk2.kni
+        ! kni_name              dpdk2.kni
     }
 
     <init> bonding bond0 {
-        mode                    0
+        mode                    4
         slave                   dpdk0
         slave                   dpdk2
         primary                 dpdk0
+        ! numa_node             1          ! /sys/bus/pci/devices/[slaves' pci]/numa_node
         kni_name                bond0.kni
+        options                 dedicated_queues=off
     }
 }
 
@@ -156,6 +150,7 @@ worker_defs {
     <init> worker cpu8 {
         type    slave
         cpu_id  8
+        ! icmp_redirect_core
         port    bond0 {
             rx_queue_ids     7
             tx_queue_ids     7
@@ -163,6 +158,14 @@ worker_defs {
             ! isol_rxq_ring_sz 1048576
         }
     }
+
+    !<init> worker cpu9 {
+    !    type    kni
+    !    cpu_id  9
+    !    port    bond0 {
+    !        tx_queue_ids     8
+    !    }
+    !}
 
 }
 
@@ -274,5 +277,6 @@ ipvs_defs {
 
 ! sa_pool config
 sa_pool {
-    pool_hash_size   16
+    pool_hash_size  16
+    flow_enable     on
 }

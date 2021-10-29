@@ -1,42 +1,33 @@
 #!/bin/sh -
 # program: dpvs
-# May 13, 2020
+# Jul 28, 2021
 #
-#####################################
-# This is a bugfix verison of v1.8.2.
-#####################################
+# Major changes:
+#   - Adapt dpvs to dpdk 20.11 (dpdk-stable-20.11.1).
+#   - Create branch DPVS-1.8-LTS to support dpdk 18.11.
+#   - Obsolete supports for dpdk 17.11.
 #
-# # Features
-# ----------
-# 
-# 
-# # Bugfix
-# --------
-# - Keepalived: Fix virtual server partial deletion problem when configured with virtual server group.
-# - Keepalived: Fix realserver deletion problem when the realservers marked as down state by health_checker.
-# - Keepalived: Fix reload problem for some configurations, such as conn timeout, blklst addresses, etc.
-# - Keepalived: Fix configurations would not load problem after restart on occasion.
-# - Keepalived: Fix port transition support problem in fullnat mode.
-# - Keepalived: Fix logging problem for MATCH/ICMP/ICMPv6 in keepalived.
-# - Keepalived: Fix snat configuration and reload problem.
-# - Keepalived: Fix conhash scheduler configuration problem in keepalived.
-# - Keepalived: Fix incorrect ipvs stats problem caused by mismatch structures of keepalived and dpvs.
-# - Keepalived: Fix crash when snat and fullnat configured together.
-# - Keepalived: Fix address family setting problem for nat64 forwarding.
-# - Keepalived: Fix dpvs route setting problem in keepalived vrrp.
-# - Keepalived: Fix laddr configuration problems with ip range style.
-# - Keepalived: Mergerd virtual server group address into range list.
-# - Keepalived: Update libipvs and related headers.
-# - Ipvsadm: do not show address family for MATCH rule.
-# - Dpvs: Fix ipv6 and nat64 blklst support problem.
-# - Dpvs: Fix duplicated ipv4 local-in routes problem.
-# - Dpvs: Allow to use non-continuous lcores, like "-l 0,1-8,11-18".
-# - Dpvs: Fix crash prolbem when cpu id is not set correctly by ipvsadm.
-# - Dpvs: Fix compile error caused by inline method.
-# - Dpvs: Fix a array boundary overflow issue.
+# Featurs:
+#   - Dpvs: Add netif_flow module using generic flow api (rte_flow), and replace flow director with rte_flow.
+#   - Dpvs: Replace mbuf userdata with mbuf dynfields.
+#   - Dpvs: Adapt dpvs to several renamed type names in dpdk 20.11.
+#   - Dpvs: Update Makefiles to support dpdk 20.11.
+#   - Dpvs: Add config option "dedicated_queues" for bonding mode 4 (802.3ad).
+#   - Dpdk: Add helper script to facilitate dpdk build.
+#   - Dpdk: Porting patches to dpdk 20.11 and remove patches of previous dpdk versions (18.11, 17.11).
+#   - Dpdk: Patch dpdk ixgbe pmd driver to support dpvs's flow api.
+#   - Dpdk: Patch dpdk bonding mode 4 for mlx5 to fix crash problem when debug.
+#   - Keeaplived: Add UDP_CHECK health checker.
+#   - Docs: Refine tutorial doc of section 'Full-NAT with Keepalived (one-arm)'.
+#   - Docs: Update docs for dpvs use with dpdk 20.11.
+#   - Ci: Update dpvs ci to support dpdk 20.11.
+#
+# Bugfix:
+#   - Dpvs: Fix ipvs rr/wrr/wlc problem of uneven load distribution across dests.
+#   - Dpvs: Fix bonding mode 4 problem caused by LACP failure.
+#
 
-
-export VERSION=1.8
-export RELEASE=4
+export VERSION=1.9
+export RELEASE=0
 
 echo $VERSION-$RELEASE

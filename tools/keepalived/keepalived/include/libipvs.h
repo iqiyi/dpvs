@@ -11,37 +11,40 @@
 //#include "config.h"
 #include "ip_vs.h"
 
-#define OPT_NONE		0x000000
-#define OPT_NUMERIC		0x000001
-#define OPT_CONNECTION		0x000002
-#define OPT_SERVICE		0x000004
-#define OPT_SCHEDULER		0x000008
-#define OPT_PERSISTENT		0x000010
-#define OPT_NETMASK		0x000020
-#define OPT_SERVER		0x000040
-#define OPT_FORWARD		0x000080
-#define OPT_WEIGHT		0x000100
-#define OPT_UTHRESHOLD		0x000200
-#define OPT_LTHRESHOLD		0x000400
-#define OPT_MCAST		0x000800
-#define OPT_TIMEOUT		0x001000
-#define OPT_DAEMON		0x002000
-#define OPT_STATS		0x004000
-#define OPT_RATE		0x008000
-#define OPT_THRESHOLDS		0x010000
-#define OPT_PERSISTENTCONN	0x020000
-#define OPT_NOSORT		0x040000
-#define OPT_SYNCID		0x080000
-#define OPT_EXACT		0x100000
-#define OPT_ONEPACKET		0x200000
-#define OPT_PERSISTENCE_ENGINE	0x400000
-#define OPT_LOCAL_ADDRESS	0x800000
-#define OPT_BLKLST_ADDRESS	0x1000000
-#define OPT_SYNPROXY		0x2000000
-#define OPT_IFNAME		0x4000000
-#define OPT_SOCKPAIR		0x8000000
-#define OPT_HASHTAG		0x10000000
-#define NUMBER_OF_OPT		30
+#define OPT_NONE                     0x000000
+#define OPT_NUMERIC                  0x000001
+#define OPT_CONNECTION               0x000002
+#define OPT_SERVICE                  0x000004
+#define OPT_SCHEDULER                0x000008
+#define OPT_PERSISTENT               0x000010
+#define OPT_NETMASK                  0x000020
+#define OPT_SERVER                   0x000040
+#define OPT_FORWARD                  0x000080
+#define OPT_WEIGHT                   0x000100
+#define OPT_UTHRESHOLD               0x000200
+#define OPT_LTHRESHOLD               0x000400
+#define OPT_MCAST                    0x000800
+#define OPT_TIMEOUT                  0x001000
+#define OPT_DAEMON                   0x002000
+#define OPT_STATS                    0x004000
+#define OPT_RATE                     0x008000
+#define OPT_THRESHOLDS               0x010000
+#define OPT_PERSISTENTCONN           0x020000
+#define OPT_NOSORT                   0x040000
+#define OPT_SYNCID                   0x080000
+#define OPT_EXACT                    0x100000
+#define OPT_ONEPACKET                0x200000
+#define OPT_PERSISTENCE_ENGINE       0x400000
+#define OPT_LOCAL_ADDRESS            0x800000
+#define OPT_BLKLST_ADDRESS          0x1000000
+#define OPT_SYNPROXY                0x2000000
+#define OPT_IFNAME                  0x4000000
+#define OPT_SOCKPAIR                0x8000000
+#define OPT_HASHTAG                0x10000000
+#define OPT_CPU                    0x20000000
+#define OPT_EXPIRE_QUIESCENT_CONN  0x40000000
+#define OPT_WHTLST_ADDRESS         0x80000000
+#define NUMBER_OF_OPT                   33
 
 #define MINIMUM_IPVS_VERSION_MAJOR      1
 #define MINIMUM_IPVS_VERSION_MINOR      1
@@ -70,9 +73,12 @@ typedef struct ip_vs_service_entry_app	ipvs_service_entry_t;
 typedef struct ip_vs_dest_entry_app	ipvs_dest_entry_t;
 typedef struct ip_vs_laddr_user 	ipvs_laddr_t;
 typedef struct ip_vs_blklst_user	ipvs_blklst_t;
+typedef struct ip_vs_whtlst_user	ipvs_whtlst_t;
 typedef struct ip_vs_tunnel_user	ipvs_tunnel_t;
 typedef struct ip_vs_laddr_entry	ipvs_laddr_entry_t;
 typedef struct ip_vs_blklst_entry	ipvs_blklst_entry_t;
+typedef struct ip_vs_whtlst_entry	ipvs_whtlst_entry_t;
+typedef struct ip_vs_stats_user	ip_vs_stats_t;
 
 
 /* init socket and get ipvs info */
@@ -120,6 +126,10 @@ extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcore
 /*for add/delete a blacklist ip*/
 extern int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
 extern int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
+
+/*for add/delete a whitelist ip*/
+extern int ipvs_add_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
+extern int ipvs_del_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
 
 /*for add/delete a tunnel*/
 extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
@@ -175,5 +185,7 @@ extern int ipvs_cmp_dests(ipvs_dest_entry_t *d1,
 extern void ipvs_sort_dests(struct ip_vs_get_dests_app *d,
 			    ipvs_dest_cmp_t f);
 
+
+extern struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void);
 
 #endif /* _LIBIPVS_H */

@@ -32,11 +32,7 @@ netif_defs {
             queue_number        8
             descriptor_number   1024
         }
-        fdir {
-            mode                perfect
-            pballoc             64k
-            status              matched
-        }
+        ! mtu                   1500
         ! promisc_mode
         kni_name                dpdk0.kni
     }
@@ -129,6 +125,7 @@ worker_defs {
     <init> worker   cpu8 {
         type        slave
         cpu_id      8
+        ! icmp_redirect_core
         port        dpdk0 {
             rx_queue_ids     7
             tx_queue_ids     7
@@ -136,6 +133,14 @@ worker_defs {
             ! isol_rxq_ring_sz 1048576
         }
     }
+
+    !<init> worker   cpu9 {
+    !    type        kni
+    !    cpu_id      9
+    !    port        dpdk0 {
+    !        tx_queue_ids     8
+    !    }
+    !}
 
 }
 
@@ -247,5 +252,6 @@ ipvs_defs {
 
 ! sa_pool config
 sa_pool {
-    pool_hash_size   16
+    pool_hash_size  16
+    flow_enable     on
 }
