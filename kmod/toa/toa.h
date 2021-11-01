@@ -38,6 +38,9 @@
 #include <net/transp_v6.h>
 #include <net/sock.h>
 #include <linux/netfilter.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
+#include <linux/kprobes.h>
+#endif
 
 #define TOA_VERSION "2.0.0.0"
 
