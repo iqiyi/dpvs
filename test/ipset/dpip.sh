@@ -105,15 +105,17 @@ ipset destroy foo
 
 # bitmap:port
 echo -e "bitmap:port"
-ipset create foo bitmap:port range 0-1024
+ipset create foo bitmap:port range 0-65535
 ipset add foo tcp:80
 ipset add foo tcp:8080
 ipset test foo tcp:80 EXPECT true
-ipset test foo tcp:8080 EXPECT false
+ipset test foo tcp:8080 EXPECT true
 ipset test foo udp:80 EXPECT false
+ipset test foo tcp:41235 EXPECT false
 ipset add foo udp:80
 ipset test foo udp:80 EXPECT true
 ipset del foo tcp:8080
+ipset test foo tcp:8080 EXPECT false
 ipset flush foo
 ipset destroy foo
 
