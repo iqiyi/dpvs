@@ -12,15 +12,17 @@ bitmap:ip
 [  OK  ] ./bin/dpip ipset test foo 10.100.100.100 EXPECT false
 [  OK  ] ./bin/dpip ipset destroy foo
 bitmap:port
-[  OK  ] ./bin/dpip ipset create foo bitmap:port range 0-1024
+[  OK  ] ./bin/dpip ipset create foo bitmap:port range 0-65535
 [  OK  ] ./bin/dpip ipset add foo tcp:80
 [  OK  ] ./bin/dpip ipset add foo tcp:8080
 [  OK  ] ./bin/dpip ipset test foo tcp:80 EXPECT true
-[  OK  ] ./bin/dpip ipset test foo tcp:8080 EXPECT false
+[  OK  ] ./bin/dpip ipset test foo tcp:8080 EXPECT true
 [  OK  ] ./bin/dpip ipset test foo udp:80 EXPECT false
+[  OK  ] ./bin/dpip ipset test foo tcp:41235 EXPECT false
 [  OK  ] ./bin/dpip ipset add foo udp:80
 [  OK  ] ./bin/dpip ipset test foo udp:80 EXPECT true
 [  OK  ] ./bin/dpip ipset del foo tcp:8080
+[  OK  ] ./bin/dpip ipset test foo tcp:8080 EXPECT false
 [  OK  ] ./bin/dpip ipset flush foo
 [  OK  ] ./bin/dpip ipset destroy foo
 bitmap:ip,mac
