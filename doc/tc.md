@@ -1,15 +1,15 @@
 DPVS Traffic Control (TC)
 ------
 
-* [Concepts](#concepts)
-  - [Qsch Objects](#qsch)
-  - [Cls Objects](#cls)
-* [Steps to use DPVS TC](#usage)
-* [Examples](#examples)
-  - [Example 1. Device traffic shaping (Egress)](#example1)
-  - [Example 2. Traffic classification and flow control (Egress)](#example2)
-  - [Example 3. Access control with TC (Ingress)](#example3)
-  - [Example 4. Traffic policing for services (Ingress)](#example4)
+- [Concepts](#concepts)
+  - [Qsch Objects](#qsch-objects)
+  - [Cls Objects](#cls-objects)
+- [Steps to use DPVS TC](#steps-to-use-dpvs-tc)
+- [Examples](#examples)
+  - [Example 1. Device traffic shaping (Egress)](#example-1-device-traffic-shaping-egress)
+  - [Example 2. Traffic classification and flow control (Egress)](#example-2-traffic-classification-and-flow-control-egress)
+  - [Example 3. Access control with TC (Ingress)](#example-3-access-control-with-tc-ingress)
+  - [Example 4. Traffic policing for services (Ingress)](#example-4-traffic-policing-for-services-ingress)
 
 <a id='concepts'/>
 
@@ -77,9 +77,15 @@ TBF QSch can have the following parameters.
 
 ## Cls Objects
 
+Cls object consists of two components: type-specific pattern and a target.
+
+There are two kinds of Cls target: Qsch or Drop. The former classifies matched packets into the queue of specified Qsch, and the latter simply discards matched packets. The target Qsch must be a child of the Qsch the Cls is attached to.
+
+There are two types of Cls object: match and ipset:
+
 - **match**
 
-Cls `match` consists of two components: a pattern and a target. Packets from Qsch compare with the pattern, and if matched, the fate of them is determined by the target.
+Packets from Qsch compare with the match pattern, and if matched, the fate of them is determined by the target.
 
 Pattern considers five attributes in a flow:
 
@@ -91,7 +97,11 @@ Pattern considers five attributes in a flow:
 
 One or more attributes of the pattern can be omitted. The omitted attributes are ignored when matching. For example, pattern `tcp,from-192.168.0.1:1-1024,oif-eth1 means to match TCP packets sent out on interface eth1 with source IP address of 192.168.0.1 and source port between 1 and 1024.
 
-There are two kinds of Cls target: Qsch or Drop. The former classifies matched packets into the queue of specified QSch, and the latter simply discards matched packets. The target Qsch must be a child of the Qsch the Cls is attached to.
+- **ipset**
+
+The ipset pattern only contains the setname. The set will test packets from Qsch, and if succeeded, the fate of them is determined by the target. 
+
+The IPset could be any type supported by DPVS and you can change the elements in it dynamically.
 
 <a id='usage'/>
 
@@ -124,8 +134,13 @@ dpip qsch add dev dpdk0 handle 2: parent ingress bfifo limit 100000             
 **4. Add Cls objects as needed.**
 
 ```bash
+# match
 dpip cls add dev dpdk0 qsch root match pattern 'tcp,oif=dpdk0' target 1:
 dpip cls add dev dpdk0 qsch ingress match pattern 'icmp,iif=dpdk0' target 2:
+# ipset
+dpip ipset add tcs hash:net,iface
+dpip ipset add tcs 0.0.0.0,icmp:0,dpdk0  # match all icmp packets
+dpip cls add dev dpdk0 qsch root ipset tcs target drop:
 ```
 
 **5. Check configurations and statistics.**
@@ -521,7 +536,7 @@ This example implements a simple ACL rule with DPVS TC. Suppose all clients othe
 -+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+-
 ```
 
-Firstly, setup the Qsch and Cls objects.
+1. Firstly, setup the Qsch and Cls objects.
 
 ```bash
 dpip qsch add dev dpdk0 ingress pfifo_fast
@@ -529,12 +544,11 @@ dpip cls add dev dpdk0 pkttype ipv6 qsch ingress handle 0:1 match pattern 'icmp6
 dpip link set dpdk0 tc-ingress on
 ```
 
-We only set ICMP Cls just for conveniences. Then add a IPv6 address on DPVS,
+2. We only set ICMP Cls just for conveniences. Then add a IPv6 address on DPVS,
 
 ```bash
 dpip addr add 2001::112/64 dev dpdk0
 ```
-
 and add two IPv6 addresses on client.
 
 ```bash
@@ -542,7 +556,7 @@ ip addr add 2001::15/64 dev eth0
 ip addr add 2001::1:15/64 dev eth0
 ```
 
-Check what we have configured.
+3. Check what we have configured.
 
 ```
 [root@dpvs-test]# dpip qsch show dev dpdk0
@@ -554,7 +568,7 @@ inet6 2001::112/64 scope global dpdk0
      valid_lft forever preferred_lft forever
 ```
 
-Now try to ping 2001::112 from client using different source IP addresses.
+4. Now try to ping 2001::112 from client using different source IP addresses.
 
 ```
 [root@client]# ping6 -c 3 2001::112 -m 1 -I 2001::15
@@ -579,7 +593,7 @@ rtt min/avg/max/mdev = 0.041/0.066/0.108/0.030 ms
 
 As expected, ping DPVS IPv6 address 2001::112 failed from 2001::15, and succeeded from 2001::1:15. 
 
-Finally, disable `tc-ingress` for `dpdk0`, and ping from 2001::15, and succeed this time.
+5. Finally, disable `tc-ingress` for `dpdk0` or remove the entry added to `tc-set`, and ping from 2001::15, and succeed this time.
 
 ```
 [root@dpvs-test]# dpip link set dpdk0 tc-ingress off
@@ -593,6 +607,29 @@ PING 2001::112(2001::112) from 2001::15 : 56 data bytes
 --- 2001::112 ping statistics ---
 3 packets transmitted, 3 received, 0% packet loss, time 1999ms
 rtt min/avg/max/mdev = 0.038/0.090/0.178/0.062 ms
+```
+
+IPset cloud also be used as a cls. All steps are identical except the following ones:
+1. Firstly, setup the Qsch and Cls objects.
+
+```bash
+dpip qsch add dev dpdk0 ingress pfifo_fast
+dpip ipset add tc-set hash:net,iface -6
+dpip ipset add tc-set 2001::0/120,icmp6:0,dpdk0
+dpip cls add dev dpdk0 pkttype ipv6 qsch ingress handle 0:1 ipset set=tc-set target drop
+dpip link set dpdk0 tc-ingress on
+```
+
+3. Check what we have configured.
+
+```
+[root@dpvs-test]# dpip qsch show dev dpdk0
+qsch pfifo_fast ingress dev dpdk0 parent 0: flags 0x1 cls 1 bands 3 priomap 1 2 2 2 1 2 0 0 1 1 1 1 1 1 1 1
+[root@dpvs-test]# dpip cls show dev dpdk0 qsch ingress
+cls match 0:1 dev dpdk0 qsch ingress pkttype 0x86dd prio 0 set=tc-set target drop
+[root@dpvs-test]# dpip addr show
+inet6 2001::112/64 scope global dpdk0
+     valid_lft forever preferred_lft forever
 ```
 
 <a id='example4'/>

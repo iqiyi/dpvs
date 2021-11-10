@@ -24,23 +24,22 @@ typedef struct hash_netiface_elem {
     union inet_addr ip;
     uint8_t cidr;
     uint8_t proto;
-    uint16_t port;
     uint16_t iface;
 
     /* data not evolved in hash calculation */
     struct netif_port *dev;
+    uint16_t port;
     char comment[IPSET_MAXCOMLEN];
 } elem_t;
 
 static bool
-hash_netiface_data_equal4(const void *elem1, const void *elem2)
+hash_netiface_data_equal(const void *adt_elem, const void *set_elem)
 {
-    elem_t *e1 = (elem_t *)elem1;
-    elem_t *e2 = (elem_t *)elem2;
+    elem_t *e1 = (elem_t *)adt_elem;
+    elem_t *e2 = (elem_t *)set_elem;
 
-    return e1->ip.in.s_addr == e2->ip.in.s_addr &&
-           e1->cidr == e2->cidr && e1->proto == e2->proto &&
-           e1->port == e2->port && e1->iface == e2->iface;
+    return !memcmp(e1, e2, offsetof(elem_t, dev)) &&
+           (e2->port == 0 || e1->port == e2->port);
 }
 
 static void
@@ -63,8 +62,7 @@ hash_netiface_hashkey4(void *data, int len, uint32_t mask)
 {
     elem_t *e = (elem_t *)data;
 
-    return (e->ip.in.s_addr * 31 + e->cidr * 31 + e->port * 31 + 
-            (e->iface | e->proto)) & mask;
+    return (e->ip.in.s_addr * 31 + e->cidr * 31 + (e->iface | e->proto)) & mask;
 }
 
 static int
@@ -133,10 +131,17 @@ hash_netiface_test(struct ipset *set, struct ipset_test_param *p)
 
     memset(&e, 0, sizeof(e));
 
-    ports = mbuf_header_pointer(p->mbuf, iph->len, sizeof(_ports), _ports);
-
     e.iface = p->mbuf->port;
     e.proto = iph->proto;
+
+    if (e.proto == IPPROTO_ICMP || e.proto == IPPROTO_ICMPV6) {
+        /* for ICMP, port is 0 */
+        e.ip = p->direction == 1? iph->saddr : iph->daddr;
+        return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
+    }
+
+    ports = mbuf_header_pointer(p->mbuf, iph->len, sizeof(_ports), _ports);
+
     if (p->direction == 1) {
         e.ip = iph->saddr;
         e.port = ports[0];
@@ -151,17 +156,11 @@ hash_netiface_test(struct ipset *set, struct ipset_test_param *p)
 struct ipset_type_variant hash_netiface_variant4 = {
     .adt = hash_netiface_adt4,
     .test = hash_netiface_test,
-    .hash.do_compare = hash_netiface_data_equal4,
+    .hash.do_compare = hash_netiface_data_equal,
     .hash.do_netmask = hash_data_netmask4,
     .hash.do_list = hash_netiface_do_list,
     .hash.do_hash = hash_netiface_hashkey4,
 };
-
-static bool
-hash_netiface_data_equal6(const void *elem1, const void *elem2)
-{
-    return !memcmp(elem1, elem2, offsetof(elem_t, dev));
-}
 
 static int
 hash_netiface_adt6(int op, struct ipset *set, struct ipset_param *param)
@@ -192,7 +191,7 @@ hash_netiface_adt6(int op, struct ipset *set, struct ipset_param *param)
 struct ipset_type_variant hash_netiface_variant6 = {
     .adt = hash_netiface_adt6,
     .test = hash_netiface_test,
-    .hash.do_compare = hash_netiface_data_equal6,
+    .hash.do_compare = hash_netiface_data_equal,
     .hash.do_netmask = hash_data_netmask6,
     .hash.do_list = hash_netiface_do_list,
     .hash.do_hash = jhash_hashkey
