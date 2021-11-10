@@ -531,6 +531,8 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
 
     INIT_LIST_HEAD(&svc->dests);
 
+    INIT_LIST_HEAD(&svc->acl_list);
+
     ret = dp_vs_bind_scheduler(svc, sched);
     if (ret)
         goto out_err;
@@ -621,6 +623,22 @@ out:
     return ret;
 }
 
+static int dp_vs_acl_flush(struct dp_vs_service *svc)
+{
+    struct dp_vs_acl_rule *rule, *next;
+
+    if (!svc)
+        return EDPVS_INVAL;
+    
+    list_for_each_entry_safe(rule, next, &svc->acl_list, list) {
+        ipset_put(rule->set);
+        list_del(&rule->list);
+        rte_free(rule);
+    }
+
+    return EDPVS_OK;
+}
+
 static void __dp_vs_service_del(struct dp_vs_service *svc)
 {
     struct dp_vs_dest *dest, *nxt;
@@ -636,6 +654,8 @@ static void __dp_vs_service_del(struct dp_vs_service *svc)
     dp_vs_blklst_flush(svc);
 
     dp_vs_whtlst_flush(svc);
+
+    dp_vs_acl_flush(svc);
 
     /*
      *    Unlink the whole destination list
@@ -689,6 +709,7 @@ dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     dst->netmask = src->netmask;
     dst->num_dests = src->num_dests;
     dst->num_laddrs = src->num_laddrs;
+    dst->num_rules = src->num_rules;
     dst->cid = rte_lcore_id();
 
     err = dp_vs_stats_add(&dst->stats, &src->stats);
@@ -822,6 +843,61 @@ static int dp_vs_services_zero(lcoreid_t cid)
     return EDPVS_OK;
 }
 
+static int dp_vs_acl_add(struct dp_vs_service_conf *u,
+                      struct dp_vs_service *svc)
+{
+    struct dp_vs_acl_rule *acl, *a;
+
+    acl = rte_zmalloc("service acl", sizeof(*acl), RTE_CACHE_LINE_SIZE);
+    if (unlikely(acl == NULL))
+        return EDPVS_NOMEM;
+
+    acl->set = ipset_get(u->setname);
+    if (acl->set == NULL) {
+        rte_free(acl);
+        return EDPVS_NOTEXIST;
+    }
+
+    if (acl->set->family != svc->af)
+        return EDPVS_INVAL;
+    
+    acl->type = u->type;
+    acl->priority = u->priority;
+    acl->direction = u->direction;
+
+    if (list_empty(&svc->acl_list)) {
+        list_add(&acl->list, &svc->acl_list);
+    } else {
+        list_for_each_entry(a, &svc->acl_list, list) {
+            if (a->priority < acl->priority)
+                break;
+        }
+
+        list_add(&acl->list, a->list.prev);
+    }
+    svc->num_rules++;
+
+    return EDPVS_OK;
+}
+
+static int dp_vs_acl_del(struct dp_vs_service_conf *u,
+                      struct dp_vs_service *svc)
+{
+    struct dp_vs_acl_rule *acl, *next;
+
+    list_for_each_entry_safe(acl, next, &svc->acl_list, list) {
+        if (!strcmp(acl->set->name, u->setname)) {
+            ipset_put(acl->set);
+            list_del(&acl->list);
+            rte_free(acl);
+            svc->num_rules--;
+
+            return EDPVS_OK;
+        }
+    }
+
+    return EDPVS_NOTEXIST;
+}
 
 /*CONTROL PLANE*/
 static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
@@ -843,6 +919,10 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
     conf->netmask = user->netmask;
     conf->bps = user->bps;
     conf->limit_proportion = user->limit_proportion;
+    conf->setname = user->setname;
+    conf->type = user->type;
+    conf->priority = user->priority;
+    conf->direction = user->direction;
 
     if (user->flags & DP_VS_SVC_F_MATCH) {
         err = dp_vs_match_parse(user->srange, user->drange,
@@ -1000,6 +1080,12 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
         case DPVS_SO_SET_DELDEST:
             dp_vs_copy_udest_compat(&udest, udest_compat);
             ret = dp_vs_dest_del(svc, &udest);
+            break;
+        case DPVS_SO_SET_ADDACL:
+            ret = dp_vs_acl_add(&usvc, svc);
+            break;
+        case DPVS_SO_SET_DELACL:
+            ret = dp_vs_acl_del(&usvc, svc);
             break;
         default:
             ret = EDPVS_INVAL;
@@ -1480,6 +1566,50 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                     return EDPVS_NOTEXIST;
                 }
             }
+        case DPVS_SO_GET_ACLS:
+            {
+                struct dp_vs_get_acls *get;
+                struct dp_vs_acl_rule *acl;
+                struct dp_vs_service *svc = NULL;
+                struct dp_vs_service_user *svc_user;
+                struct dp_vs_service_entry entry;
+                int size, i = 0;
+
+                svc_user = (struct dp_vs_service_user *)user;
+
+                entry.addr    = svc_user->addr;
+                entry.af      = svc_user->af? svc_user->af : AF_INET6;
+                entry.fwmark  = svc_user->fwmark;
+                entry.port    = svc_user->port;
+                entry.proto   = svc_user->proto;
+                rte_memcpy(entry.srange, svc_user->srange, sizeof(svc_user->srange));
+                rte_memcpy(entry.drange, svc_user->drange, sizeof(svc_user->drange));
+                rte_memcpy(entry.iifname, svc_user->iifname, sizeof(svc_user->iifname));
+                rte_memcpy(entry.oifname, svc_user->oifname, sizeof(svc_user->oifname));
+
+                svc = dp_vs_service_get_lcore(&entry, cid);
+                if (!svc)
+                    return EDPVS_NOTEXIST;
+                
+                size = sizeof(*get) + \
+                       svc->num_rules * sizeof(struct dp_vs_acl_entry);
+                get = rte_zmalloc("get_acls", size, 0);
+                if (unlikely(get == NULL))
+                    return EDPVS_NOMEM;
+                
+                list_for_each_entry(acl, &svc->acl_list, list) {
+                    rte_strlcpy(get->entrytable[i].setname, acl->set->name, 32);
+                    get->entrytable[i].type = acl->type;
+                    get->entrytable[i].priority = acl->priority;
+                    get->entrytable[i].direction = acl->direction;
+                    i++;
+                }
+                get->num_rules = svc->num_rules;
+                *out = get;
+                *outlen = size;
+
+                return EDPVS_OK;
+            }
         default:
             return EDPVS_INVAL;
     }
@@ -1533,6 +1663,16 @@ static int editdest_msg_cb(struct dpvs_msg *msg)
 static int deldest_msg_cb(struct dpvs_msg *msg)
 {
     return dp_vs_service_set(DPVS_SO_SET_DELDEST, msg->data, msg->len);
+}
+
+static int addacl_msg_cb(struct dpvs_msg *msg)
+{
+    return dp_vs_service_set(DPVS_SO_SET_ADDACL, msg->data, msg->len);
+}
+
+static int delacl_msg_cb(struct dpvs_msg *msg)
+{
+    return dp_vs_service_set(DPVS_SO_SET_DELACL, msg->data, msg->len);
 }
 
 int dp_vs_service_init(void)
@@ -1641,6 +1781,30 @@ int dp_vs_service_init(void)
     msg_type.prio   = MSG_PRIO_NORM;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = deldest_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_SVC_SET_ADDACL;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = addacl_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_SVC_SET_DELACL;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = delacl_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
          RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
