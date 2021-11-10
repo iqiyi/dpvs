@@ -30,6 +30,7 @@
 #include "ipvs/sched.h"
 #include "conf/match.h"
 #include "conf/service.h"
+#include "ipset/ipset.h"
 
 #define RTE_LOGTYPE_SERVICE             RTE_LOGTYPE_USER3
 
@@ -43,6 +44,15 @@
 #define DP_VS_SVC_F_SIP_HASH            IP_VS_SVC_F_SIP_HASH
 #define DP_VS_SVC_F_QID_HASH            IP_VS_SVC_F_QID_HASH
 #define DP_VS_SVC_F_MATCH               IP_VS_SVC_F_MATCH
+
+struct dp_vs_acl_rule {
+    struct list_head list;
+
+    int type;
+    int direction;
+    unsigned priority;
+    struct ipset *set;
+};
 
 /* virtual service */
 struct dp_vs_service {
@@ -87,6 +97,10 @@ struct dp_vs_service {
     uint32_t            num_laddrs;
 
     /* ... flags, timer ... */
+
+    /* ACL rules */
+    struct list_head    acl_list;
+    uint8_t             num_rules;
 } __rte_cache_aligned;
 
 

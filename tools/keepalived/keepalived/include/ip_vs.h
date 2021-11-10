@@ -72,7 +72,9 @@
 #define IP_VS_SO_SET_DELTUNNEL          (IP_VS_BASE_CTL+21)
 #define IP_VS_SO_SET_ADDWHTLST          (IP_VS_BASE_CTL+22)
 #define IP_VS_SO_SET_DELWHTLST          (IP_VS_BASE_CTL+23)
-#define IP_VS_SO_SET_MAX                IP_VS_SO_SET_DELWHTLST
+#define IP_VS_SO_SET_ADDACL             (IP_VS_BASE_CTL+24)
+#define IP_VS_SO_SET_DELACL             (IP_VS_BASE_CTL+25)
+#define IP_VS_SO_SET_MAX                IP_VS_SO_SET_DELACL
 
 #define IP_VS_SO_GET_VERSION            IP_VS_BASE_CTL
 #define IP_VS_SO_GET_INFO               (IP_VS_BASE_CTL+1)
@@ -109,6 +111,12 @@ struct ip_vs_service_user {
     char        drange[256];
     char        iifname[IFNAMSIZ];
     char        oifname[IFNAMSIZ];
+
+    /* ACL rule */
+    char        setname[32];
+    int         type;           /* black -1 | white 1 */
+    int         direction;
+    unsigned    priority;
 };
 
 struct ip_vs_dest_user {
@@ -199,6 +207,7 @@ struct ip_vs_service_entry {
     /* number of real servers */
     unsigned int        num_dests;
     unsigned int        num_laddrs;
+    unsigned int        num_rules;
     unsigned int        bps;
     unsigned int        limit_proportion;
 
@@ -302,6 +311,13 @@ struct ip_vs_dest_entry_app {
     union nf_inet_addr      nf_addr;
 };
 
+struct ip_vs_acl_entry_app {
+    char setname[32];
+    int type;
+    int direction;
+    unsigned priority;
+};
+
 struct ip_vs_get_dests_app {
     struct {    // Can we avoid this duplication of definition?
     /* which service: user fills in these */
@@ -334,6 +350,14 @@ struct ip_vs_get_services_app {
     /* service table */
     struct ip_vs_service_entry_app entrytable[0];
     }               user;
+};
+
+struct ip_vs_get_acls_app {
+    struct {
+        unsigned int num_rules;
+
+        struct ip_vs_acl_entry_app entrytable[0];
+    };
 };
 
 /* Make sure we don't have an inconsistent definition */

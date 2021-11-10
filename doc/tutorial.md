@@ -22,6 +22,7 @@ DPVS Tutorial
 * [UDP Option of Address (UOA)](#uoa)
 * [Launch DPVS in Virtual Machine (Ubuntu)](#Ubuntu16.04)
 * [Traffic Control(TC)](#tc)
+* [IPset based ACL](#acl)
 * [Debug DPVS](#debug)
   - [Debug with Log](#debug-with-log)
   - [Packet Capture and Tcpdump](#packet-capture)
@@ -1190,6 +1191,84 @@ worker_defs {
 # Traffic Control(TC)
 
 Please refer to doc [tc.md](tc.md).
+
+<a id='acl'/>
+
+# IPset based ACL
+An access control list (ACL) is a list of access control entries (ACE). Each ACE in an ACL identifies a trustee and specifies the access rights allowed or denied for that trustee. DPVS implements an ACL mechanism based on [IPset module](IPset.md). <br>
+Each service contains an ACL rule list where you can add rules. All rules should follow the **PATTERN** of `set=NAME,type={black|white}[,prio={1-100},dir={ingress|egress}]` where `set` and `type` are **essential**. Then you can dynamically change the ACL by adding/deleting entries in the set. For a 'black-type' rule, entries in the set will not be able to establish a DPVS conn. And if a packet is not contained in any 'white-type' rule, it will also be dropped.<br>
+
+![fnat-two-arm](./pics/fnat-two-arm.png)
+## use ipvsadm
+
+Based on the [Simple Full-NAT (two-arm)](#simple-fnat) example, the following commands demonstrate how to add a blacklist and a whitelist to the service using `ipvsadm`:
+```
+$ dpip ipset add s1 hash:ip
+$ dpip ipset add s2 hash:net
+$ ipvsadm -K -t 10.0.0.100/32 -3 set=s1,type=black,prio=100,dir=ingress
+$ ipvsadm -K -t 10.0.0.100/32 -3 set=s2,type=white,prio=99,dir=ingress
+```
+Now if we check the rules attached to the service:
+```
+$ ipvsadm -Tn -t 10.0.0.100/32 --verbose
+Prot LocalAddress:Port
+TCP  10.0.0.100:80
+  Prio  SetName                         Type            Direction
+  100   s1                              blacklist       ingress
+        Members:
+
+  99    s2                              whitelist       ingress
+        Members:
+```
+We can find that there is no element in the whitelist. So any request to the VIP will fail at DPVS. Let's add the client subnet to the whitelist:
+```
+$ dpip ipset add s2 10.0.0.0/8
+```
+Then request from the subnet 10.0.0.0/8 will succeed. But if you add the client IP to the blacklist, the request will fail again:
+```
+$ dpip ipset add s1 10.0.0.48
+[client ~] $ curl 10.0.0.100
+curl: (7) Failed connect to 10.0.0.100:80; Connection timed out
+```
+The entire operation of ACL rules by ipvsadm is as follows:
+``` 
+# add a rule
+$ ipvsadm -K -t/u/q $SERVICE -3 $PATTERN
+# delete a rule
+$ ipvsadm -N -t/u/q $SERVICE -3 set=$SETNAME
+# list the rules of a service
+ipvsadm -Tn -t/u/q $SERVICE (--verbose to show the set members)
+# list ACL rules of all services
+$ ipvsadm -Tn (--verbose)
+```
+There is no limitation on the type of IPset. So you can choose any type on demand. There are 9 types supported by now: `bitmap:ip`, `bitmap:ip,mac`, `bitmap:port`, `hash:ip`, `hash:net`, `hash:ip,port`, `hash:ip,port,ip`, `hash:net,iface` and `hash:net,net`. You can also develop a new type according to the [develop guide](IPset.md).
+
+## use keepalived
+
+Currently, you need to create the needed IPset first, then reload `keepalived`. The example configuration is as follows:
+```
+acl_rule_group acl_g1 {
+    #PATTERN [setname type priority direction]
+    s1 black 100 ingress
+    s2 white 99 ingress
+}
+
+virtual_server 10.0.0.100 80 {
+    delay_loop 6
+    lb_algo rr
+    lb_kind FNAT
+    protocol TCP
+
+    laddr_group_name laddr_g1
+    acl_group_name acl_g1
+    real_server 192.168.100.2 80 {
+        weight 100
+    }
+    real_server 192.168.100.3 80 {
+        weight 100
+    }
+}
+```
 
 <a id='debug'/>
 

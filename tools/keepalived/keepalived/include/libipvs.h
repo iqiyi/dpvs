@@ -71,6 +71,7 @@ typedef struct ip_vs_timeout_user	ipvs_timeout_t;
 typedef struct ip_vs_daemon_app		ipvs_daemon_t;
 typedef struct ip_vs_service_entry_app	ipvs_service_entry_t;
 typedef struct ip_vs_dest_entry_app	ipvs_dest_entry_t;
+typedef struct ip_vs_acl_entry_app      ipvs_acl_entry_t;
 typedef struct ip_vs_laddr_user 	ipvs_laddr_t;
 typedef struct ip_vs_blklst_user	ipvs_blklst_t;
 typedef struct ip_vs_whtlst_user	ipvs_whtlst_t;
@@ -131,6 +132,13 @@ extern int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
 extern int ipvs_add_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
 extern int ipvs_del_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
 
+/*for add/delte an ACL rule*/
+extern int ipvs_add_aclrule(ipvs_service_t *svc);
+extern int ipvs_del_aclrule(ipvs_service_t *svc);
+
+extern char *ipset_get_members(char *setname);
+extern int ipset_need_dir(char *setname);
+
 /*for add/delete a tunnel*/
 extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
 extern int ipvs_del_tunnel(ipvs_tunnel_t * tunnel_entry);
@@ -149,6 +157,9 @@ extern struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lco
 
 /* get an ipvs service entry */
 extern ipvs_service_entry_t *ipvs_get_service(struct ip_vs_service_app *hint, lcoreid_t cid);
+
+/* get the ACL rules of the specified service */
+extern struct ip_vs_get_acls_app *ipvs_get_acls(ipvs_service_t *svc);
 
 /* get ipvs timeout */
 extern ipvs_timeout_t *ipvs_get_timeout(void);

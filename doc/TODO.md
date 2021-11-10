@@ -10,9 +10,9 @@ DPVS TODO list
 * [x] Merge DPDK stable 18.11
 * [ ] Merge DPDK stable 20.11
 * [x] Service whitelist ACL
-* [ ] IPset Support
-  - [ ] SNAT ACL with IPset
-  - [ ] TC policing with IPset
+* [x] IPset Support
+  - [x] SNAT ACL with IPset
+  - [x] TC policing with IPset
 * [x] Refactor Keepalived (porting latest stable keepalived)
 * [ ] Keepalived stability test and optimization.
 * [x] Packet Capture and Tcpdump Support

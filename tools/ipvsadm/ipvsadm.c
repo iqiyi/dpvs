@@ -21,7 +21,7 @@
  *        Wensong Zhang       :   added the long options
  *        Wensong Zhang       :   added the hostname and portname input
  *        Wensong Zhang       :   added the hostname and portname output
- *        Lars Marowsky-Brée  :   added persistence granularity support
+ *        Lars Marowsky-Brï¿½e  :   added persistence granularity support
  *        Julian Anastasov    :   fixed the (null) print for unknown services
  *        Wensong Zhang       :   added the port_to_anyname function
  *        Horms               :   added option to read commands from stdin
@@ -147,7 +147,10 @@
 #define CMD_ADDWHTLST		(CMD_NONE+21)
 #define CMD_DELWHTLST		(CMD_NONE+22)
 #define CMD_GETWHTLST		(CMD_NONE+23)
-#define CMD_MAX			CMD_GETWHTLST
+#define CMD_ADDACL	        (CMD_NONE+24)
+#define CMD_DELACL              (CMD_NONE+25)
+#define CMD_GETACL		(CMD_NONE+26)
+#define CMD_MAX			CMD_GETACL
 #define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
 
 static const char* cmdnames[] = {
@@ -270,6 +273,9 @@ static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
     {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x' ,'x' ,'x', 'x', 'x', 'x'},
 };
 
+/* print verbose ACL info */
+static bool verbose = false;
+
 /* printing format flags */
 #define FMT_NONE		0x0000
 #define FMT_NUMERIC		0x0001
@@ -324,6 +330,7 @@ enum {
 	TAG_SOCKPAIR,
 	TAG_CPU,
 	TAG_CONN_EXPIRE_QUIESCENT,
+	TAG_VERBOSE,
 };
 
 /* various parsing helpers & parsing functions */
@@ -343,6 +350,7 @@ static int parse_timeout(char *buf, int min, int max);
 static unsigned int parse_fwmark(char *buf);
 static int parse_sockpair(char *buf, ipvs_sockpair_t *sockpair);
 static int parse_match_snat(const char *buf, ipvs_service_t *svc);
+static int parse_acl_rule(const char *buf, ipvs_service_t *svc);
 
 /* check the options based on the commands_v_options table */
 static void generic_opt_check(int command, unsigned int options);
@@ -371,6 +379,8 @@ static int list_all_blklsts(void);
 static void list_whtlsts_print_title(void);
 static int list_whtlst(int af, const union nf_inet_addr *addr, uint16_t port, uint16_t protocol);
 static int list_all_whtlsts(void);
+static int list_aclrules(unsigned int format, ipvs_service_t *svc);
+static int list_all_aclrules(unsigned int format);
 
 static int process_options(int argc, char **argv, int reading_stdin);
 
@@ -439,6 +449,9 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "add-whtlst", 'O', POPT_ARG_NONE, NULL, 'O', NULL, NULL },
 		{ "del-whtlst", 'Y', POPT_ARG_NONE, NULL, 'Y', NULL, NULL },
 		{ "get-whtlst", 'W', POPT_ARG_NONE, NULL, 'W', NULL, NULL },
+		{ "add-acl", 'K', POPT_ARG_NONE, NULL, 'K', NULL, NULL },
+		{ "del-acl", 'N', POPT_ARG_NONE, NULL,'N', NULL, NULL },
+		{ "get-acl", 'T', POPT_ARG_NONE, NULL, 'T', NULL, NULL},
 		{ "tcp-service", 't', POPT_ARG_STRING, &optarg, 't',
 		  NULL, NULL },
 		{ "udp-service", 'u', POPT_ARG_STRING, &optarg, 'u',
@@ -492,12 +505,14 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "laddr", 'z', POPT_ARG_STRING, &optarg, 'z', NULL, NULL },
 		{ "blklst", 'k', POPT_ARG_STRING, &optarg, 'k', NULL, NULL },
 		{ "whtlst", '2', POPT_ARG_STRING, &optarg, '2', NULL, NULL },
+		{ "acl-entry", '3', POPT_ARG_STRING, &optarg, '3', NULL, NULL},
 		{ "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
 		{ "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
 		{ "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
 		{ "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
 		{ "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
 		{ "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
+		{ "verbose", '\0', POPT_ARG_NONE, NULL, TAG_VERBOSE, NULL, NULL},
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
 
@@ -593,6 +608,15 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		break;
 	case 'W':
 		set_command(&ce->cmd, CMD_GETWHTLST);
+		break;
+	case 'K':
+		set_command(&ce->cmd, CMD_ADDACL);
+		break;
+	case 'N':
+		set_command(&ce->cmd, CMD_DELACL);
+		break;
+	case 'T':
+		set_command(&ce->cmd, CMD_GETACL);
 		break;
 	default:
 		tryhelp_exit(argv[0], -1);
@@ -823,7 +847,12 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			ce->whtlst.addr = nsvc.nf_addr;
 			ce->whtlst.__addr_v4 = nsvc.nf_addr.ip;
 			break;
-
+			}
+		case '3':
+			{
+			if (parse_acl_rule(optarg, &ce->svc) != 0)
+				fail(2, "illegal ACL rule specified");
+			break;
 			}
 		case 'F':
 			set_option(options, OPT_IFNAME);
@@ -872,6 +901,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			{
 			set_option(options, OPT_EXPIRE_QUIESCENT_CONN);
 			ce->svc.user.flags = ce->svc.user.flags | IP_VS_CONN_F_EXPIRE_QUIESCENT;
+			break;
+			}
+		case TAG_VERBOSE:
+			{
+			verbose = true;
 			break;
 			}
 		default:
@@ -1084,11 +1118,11 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		break;
 
 	case CMD_ADDBLKLST:
-		result = ipvs_add_blklst(&ce.svc , &ce.blklst);
+		result = ipvs_add_blklst(&ce.svc, &ce.blklst);
 		break;
 
 	case CMD_DELBLKLST:
-		result = ipvs_del_blklst(&ce.svc , &ce.blklst);
+		result = ipvs_del_blklst(&ce.svc, &ce.blklst);
 		break;
 
 	case CMD_GETBLKLST:
@@ -1101,11 +1135,11 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		break;
 
 	case CMD_ADDWHTLST:
-		result = ipvs_add_whtlst(&ce.svc , &ce.whtlst);
+		result = ipvs_add_whtlst(&ce.svc, &ce.whtlst);
 		break;
 
 	case CMD_DELWHTLST:
-		result = ipvs_del_whtlst(&ce.svc , &ce.whtlst);
+		result = ipvs_del_whtlst(&ce.svc, &ce.whtlst);
 		break;
 
 	case CMD_GETWHTLST:
@@ -1115,6 +1149,19 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		}
 		else
 			result = list_all_whtlsts();
+		break;
+	case CMD_ADDACL:
+		result = ipvs_add_aclrule(&ce.svc);
+		break;
+	case CMD_DELACL:
+		result = ipvs_del_aclrule(&ce.svc);
+		break;
+	case CMD_GETACL:
+		if(options & OPT_SERVICE) {
+			result = list_aclrules(format, &ce.svc);
+		}
+		else
+			result = list_all_aclrules(format);
 		break;
 	}
 	if (result)
@@ -1431,6 +1478,60 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
     return 0;
 }
 
+/*
+ * comma separated parameters list, all fields is used to describe an ACL rule.
+ *
+ *   set        := IPset name
+ *   type       := black/white
+ *   prio       := [0-100]
+ *   dir        := ingress/egress/unspec
+ *
+ * example:
+ *
+ *   set=foo,type=black,prio=100,dir=ingress
+ */
+static int parse_acl_rule(const char *buf, ipvs_service_t *svc)
+{
+	int r;
+	char *start, *arg, *sp, params[128], key[8], val[64];
+
+    	snprintf(params, sizeof(params), "%s", buf);
+
+	for (start = params; (arg = strtok_r(start, ",", &sp)); start = NULL) {
+		r = sscanf(arg, "%7[^=]=%63s", key, val);
+        	if (r != 2) {
+            		if (sscanf(arg, "%7[^=]=", key) != 1)
+                		return -1;
+            		val[0] = '\0';
+        	}
+
+		if (!strcmp(key, "set")) {
+			if (strlen(val) == 0)
+				fail(2, "The name of IPset cannot be empty");
+			snprintf(svc->user.setname, 32, "%s", val);
+		} else if (!strcmp(key, "type")) {
+			if (!strcmp(val, "black"))
+				svc->user.type = -1;
+			else if (!strcmp(val, "white"))
+				svc->user.type = 1;
+		} else if (!strcmp(key, "prio")) {
+			svc->user.priority = atoi(val);
+		} else if (!strcmp(key, "dir")) {
+			if (!strcmp(val, "ingress"))
+				svc->user.direction = 1;
+			if (!strcmp(val, "egress"))
+				svc->user.direction = -1;
+		}
+	}
+	if (svc->user.type == 0)
+		fail(2, "You MUST specifiy the type of ACL rule");
+	if (svc->user.direction == 0)
+		if (ipset_need_dir(svc->user.setname) == 1)
+			fail(2, "You MUST specify the direction for this IPset type");
+
+	return 0;
+}
+
 static void
 generic_opt_check(int command, unsigned int options)
 {
@@ -1520,6 +1621,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  %s -G -t|u|q|f service-address \n"
 		"  %s -U|V -t|u|q|f service-address -k blacklist-address\n"
 		"  %s -O|Y -t|u|q|f service-address -2 whitelist-address\n"
+		"  %s -K|N -t|u|q|f service-address -3 ACL-rule\n"
 		"  %s -a|e -t|u|q|f service-address -r server-address [options]\n"
 		"  %s -d -t|u|q|f service-address -r server-address\n"
 		"  %s -L|l [options]\n"
@@ -1529,7 +1631,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  %s --stop-daemon state\n"
 		"  %s -h\n\n",
 		program, program, program,
-		program, program, program, program,
+		program, program, program, program, program,
 		program, program, program, program, program,
 		program, program, program, program, program);
 
@@ -1547,9 +1649,12 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --add-blklst      -U        add blacklist address\n"
 		"  --del-blklst      -V        del blacklist address\n"
 		"  --get-blklst      -B        get blacklist address\n"
-        "  --add-whtlst      -O        add whitelist address\n"
-        "  --del-whtlst      -Y        del whitelist address\n"
-        "  --get-whtlst      -W        get whitelist address\n"
+		"  --add-whtlst      -O        add whitelist address\n"
+		"  --del-whtlst      -Y        del whitelist address\n"
+		"  --get-whtlst      -W        get whitelist address\n"
+		"  --add-acl         -K        add ACL rule\n"
+		"  --del-acl         -N        del ACL rule\n"
+		"  --get-acl         -T        get ACL rules\n"
 		"  --save            -S        save rules to stdout\n"
 		"  --add-server      -a        add real server with options\n"
 		"  --edit-server     -e        edit real server with options\n"
@@ -1605,7 +1710,9 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --match        -H MATCH             select service by MATCH 'af,proto,srange,drange,iif,oif', af should be defined if no range defined\n"
 		"  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
 		"  --cpu            cid                choose cid to show\n"
-		"  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n",
+		"  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
+		"  --acl-entry    -3                   ACL entry is in pattern 'set,type,prio,dir'\n"
+		"  --verbose                           print the IPset members of ACL rules\n",
 		DEF_SCHED);
 
 	exit(exit_status);
@@ -2340,6 +2447,137 @@ static int list_all_whtlsts(void)
 		list_whtlst(get->user.entrytable[i].af, &get->user.entrytable[i].nf_addr,
 				get->user.entrytable[i].user.port, get->user.entrytable[i].user.protocol);
 	free(get);
+	return 0;
+}
+
+static int list_aclrules(unsigned int format, ipvs_service_t *svc)
+{
+	int i;
+	char svc_name[1024], *dir, *members;
+	struct ip_vs_get_acls_app *get;
+
+	get = ipvs_get_acls(svc);	
+	if (get == NULL)
+		return EDPVS_NOTEXIST;
+	
+	int left = sizeof(svc_name);
+	svc_name[0] = '\0';
+
+	if (svc->user.__addr_v4 || svc->user.port) {
+		char *vname, *proto;
+
+		if (!(vname = addrport_to_anyname(svc->af, &svc->nf_addr, ntohs(svc->user.port),
+						  svc->user.protocol, format)))
+			fail(2, "addrport_to_anyname: %s", strerror(errno));
+
+		if (svc->user.protocol == IPPROTO_TCP)
+			proto = "TCP";
+		else if (svc->user.protocol == IPPROTO_UDP)
+			proto = "UDP";
+		else if (svc->user.protocol == IPPROTO_ICMP)
+			proto = "ICMP";
+		else
+			proto = "ICMPv6";
+
+		sprintf(svc_name, "%s  %s", proto, vname);
+		if (svc->af != AF_INET6)
+			svc_name[33] = '\0';
+
+		free(vname);
+	}
+	else {
+		char *proto;
+
+		if (svc->user.protocol == IPPROTO_TCP)
+			proto = "tcp";
+		else if (svc->user.protocol == IPPROTO_UDP)
+			proto = "udp";
+		else if (svc->user.protocol == IPPROTO_ICMP)
+			proto = "icmp";
+		else
+			proto = "icmpv6";
+		left -= snprintf(svc_name + strlen(svc_name), left,
+			"MATCH %s", proto);
+
+		if (strcmp(svc->user.srange, "[::-::]:0-0") != 0 &&
+	                          strcmp(svc->user.srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+			left -= snprintf(svc_name + strlen(svc_name), left,
+			",from=%s", svc->user.srange);
+
+		if (strcmp(svc->user.drange, "[::-::]:0-0") != 0 &&
+	                          strcmp(svc->user.drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+			left -= snprintf(svc_name + strlen(svc_name), left,
+			",to=%s", svc->user.drange);
+
+		if (strlen(svc->user.iifname))
+			left -= snprintf(svc_name + strlen(svc_name), left,
+			",iif=%s", svc->user.iifname);
+
+		if (strlen(svc->user.oifname))
+			left -= snprintf(svc_name + strlen(svc_name), left,
+			",oif=%s", svc->user.oifname);
+	}
+
+	printf("%s\n", svc_name);
+	printf("  Prio\tSetName\t\t\t\tType\t\tDirection\n");
+	for (i = 0; i < get->num_rules; i++) {
+		if(get->entrytable[i].direction == 1)
+			dir = "ingress";
+		else if(get->entrytable[i].direction == -1)
+			dir = "egress";
+		else
+			dir = "unspec";
+		printf("  %d\t%-32s%s\t%s\n", 
+			get->entrytable[i].priority, 
+			get->entrytable[i].setname, 
+			get->entrytable[i].type == -1? "blacklist" : "whitelist", dir);
+		if (verbose) {
+			members = ipset_get_members(get->entrytable[i].setname);
+			if (members != NULL) {
+				printf("\tMembers:\n");
+				printf("%s", members);	
+				free(members);
+			} else
+				fail(2, "error during fetching IPset members");
+		}
+	}
+
+	return 0;
+}
+
+static int list_all_aclrules(unsigned int format)
+{
+	int i;
+	ipvs_service_t svc;
+	ipvs_service_entry_t *entry;
+	struct ip_vs_get_services_app *get;
+
+	if (!(get = ipvs_get_services(0))) {
+		fprintf(stderr, "%s\n", ipvs_strerror(errno));
+		exit(1);
+	};
+
+	printf("Prot LocalAddress:Port\n");
+
+	for (i = 0; i < get->user.num_services; i++) {
+		entry = &get->user.entrytable[i];
+
+		if (entry->user.num_rules == 0)
+			continue;
+
+		svc.af = entry->af;
+		svc.nf_addr = entry->nf_addr;
+		svc.user.fwmark = entry->user.fwmark;
+		svc.user.port = entry->user.port;
+		svc.user.protocol = entry->user.protocol;
+		strcpy(svc.user.srange, entry->user.srange);
+		strcpy(svc.user.drange, entry->user.drange);
+		strcpy(svc.user.iifname, entry->user.iifname);
+		strcpy(svc.user.oifname, entry->user.oifname);
+
+		list_aclrules(format, &svc);
+	}
+
 	return 0;
 }
 
