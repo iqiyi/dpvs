@@ -201,6 +201,7 @@ static int
 port_arg_parse(char *arg, struct inet_addr_range *range)
 {
     char *proto = arg, *sep, *port1, *port2;
+    int portval;
 
     if (!strncmp(proto, "tcp", 3))
         param.proto = IPPROTO_TCP;
@@ -219,18 +220,19 @@ port_arg_parse(char *arg, struct inet_addr_range *range)
     }
 
     port1 = arg;
-    range->max_port = range->min_port = atoi(port1);
-    if (range->min_port > 65535)
+    portval = atoi(port1);
+    if (portval < 0 || portval > 65535)
         return EDPVS_INVAL;
+    range->max_port = range->min_port = portval;
 
     sep = strchr(arg, '-');
     if (sep) {
         *sep++ = '\0';
         port2 = sep;
-        range->max_port = atoi(port2);
-        if (range->max_port < range->min_port ||
-                range->max_port > 65535)
+        portval = atoi(port2);
+        if (portval < range->min_port || portval > 65535)
             return EDPVS_INVAL;
+        range->max_port = portval;
     }
 
     return EDPVS_OK;
@@ -680,7 +682,7 @@ hash_ip_check(void)
 
     if (param.option.family == AF_INET6) {
         if (param.cidr || param.cidr2) {
-            fprintf(stderr, "hash:ip,port doesn't support ipv6 cidr\n");
+            fprintf(stderr, "ipv6 cidr is not supported by the set type\n");
             return EDPVS_INVAL;
         }
     } else if (param.option.family == AF_INET) {
@@ -697,7 +699,7 @@ hash_ip_check(void)
             }
             if (ntohl(param.range.max_addr.in.s_addr) -
                     ntohl(param.range.min_addr.in.s_addr) > 65536) {
-                fprintf(stderr, "ipv6 range shouldn't be greater than 65536\n");
+                fprintf(stderr, "ip range shouldn't be greater than 65536\n");
                 return EDPVS_INVAL;
             }
         }
@@ -709,7 +711,7 @@ hash_ip_check(void)
             }
             if (ntohl(param.range2.max_addr.in.s_addr) -
                     ntohl(param.range2.min_addr.in.s_addr) > 65536) {
-                fprintf(stderr, "ipv6 range shouldn't be greater than 65536\n");
+                fprintf(stderr, "ip range shouldn't be greater than 65536\n");
                 return EDPVS_INVAL;
             }
         }
