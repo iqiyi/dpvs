@@ -22,6 +22,13 @@
 #include "ipset.h"
 #include "linux_ipv6.h"
 
+/* return value for hash.do_compare */
+enum HASH_COMPARE_RESULT {
+    COMPARE_INEQUAL = 0,
+    COMPARE_EQUAL_ACCEPT,
+    COMPARE_EQUAL_REJECT,
+};
+
 struct hash_type {
     struct list_head *htable;   /* the hash table */
     uint32_t hashsize;          /* size of the hash table */

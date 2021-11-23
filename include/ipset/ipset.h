@@ -85,7 +85,7 @@ struct ipset_type_variant {
         struct {
             /* Type that contains 'net' element must implement */
             void (*do_netmask)(void *elem, uint8_t cidr, bool inner);
-            bool (*do_compare)(const void *adt_elem, const void *set_elem);
+            int (*do_compare)(const void *adt_elem, const void *set_elem);
             void (*do_list)(struct ipset_member *members, void *elem, bool comment);
             uint32_t (*do_hash)(void *data, int len, uint32_t mask);
         } hash;

@@ -96,11 +96,13 @@ hash_add(struct ipset *set, void *value, uint16_t flag)
     key = do(hash, value, set->hash_len, htype->mask);
     head = &htype->htable[key];
     list_for_each_entry(hnode, head, list) {
-        if (do(compare, value, hnode->elem)) {
+        if (do(compare, value, hnode->elem) != COMPARE_INEQUAL) {
             if (!flag & IPSET_F_FORCE)
                 return EDPVS_EXIST;
-            else
-                goto overwrite_extension;
+            //overwrite extension
+            rte_memcpy(hnode->elem + set->hash_len,
+                    value + set->hash_len, set->dsize - set->hash_len);
+            return EDPVS_OK;
         }
     }
 
@@ -123,38 +125,35 @@ hash_add(struct ipset *set, void *value, uint16_t flag)
 
     /* update cidr map */
     e = (elem_t *)value;
-    htype->cidr_map[e->cidr][0]++;
+    if (set->net_count > 0)
+        htype->cidr_map[e->cidr][0]++;
     if (set->net_count == 2)
         htype->cidr_map[e->cidr2][1]++;
 
     return EDPVS_OK;
-
-    overwrite_extension:
-        rte_memcpy(hnode->elem + set->hash_len, 
-            value + set->hash_len, set->dsize - set->hash_len);
-        return EDPVS_OK;
 }
 
 static int
 hash_del(struct ipset *set, void *value, uint16_t flag)
 {
     struct hash_type *htype = set->data;
-    struct hash_entry *hnode;
+    struct hash_entry *hnode, *next;
     struct list_head *head;
     uint32_t key;
     elem_t *e;
 
     key = do(hash, value, set->hash_len, htype->mask);
     head = &htype->htable[key];
-    list_for_each_entry(hnode, head, list) {
-        if (do(compare, value, hnode->elem)) {
-            __list_del_entry(&hnode->list);
+    list_for_each_entry_safe(hnode, next, head, list) {
+        if (do(compare, value, hnode->elem) != COMPARE_INEQUAL) {
+            list_del(&hnode->list);
             rte_mempool_put(this_hash_cache, hnode);
             set->elements--;
 
             /* update cidr map */
             e = (elem_t *)value;
-            htype->cidr_map[e->cidr][0]--;
+            if (set->net_count > 0)
+                htype->cidr_map[e->cidr][0]--;
             if (set->net_count == 2)
                 htype->cidr_map[e->cidr2][1]--;
 
@@ -167,6 +166,7 @@ hash_del(struct ipset *set, void *value, uint16_t flag)
 static inline int
 do_test(struct ipset *set, struct hash_type *htype, void *elem)
 {
+    int res;
     uint32_t key;
     struct hash_entry *hnode;
     struct list_head *head ;
@@ -174,16 +174,18 @@ do_test(struct ipset *set, struct hash_type *htype, void *elem)
     key = do(hash, elem, set->hash_len, htype->mask);
     head = &htype->htable[key];
     list_for_each_entry(hnode, head, list) {
-        if (do(compare, elem, hnode->elem))
-            return 1;
+        res = do(compare, elem, hnode->elem);
+        if (res == COMPARE_EQUAL_ACCEPT ||
+                res == COMPARE_EQUAL_REJECT)
+            return res;
     }
-    return 0;
+    return COMPARE_INEQUAL;
 }
 
 static int
 test_cidrs(struct ipset *set, struct hash_type *htype, void *value)
 {
-    int i, j;
+    int i, j, res;
     uint8_t host_mask = set->family == AF_INET? 32 : 128;
 
     if (set->net_count == 1) {
@@ -192,12 +194,18 @@ test_cidrs(struct ipset *set, struct hash_type *htype, void *value)
                 continue;
             do(netmask, value, i, false);
 
-            if (do_test(set, htype, value))
+            res = do_test(set, htype, value);
+            if (res == COMPARE_EQUAL_ACCEPT)
                 return 1;
+            if (res == COMPARE_EQUAL_REJECT) // nomatch
+                return 0;
         }
         return 0;
     } else {
+        elem_t *e = (elem_t *)value;
+        union inet_addr ip2_save = e->ip2;
         for (i = host_mask; i >= 0; i--) {
+            e->ip2 = ip2_save;
             if (htype->cidr_map[i][0] <= 0)
                 continue;
             do(netmask, value, i, false);
@@ -206,8 +214,11 @@ test_cidrs(struct ipset *set, struct hash_type *htype, void *value)
                     continue;
                 do(netmask, value, j, true);
 
-                if (do_test(set, htype, value))
+                res = do_test(set, htype, value);
+                if (res == COMPARE_EQUAL_ACCEPT)
                     return 1;
+                if (res == COMPARE_EQUAL_REJECT) // nomatch
+                    return 0;
             }
         }
         return 0;
@@ -228,7 +239,10 @@ hash_test(struct ipset *set, void *value, uint16_t flag)
         return test_cidrs(set, htype, value);
     }
 
-    return do_test(set, htype, value);
+    if (do_test(set, htype, value) == COMPARE_EQUAL_ACCEPT)
+        return 1;
+
+    return 0;
 }
 
 ipset_adtfn hash_adtfn[IPSET_ADT_MAX] = { hash_add, hash_del, hash_test };
@@ -247,6 +261,9 @@ hash_flush(struct ipset *set)
             set->elements--;
         }
     }
+
+    assert(set->elements == 0);
+    memset(htype->cidr_map, 0, sizeof(htype->cidr_map));
 }
 
 void
@@ -292,11 +309,11 @@ hash_create(struct ipset *set, struct ipset_param *param)
     size_t size;
     uint32_t hashsize;
     struct hash_type *htype;
-    struct ipset_create_option *opt = &param->option;
+    struct ipset_option *opt = &param->option;
 
-    if (opt->hashsize) {
-        is_power2(opt->hashsize, 0, &opt->hashsize);
-        hashsize = opt->hashsize;
+    if (opt->create.hashsize) {
+        is_power2(opt->create.hashsize, 0, &opt->create.hashsize);
+        hashsize = opt->create.hashsize;
     } else {
         hashsize = DEF_HASHSIZE;
     }
@@ -314,12 +331,12 @@ hash_create(struct ipset *set, struct ipset_param *param)
     htype->hashsize = hashsize;
     htype->mask = htype->hashsize - 1;
 
-    if (opt->maxelem)
-        htype->maxelem = opt->maxelem;
+    if (opt->create.maxelem)
+        htype->maxelem = opt->create.maxelem;
     else
         htype->maxelem = DEF_MAXELEM;
 
-    if (opt->comment)
+    if (opt->create.comment)
         set->comment = true;
 
     if (opt->family)

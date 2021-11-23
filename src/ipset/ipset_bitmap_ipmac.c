@@ -32,7 +32,7 @@ struct bitmap_ipmac {
 };
 
 typedef struct bitmap_ipmac_elem {
-    uint16_t id;
+    uint32_t id;
     uint8_t *mac;
 } elem_t;
 
@@ -40,6 +40,14 @@ typedef struct bitmap_ipmac_ext {
     uint8_t mac[6];
     char comment[IPSET_MAXCOMLEN];
 } ext_t;
+
+static inline int
+is_zero_mac_addr(const uint8_t *mac)
+{
+    const uint16_t *w = (const uint16_t *)mac;
+
+    return !(w[0] | w[1] | w[2]);
+}
 
 static uint32_t
 ip_to_id(struct bitmap_ipmac *m, uint32_t ip)
@@ -64,6 +72,8 @@ bitmap_ipmac_do_test(struct bitmap_elem *elem, struct bitmap_map *map, size_t ds
 
     ext = get_elem(map->extensions, e->id, dsize);
 
+    if (is_zero_mac_addr(ext->mac) || is_zero_mac_addr(e->mac))
+        return 1;
     return !memcmp(ext->mac, e->mac, 6)? 1 : 0;
 }
 
@@ -132,16 +142,19 @@ bitmap_ipmac_test(struct ipset *set, struct ipset_test_param *p)
 {
     elem_t e;
     struct bitmap_ipmac *map = set->data;
+    struct ether_hdr *ehdr;
 
     memset(&e, 0, sizeof(e));
 
-    if (p->direction == 1)
+    ehdr = (struct ether_hdr *)rte_pktmbuf_prepend(p->mbuf, sizeof(struct ether_hdr));
+    if (p->direction == 1) {
         e.id = ip_to_id(map, ntohs(p->iph->saddr.in.s_addr));
-    else
+        e.mac = ehdr->s_addr.addr_bytes;
+    } else {
         e.id = ip_to_id(map, ntohs(p->iph->daddr.in.s_addr));
-
-    /* only available for set used as tc cls */
-    e.mac = p->mbuf->userdata;
+        e.mac = ehdr->d_addr.addr_bytes;
+    }
+    rte_pktmbuf_adj(p->mbuf, sizeof(struct ether_hdr));
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }
@@ -172,7 +185,7 @@ bitmap_ipmac_create(struct ipset *set, struct ipset_param *param)
     }
 
     elements = last_ip - first_ip + 1;
-    set->comment = param->option.comment? true : false;
+    set->comment = param->option.create.comment? true : false;
     set->dsize = set->comment? sizeof(ext_t) : offsetof(ext_t, comment);
     set->variant = &bitmap_ipmac_variant;
 
