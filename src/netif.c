@@ -152,6 +152,10 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
  *       unregistered on cleanup stage
  */
 
+/* fast searching tables */
+lcoreid_t lcore2index[DPVS_MAX_LCORE+1];
+portid_t port2index[DPVS_MAX_LCORE][NETIF_MAX_PORTS];
+
 #define NETIF_CTRL_BUFFER_LEN     4096
 
 /* function declarations */
@@ -1192,6 +1196,7 @@ static void config_lcores(struct list_head *worker_list)
         else
             lcore_conf[id].type = LCORE_ROLE_IDLE;
 
+        lcore2index[worker_min->cpu_id] = id;
         list_for_each_entry_reverse(queue, &worker_min->port_list, queue_list_node) {
             port = netif_port_get_by_name(queue->port_name);
             if (port)
@@ -1234,10 +1239,6 @@ static void config_lcores(struct list_head *worker_list)
         cpu_left--;
     }
 }
-
-/* fast searching tables */
-lcoreid_t lcore2index[DPVS_MAX_LCORE+1];
-portid_t port2index[DPVS_MAX_LCORE][NETIF_MAX_PORTS];
 
 static void lcore_index_init(void)
 {
