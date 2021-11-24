@@ -73,6 +73,8 @@ extern struct dp_vs_proto dp_vs_proto_udp;
 extern struct dp_vs_proto dp_vs_proto_tcp;
 extern struct dp_vs_proto dp_vs_proto_icmp;
 extern struct dp_vs_proto dp_vs_proto_icmp6;
+extern struct dp_vs_proto dp_vs_proto_esp;
+extern struct dp_vs_proto dp_vs_proto_ah;
 
 int dp_vs_proto_init(void)
 {
@@ -98,6 +100,16 @@ int dp_vs_proto_init(void)
         goto icmp_error;
     }
 
+	if ((err = proto_register(&dp_vs_proto_esp)) != EDPVS_OK) {
+        RTE_LOG(ERR, IPVS, "%s: fail to register ESP\n", __func__);
+        goto esp_error;
+    }
+
+	if ((err = proto_register(&dp_vs_proto_ah)) != EDPVS_OK) {
+        RTE_LOG(ERR, IPVS, "%s: fail to register AH\n", __func__);
+        goto ah_error;
+    }
+
     return EDPVS_OK;
 
 icmp_error:
@@ -106,6 +118,10 @@ icmp6_error:
     proto_unregister(&dp_vs_proto_tcp);
 tcp_error:
     proto_unregister(&dp_vs_proto_udp);
+esp_error:
+    proto_unregister(&dp_vs_proto_esp);
+ah_error:
+    proto_unregister(&dp_vs_proto_ah);	
     return err;
 }
 
@@ -122,6 +138,12 @@ int dp_vs_proto_term(void)
 
     if (proto_unregister(&dp_vs_proto_udp) != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "%s: fail to unregister UDP\n", __func__);
+
+	if (proto_unregister(&dp_vs_proto_ah) != EDPVS_OK)
+        RTE_LOG(ERR, IPVS, "%s: fail to unregister AH\n", __func__);
+
+	if (proto_unregister(&dp_vs_proto_esp) != EDPVS_OK)
+        RTE_LOG(ERR, IPVS, "%s: fail to unregister ESP\n", __func__);
 
     return EDPVS_OK;
 }
