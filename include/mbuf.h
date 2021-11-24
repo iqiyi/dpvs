@@ -157,4 +157,45 @@ static inline void mbuf_userdata_reset(struct rte_mbuf *m)
 
 int mbuf_init(void);
 
+/*
+ * Return a pointer to L2 header, and set mbuf->l2_len.
+ * The start of data in the mbuf should be L2 data.
+ * It assumes that L2 header is in the first seg if the mbuf is not continuous.
+ * Supported protocols:
+ *   - IEEE 802.3, Ethernet
+ *   - IEEE 802.1Q, VLAN (tpid 0x8100)
+ * */
+void *mbuf_header_l2(struct rte_mbuf *mbuf);
+
+/*
+ * Return a pointer to L3 header, and set mbuf->l3_len.
+ * The start of data in the mbuf should be L2 data.
+ * It assumes that L3 header is in the first seg if the mbuf is not continuous.
+ * Supported protocols:
+ *   - IPv4
+ *   - IPv6
+ *   - ARP
+ * */
+void *mbuf_header_l3(struct rte_mbuf *mbuf);
+
+/*
+ * Return a pointer to L4 header.
+ * The start of data in the mbuf should be L2 data.
+ * It assumes that L4 header is in the first seg if the mbuf is not continuous.
+ * */
+void *mbuf_header_l4(struct rte_mbuf *mbuf);
+
+/*
+ * Return ether type (ETHER_TYPE_XXX) in the mbuf.
+ * The start of data in the mbuf should be L2 data,
+ * and vlan is ignored.
+ * */
+uint16_t mbuf_ether_type(struct rte_mbuf *mbuf);
+
+/*
+ * Return protocol type (IPPROTO_XX) in the mbuf.
+ * The start of data in the mbuf should be L2 data.
+ * */
+uint8_t mbuf_protocol(struct rte_mbuf *mbuf);
+
 #endif /* __DP_VS_MBUF_H__ */
