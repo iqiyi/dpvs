@@ -127,9 +127,7 @@ inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf
  * Return a pointer to L2 header, and set mbuf->l2_len.
  * The start of data in the mbuf should be L2 data.
  * It assumes that L2 header is in the first seg if the mbuf is not continuous.
- * Supported protocols:
- *   - IEEE 802.3, Ethernet
- *   - IEEE 802.1Q, VLAN (tpid 0x8100)
+ * Only support outer headers for tunnelling packets.
  * */
 void *mbuf_header_l2(struct rte_mbuf *mbuf);
 
@@ -137,17 +135,15 @@ void *mbuf_header_l2(struct rte_mbuf *mbuf);
  * Return a pointer to L3 header, and set mbuf->l3_len.
  * The start of data in the mbuf should be L2 data.
  * It assumes that L3 header is in the first seg if the mbuf is not continuous.
- * Supported protocols:
- *   - IPv4
- *   - IPv6
- *   - ARP
+ * Only support outer headers for tunnelling packets.
  * */
 void *mbuf_header_l3(struct rte_mbuf *mbuf);
 
 /*
- * Return a pointer to L4 header.
+ * Return a pointer to L4 header, and set mbuf->l4_len.
  * The start of data in the mbuf should be L2 data.
  * It assumes that L4 header is in the first seg if the mbuf is not continuous.
+ * Only support outer headers for tunnelling packets.
  * */
 void *mbuf_header_l4(struct rte_mbuf *mbuf);
 
@@ -155,12 +151,14 @@ void *mbuf_header_l4(struct rte_mbuf *mbuf);
  * Return ether type (ETHER_TYPE_XXX) in the mbuf.
  * The start of data in the mbuf should be L2 data,
  * and vlan is ignored.
+ * Only support outer headers for tunnelling packets.
  * */
 uint16_t mbuf_ether_type(struct rte_mbuf *mbuf);
 
 /*
  * Return protocol type (IPPROTO_XX) in the mbuf.
  * The start of data in the mbuf should be L2 data.
+ * Only support outer headers for tunnelling packets.
  * */
 uint8_t mbuf_protocol(struct rte_mbuf *mbuf);
 
