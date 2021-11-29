@@ -243,6 +243,17 @@ uint16_t mbuf_ether_type(struct rte_mbuf *mbuf)
     return ethtype;
 }
 
+int mbuf_address_family(struct rte_mbuf *mbuf)
+{
+    uint16_t etype = mbuf_ether_type(mbuf);
+
+    if (etype == ETHER_TYPE_IPv4)
+        return AF_INET;
+    if (etype == ETHER_TYPE_IPv6)
+        return AF_INET6;
+    return 0;  // AF_UNSPEC
+}
+
 uint8_t mbuf_protocol(struct rte_mbuf *mbuf)
 {
     // FIXME: The ether-type should be retrived from mbuf->packet_type
