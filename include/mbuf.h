@@ -156,6 +156,12 @@ void *mbuf_header_l4(struct rte_mbuf *mbuf);
 uint16_t mbuf_ether_type(struct rte_mbuf *mbuf);
 
 /*
+ * Return socket address family (AF_INET | AF_INET6) derived from ether type
+ * in the mbuf. The function is based on "mbuf_ether_type".
+ * */
+int mbuf_address_family(struct rte_mbuf *mbuf);
+
+/*
  * Return protocol type (IPPROTO_XX) in the mbuf.
  * The start of data in the mbuf should be L2 data.
  * Only support outer headers for tunnelling packets.
