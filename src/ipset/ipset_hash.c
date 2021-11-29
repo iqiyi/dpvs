@@ -336,14 +336,6 @@ hash_create(struct ipset *set, struct ipset_param *param)
     else
         htype->maxelem = DEF_MAXELEM;
 
-    if (opt->create.comment)
-        set->comment = true;
-
-    if (opt->family)
-        set->family = opt->family;
-    else
-        set->family = AF_INET;
-
     for (i = 0; i < htype->hashsize; i++)
         INIT_LIST_HEAD(&htype->htable[i]);
 

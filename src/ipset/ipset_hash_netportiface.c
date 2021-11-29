@@ -128,24 +128,42 @@ hash_netportiface_adt4(int op, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-hash_netportiface_test(struct ipset *set, struct ipset_test_param *p)
+hash_netportiface_test4(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
-    uint16_t *ports, _ports[2];
-    struct dp_vs_iphdr *iph = p->iph;
+    uint16_t proto;
+    struct ipv4_hdr *ip4hdr;
+    struct udp_hdr *l4hdr = NULL;
+
+    if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
+        return 0;
+
+    proto = mbuf_protocol(mbuf);
+    if (!hash_proto_support(proto))
+        return 0;
+
+    if (proto == IPPROTO_TCP || proto == IPPROTO_UDP) {
+        l4hdr = mbuf_header_l4(mbuf);
+        if (unlikely(!l4hdr))
+            return 0;
+    }
+
+    ip4hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip4hdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
+    e.proto = proto;
+    e.iface = mbuf->port;
 
-    ports = mbuf_header_pointer(p->mbuf, iph->len, sizeof(_ports), _ports);
-
-    e.iface = p->mbuf->port;
-    e.proto = iph->proto;
-    if (p->direction == 1) {
-        e.ip = iph->saddr;
-        e.port = ports[0];
+    if (dst_match) {
+        e.ip.in.s_addr = ip4hdr->dst_addr;
+        if (l4hdr)
+            e.port = l4hdr->dst_port;
     } else {
-        e.ip = iph->daddr;
-        e.port = ports[1];
+        e.ip.in.s_addr = ip4hdr->src_addr;
+        if (l4hdr)
+            e.port = l4hdr->src_port;
     }
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
@@ -153,7 +171,7 @@ hash_netportiface_test(struct ipset *set, struct ipset_test_param *p)
 
 struct ipset_type_variant hash_netportiface_variant4 = {
     .adt = hash_netportiface_adt4,
-    .test = hash_netportiface_test,
+    .test = hash_netportiface_test4,
     .hash.do_compare = hash_netportiface_data_equal,
     .hash.do_netmask = hash_data_netmask4,
     .hash.do_list = hash_netportiface_do_list,
@@ -207,9 +225,51 @@ hash_netportiface_adt6(int op, struct ipset *set, struct ipset_param *param)
     return EDPVS_OK;
 }
 
+static int
+hash_netportiface_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
+{
+    elem_t e;
+    uint16_t proto;
+    struct ipv6_hdr *ip6hdr;
+    struct udp_hdr *l4hdr = NULL;
+
+    if (set->family != AF_INET6 || mbuf_address_family(mbuf) != AF_INET6)
+        return 0;
+
+    proto = mbuf_protocol(mbuf);
+    if (!hash_proto_support(proto))
+        return 0;
+
+    if (proto == IPPROTO_TCP || proto == IPPROTO_UDP) {
+        l4hdr = mbuf_header_l4(mbuf);
+        if (unlikely(!l4hdr))
+            return 0;
+    }
+
+    ip6hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip6hdr))
+        return 0;
+
+    memset(&e, 0, sizeof(e));
+    e.proto = proto;
+    e.iface = mbuf->port;
+
+    if (dst_match) {
+        memcpy(&e.ip, ip6hdr->dst_addr, sizeof(e.ip));
+        if (l4hdr)
+            e.port = l4hdr->dst_port;
+    } else {
+        memcpy(&e.ip, ip6hdr->src_addr, sizeof(e.ip));
+        if (l4hdr)
+            e.port = l4hdr->src_port;
+    }
+
+    return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
+}
+
 struct ipset_type_variant hash_netportiface_variant6 = {
     .adt = hash_netportiface_adt6,
-    .test = hash_netportiface_test,
+    .test = hash_netportiface_test6,
     .hash.do_compare = hash_netportiface_data_equal,
     .hash.do_netmask = hash_data_netmask6,
     .hash.do_list = hash_netportiface_do_list,

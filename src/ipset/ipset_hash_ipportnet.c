@@ -133,25 +133,42 @@ hash_ipportnet_adt4(int op, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-hash_ipportnet_test(struct ipset *set, struct ipset_test_param *p)
+hash_ipportnet_test4(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
-    uint16_t *ports, _ports[2];
-    struct dp_vs_iphdr *iph = p->iph;
+    uint16_t proto;
+    struct ipv4_hdr *ip4hdr;
+    struct udp_hdr *l4hdr = NULL;
+
+    if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
+        return 0;
+    proto = mbuf_protocol(mbuf);
+    if (!hash_proto_support(proto))
+        return 0;
+
+    if (proto == IPPROTO_TCP || proto == IPPROTO_UDP) {
+        l4hdr = mbuf_header_l4(mbuf);
+        if (unlikely(!l4hdr))
+            return 0;
+    }
+
+    ip4hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip4hdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
+    e.proto = proto;
+    // Unlikely other set types, which match source address first and then dest address,
+    // ip,port,net always matches source address with its "net" part, dest address with its
+    // "ip" part respectively, and its "port" part match is determined by param dst_match.
+    e.ip2.in.s_addr = ip4hdr->dst_addr; // dst_ip
+    e.ip.in.s_addr = ip4hdr->src_addr;  // src_net
 
-    ports = mbuf_header_pointer(p->mbuf, iph->len, sizeof(_ports), _ports);
-
-    e.proto = iph->proto;
-    if (p->direction == 1) {
-        e.ip2 = iph->saddr;
-        e.port = ports[0];  // match for source
-        e.ip = iph->daddr;
-    } else {
-        e.ip = iph->daddr;
-        e.port = ports[1]; // match for dest
-        e.ip2 = iph->saddr;
+    if (l4hdr) {
+        if (dst_match)
+            e.port = l4hdr->dst_port; // dst_ip,dst_port,src_net
+        else
+            e.port = l4hdr->src_port; // dst_ip,src_port,src_net
     }
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
@@ -159,7 +176,7 @@ hash_ipportnet_test(struct ipset *set, struct ipset_test_param *p)
 
 struct ipset_type_variant hash_ipportnet_variant4 = {
     .adt = hash_ipportnet_adt4,
-    .test = hash_ipportnet_test,
+    .test = hash_ipportnet_test4,
     .hash.do_compare = hash_ipportnet_data_equal,
     .hash.do_netmask = hash_data_netmask4,
     .hash.do_list = hash_ipportnet_do_list,
@@ -210,9 +227,50 @@ hash_ipportnet_adt6(int op, struct ipset *set, struct ipset_param *param)
     return EDPVS_OK;
 }
 
+static int
+hash_ipportnet_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
+{
+    elem_t e;
+    uint16_t proto;
+    struct ipv6_hdr *ip6hdr;
+    struct udp_hdr *l4hdr = NULL;
+
+    if (set->family != AF_INET6 || mbuf_address_family(mbuf) != AF_INET6)
+        return 0;
+    proto = mbuf_protocol(mbuf);
+    if (!hash_proto_support(proto))
+        return 0;
+
+    if (proto == IPPROTO_TCP || proto == IPPROTO_UDP) {
+        l4hdr = mbuf_header_l4(mbuf);
+        if (unlikely(!l4hdr))
+            return 0;
+    }
+
+    ip6hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip6hdr))
+        return 0;
+
+    memset(&e, 0, sizeof(e));
+    e.proto = proto;
+    // Unlikely other set types, which match source address first and then dest address,
+    // ip,port,net always matches source address with its "net" part, dest address with its
+    // "ip" part respectively, and its "port" part match is determined by param dst_match.
+    memcpy(&e.ip2, ip6hdr->dst_addr, sizeof(e.ip2)); // dst_ip
+    memcpy(&e.ip, ip6hdr->src_addr, sizeof(e.ip));   // src_net
+    if (l4hdr) {
+        if (dst_match)
+            e.port = l4hdr->dst_port; // dst_ip,dst_port,src_net
+        else
+            e.port = l4hdr->src_port; // dst_ip,src_port,src_net
+    }
+
+    return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
+}
+
 struct ipset_type_variant hash_ipportnet_variant6 = {
     .adt = hash_ipportnet_adt6,
-    .test = hash_ipportnet_test,
+    .test = hash_ipportnet_test6,
     .hash.do_compare = hash_ipportnet_data_equal,
     .hash.do_netmask = hash_data_netmask6,
     .hash.do_list = hash_ipportnet_do_list,
