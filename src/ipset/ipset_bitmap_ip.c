@@ -123,17 +123,25 @@ bitmap_ip_adt(int opcode, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-bitmap_ip_test(struct ipset *set, struct ipset_test_param *p)
+bitmap_ip_test(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
+    struct ipv4_hdr *ip4hdr;
     struct bitmap_ip *map = set->data;
+
+    if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
+        return 0;
+
+    ip4hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip4hdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
 
-    if (p->direction == 1)
-        e.id = ip_to_id(map, ntohl(p->iph->saddr.in.s_addr));
+    if (dst_match)
+        e.id = ip_to_id(map, ntohl(ip4hdr->dst_addr));
     else
-        e.id = ip_to_id(map, ntohl(p->iph->daddr.in.s_addr));
+        e.id = ip_to_id(map, ntohl(ip4hdr->src_addr));
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }

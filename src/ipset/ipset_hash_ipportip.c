@@ -116,23 +116,40 @@ hash_ipportip_adt4(int opcode, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-hash_ipportip_test4(struct ipset *set, struct ipset_test_param *p)
+hash_ipportip_test4(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem4_t e;
-    uint16_t *ports, _ports[2];
-    struct dp_vs_iphdr *iph = p->iph;
+    uint16_t proto;
+    struct ipv4_hdr *ip4hdr;
+    struct udp_hdr *l4hdr = NULL;
+
+    if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
+        return 0;
+    proto = mbuf_protocol(mbuf);
+    if (!hash_proto_support(proto))
+        return 0;
+
+    if (proto == IPPROTO_TCP || proto == IPPROTO_UDP) {
+        l4hdr = mbuf_header_l4(mbuf);
+        if (unlikely(!l4hdr))
+            return 0;
+    }
+
+    ip4hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip4hdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
+    e.proto = proto;
+    e.ip1 = ip4hdr->src_addr;
+    e.ip2 = ip4hdr->dst_addr;
 
-    ports = mbuf_header_pointer(p->mbuf, iph->len, sizeof(_ports), _ports);
-
-    e.ip1 = iph->saddr.in.s_addr;
-    e.ip2 = iph->daddr.in.s_addr;
-    e.proto = iph->proto;
-    if (p->direction == 1)
-        e.port = ports[0];
-    else
-        e.port = ports[1];
+    if (l4hdr) {
+        if (dst_match)
+            e.port = l4hdr->dst_port;
+        else
+            e.port = l4hdr->src_port;
+    }
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }
@@ -216,23 +233,40 @@ hash_ipportip_adt6(int opcode, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-hash_ipportip_test6(struct ipset *set, struct ipset_test_param *p)
+hash_ipportip_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem6_t e;
-    uint16_t *ports, _ports[2];
-    struct dp_vs_iphdr *iph = p->iph;
+    uint16_t proto;
+    struct ipv6_hdr *ip6hdr;
+    struct udp_hdr *l4hdr = NULL;
+
+    if (set->family != AF_INET6 || mbuf_address_family(mbuf) != AF_INET6)
+        return 0;
+    proto = mbuf_protocol(mbuf);
+    if (!hash_proto_support(proto))
+        return 0;
+
+    if (proto == IPPROTO_TCP || proto == IPPROTO_UDP) {
+        l4hdr = mbuf_header_l4(mbuf);
+        if (unlikely(!l4hdr))
+            return 0;
+    }
+
+    ip6hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip6hdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
+    e.proto = proto;
+    memcpy(&e.ip1, ip6hdr->src_addr, sizeof(e.ip1));
+    memcpy(&e.ip2, ip6hdr->dst_addr, sizeof(e.ip2));
 
-    ports = mbuf_header_pointer(p->mbuf, iph->len, sizeof(_ports), _ports);
-
-    e.ip1 = iph->saddr.in6;
-    e.ip2 = iph->daddr.in6;
-    e.proto = iph->proto;
-    if (p->direction == 1)
-        e.port = ports[0];
-    else
-        e.port = ports[1];
+    if (l4hdr) {
+        if (dst_match)
+            e.port = l4hdr->dst_port;
+        else
+            e.port = l4hdr->src_port;
+    }
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }

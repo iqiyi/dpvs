@@ -58,4 +58,12 @@ void hash_data_netmask4(void *elem, uint8_t cidr, bool inner);
 void hash_data_netmask6(void *elem, uint8_t cidr, bool inner);
 uint32_t jhash_hashkey(void *data, int len, uint32_t mask);
 
+static inline int hash_proto_support(uint16_t proto)
+{
+    return proto == IPPROTO_TCP ||
+        proto == IPPROTO_UDP ||
+        proto == IPPROTO_ICMP ||
+        proto == IPPROTO_ICMPV6;
+}
+
 #endif

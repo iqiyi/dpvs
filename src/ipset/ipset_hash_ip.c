@@ -83,16 +83,24 @@ hash_ip_adt4(int opcode, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-hash_ip_test4(struct ipset *set, struct ipset_test_param *p)
+hash_ip_test4(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem4_t e;
+    struct ipv4_hdr *ip4hdr;
+
+    if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
+        return 0;
+
+    ip4hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip4hdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
 
-    if (p->direction == 1)
-        e.ip = p->iph->saddr.in.s_addr;
+    if (dst_match)
+        e.ip = ip4hdr->dst_addr;
     else
-        e.ip = p->iph->daddr.in.s_addr;
+        e.ip = ip4hdr->src_addr;
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }
@@ -146,16 +154,24 @@ hash_ip_adt6(int opcode, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-hash_ip_test6(struct ipset *set, struct ipset_test_param *p)
+hash_ip_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem6_t e;
+    struct ipv6_hdr *ip6hdr;
+
+    if (set->family != AF_INET6 || mbuf_address_family(mbuf) != AF_INET6)
+        return 0;
+
+    ip6hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip6hdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
 
-    if (p->direction == 1)
-        e.ip = p->iph->saddr.in6;
+    if (dst_match)
+        memcpy(&e.ip, ip6hdr->dst_addr, sizeof(e.ip));
     else
-        e.ip = p->iph->daddr.in6;
+        memcpy(&e.ip, ip6hdr->src_addr, sizeof(e.ip));
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }

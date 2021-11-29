@@ -127,20 +127,26 @@ bitmap_port_adt(int opcode, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-bitmap_port_test(struct ipset *set, struct ipset_test_param *p)
+bitmap_port_test(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
-    uint16_t *ports, _ports[2]; 
+    uint16_t proto;
+    struct udp_hdr *l4hdr;
     struct bitmap_port *map = set->data;
+
+    proto = mbuf_protocol(mbuf);
+    if (proto != IPPROTO_TCP && proto != IPPROTO_UDP)
+        return 0;
+    l4hdr = mbuf_header_l4(mbuf);
+    if (!l4hdr)
+        return 0;
 
     memset(&e, 0, sizeof(e));
 
-    ports = mbuf_header_pointer(p->mbuf, p->iph->len, sizeof(_ports), _ports);
-
-    if (p->direction == 1)
-        e.id = port_to_id(map, ntohs(ports[0]), p->iph->proto);
+    if (dst_match)
+        e.id = port_to_id(map, ntohs(l4hdr->dst_port), proto);
     else
-        e.id = port_to_id(map, ntohs(ports[1]), p->iph->proto);
+        e.id = port_to_id(map, ntohs(l4hdr->src_port), proto);
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }

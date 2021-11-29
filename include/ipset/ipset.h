@@ -37,17 +37,6 @@ struct ipset;
 struct bitmap_elem;
 struct bitmap_map;
 
-struct ipset_test_param {
-    /* MUST be L2 stripped */
-    struct rte_mbuf *mbuf;
-
-    struct dp_vs_iphdr *iph;
-
-    /* ingress -> 1 | egress -> -1
-       MUST be specified for set containing ONLY one direction */
-    int direction;
-};
-
 /* add/del/test func prototype for ipset */
 typedef int (*ipset_adtfn)(struct ipset *set, void *value, uint16_t flag);
 
@@ -73,7 +62,7 @@ struct ipset_type_variant {
     /* test/add/del entries called by dpip */
     int (*adt)(int opcode, struct ipset *set, struct ipset_param *param);
     /* Internal test function */
-    int (*test)(struct ipset *set, struct ipset_test_param *param);
+    int (*test)(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match);
     /* Basic functions that each ipset type should implement partially */
     union {
         struct {
@@ -119,7 +108,7 @@ struct ipset {
  * Return : pointer to the set   - success
  *          NULL                 - fail
  */
-struct ipset *ipset_get(char *name);
+struct ipset *ipset_get(const char *name);
 
 /*
  * Function name : ipset_put
@@ -137,17 +126,18 @@ ipset_put(struct ipset *set)
  * Function name : elem_in_set
  * Description : Judge if element 'mbuf' is in the set
  * Parameter :
- *        @set            pointer to the IPset
- *        @param          pointer to the test parameter struct
+ *        @set          pointer to the IPset
+ *        @mbuf         pointer to the mbuf
+ *        @dst_match    true if to match dst addr/port in mbuf, otherwise false
  * Return :  1     - in set
  *           0     - NOT in set
  */
 static inline int
-elem_in_set(struct ipset *set, struct ipset_test_param *param)
+elem_in_set(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     assert(set->variant->test);
 
-    return set->variant->test(set, param);
+    return set->variant->test(set, mbuf, dst_match);
 }
 
 int ipset_ctrl_init(void);
