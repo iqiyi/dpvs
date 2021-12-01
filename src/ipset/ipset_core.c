@@ -36,7 +36,7 @@ static struct list_head ipset_types;
 static RTE_DEFINE_PER_LCORE(struct list_head *, ip_sets);
 
 static struct ipset *
-ipset_lookup(char *name)
+ipset_lookup(const char *name)
 {
     struct ipset *set;
     uint32_t hash;
@@ -51,7 +51,7 @@ ipset_lookup(char *name)
 }
 
 struct ipset *
-ipset_get(char *name)
+ipset_get(const char *name)
 {
     struct ipset *set = ipset_lookup(name);
 
