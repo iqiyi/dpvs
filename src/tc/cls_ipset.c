@@ -92,7 +92,7 @@ static void cls_ipset_destroy(struct tc_cls *cls)
 {
     struct ipset_cls_priv *priv = tc_cls_priv(cls);
 
-    if (likely(priv->set))
+    if (likely(priv->set != NULL))
         ipset_put(priv->set);
 }
 
@@ -102,6 +102,7 @@ static int cls_ipset_dump(struct tc_cls *cls, void *arg)
     struct tc_cls_ipset_copt *copt = arg;
 
     strncpy(copt->setname, priv->set->name, sizeof(copt->setname));
+    copt->dst_match = priv->dst_match;
     copt->result = priv->result;
 
     return EDPVS_OK;

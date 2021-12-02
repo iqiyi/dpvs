@@ -232,8 +232,10 @@ uint8_t mbuf_protocol(struct rte_mbuf *mbuf)
         return IPPROTO_SCTP;
     case RTE_PTYPE_L4_ICMP:
         return IPPROTO_ICMP;
+#if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
     case RTE_PTYPE_L4_IGMP:
         return IPPROTO_IGMP;
+#endif
     default:
         return 0;
     }
