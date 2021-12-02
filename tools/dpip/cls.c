@@ -107,7 +107,8 @@ static void cls_dump_param(const char *ifname, const union tc_param *param,
         else
             snprintf(result, sizeof(result), "%s",
                     tc_handle_itoa(set->result.sch_id, target, sizeof(target)));
-        printf("ipset match %s target %s", set->setname, result);
+        printf("ipset match %s,%s target %s", set->setname,
+                set->dst_match ? "dst" : "src", result);
     }
 
     printf("\n");
