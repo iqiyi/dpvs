@@ -3982,7 +3982,7 @@ static int obtain_dpdk_bond_name(char *dst, const char *ori, size_t size)
      * DPDK need bonding device name start with "net_bonding"
      * to match the driver.
      */
-    snprintf(dst, size, "net_bonding%u\n", num);
+    snprintf(dst, size, "net_bonding%u", num);
 
     return EDPVS_OK;
 }
