@@ -11,37 +11,58 @@
  *              but WITHOUT ANY WARRANTY; without even the implied warranty of
  *              MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  *              See the GNU General Public License for more details.
- *              
+ *
  *              This program is free software; you can redistribute it and/or
  *              modify it under the terms of the GNU General Public License
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _VRRP_VMAC_H
 #define _VRRP_VMAC_H
 
 /* global includes */
-#include <stdio.h>
-#include <stdlib.h>
-#include <arpa/inet.h>
-#include <string.h>
-#include <syslog.h>
+#include <sys/types.h>
+#if defined _HAVE_NETINET_LINUX_IF_ETHER_H_COLLISION_ && \
+    defined _LINUX_IF_ETHER_H && \
+    !defined _NETINET_IF_ETHER_H
+#define _NETINET_IF_ETHER_H
+#endif
 #include <net/ethernet.h>
+#include <stdbool.h>
 
 /* local includes */
 #include "vrrp.h"
 #include "vrrp_if.h"
 
 /* Defines */
-#define VRRP_VMAC_FL_SET	(1 << 0)
-#define VRRP_VMAC_FL_UP		(1 << 1)
-#define VRRP_VMAC_FL_XMITBASE	(1 << 2)
+enum vrrp_vmac_bits {
+	VRRP_VMAC_BIT = 0,
+	VRRP_VMAC_UP_BIT = 1,
+	VRRP_VMAC_XMITBASE_BIT = 2,
+#ifdef _HAVE_VRRP_IPVLAN_
+	VRRP_IPVLAN_BIT = 3,
+#endif
+};
+
+extern const char * const macvlan_ll_kind;
+extern u_char ll_addr[ETH_ALEN];
 
 /* prototypes */
-extern int netlink_link_add_vmac(vrrp_t *);
-extern int netlink_link_del_vmac(vrrp_t *);
+extern bool add_link_local_address(interface_t *, struct in6_addr*);
+extern bool replace_link_local_address(interface_t *);
+#if !HAVE_DECL_IFLA_INET6_ADDR_GEN_MODE
+extern void remove_vmac_auto_gen_addr(interface_t *, struct in6_addr *);
+#endif
+extern bool netlink_link_add_vmac(vrrp_t *);
+extern void netlink_link_del_vmac(vrrp_t *);
+#ifdef _HAVE_VRRP_IPVLAN_
+extern bool netlink_link_add_ipvlan(vrrp_t *);
+#endif
+#ifdef _HAVE_VRF_
+extern void update_vmac_vrfs(interface_t *);
+#endif
 
 #endif

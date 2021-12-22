@@ -2,14 +2,13 @@
  * Soft:        Keepalived is a failover program for the LVS project
  *              <www.linuxvirtualserver.org>. It monitor & manipulate
  *              a loadbalanced server pool using multi-layer checks.
+ *		In addition it provides a VRRPv2 & VRRPv3 stack.
  *
- * Part:        list_head. This code is comming from Linux Kernel.
+ * Author:      Alexandre Cassen, <acassen@corp.free.fr>
  *
- * Author:      Alexandre Cassen, <acassen@linux-vs.org>
- *
- *              This program is distributed in the hope that it will be useful, 
- *              but WITHOUT ANY WARRANTY; without even the implied warranty of 
- *              MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+ *              This program is distributed in the hope that it will be useful,
+ *              but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *              MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  *              See the GNU General Public License for more details.
  *
  *              This program is free software; you can redistribute it and/or
@@ -17,7 +16,7 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@linux-vs.org>
+ * Copyright (C) 2018 Alexandre Cassen, <acassen@corp.free.fr>
  */
 
 #ifndef _LIST_HEAD_H
@@ -26,19 +25,7 @@
 #include <stdlib.h>
 #include <stddef.h>
 
-/*
- * container_of - cast a member of a structure out to the containing structure
- *
- * @ptr:	the pointer to the member.
- * @type:	the type of the container struct this is embedded in.
- * @member:	the name of the member within the struct.
- *
- */
-#ifndef container_of
-# define container_of(ptr, type, member) ({			\
-	const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
-	(type *)( (char *)__mptr - offsetof(type,member) );})
-#endif
+#include "container.h"
 
 /*
  * These are non-NULL pointers that will result in page faults
@@ -64,7 +51,8 @@ typedef struct list_head {
 
 #define LIST_HEAD_INIT(name) { &(name), &(name) }
 
-#define LIST_HEAD(name) \
+// TODO
+#define LH_LIST_HEAD(name) \
 	struct list_head name = LIST_HEAD_INIT(name)
 
 #define INIT_LIST_HEAD(ptr) do { \
@@ -100,6 +88,7 @@ static inline void list_head_add(struct list_head *new, struct list_head *head)
 	__list_add(new, head, head->next);
 }
 
+// list_head_add_tail
 /**
  * list_add_tail - add a new entry
  * @new: new entry to be added
@@ -151,47 +140,47 @@ static inline void list_del_init(struct list_head *entry)
 
 /**
  * list_move - delete from one list and add as another's head
- * @list: the entry to move
+ * @lst: the entry to move
  * @head: the head that will precede our entry
  */
-static inline void list_move(struct list_head *list, struct list_head *head)
+static inline void list_move(struct list_head *lst, struct list_head *head)
 {
-	__list_del(list->prev, list->next);
-	list_head_add(list, head);
+	__list_del(lst->prev, lst->next);
+	list_head_add(lst, head);
 }
 
 /**
  * list_move_tail - delete from one list and add as another's tail
- * @list: the entry to move
+ * @lst: the entry to move
  * @head: the head that will follow our entry
  */
-static inline void list_move_tail(struct list_head *list,
+static inline void list_move_tail(struct list_head *lst,
 				  struct list_head *head)
 {
-	__list_del(list->prev, list->next);
-	list_add_tail(list, head);
+	__list_del(lst->prev, lst->next);
+	list_add_tail(lst, head);
 }
 
 /**
  * list_is_first - tests whether @list is the first entry in list @head
- * @list: the entry to test
+ * @lst: the entry to test
  * @head: the head of the list
  */
-static inline int list_is_first(const struct list_head *list,
+static inline int list_is_first(const struct list_head *lst,
 				const struct list_head *head)
 {
-	return list->prev == head;
+	return lst->prev == head;
 }
 
 /**
  * list_is_last - tests whether @list is the last entry in list @head
- * @list: the entry to test
+ * @lst: the entry to test
  * @head: the head of the list
  */
-static inline int list_is_last(const struct list_head *list,
+static inline int list_is_last(const struct list_head *lst,
 			       const struct list_head *head)
 {
-	return list->next == head;
+	return lst->next == head;
 }
 
 /**
@@ -203,11 +192,11 @@ static inline int list_empty(const struct list_head *head)
 	return head->next == head;
 }
 
-static inline void __list_splice(struct list_head *list,
+static inline void __list_splice(struct list_head *lst,
 				 struct list_head *head)
 {
-	struct list_head *first = list->next;
-	struct list_head *last = list->prev;
+	struct list_head *first = lst->next;
+	struct list_head *last = lst->prev;
 	struct list_head *at = head->next;
 
 	first->prev = head;
@@ -219,13 +208,13 @@ static inline void __list_splice(struct list_head *list,
 
 /**
  * list_splice - join two lists
- * @list: the new list to add.
+ * @lst: the new list to add.
  * @head: the place to add it in the first list.
  */
-static inline void list_splice(struct list_head *list, struct list_head *head)
+static inline void list_splice(struct list_head *lst, struct list_head *head)
 {
-	if (!list_empty(list))
-		__list_splice(list, head);
+	if (!list_empty(lst))
+		__list_splice(lst, head);
 }
 
 /**
@@ -235,12 +224,12 @@ static inline void list_splice(struct list_head *list, struct list_head *head)
  *
  * The list at @list is reinitialised
  */
-static inline void list_splice_init(struct list_head *list,
+static inline void list_splice_init(struct list_head *lst,
 				    struct list_head *head)
 {
-	if (!list_empty(list)) {
-		__list_splice(list, head);
-		INIT_LIST_HEAD(list);
+	if (!list_empty(lst)) {
+		__list_splice(lst, head);
+		INIT_LIST_HEAD(lst);
 	}
 }
 
@@ -293,6 +282,7 @@ void list_sort(struct list_head *head,
 	for (pos = (head)->next; pos != (head); \
 		pos = pos->next)
 
+// __list_for_each isn't different
 /**
  * __list_for_each	-	iterate over a list
  * @pos:	the &struct list_head to use as a loop counter.
@@ -404,6 +394,7 @@ void list_sort(struct list_head *head,
  * @head:	the head for your list.
  * @member:	the name of the list_struct within the struct.
  */
+// Try the alternative
 #define list_for_each_entry_safe(pos, n, head, member)			\
 	for (pos = list_entry((head)->next, typeof(*pos), member),	\
 		n = list_entry(pos->member.next, typeof(*pos), member);	\
@@ -418,13 +409,13 @@ void list_sort(struct list_head *head,
  * You lose the ability to access the tail in O(1).
  */
 
-struct hlist_head {
+typedef struct hlist_head {
 	struct hlist_node *first;
-};
+} hlist_head_t;
 
-struct hlist_node {
+typedef struct hlist_node {
 	struct hlist_node *next, **pprev;
-};
+} hlist_node_t;
 
 #define HLIST_HEAD_INIT { .first = NULL }
 #define HLIST_HEAD(name) struct hlist_head name = {  .first = NULL }

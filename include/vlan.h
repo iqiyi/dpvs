@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -23,7 +23,7 @@
 #ifndef __DPVS_VLAN_H__
 #define __DPVS_VLAN_H__
 #include <linux/if_ether.h>
-#include "common.h"
+#include "conf/common.h"
 #include "list.h"
 #include "netif.h"
 
@@ -39,7 +39,7 @@ struct vlan_info {
     struct netif_port   *real_dev;
     struct hlist_head   *vlan_dev_hash;
     uint16_t            vlan_dev_num;
-    rte_spinlock_t      vlan_lock;
+    rte_rwlock_t        vlan_lock;
     rte_atomic32_t      refcnt;
 };
 
@@ -74,25 +74,25 @@ struct vlan_dev_priv {
 
     /* per-CPU statistics
      * RTE_DEFINE_PER_LCORE cannot be used inside struct */
-    struct vlan_stats   lcore_stats[RTE_MAX_LCORE];
+    struct vlan_stats   lcore_stats[DPVS_MAX_LCORE];
 };
 
 /**
  *  from linux kernel.
  *
- *	struct vlan_ethhdr - vlan ethernet header (ethhdr + vlan_hdr)
- *	@h_dest: destination ethernet address
- *	@h_source: source ethernet address
- *	@h_vlan_proto: ethernet protocol
- *	@h_vlan_TCI: priority and VLAN ID
- *	@h_vlan_encapsulated_proto: packet type ID or len
+ *    struct vlan_ethhdr - vlan ethernet header (ethhdr + vlan_hdr)
+ *    @h_dest: destination ethernet address
+ *    @h_source: source ethernet address
+ *    @h_vlan_proto: ethernet protocol
+ *    @h_vlan_TCI: priority and VLAN ID
+ *    @h_vlan_encapsulated_proto: packet type ID or len
  */
 struct vlan_ethhdr {
-	unsigned char	h_dest[ETH_ALEN];
-	unsigned char	h_source[ETH_ALEN];
-	__be16		h_vlan_proto;
-	__be16		h_vlan_TCI;
-	__be16		h_vlan_encapsulated_proto;
+    unsigned char    h_dest[ETH_ALEN];
+    unsigned char    h_source[ETH_ALEN];
+    __be16        h_vlan_proto;
+    __be16        h_vlan_TCI;
+    __be16        h_vlan_encapsulated_proto;
 };
 
 int vlan_add_dev(struct netif_port *real_dev, const char *ifname,

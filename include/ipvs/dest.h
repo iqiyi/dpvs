@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,32 +17,16 @@
  */
 #ifndef __DPVS_DEST_H__
 #define __DPVS_DEST_H__
-#include "common.h"
-#include "list.h"
-#include "dpdk.h"
+
+#include "conf/dest.h"
 #include "ipvs/service.h"
 
-/* must consistent with IP_VS_CONN_F_XXX (libipvs-2.6/ip_vs.h) */
-enum dpvs_fwd_mode {
-    DPVS_FWD_MASQ           = 0,
-    DPVS_FWD_LOCALNODE      = 1,
-    DPVS_FWD_MODE_TUNNEL    = 2,
-    DPVS_FWD_MODE_DR        = 3,
-    DPVS_FWD_MODE_BYPASS    = 4,
-    DPVS_FWD_MODE_FNAT      = 5,
-    DPVS_FWD_MODE_NAT       = DPVS_FWD_MASQ,
-    DPVS_FWD_MODE_SNAT      = 6,
-};
-
-enum {
-    DPVS_DEST_F_AVAILABLE       = 0x1<<0,
-    DPVS_DEST_F_OVERLOAD        = 0x1<<1,
-};
-
+#include "conf/common.h"
+#include "list.h"
+#include "dpdk.h"
 
 struct dp_vs_dest {
     struct list_head    n_list;     /* for the dests in the service */
-    struct list_head    d_list;     /* for table with all the dests */
 
     int                 af;         /* address family */
     /*
@@ -58,7 +42,7 @@ struct dp_vs_dest {
     rte_atomic16_t      weight;     /* server weight */
 
     rte_atomic32_t      refcnt;     /* reference counter */
-    struct dp_vs_stats  *stats;     /* Use per-cpu statistics for destination server */
+    struct dp_vs_stats  stats;      /* Use per-cpu statistics for destination server */
 
     enum dpvs_fwd_mode  fwdmode;
 
@@ -75,99 +59,67 @@ struct dp_vs_dest {
     uint32_t            vfwmark;    /* firewall mark of service */
     struct dp_vs_service *svc;      /* service it belongs to */
     union inet_addr     vaddr;      /* virtual IP address */
+    unsigned            conn_timeout; /* conn timeout copied from svc*/
+    unsigned            limit_proportion; /* limit copied from svc*/
 } __rte_cache_aligned;
 
-struct dp_vs_dest_conf {
-    /* destination server address */
-    union inet_addr addr;
-    uint16_t port;
+static inline bool
+dp_vs_dest_is_avail(struct dp_vs_dest *dest)
+{
+    return (dest->flags & DPVS_DEST_F_AVAILABLE) ? true : false;
+}
 
-    enum dpvs_fwd_mode fwdmode;
-    /* real server options */
-    unsigned conn_flags;    /* connection flags */
-    int weight;     /* destination weight */
+static inline void
+dp_vs_dest_set_avail(struct dp_vs_dest *dest)
+{
+    dest->flags |= DPVS_DEST_F_AVAILABLE;
+}
 
-    /* thresholds for active connections */
-    uint32_t max_conn;    /* upper threshold */
-    uint32_t min_conn;    /* lower threshold */
-};
+static inline void
+dp_vs_dest_clear_avail(struct dp_vs_dest *dest)
+{
+    dest->flags &= ~DPVS_DEST_F_AVAILABLE;
+}
 
-struct dp_vs_dest_entry {
-    uint32_t addr;        /* destination address */
-    uint16_t port;
-    unsigned conn_flags;    /* connection flags */
-    int weight;     /* destination weight */
+static inline bool
+dp_vs_dest_is_overload(struct dp_vs_dest *dest)
+{
+    return (dest->flags & DPVS_DEST_F_OVERLOAD) ? true : false;
+}
 
-    uint32_t max_conn;  /* upper threshold */
-    uint32_t min_conn;  /* lower threshold */
+static inline int16_t
+dp_vs_dest_get_weight(struct dp_vs_dest *dest)
+{
+    return rte_atomic16_read(&dest->weight);
+}
 
-    uint32_t actconns;  /* active connections */
-    uint32_t inactconns;   /* inactive connections */
-    uint32_t persistconns; /* persistent connections */
+static inline bool
+dp_vs_dest_is_valid(struct dp_vs_dest *dest)
+{
+    return (dest
+            && dp_vs_dest_is_avail(dest)
+            && !dp_vs_dest_is_overload(dest)
+            && dp_vs_dest_get_weight(dest) > 0) ? true : false;
+}
 
-    /* statistics */
-    struct dp_vs_stats stats;
-};
-
-struct dp_vs_get_dests {
-    /* which service: user fills in these */
-    uint16_t    proto;
-    uint32_t    addr;        /* virtual address */
-    uint16_t    port;
-    uint32_t    fwmark;       /* firwall mark of service */
-
-    /* number of real servers */
-    unsigned int num_dests;
-
-    char        srange[256];
-    char        drange[256];
-    char        iifname[IFNAMSIZ];
-    char        oifname[IFNAMSIZ];
-
-    /* the real servers */
-    struct dp_vs_dest_entry entrytable[0];
-};
-
-struct dp_vs_dest_user{
-    uint32_t addr;
-    uint16_t port;
-
-    unsigned conn_flags;
-    int weight;
-
-    uint32_t max_conn;
-    uint32_t min_conn;
-};
-
-
-int dp_vs_new_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
+int dp_vs_dest_new(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest,
                                               struct dp_vs_dest **dest_p);
 
-struct dp_vs_dest *dp_vs_lookup_dest(struct dp_vs_service *svc,
+struct dp_vs_dest *dp_vs_dest_lookup(int af, struct dp_vs_service *svc,
                                      const union inet_addr *daddr, uint16_t dport);
 
-struct dp_vs_dest *dp_vs_find_dest(int af, const union inet_addr *daddr,
-                                   uint16_t dport, const union inet_addr *vaddr,
-                                   uint16_t vport, uint16_t protocol);
+int dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
-struct dp_vs_dest *dp_vs_trash_get_dest(struct dp_vs_service *svc,
-                                        const union inet_addr *daddr, uint16_t dport);
+int dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
-void dp_vs_trash_cleanup(void);
-
-int dp_vs_add_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
-
-int dp_vs_edit_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
-
-void __dp_vs_unlink_dest(struct dp_vs_service *svc,
+void dp_vs_dest_unlink(struct dp_vs_service *svc,
                         struct dp_vs_dest *dest, int svcupd);
 
-void __dp_vs_del_dest(struct dp_vs_dest *dest);
+void dp_vs_dest_put(struct dp_vs_dest *dest);
 
-int dp_vs_del_dest(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
+int dp_vs_dest_del(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
-int dp_vs_get_dest_entries(const struct dp_vs_service *svc,
-                           const struct dp_vs_get_dests *get,
+int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
                            struct dp_vs_get_dests *uptr);
 
 int dp_vs_dest_init(void);

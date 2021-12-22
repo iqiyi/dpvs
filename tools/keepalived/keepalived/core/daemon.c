@@ -17,20 +17,30 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
-#include <syslog.h>
+#include "config.h"
+
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdbool.h>
+
 #include "daemon.h"
 #include "logger.h"
 #include "utils.h"
 
 /* Daemonization function coming from zebra source code */
 pid_t
-xdaemon(int nochdir, int noclose, int exitflag)
+xdaemon(bool nochdir, bool noclose, bool exitflag)
 {
 	pid_t pid;
 	int ret;
+
+#ifdef ENABLE_LOG_TO_FILE
+	if (log_file_name)
+		flush_log_file();
+#endif
 
 	/* In case of fork is error. */
 	pid = fork();
@@ -63,19 +73,8 @@ xdaemon(int nochdir, int noclose, int exitflag)
 	}
 
 	/* File descriptor close. */
-	if (!noclose) {
-		int fd;
+	if (!noclose)
+		set_std_fd(true);
 
-		fd = open("/dev/null", O_RDWR, 0);
-		if (fd != -1) {
-			dup2(fd, STDIN_FILENO);
-			dup2(fd, STDOUT_FILENO);
-			dup2(fd, STDERR_FILENO);
-			if (fd > 2)
-				close(fd);
-		}
-	}
-
-	umask(0);
 	return 0;
 }

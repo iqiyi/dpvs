@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,31 +17,66 @@
  */
 #ifndef __DPVS_INET_H__
 #define __DPVS_INET_H__
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 #include <netinet/in.h>
-#include "common.h"
+#include <arpa/inet.h>
+#include "conf/common.h"
+#include "conf/inet.h"
 
-union inet_addr {
-    struct in_addr      in;
-    struct in6_addr     in6;
+#include "dpdk.h"
+#include "netif.h"
+
+/*
+ * Inet Hooks
+ */
+enum {
+    INET_HOOK_PRE_ROUTING,
+    INET_HOOK_LOCAL_IN,
+    INET_HOOK_FORWARD,
+    INET_HOOK_LOCAL_OUT,
+    INET_HOOK_POST_ROUTING,
+    INET_HOOK_NUMHOOKS,
 };
 
-struct inet_prefix {
-    int                 plen;
-    union inet_addr     addr;
+struct inet_hook_state {
+    unsigned int        hook;
+} __rte_cache_aligned;
+
+enum {
+    INET_DROP           = 0,
+    INET_ACCEPT,
+    INET_STOLEN,
+    INET_REPEAT,
+    INET_STOP,
+    INET_VERDICT_NUM,
 };
 
-struct inet_addr_range {
-    union inet_addr     min_addr;
-    union inet_addr     max_addr;
-    __be16              min_port;
-    __be16              max_port;
+typedef int (*inet_hook_fn)(void *priv, struct rte_mbuf *mbuf,
+                            const struct inet_hook_state *state);
+
+struct inet_hook_ops {
+    inet_hook_fn        hook;
+    unsigned int        hooknum;
+    int                 af;
+    void                *priv;
+    int                 priority;
+
+    struct list_head    list;
 };
+
+struct netif_port;
+
+int INET_HOOK(int af, unsigned int hook, struct rte_mbuf *mbuf,
+              struct netif_port *in, struct netif_port *out,
+              int (*okfn)(struct rte_mbuf *mbuf));
 
 int inet_init(void);
 int inet_term(void);
 
-bool inet_addr_equal(int af, const union inet_addr *a1, 
+bool inet_addr_equal(int af, const union inet_addr *a1,
                      const union inet_addr *a2);
 
 const char *inet_proto_name(uint8_t proto);
@@ -50,7 +85,7 @@ bool inet_is_addr_any(int af, const union inet_addr *addr);
 
 int inet_plen_to_mask(int af, uint8_t plen, union inet_addr *mask);
 
-int inet_addr_net(int af, const union inet_addr *addr, 
+int inet_addr_net(int af, const union inet_addr *addr,
                   const union inet_addr *mask,
                   union inet_addr *net);
 
@@ -58,10 +93,12 @@ bool inet_addr_same_net(int af, uint8_t plen,
                         const union inet_addr *addr1,
                         const union inet_addr *addr2);
 
-int inet_addr_range_parse(int af, const char *param,
-                          struct inet_addr_range *range);
+int inet_addr_range_dump(int af, const struct inet_addr_range *range,
+                         char *buf, size_t size);
 
-void inet_addr_range_dump(int af, const struct inet_addr_range *range,
-                          char *buf, size_t size);
+int inet_register_hooks(struct inet_hook_ops *reg, size_t n);
+int inet_unregister_hooks(struct inet_hook_ops *reg, size_t n);
+
+void inet_stats_add(struct inet_stats *stats, const struct inet_stats *diff);
 
 #endif /* __DPVS_INET_H__ */

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <linux/if_ether.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 #include "utils.h"
 #include "conf/vlan.h"
@@ -167,7 +167,7 @@ static int vlan_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
     size_t size;
     int err, i;
 
-    switch (conf->cmd) {
+    switch (cmd) {
     case DPIP_CMD_ADD:
         return dpvs_setsockopt(SOCKOPT_SET_VLAN_ADD, param, sizeof(*param));
     case DPIP_CMD_DEL:

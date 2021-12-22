@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -20,6 +20,11 @@
 #include "icmp.h"
 #include "netinet/in.h"
 #include "netinet/ip_icmp.h"
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+#include "netif.h"
+#include "scheduler.h"
+#include "global_data.h"
+#endif
 
 #define ICMP
 #define RTE_LOGTYPE_ICMP    RTE_LOGTYPE_USER1
@@ -34,11 +39,11 @@ struct icmp_ctrl {
 #ifdef CONFIG_DPVS_ICMP_DEBUG
 static void icmp_dump_hdr(const struct rte_mbuf *mbuf)
 {
-    struct icmp_hdr *ich = rte_pktmbuf_mtod(mbuf, struct icmp_hdr *);
+    struct rte_icmp_hdr *ich = rte_pktmbuf_mtod(mbuf, struct rte_icmp_hdr *);
     lcoreid_t lcore = rte_lcore_id();
 
     fprintf(stderr, "lcore %d port %d icmp type %u code %u id %u seq %u\n",
-            lcore, mbuf->port, ich->icmp_type, ich->icmp_code, 
+            lcore, mbuf->port, ich->icmp_type, ich->icmp_code,
             ntohs(ich->icmp_ident), ntohs(ich->icmp_seq_nb));
 
     return;
@@ -47,12 +52,12 @@ static void icmp_dump_hdr(const struct rte_mbuf *mbuf)
 
 static int icmp_echo(struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *iph = mbuf->userdata;
-    struct icmp_hdr *ich = rte_pktmbuf_mtod(mbuf, struct icmp_hdr *);
+    struct rte_ipv4_hdr *iph = MBUF_USERDATA(mbuf, struct rte_ipv4_hdr *, MBUF_FIELD_PROTO);
+    struct rte_icmp_hdr *ich = rte_pktmbuf_mtod(mbuf, struct rte_icmp_hdr *);
     uint16_t csum;
     struct flow4 fl4;
 
-    if (ich->icmp_type != IP_ICMP_ECHO_REQUEST || ich->icmp_code != 0) {
+    if (ich->icmp_type != RTE_IP_ICMP_ECHO_REQUEST || ich->icmp_code != 0) {
         RTE_LOG(WARNING, ICMP, "%s: not echo-request\n", __func__);
         goto errout;
     }
@@ -61,22 +66,31 @@ static int icmp_echo(struct rte_mbuf *mbuf)
         goto errout;
 
     if (rte_raw_cksum(ich, mbuf->pkt_len) != 0xffff) {
-        RTE_LOG(WARNING, ICMP, "%s: bad checksum\n", __func__);
+        char sbuf[64], dbuf[64];
+        const char *saddr, *daddr;
+
+        saddr = inet_ntop(AF_INET, &iph->src_addr,
+                          sbuf, sizeof(sbuf)) ? sbuf : "::";
+        daddr = inet_ntop(AF_INET, &iph->dst_addr,
+                          dbuf, sizeof(dbuf)) ? dbuf : "::";
+
+        RTE_LOG(WARNING, ICMP, "%s: %s->%s, bad checksum\n",
+                __func__, saddr, daddr);
         goto errout;
     }
 
-    ich->icmp_type = IP_ICMP_ECHO_REPLY;
+    ich->icmp_type = RTE_IP_ICMP_ECHO_REPLY;
     /* recalc the checksum */
     ich->icmp_cksum = 0;
     csum = rte_raw_cksum(ich, mbuf->pkt_len);
     ich->icmp_cksum = (csum == 0xffff) ? csum : ~csum;
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr.s_addr = iph->src_addr;
-    fl4.saddr.s_addr = iph->dst_addr;
-    fl4.oif = netif_port_get(mbuf->port);
-    fl4.proto = IPPROTO_ICMP;
-    fl4.tos = iph->type_of_service;
+    fl4.fl4_daddr.s_addr = iph->src_addr;
+    fl4.fl4_saddr.s_addr = iph->dst_addr;
+    fl4.fl4_oif = netif_port_get(mbuf->port);
+    fl4.fl4_proto = IPPROTO_ICMP;
+    fl4.fl4_tos = iph->type_of_service;
 
     return ipv4_xmit(mbuf, &fl4);
 
@@ -150,8 +164,8 @@ static struct icmp_ctrl icmp_ctrls[MAX_ICMP_CTRL] = {
 /* @imbuf is input (original) IP packet to trigger ICMP. */
 void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
 {
-    struct route_entry *rt = imbuf->userdata;
-    struct ipv4_hdr *iph = ip4_hdr(imbuf);
+    struct route_entry *rt = MBUF_USERDATA(imbuf, struct route_entry *, MBUF_FIELD_ROUTE);
+    struct rte_ipv4_hdr *iph = ip4_hdr(imbuf);
     eth_type_t etype = imbuf->packet_type; /* FIXME: use other field ? */
     struct in_addr saddr;
     uint8_t tos;
@@ -182,7 +196,7 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     }
 
     /* reply only first fragment. */
-    if (iph->fragment_offset & htons(IPV4_HDR_OFFSET_MASK))
+    if (iph->fragment_offset & htons(RTE_IPV4_HDR_OFFSET_MASK))
         return;
 
     if (type > NR_ICMP_TYPES)
@@ -220,21 +234,22 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
            | IPTOS_PREC_INTERNETCONTROL) : iph->type_of_service;
 
     memset(&fl4, 0, sizeof(struct flow4));
-    fl4.daddr.s_addr = iph->src_addr;
-    fl4.saddr = saddr;
-    fl4.oif  = netif_port_get(imbuf->port);
-    fl4.proto = IPPROTO_ICMP;
-    fl4.tos = tos;
-    if (!fl4.oif) {
+    fl4.fl4_daddr.s_addr    = iph->src_addr;
+    fl4.fl4_saddr           = saddr;
+    fl4.fl4_oif             = netif_port_get(imbuf->port);
+    fl4.fl4_proto           = IPPROTO_ICMP;
+    fl4.fl4_tos             = tos;
+    if (!fl4.fl4_oif) {
         RTE_LOG(DEBUG, ICMP, "%s: no output iface.\n", __func__);
         return;
     }
 
-    mbuf = rte_pktmbuf_alloc(fl4.oif->mbuf_pool);
+    mbuf = rte_pktmbuf_alloc(fl4.fl4_oif->mbuf_pool);
     if (!mbuf) {
         RTE_LOG(DEBUG, ICMP, "%s: no memory.\n", __func__);
         return;
     }
+    mbuf_userdata_reset(mbuf);
     assert(rte_pktmbuf_headroom(mbuf) >= 128); /* for L2/L3 */
 
     /* prepare ICMP message */
@@ -249,8 +264,8 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     icmph->un.gateway = info; /* not good */
 
     /* copy as much as we can without exceeding 576 (min-MTU) */
-    room = fl4.oif->mtu > 576 ? 576 : fl4.oif->mtu;
-    room -= sizeof(struct ipv4_hdr);
+    room = fl4.fl4_oif->mtu > 576 ? 576 : fl4.fl4_oif->mtu;
+    room -= sizeof(struct rte_ipv4_hdr);
     room -= sizeof(struct icmphdr);
 
     /* we support only linear mbuf now, use m.data_len
@@ -276,13 +291,13 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
 
 static int icmp_rcv(struct rte_mbuf *mbuf)
 {
-    struct ipv4_hdr *iph = mbuf->userdata;
-    struct icmp_hdr *ich;
+    struct rte_ipv4_hdr *iph = MBUF_USERDATA(mbuf, struct rte_ipv4_hdr *, MBUF_FIELD_PROTO);
+    struct rte_icmp_hdr *ich;
     struct icmp_ctrl *ctrl;
 
-    if (mbuf_may_pull(mbuf, sizeof(struct icmp_hdr)) != 0)
+    if (mbuf_may_pull(mbuf, sizeof(struct rte_icmp_hdr)) != 0)
         goto invpkt;
-    ich = rte_pktmbuf_mtod(mbuf, struct icmp_hdr *);
+    ich = rte_pktmbuf_mtod(mbuf, struct rte_icmp_hdr *);
 
     if (unlikely(!iph)) {
         RTE_LOG(WARNING, ICMP, "%s: no ipv4 header\n", __func__);
@@ -308,9 +323,112 @@ static struct inet_protocol icmp_protocol = {
     .handler    = icmp_rcv,
 };
 
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+static struct rte_ring *icmp_redirect_ring;
+#define ICMP_RING_SIZE 2048
+lcoreid_t g_icmp_redirect_lcore_id = 0;
+
+static struct dpvs_lcore_job icmp_redirect = {
+    .name = "icmp_redirect_proc",
+    .type = LCORE_JOB_LOOP,
+    .func = icmp_redirect_proc,
+    .data = NULL,
+};
+
+static int icmp_redirect_init(void)
+{
+    int ret = 0;
+    int socket_id;
+
+    socket_id = rte_socket_id();
+    icmp_redirect_ring = rte_ring_create("icmp_redirect_ring", ICMP_RING_SIZE, socket_id, RING_F_SC_DEQ);
+    if (icmp_redirect_ring == NULL) {
+        rte_panic("create ring:icmp_redirect_ring  failed!\n");
+        return EDPVS_NOMEM;
+    }
+
+    ret = dpvs_lcore_job_register(&icmp_redirect, LCORE_ROLE_FWD_WORKER);
+    if (ret < 0) {
+        rte_ring_free(icmp_redirect_ring);
+        return ret;
+    }
+
+    return EDPVS_OK;
+}
+
+int icmp_recv_proc(struct rte_mbuf *mbuf)
+{
+    int ret = 0;
+    ret = rte_ring_enqueue(icmp_redirect_ring, mbuf);
+    if (unlikely(-EDQUOT == ret)) {
+        RTE_LOG(WARNING, ICMP, "%s: icmp ring quota exceeded\n", __func__);
+    }
+    else if (ret < 0) {
+        RTE_LOG(WARNING, ICMP, "%s: icmp ring enqueue failed\n", __func__);
+        rte_pktmbuf_free(mbuf);
+    }
+
+    return 0;
+}
+
+void icmp_redirect_proc(void *args)
+{
+    int ret = 0;
+    int i = 0;
+    lcoreid_t cid;
+    struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
+    uint16_t nb_rb = 0;
+    uint16_t data_off;
+
+    cid = rte_lcore_id();
+    if (cid != g_icmp_redirect_lcore_id)
+        return;
+
+    nb_rb = rte_ring_dequeue_burst(icmp_redirect_ring, (void**)mbufs, NETIF_MAX_PKT_BURST, NULL);
+    if (nb_rb <= 0) {
+        return;
+    }
+
+    for (i = 0; i < nb_rb; i++) {
+        struct rte_mbuf *mbuf = mbufs[i];
+        struct netif_port *dev = netif_port_get(mbuf->port);
+
+        /* Remove ether_hdr at the beginning of an mbuf */
+        data_off = mbuf->data_off;
+        if (unlikely(NULL == rte_pktmbuf_adj(mbuf, sizeof(struct rte_ether_hdr)))) {
+            rte_pktmbuf_free(mbuf);
+            return;
+        }
+
+        ret = INET_HOOK(AF_INET, INET_HOOK_PRE_ROUTING,
+                     mbuf, dev, NULL, ipv4_rcv_fin);
+        if (ret == EDPVS_KNICONTINUE) {
+            if (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI) {
+                rte_pktmbuf_free(mbuf);
+                return;
+            }
+            if (likely(NULL != rte_pktmbuf_prepend(mbuf,
+                (mbuf->data_off - data_off)))) {
+                    kni_ingress(mbuf, dev);
+            } else {
+                rte_pktmbuf_free(mbuf);
+            }
+        }
+    }
+
+    return;
+}
+#endif
+
 int icmp_init(void)
 {
     int err;
+
+#ifdef CONFIG_ICMP_REDIRECT_CORE
+    err = icmp_redirect_init();
+    if (err)
+        return err;
+#endif
 
     err = ipv4_register_protocol(&icmp_protocol, IPPROTO_ICMP);
 

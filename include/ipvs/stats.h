@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,26 +17,13 @@
  */
 #ifndef __DPVS_STATS_H__
 #define __DPVS_STATS_H__
+
 #include <stdint.h>
-#include "ipvs/service.h"
 #include "dpdk.h"
+#include "conf/stats.h"
+#include "ipvs/service.h"
 
 struct dp_vs_conn;
-
-struct dp_vs_stats {
-    uint64_t            conns;
-    uint64_t            inpkts;
-    uint64_t            inbytes;
-    uint64_t            outpkts;
-    uint64_t            outbytes;
-
-    uint32_t cps;
-    uint32_t inpps;
-    uint32_t inbps;
-    uint32_t outpps;
-    uint32_t outbps;
-};
-
 
 /* statistics for FULLNAT and SYNPROXY */
 enum  dp_vs_estats_type {
@@ -97,9 +84,8 @@ struct dp_vs_estats {
 int dp_vs_stats_init(void);
 int dp_vs_stats_term(void);
 
-void dp_vs_stats_clear(void);
-void dp_svc_stats_clear(struct dp_vs_stats *stats);
-
+void dp_vs_stats_clear(struct dp_vs_stats *stats);
+int dp_vs_stats_add(struct dp_vs_stats *dst, struct dp_vs_stats *src);
 int dp_vs_stats_in(struct dp_vs_conn *conn, struct rte_mbuf *mbuf);
 int dp_vs_stats_out(struct dp_vs_conn *conn, struct rte_mbuf *mbuf);
 void dp_vs_stats_conn(struct dp_vs_conn *conn);
@@ -107,20 +93,5 @@ void dp_vs_stats_conn(struct dp_vs_conn *conn);
 void dp_vs_estats_inc(enum dp_vs_estats_type field);
 void dp_vs_estats_clear(void);
 uint64_t dp_vs_estats_get(enum dp_vs_estats_type field);
-
-int dp_vs_new_stats(struct dp_vs_stats **p);
-void dp_vs_del_stats(struct dp_vs_stats *p);
-void dp_vs_zero_stats(struct dp_vs_stats* stats);
-int dp_vs_copy_stats(struct dp_vs_stats* dst, struct dp_vs_stats* src);
-
-#if 0
-/*rate control code*/
-int dp_vs_rate_init(void);
-void dp_vs_rate_cleanup(void);
-void dp_vs_new_rate(struct dp_vs_service *svc);
-void dp_vs_kill_rate(struct dp_vs_service *svc);
-void dp_vs_zero_rate(struct dp_vs_service *svc);
-__u64 dp_vs_rate_bps(struct dp_vs_rate *rate);
-#endif
 
 #endif /* __DPVS_STATS_H__ */

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -19,11 +19,13 @@
 #define __DPVS_PROTO_H__
 #include "list.h"
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/conn.h"
 
 struct dp_vs_conn;
+#define IPV6_ADDR_LEN_IN_BYTES 16
+#define IPV4_ADDR_LEN_IN_BYTES 4
 
 struct dp_vs_proto {
     char                    *name;
@@ -34,7 +36,7 @@ struct dp_vs_proto {
     int (*exit)(struct dp_vs_proto *proto);
 
     /* schedule RS and create new conn */
-    int (*conn_sched)(struct dp_vs_proto *proto, 
+    int (*conn_sched)(struct dp_vs_proto *proto,
                       const struct dp_vs_iphdr *iph,
                       struct rte_mbuf *mbuf,
                       struct dp_vs_conn **conn,
@@ -43,13 +45,16 @@ struct dp_vs_proto {
     /* lookup conn by <proto, saddr, sport, daddr, dport>
      * return conn and direction or NULL if miss */
     struct dp_vs_conn *
-        (*conn_lookup)(struct dp_vs_proto *proto, 
+        (*conn_lookup)(struct dp_vs_proto *proto,
                        const struct dp_vs_iphdr *iph,
-                       struct rte_mbuf *mbuf, 
-                       int *direct, bool reverse);
+                       struct rte_mbuf *mbuf, int *direct,
+                       bool reverse, bool *drop, lcoreid_t *peer_cid);
 
-    int (*conn_expire)(struct dp_vs_proto *proto, 
+    int (*conn_expire)(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn);
+
+    /* expire quiescent connections timely */
+    int (*conn_expire_quiescent)(struct dp_vs_conn *conn);
 
     /* for NAT mode */
     int (*nat_in_handler)(struct dp_vs_proto *proto,
@@ -66,6 +71,13 @@ struct dp_vs_proto {
     int (*fnat_out_handler)(struct dp_vs_proto *proto,
                        struct dp_vs_conn *conn,
                        struct rte_mbuf *mbuf);
+    /* pre-handler for FNAT */
+    int (*fnat_in_pre_handler)(struct dp_vs_proto *proto,
+                       struct dp_vs_conn *conn,
+                       struct rte_mbuf *mbuf);
+    int (*fnat_out_pre_handler)(struct dp_vs_proto *proto,
+                       struct dp_vs_conn *conn,
+                       struct rte_mbuf *mbuf);
 
     /* for SNAT mode */
     int (*snat_in_handler)(struct dp_vs_proto *proto,
@@ -78,13 +90,13 @@ struct dp_vs_proto {
     int (*csum_check)(struct dp_vs_proto *proto, int af,
                        struct rte_mbuf *mbuf);
     int (*dump_packet)(struct dp_vs_proto *proto, int af,
-                       struct rte_mbuf *mbuf, int off, 
+                       struct rte_mbuf *mbuf, int off,
                        const char *msg);
 
     /* try trans connn's states by packet and direction */
-    int (*state_trans)(struct dp_vs_proto *proto, 
-                       struct dp_vs_conn *conn, 
-                       struct rte_mbuf *mbuf, 
+    int (*state_trans)(struct dp_vs_proto *proto,
+                       struct dp_vs_conn *conn,
+                       struct rte_mbuf *mbuf,
                        int direct);
 
     const char *

@@ -11,27 +11,31 @@
 
 ! global config
 global_defs {
-    #daemon                         <disalbe> 
-    log_level   INFO                <none>
-    log_file    /var/log/dpvs.log   <none>
+    #daemon                             <disalbe>
+    log_level         INFO              <none>
+    log_file          /var/log/dpvs.log <none>
+    <init> log_async_mode    off        <off, on|off>
+    <init> pdump      off               <off, on|off>
 }
 
 ! netif config
 netif_defs {
-    <init> pktpool_size     524287  <65535, 1023-134217728>
+    <init> pktpool_size     2097151 <65535, 1023-134217728>
     <init> pktpool_cache    256     <256, 32-8192>
+    <init> fdir_mode        perfect <perfect, perfect|signature> # only for ixgbe
 
     <init> device dpdk0 {
         rx {
             #max_burst_size     32
             queue_number        6           <16, 0-16>
-            descriptor_number   128         <64, 16-8192>
-            rss                 ip          <tcp, tcp|ip>
+            descriptor_number   256         <256, 16-8192>
+            rss                 all         <all, all|ip|tcp|udp|sctp|ether|port|tunnel>
         }
         tx {
             queue_number        6           <16, 0-16>
-            descriptor_number   256         <128, 16-8192>
+            descriptor_number   512         <512, 16-8192>
         }
+    !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
     }
@@ -41,22 +45,28 @@ netif_defs {
             #max_burst_size     32
             queue_number        4
             descriptor_number   128
-            rss                 tcp
+            rss                 all
         }
         tx {
             queue_number        4
             descriptor_number   256
         }
+    !    mtu                    1500
     !    promisc_mode
     !    kni_name               dpdk1.kni
     }
 
-    <init> device bond0 {
+    <init> bonding bond0 {
         mode                    4           <0-6>
         slave                   dpdk0       <device name>
         slave                   dpdk1       <device name>
         primary                 dpdk0       <device name, use primary slave queue conf for bond>
+        numa_node               0           <0, int value from /sys/bus/pci/devices/[pci_bus]/numa_node>
         kni_name                bond0.kni   <char[32]>
+
+        ! supported options:
+        !   dedicated_queues=on|enable|off|disable, default on
+        options                 OPT1=VAL1;OPT2=VAL2;...
     }
 }
 
@@ -121,24 +131,37 @@ worker_defs {
             tx_queue_ids     3
         }
     }
+
+    ! kni worker config, optional
+    ! if not configure, kni packets are processed on master lcore
+    <init> worker cpu5 {
+        type    kni
+        cpu_id  5
+        icmp_redirect_core
+        port dpdk0 {
+            tx_queue_ids 6
+        }
+        port dpdk1 {
+            tx_queue_ids 4
+        }
+    }
 }
 
 ! timer config
 timer_defs {
-    # cpu job loops to schedule dpdk timer management
+    # time interval(us) to schedule dpdk timer management
     schedule_interval    500            <10, 1-10000000>
 }
 
 ! dpvs neighbor config
 neigh_defs {
     <init> unres_queue_length  128      <128, 16-8192>
-    <init> pktpool_size        1023     <1023, 63-32767>
-    <init> pktpool_cache       default  <32, 2-512>
-    <init> timeout             60       <60, 1-3600>
+    timeout                    60       <60, 1-3600>
 }
 
 ! dpvs ipv4 config
 ipv4_defs {
+    forwarding                 off      <off, on/off>
     <init> default_ttl         64       <64, 0-255>
     fragment {
         <init> bucket_number   4096     <4096, 32-65536>
@@ -148,13 +171,29 @@ ipv4_defs {
     }
 }
 
+! dpvs ipv6 config
+ipv6_defs {
+    disable                 off         <off, on/off>
+    forwarding              off         <off, on/off>
+    route6 {
+        <init> method       "hlist"     <"hlist"/"lpm">
+        recycle_time        10          <10, 1-36000>
+        lpm {
+            <init> lpm6_max_rules       1024    <1024, 16-2147483647>
+            <init> lpm6_num_tbl8s       65536   <65536, 16-2147483647>
+            <init> rt6_array_size       65536   <65536, 16-2147483647>
+            <init> rt6_hash_bucket      256     <256, 2-2147483647>
+        }
+    }
+}
+
 ! control plane config
 ctrl_defs {
     lcore_msg {
         #bucket_number   256
         <init> ring_size                4096    <4096, 256-524288>
-        <init> multicast_queue_length   257     <256, 16-32768>
         sync_msg_timeout_us             2000    <2000, 1-∞>
+        priority_level                  low     <low, low|norm|high|ign>
     }
     ipc_msg {
         <init> unix_domain /var/run/dpvs_ctrl   </var/run/dpvs_ctrl, max chars: 256>
@@ -168,11 +207,14 @@ ipvs_defs {
         <init> conn_pool_cache      256         <256, 1-∞>
         conn_init_timeout           3           <3, 1-31535999>
         expire_quiescent_template               <disable>
-        fast_xmit_close                         <disable>
+        <init> fast_xmit_close                  <disable>
+        <init> redirect             off         <off/on: disable/enable packet redirect>
     }
 
     udp {
         defence_udp_drop        <enable>
+        uoa_mode                opp   <opp for private protocol by default, or ipo for IP-option mode>
+        uoa_max_trail           3     <max trails for send UOA for a connection>
         timeout {               <1-31535999>
             normal      300     <300>
             last        3       <3>
@@ -220,4 +262,5 @@ ipvs_defs {
 
 sa_pool {
     <init> pool_hash_size   16  <16, 1-128>
+    <init> flow_enable      on  <on, on|off>
 }

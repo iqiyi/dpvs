@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,41 +17,40 @@
  */
 #ifndef __DPVS_SVC_H__
 #define __DPVS_SVC_H__
+
 #include <stdint.h>
 #include <net/if.h>
-#include "list.h"
-#include "dpdk.h"
-#include "inet.h"
-#include "netif.h"
-#include "ipvs/ipvs.h"
 #include "ipvs/stats.h"
 #include "ipvs/dest.h"
+#include "inet.h"
+#include "list.h"
+#include "dpdk.h"
+#include "netif.h"
+#include "ipvs/ipvs.h"
 #include "ipvs/sched.h"
+#include "conf/match.h"
+#include "conf/service.h"
 
-#define RTE_LOGTYPE_SERVICE RTE_LOGTYPE_USER3
-#define DP_VS_SVC_F_PERSISTENT      0x0001      /* peristent port */
-#define DP_VS_SVC_F_HASHED          0x0002      /* hashed entry */
-#define DP_VS_SVC_F_SYNPROXY        0x8000      /* synrpoxy flag */
+#define RTE_LOGTYPE_SERVICE             RTE_LOGTYPE_USER3
 
-#define DP_VS_SCHEDNAME_MAXLEN      16
-
-rte_rwlock_t __dp_vs_svc_lock;
-
-struct dp_vs_match {
-    /* range is more flexible than prefix. */
-    struct inet_addr_range  srange;     /* source range */
-    struct inet_addr_range  drange;     /* dest range */
-    int                     iif;        /* input iface */
-    int                     oif;        /* output iface */
-};
+/* DP_VS_SVC_F_XXX should always be the same with IP_VS_SVC_F_XXX */
+#define DP_VS_SVC_F_PERSISTENT          IP_VS_SVC_F_PERSISTENT
+#define DP_VS_SVC_F_HASHED              IP_VS_SVC_F_HASHED
+#define DP_VS_SVC_F_ONEPACKET           IP_VS_SVC_F_ONEPACKET
+#define DP_VS_SVC_F_SCHED1              IP_VS_SVC_F_SCHED1
+#define DP_VS_SVC_F_SCHED2              IP_VS_SVC_F_SCHED2
+#define DP_VS_SVC_F_SCHED3              IP_VS_SVC_F_SCHED3
+#define DP_VS_SVC_F_SIP_HASH            IP_VS_SVC_F_SIP_HASH
+#define DP_VS_SVC_F_QID_HASH            IP_VS_SVC_F_QID_HASH
+#define DP_VS_SVC_F_MATCH               IP_VS_SVC_F_MATCH
 
 /* virtual service */
 struct dp_vs_service {
     struct list_head    s_list;     /* node for normal service table */
     struct list_head    f_list;     /* node for fwmark service table */
     struct list_head    m_list;     /* node for match  service table */
-    rte_atomic32_t      refcnt;
-    rte_atomic32_t      usecnt;
+    rte_atomic32_t      refcnt;     /* svc is per core, conn will not refer to svc, but dest will.
+                                     *  while conn will refer to dest */
 
     /*
      * to identify a service
@@ -79,176 +78,41 @@ struct dp_vs_service {
 
     struct dp_vs_scheduler  *scheduler;
     void                *sched_data;
-    rte_rwlock_t        sched_lock;
 
-    struct dp_vs_stats  *stats;
+    struct dp_vs_stats  stats;
 
     /* FNAT only */
     struct list_head    laddr_list; /* local address (LIP) pool */
     struct list_head    *laddr_curr;
-    rte_rwlock_t        laddr_lock;
     uint32_t            num_laddrs;
 
     /* ... flags, timer ... */
 } __rte_cache_aligned;
 
 
-struct dp_vs_service_conf {
-    /* virtual service addresses */
-    uint16_t            af;
-    uint16_t            protocol;
-    union inet_addr     addr;       /* virtual ip address */
-    uint16_t            port;
-    uint32_t            fwmark;     /* firwall mark of service */
-    struct dp_vs_match  match;
-
-    /* virtual service options */
-    char                *sched_name;
-    unsigned            flags;     /* virtual service flags */
-    unsigned            timeout;   /* persistent timeout in sec */
-    unsigned            conn_timeout;
-    uint32_t            netmask;        /* persistent netmask */
-    unsigned            bps;
-    unsigned            limit_proportion;
-};
-
-struct dp_vs_service_entry {
-    uint16_t            proto;
-    uint32_t            addr;
-    uint16_t            port;
-    uint32_t            fwmark;
-
-    char                sched_name[DP_VS_SCHEDNAME_MAXLEN];
-    unsigned            flags;
-    unsigned            timeout;
-    unsigned            conn_timeout;
-    uint32_t            netmask;
-    unsigned            bps;
-    unsigned            limit_proportion;
-
-    unsigned int        num_dests;
-    unsigned int        num_laddrs;
-
-    struct dp_vs_stats  stats;
-
-    char                srange[256];
-    char                drange[256];
-    char                iifname[IFNAMSIZ];
-    char                oifname[IFNAMSIZ];
-};
-
-struct dp_vs_get_services {
-    unsigned int        num_services;
-    struct dp_vs_service_entry entrytable[0];
-};
-
-
 int dp_vs_service_init(void);
 int dp_vs_service_term(void);
 
-int dp_vs_add_service(struct dp_vs_service_conf *u,
-                      struct dp_vs_service **svc_p);
-
-int dp_vs_del_service(struct dp_vs_service *svc);
-
-int dp_vs_edit_service(struct dp_vs_service *svc, 
-                       struct dp_vs_service_conf *u);
-
 struct dp_vs_service *
 dp_vs_service_lookup(int af, uint16_t protocol,
-                     const union inet_addr *vaddr, 
+                     const union inet_addr *vaddr,
                      uint16_t vport, uint32_t fwmark,
                      const struct rte_mbuf *mbuf,
-                     const struct dp_vs_match *match);
+                     const struct dp_vs_match *match,
+                     bool *outwall, lcoreid_t cid);
 
-int dp_vs_match_parse(int af, const char *srange, const char *drange,
+int dp_vs_match_parse(const char *srange, const char *drange,
                       const char *iifname, const char *oifname,
-                      struct dp_vs_match *match);
+                      int af, struct dp_vs_match *match);
 
-void __dp_vs_bind_svc(struct dp_vs_dest *dest, struct dp_vs_service *svc);
+void dp_vs_service_bind(struct dp_vs_dest *dest, struct dp_vs_service *svc);
 
-void __dp_vs_unbind_svc(struct dp_vs_dest *dest);
+void dp_vs_service_unbind(struct dp_vs_dest *dest);
 
-struct dp_vs_service *dp_vs_lookup_vip(int af, uint16_t protocol,
-                                    const union inet_addr *vaddr);
+void dp_vs_service_put(struct dp_vs_service *svc);
 
-static inline void dp_vs_service_put(struct dp_vs_service *svc)
-{
-    rte_atomic32_dec(&svc->usecnt);
-}
-
-struct dp_vs_service *__dp_vs_service_get(int af, uint16_t protocol,
-                       const union inet_addr *vaddr, uint16_t vport);
-
-struct dp_vs_service *__dp_vs_svc_fwm_get(int af, uint32_t fwmark);
-
-int dp_vs_get_service_entries(const struct dp_vs_get_services *get,
-        struct dp_vs_get_services *uptr);
-
-unsigned dp_vs_get_conn_timeout(struct dp_vs_conn *conn);
-
-/* flush all services */
-int dp_vs_flush(void);
-
-int dp_vs_zero_service(struct dp_vs_service *svc);
-
-int dp_vs_zero_all(void);
-
-
-struct dp_vs_service_user{
-    uint16_t    proto;
-    uint32_t    addr;
-    uint16_t    port;
-    uint32_t    fwmark;
-    
-    char        sched_name[DP_VS_SCHEDNAME_MAXLEN];
-    unsigned    flags;
-    unsigned    timeout;
-    unsigned    conn_timeout;
-    uint32_t    netmask;
-    unsigned    bps;
-    unsigned    limit_proportion;
-
-    char        srange[256];
-    char        drange[256];
-    char        iifname[IFNAMSIZ];
-    char        oifname[IFNAMSIZ];
-};
-
-struct dp_vs_getinfo {
-    unsigned int version;
-    unsigned int size;
-    unsigned int num_services;
-};
-
-enum{
-    DPVS_SO_SET_FLUSH = 200,
-    DPVS_SO_SET_ZERO,
-    DPVS_SO_SET_ADD,
-    DPVS_SO_SET_EDIT,
-    DPVS_SO_SET_DEL,
-    DPVS_SO_SET_ADDDEST,
-    DPVS_SO_SET_EDITDEST,
-    DPVS_SO_SET_DELDEST,
-    DPVS_SO_SET_GRATARP,
-};
-
-enum{
-    DPVS_SO_GET_VERSION = 200,
-    DPVS_SO_GET_INFO,
-    DPVS_SO_GET_SERVICES,
-    DPVS_SO_GET_SERVICE,
-    DPVS_SO_GET_DESTS,
-};
-
-
-#define SOCKOPT_SVC_BASE         DPVS_SO_SET_FLUSH
-#define SOCKOPT_SVC_SET_CMD_MAX  DPVS_SO_SET_GRATARP
-#define SOCKOPT_SVC_GET_CMD_MAX  DPVS_SO_GET_DESTS
-
-#define MAX_ARG_LEN    (sizeof(struct dp_vs_service_user) +    \
-                         sizeof(struct dp_vs_dest_user))
-
-#define DPVS_WAIT_WHILE(expr) while(expr){;}
+struct dp_vs_service *dp_vs_vip_lookup(int af, uint16_t protocol,
+                                       const union inet_addr *vaddr,
+                                       lcoreid_t cid);
 
 #endif /* __DPVS_SVC_H__ */

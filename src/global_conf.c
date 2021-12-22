@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -19,6 +19,10 @@
 #include <sys/stat.h>
 #include "global_conf.h"
 
+extern bool g_dpvs_log_async_mode;
+
+bool g_dpvs_pdump = false;
+
 static void log_current_time(void)
 {
     time_t t = time(0);
@@ -27,27 +31,43 @@ static void log_current_time(void)
     RTE_LOG(INFO, CFG_FILE, "load dpvs configuation file at %s\n", buf);
 }
 
+static inline void set_log_level_dynamic_types(const char *regex, uint32_t level)
+{
+#if RTE_VERSION >= RTE_VERSION_NUM(17, 5, 0, 0)
+    rte_log_set_level_regexp(regex, level);
+#endif
+}
+
 static int set_log_level(char *log_level)
 {
-    if (!log_level)
-        rte_set_log_level(RTE_LOG_DEBUG);
-    else if (!strncmp(log_level, "EMERG", strlen("EMERG")))
-        rte_set_log_level(RTE_LOG_EMERG);
-    else if (!strncmp(log_level, "ALERT", strlen("ALERT")))
-        rte_set_log_level(RTE_LOG_ALERT);
-    else if (!strncmp(log_level, "CRIT", strlen("CRIT")))
-        rte_set_log_level(RTE_LOG_CRIT);
-    else if (!strncmp(log_level, "ERR", strlen("ERR")))
-        rte_set_log_level(RTE_LOG_ERR);
-    else if (!strncmp(log_level, "WARNING", strlen("WARNING")))
-        rte_set_log_level(RTE_LOG_WARNING);
-    else if (!strncmp(log_level, "NOTICE", strlen("NOTICE")))
-        rte_set_log_level(RTE_LOG_NOTICE);
-    else if (!strncmp(log_level, "INFO", strlen("INFO")))
-        rte_set_log_level(RTE_LOG_INFO);
-    else if (!strncmp(log_level, "DEBUG", strlen("DEBUG")))
-        rte_set_log_level(RTE_LOG_DEBUG);
-    else {
+    if (!log_level) {
+        rte_log_set_global_level(RTE_LOG_DEBUG);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_DEBUG);
+    } else if (!strncmp(log_level, "EMERG", strlen("EMERG"))) {
+        rte_log_set_global_level(RTE_LOG_EMERG);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_EMERG);
+    } else if (!strncmp(log_level, "ALERT", strlen("ALERT"))) {
+        rte_log_set_global_level(RTE_LOG_ALERT);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_ALERT);
+    } else if (!strncmp(log_level, "CRIT", strlen("CRIT"))) {
+        rte_log_set_global_level(RTE_LOG_CRIT);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_CRIT);
+    } else if (!strncmp(log_level, "ERR", strlen("ERR"))) {
+        rte_log_set_global_level(RTE_LOG_ERR);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_ERR);
+    } else if (!strncmp(log_level, "WARNING", strlen("WARNING"))) {
+        rte_log_set_global_level(RTE_LOG_WARNING);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_WARNING);
+    } else if (!strncmp(log_level, "NOTICE", strlen("NOTICE"))) {
+        rte_log_set_global_level(RTE_LOG_NOTICE);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_NOTICE);
+    } else if (!strncmp(log_level, "INFO", strlen("INFO"))) {
+        rte_log_set_global_level(RTE_LOG_INFO);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_INFO);
+    } else if (!strncmp(log_level, "DEBUG", strlen("DEBUG"))) {
+        rte_log_set_global_level(RTE_LOG_DEBUG);
+        set_log_level_dynamic_types("user[0-9]", RTE_LOG_DEBUG);
+    } else {
         RTE_LOG(WARNING, CFG_FILE, "%s: illegal log level: %s\n",
                 __func__, log_level);
         return EDPVS_INVAL;
@@ -78,7 +98,7 @@ static int set_log_file(const char *log_file)
                 __func__, log_file);
         return EDPVS_DPDKAPIFAIL;
     }
-    
+
     log_current_time();
     return EDPVS_OK;
 }
@@ -101,12 +121,49 @@ static void log_file_handler(vector_t tokens)
     FREE_PTR(log_file);
 }
 
+static void log_async_mode_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    assert(str);
+    if (strcasecmp(str, "on") == 0)
+        g_dpvs_log_async_mode = true;
+    else if (strcasecmp(str, "off") == 0)
+        g_dpvs_log_async_mode = false;
+    else
+        RTE_LOG(WARNING, CFG_FILE, "invalid log async mode %s\n", str);
+
+    RTE_LOG(INFO, CFG_FILE, "log async mode = %s\n", g_dpvs_log_async_mode ? "on" : "off");
+
+    FREE_PTR(str);
+}
+
+#ifdef CONFIG_DPVS_PDUMP
+static void pdump_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    assert(str);
+    if (strcasecmp(str, "on") == 0)
+        g_dpvs_pdump = true;
+    else if (strcasecmp(str, "off") == 0)
+        g_dpvs_pdump = false;
+    else
+        RTE_LOG(WARNING, CFG_FILE, "invalid pdump switch: %s\n", str);
+
+    RTE_LOG(INFO, CFG_FILE, "pdump = %s\n", g_dpvs_pdump ? "on" : "off");
+
+    FREE_PTR(str);
+}
+#endif
+
 void install_global_keywords(void)
 {
     install_keyword_root("global_defs", NULL);
     install_keyword("log_level", log_level_handler, KW_TYPE_NORMAL);
     install_keyword("log_file", log_file_handler, KW_TYPE_NORMAL);
-
+    install_keyword("log_async_mode", log_async_mode_handler, KW_TYPE_INIT);
+#ifdef CONFIG_DPVS_PDUMP
+    install_keyword("pdump", pdump_handler, KW_TYPE_INIT);
+#endif
 }
 
 int global_conf_init(void)

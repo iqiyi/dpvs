@@ -17,18 +17,17 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@linux-vs.org>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _HTML_H
 #define _HTML_H
 
-/* HTTP header tag */
-#define CONTENT_LENGTH	"Content-Length:"
+#include <sys/types.h>
 
 /* Prototypes */
-extern int extract_content_length(char *buffer, int size);
-extern int extract_status_code(char *buffer, int size);
-extern char *extract_html(char *buffer, int size_buffer);
+extern size_t extract_content_length(const char *buffer, size_t size);
+extern int extract_status_code(const char *buffer, size_t size);
+extern const char *extract_html(const char *buffer, size_t size_buffer) __attribute__ ((pure));
 
 #endif

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,7 +18,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include "dpdk.h"
-#include "common.h"
+#include "conf/common.h"
 #include "parser/parser.h"
 #include "cfgfile.h"
 #include "global_conf.h"
@@ -26,12 +26,14 @@
 #include "neigh.h"
 #include "ipv4.h"
 #include "ipv4_frag.h"
+#include "ipv6.h"
 #include "ctrl.h"
 #include "sa_pool.h"
 #include "ipvs/conn.h"
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
 #include "ipvs/synproxy.h"
+#include "scheduler.h"
 
 typedef void (*sighandler_t)(int);
 
@@ -51,6 +53,8 @@ static void keyword_value_init(void)
     udp_keyword_value_init();
     tcp_keyword_value_init();
     synproxy_keyword_value_init();
+
+    ipv6_keyword_value_init();
 }
 
 static vector_t install_keywords(void)
@@ -84,6 +88,8 @@ static vector_t install_keywords(void)
     install_proto_udp_keywords();
     install_sublevel_end();
 
+    install_ipv6_keywords();
+
     return g_keywords;
 }
 
@@ -98,7 +104,7 @@ static inline void sighup(void)
     SET_RELOAD;
 }
 
-void try_reload(void)
+static void try_reload(void *dump)
 {
     if (unlikely(RELOAD_STATUS)) {
         UNSET_RELOAD;
@@ -129,6 +135,12 @@ static void sig_callback(int sig)
     }
 }
 
+static struct dpvs_lcore_job reload_job = {
+    .name = "cfgfile_reload",
+    .type = LCORE_JOB_LOOP,
+    .func = try_reload,
+};
+
 int cfgfile_init(void)
 {
     int ret;
@@ -157,7 +169,13 @@ int cfgfile_init(void)
 
     /* load configuration file on start */
     SET_RELOAD;
-    try_reload();
+    try_reload(NULL);
+
+    ret = dpvs_lcore_job_register(&reload_job, LCORE_ROLE_MASTER);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(ERR, CFG_FILE, "%s: fail to register cfgfile_reload job\n", __func__);
+        return ret;
+    }
 
     return EDPVS_OK;
 }
@@ -169,6 +187,12 @@ int cfgfile_term(void)
     if ((ret = global_conf_term()) != EDPVS_OK) {
         RTE_LOG(ERR, CFG_FILE, "%s: global configuration termination failed\n",
                 __func__);
+        return ret;
+    }
+
+    ret = dpvs_lcore_job_unregister(&reload_job, LCORE_ROLE_MASTER);
+    if (ret != EDPVS_OK) {
+        RTE_LOG(ERR, CFG_FILE, "%s: fail to unregister cfgfile_reload job\n", __func__);
         return ret;
     }
 

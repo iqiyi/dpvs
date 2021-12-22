@@ -20,64 +20,87 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2017 Alexandre Cassen, <acassen@gmail.com>
  */
 
+#include "config.h"
+
+#include <fcntl.h>
 #include <openssl/err.h>
+
 #include "check_ssl.h"
 #include "check_api.h"
+#include "check_http.h"
 #include "logger.h"
-#include "memory.h"
-#include "parser.h"
-#include "smtp.h"
-#include "utils.h"
-#include "html.h"
+#ifdef THREAD_DUMP
+#include "scheduler.h"
+#endif
 
 /* SSL primitives */
 /* Free an SSL context */
 void
 clear_ssl(ssl_data_t *ssl)
 {
-	if (ssl)
-		if (ssl->ctx)
-			SSL_CTX_free(ssl->ctx);
+	if (ssl && ssl->ctx) {
+		SSL_CTX_free(ssl->ctx);
+		ssl->ctx = NULL;
+	}
 }
 
 /* PEM password callback function */
 static int
-password_cb(char *buf, int num, int rwflag, void *userdata)
+password_cb(char *buf, int num, __attribute__((unused)) int rwflag, void *userdata)
 {
 	ssl_data_t *ssl = (ssl_data_t *) userdata;
-	unsigned int plen = strlen(ssl->password);
+	size_t plen = strlen(ssl->password);
 
-	if (num < plen + 1)
+	if ((unsigned)num < plen + 1)
 		return (0);
 
-	strncpy(buf, ssl->password, plen);
-	return (plen);
+	strcpy(buf, ssl->password);
+	return (int)plen;
 }
 
 /* Inititalize global SSL context */
-static BIO *bio_err = 0;
-static int
+static bool
 build_ssl_ctx(void)
 {
 	ssl_data_t *ssl;
 
 	/* Library initialization */
+#ifdef HAVE_OPENSSL_INIT_CRYPTO
+#ifndef HAVE_OPENSSL_INIT_NO_LOAD_CONFIG_BUG
+	/* In OpenSSL v1.1.1 if the following is called, SSL_CTX_new() below fails.
+	 * It works in v1.1.0h and v1.1.1b.
+	 * It transpires that it works without setting NO_LOAD_CONFIG, but it is
+	 * presumably more efficient not to load it. */
+	if (!OPENSSL_init_crypto(OPENSSL_INIT_NO_LOAD_CONFIG, NULL))
+		log_message(LOG_INFO, "OPENSSL_init_crypto failed");
+#endif
+#else
 	SSL_library_init();
-
 	SSL_load_error_strings();
-	bio_err = BIO_new_fp(stderr, BIO_NOCLOSE);
+#endif
 
 	if (!check_data->ssl)
 		ssl = (ssl_data_t *) MALLOC(sizeof(ssl_data_t));
 	else
 		ssl = check_data->ssl;
 
-	/* Initialize SSL context for SSL v2/3 */
-	ssl->meth = (SSL_METHOD *) SSLv23_method();
-	ssl->ctx = SSL_CTX_new(ssl->meth);
+	/* Initialize SSL context */
+#ifdef HAVE_TLS_METHOD
+	ssl->meth = TLS_method();
+#else
+	ssl->meth = SSLv23_method();
+#endif
+	if (!(ssl->ctx = SSL_CTX_new(ssl->meth))) {
+		log_message(LOG_INFO, "SSL error: cannot create new SSL context");
+
+		if (!check_data->ssl)
+			FREE(ssl);
+
+		return false;
+	}
 
 	/* return for autogen context */
 	if (!check_data->ssl) {
@@ -92,7 +115,7 @@ build_ssl_ctx(void)
 		     (ssl->ctx, check_data->ssl->certfile))) {
 			log_message(LOG_INFO,
 			       "SSL error : Cant load certificate file...");
-			return 0;
+			return false;
 		}
 
 	/* Handle password callback using userdata ssl */
@@ -107,7 +130,7 @@ build_ssl_ctx(void)
 		    (SSL_CTX_use_PrivateKey_file
 		     (ssl->ctx, check_data->ssl->keyfile, SSL_FILETYPE_PEM))) {
 			log_message(LOG_INFO, "SSL error : Cant load key file...");
-			return 0;
+			return false;
 		}
 
 	/* Load the CAs we trust */
@@ -116,22 +139,22 @@ build_ssl_ctx(void)
 		    (SSL_CTX_load_verify_locations
 		     (ssl->ctx, check_data->ssl->cafile, 0))) {
 			log_message(LOG_INFO, "SSL error : Cant load CA file...");
-			return 0;
+			return false;
 		}
 
       end:
-#if (OPENSSL_VERSION_NUMBER < 0x00905100L)
+#if HAVE_SSL_CTX_SET_VERIFY_DEPTH
 	SSL_CTX_set_verify_depth(ssl->ctx, 1);
 #endif
 
-	return 1;
+	return true;
 }
 
 /*
  * Initialize the SSL context, with or without specific
  * configuration files.
  */
-int
+bool
 init_ssl_ctx(void)
 {
 	ssl_data_t *ssl = check_data->ssl;
@@ -143,18 +166,15 @@ init_ssl_ctx(void)
 		log_message(LOG_INFO, "  SSL   cafile:%s", ssl->cafile);
 		log_message(LOG_INFO, "Terminate...");
 		clear_ssl(ssl);
-		return 0;
+		return false;
 	}
-	return 1;
+	return true;
 }
 
 /* Display SSL error to readable string */
 int
 ssl_printerr(int err)
 {
-	unsigned long extended_error = 0;
-	char *ssl_strerr;
-
 	switch (err) {
 	case SSL_ERROR_ZERO_RETURN:
 		log_message(LOG_INFO, "  SSL error: (zero return)");
@@ -174,54 +194,75 @@ ssl_printerr(int err)
 	case SSL_ERROR_SYSCALL:
 		log_message(LOG_INFO, "  SSL error: (syscall error)");
 		break;
-	case SSL_ERROR_SSL:{
-			ssl_strerr = (char *) MALLOC(500);
-
-			extended_error = ERR_get_error();
-			ERR_error_string(extended_error, ssl_strerr);
-			log_message(LOG_INFO, "  SSL error: (%s)", ssl_strerr);
-			FREE(ssl_strerr);
-			break;
-		}
+	case SSL_ERROR_SSL:
+		/* Note: the following is not thread safe. Use MALLOC(256) and ERR_error_string_n if need thread safety */
+		log_message(LOG_INFO, "  SSL error: (%s)", ERR_error_string(ERR_get_error(), NULL));
+		break;
 	}
 	return 0;
 }
 
 int
-ssl_connect(thread_t * thread, int new_req)
+ssl_connect(thread_ref_t thread, int new_req)
 {
 	checker_t *checker = THREAD_ARG(thread);
 	http_checker_t *http_get_check = CHECKER_ARG(checker);
-	http_t *http = HTTP_ARG(http_get_check);
-	request_t *req = HTTP_REQ(http);
+	request_t *req = http_get_check->req;
+#ifdef _HAVE_SSL_SET_TLSEXT_HOST_NAME_
+	url_t *url = ELEMENT_DATA(http_get_check->url_it);
+	const char* vhost = NULL;
+#endif
 	int ret = 0;
-	int val = 0;
 
 	/* First round, create SSL context */
 	if (new_req) {
-		req->ssl = SSL_new(check_data->ssl->ctx);
-		req->bio = BIO_new_socket(thread->u.fd, BIO_NOCLOSE);
+		int bio_fd;
+
+		if (!(req->ssl = SSL_new(check_data->ssl->ctx))) {
+			log_message(LOG_INFO, "Unable to establish ssl connection - SSL_new() failed");
+			return 0;
+		}
+
+		if (!(req->bio = BIO_new_socket(thread->u.f.fd, BIO_NOCLOSE))) {
+			log_message(LOG_INFO, "Unable to establish ssl connection - BIO_new_socket() failed");
+			return 0;
+		}
+
+		BIO_get_fd(req->bio, &bio_fd);
+		if (fcntl(bio_fd, F_SETFD, fcntl(bio_fd, F_GETFD) | FD_CLOEXEC) == -1)
+			log_message(LOG_INFO, "Setting CLOEXEC failed on ssl socket - errno %d", errno);
+#ifdef HAVE_SSL_SET0_RBIO
+		BIO_up_ref(req->bio);
+		SSL_set0_rbio(req->ssl, req->bio);
+		SSL_set0_wbio(req->ssl, req->bio);
+#else
 		SSL_set_bio(req->ssl, req->bio, req->bio);
+#endif
+#ifdef _HAVE_SSL_SET_TLSEXT_HOST_NAME_
+		if (http_get_check->enable_sni) {
+			if (url && url->virtualhost)
+				vhost = url->virtualhost;
+			else if (http_get_check->virtualhost)
+				vhost = http_get_check->virtualhost;
+			else if (checker->vs->virtualhost)
+				vhost = checker->vs->virtualhost;
+			if (vhost)
+				SSL_set_tlsext_host_name(req->ssl, vhost);
+		}
+#endif
 	}
 
-	/* Set descriptor non blocking */
-	val = fcntl(thread->u.fd, F_GETFL, 0);
-	fcntl(thread->u.fd, F_SETFL, val | O_NONBLOCK);
-
 	ret = SSL_connect(req->ssl);
-
-	/* restore descriptor flags */
-	fcntl(thread->u.fd, F_SETFL, val);
 
 	return ret;
 }
 
-int
-ssl_send_request(SSL * ssl, char *str_request, int request_len)
+bool
+ssl_send_request(SSL * ssl, const char *str_request, int request_len)
 {
 	int err, r = 0;
 
-	while (1) {
+	while (true) {
 		err = 1;
 		r = SSL_write(ssl, str_request, request_len);
 		if (SSL_ERROR_NONE != SSL_get_error(ssl, r))
@@ -233,80 +274,67 @@ ssl_send_request(SSL * ssl, char *str_request, int request_len)
 		break;
 	}
 
-	return (err == 3) ? 1 : 0;
+	return (err == 3);
 }
 
 /* Asynchronous SSL stream reader */
 int
-ssl_read_thread(thread_t * thread)
+ssl_read_thread(thread_ref_t thread)
 {
 	checker_t *checker = THREAD_ARG(thread);
 	http_checker_t *http_get_check = CHECKER_ARG(checker);
-	http_t *http = HTTP_ARG(http_get_check);
-	request_t *req = HTTP_REQ(http);
+	request_t *req = http_get_check->req;
+	url_t *url = ELEMENT_DATA(http_get_check->url_it);
 	unsigned timeout = checker->co->connection_to;
-	unsigned char digest[16];
+	unsigned char digest[MD5_DIGEST_LENGTH];
 	int r = 0;
-	int val;
 
 	/* Handle read timeout */
 	if (thread->type == THREAD_READ_TIMEOUT && !req->extracted)
-		return timeout_epilog(thread, "=> SSL CHECK failed on service"
-				      " : recevice data <=\n\n", "SSL read");
+		return timeout_epilog(thread, "Timeout SSL read");
 
-	/* Set descriptor non blocking */
-	val = fcntl(thread->u.fd, F_GETFL, 0);
-	fcntl(thread->u.fd, F_SETFL, val | O_NONBLOCK);
-
-	/* read the SSL stream */
-	r = SSL_read(req->ssl, req->buffer + req->len,
-		     MAX_BUFFER_LENGTH - req->len);
-
-	/* restore descriptor flags */
-	fcntl(thread->u.fd, F_SETFL, val);
+	/* read the SSL stream - allow for terminating the data with '\0 */
+	r = SSL_read(req->ssl, req->buffer + req->len, (int)(MAX_BUFFER_LENGTH - 1 - req->len));
 
 	req->error = SSL_get_error(req->ssl, r);
 
 	if (req->error == SSL_ERROR_WANT_READ) {
-		 /* async read unfinished */ 
+		 /* async read unfinished */
 		thread_add_read(thread->master, ssl_read_thread, checker,
-				thread->u.fd, timeout);
+				thread->u.f.fd, timeout, false);
 	} else if (r > 0 && req->error == 0) {
 		/* Handle response stream */
-		http_process_response(req, r);
+		http_process_response(req, (size_t)r, url);
 
 		/*
 		 * Register next ssl stream reader.
 		 * Register itself to not perturbe global I/O multiplexer.
 		 */
 		thread_add_read(thread->master, ssl_read_thread, checker,
-				thread->u.fd, timeout);
+				thread->u.f.fd, timeout, false);
 	} else if (req->error) {
 
 		/* All the SSL streal has been parsed */
-		MD5_Final(digest, &req->context);
+		if (url->digest)
+			MD5_Final(digest, &req->context);
 		SSL_set_quiet_shutdown(req->ssl, 1);
 
 		r = (req->error == SSL_ERROR_ZERO_RETURN) ? SSL_shutdown(req->ssl) : 0;
 
-		if (r && !req->extracted) {
-			/* check if server is currently alive */
-			if (svr_checker_up(checker->id, checker->rs)) {
-				smtp_alert(checker->rs, NULL, NULL,
-					   "DOWN",
-					   "=> SSL CHECK failed on service"
-					   " : cannot receive data <=\n\n");
-				update_svr_checker_state(DOWN, checker->id
-							     , checker->vs
-							     , checker->rs);
-			}
-			return epilog(thread, 1, 0, 0);
-		}
+		if (r && !req->extracted)
+			return timeout_epilog(thread, "SSL read error from");
 
 		/* Handle response stream */
-		http_handle_response(thread, digest, (!req->extracted) ? 1 : 0);
-
+		http_handle_response(thread, digest, !req->extracted);
 	}
 
 	return 0;
 }
+
+#ifdef THREAD_DUMP
+void
+register_check_ssl_addresses(void)
+{
+	register_thread_address("ssl_read_thread", ssl_read_thread);
+}
+#endif

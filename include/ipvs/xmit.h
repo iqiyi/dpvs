@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -29,9 +29,9 @@ int dp_vs_out_xmit_fnat(struct dp_vs_proto *prot,
                         struct dp_vs_conn *conn,
                         struct rte_mbuf *mbuf);
 
-void dp_vs_xmit_icmp(struct rte_mbuf *mbuf, 
+void dp_vs_xmit_icmp(struct rte_mbuf *mbuf,
                      struct dp_vs_proto *prot,
-                     struct dp_vs_conn *conn, 
+                     struct dp_vs_conn *conn,
                      int dir);
 
 int dp_vs_xmit_dr(struct dp_vs_proto *proto,
@@ -43,6 +43,18 @@ int dp_vs_xmit_snat(struct dp_vs_proto *proto,
                         struct rte_mbuf *mbuf);
 
 int dp_vs_out_xmit_snat(struct dp_vs_proto *proto,
+                        struct dp_vs_conn *conn,
+                        struct rte_mbuf *mbuf);
+
+int dp_vs_xmit_nat(struct dp_vs_proto *proto,
+                        struct dp_vs_conn *conn,
+                        struct rte_mbuf *mbuf);
+
+int dp_vs_out_xmit_nat(struct dp_vs_proto *proto,
+                        struct dp_vs_conn *conn,
+                        struct rte_mbuf *mbuf);
+
+int dp_vs_xmit_tunnel(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn,
                         struct rte_mbuf *mbuf);
 

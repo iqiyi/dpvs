@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
 #include <libgen.h>
 #include <errno.h>
 #include <glob.h>
-#include "common.h"
+#include "conf/common.h"
 #include "parser/parser.h"
 
 /* exported global vars */
@@ -32,8 +32,8 @@ static vector_t g_current_keywords;
 static char *g_current_conf_file;
 static int g_sublevel = 0;
 
-/* 
- * keyword operations 
+/*
+ * keyword operations
  * */
 
 /* allocate and set a keyword in current level */

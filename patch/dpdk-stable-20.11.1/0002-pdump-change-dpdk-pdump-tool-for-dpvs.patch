@@ -1,0 +1,555 @@
+From 8d1dc22740a315d62596445beba8b8737c45ffa4 Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@iqiyi.com>
+Date: Thu, 1 Jul 2021 21:23:50 +0800
+Subject: [PATCH 2/6] pdump: change dpdk-pdump tool for dpvs
+
+---
+ app/pdump/main.c             | 167 ++++++++++++++++++++++++++++++++++++++++---
+ lib/librte_pdump/rte_pdump.c | 145 +++++++++++++++++++++++++++++++++++--
+ lib/librte_pdump/rte_pdump.h |  27 +++++++
+ 3 files changed, 327 insertions(+), 12 deletions(-)
+
+diff --git a/app/pdump/main.c b/app/pdump/main.c
+index b34bf33..9d14474 100644
+--- a/app/pdump/main.c
++++ b/app/pdump/main.c
+@@ -27,6 +27,7 @@
+ #include <rte_ring.h>
+ #include <rte_string_fns.h>
+ #include <rte_pdump.h>
++#include <rte_malloc.h>
+ 
+ #define CMD_LINE_OPT_PDUMP "pdump"
+ #define CMD_LINE_OPT_PDUMP_NUM 256
+@@ -42,6 +43,14 @@
+ #define PDUMP_MSIZE_ARG "mbuf-size"
+ #define PDUMP_NUM_MBUFS_ARG "total-num-mbufs"
+ 
++#define PDUMP_HOST_ARG "host"
++#define PDUMP_SRC_ARG "src-host"
++#define PDUMP_DST_ARG "dst-host"
++#define PDUMP_PROTO_PORT_AGE "proto-port"
++#define PDUMP_SPORT_ARG "src-port"
++#define PDUMP_DPORT_ARG "dst-port"
++#define PDUMP_PROTO_ARG "proto"
++
+ #define VDEV_NAME_FMT "net_pcap_%s_%d"
+ #define VDEV_PCAP_ARGS_FMT "tx_pcap=%s"
+ #define VDEV_IFACE_ARGS_FMT "tx_iface=%s"
+@@ -97,6 +106,13 @@ static const char * const valid_pdump_arguments[] = {
+ 	PDUMP_RING_SIZE_ARG,
+ 	PDUMP_MSIZE_ARG,
+ 	PDUMP_NUM_MBUFS_ARG,
++	PDUMP_HOST_ARG,
++	PDUMP_SRC_ARG,
++	PDUMP_DST_ARG,
++	PDUMP_PROTO_PORT_AGE,
++	PDUMP_SPORT_ARG,
++	PDUMP_DPORT_ARG,
++	PDUMP_PROTO_ARG,
+ 	NULL
+ };
+ 
+@@ -130,6 +146,7 @@ struct pdump_tuples {
+ 	enum pcap_stream rx_vdev_stream_type;
+ 	enum pcap_stream tx_vdev_stream_type;
+ 	bool single_pdump_dev;
++	struct pdump_filter *filter;
+ 
+ 	/* stats */
+ 	struct pdump_stats stats;
+@@ -158,6 +175,11 @@ pdump_usage(const char *prgname)
+ 			"(queue=<queue_id>),"
+ 			"(rx-dev=<iface or pcap file> |"
+ 			" tx-dev=<iface or pcap file>,"
++			"[host=<ipaddress> | src-host=<source ip address> |"
++			"dst-host=<destination ip address>],"
++			"[proto=<protocol type>support:tcp/udp/icmp],"
++			"[proto-port=<protocol port> |src-port=<source protocol port> |"
++			"dst-port=<destination protocol port>],"
+ 			"[ring-size=<ring size>default:16384],"
+ 			"[mbuf-size=<mbuf data size>default:2176],"
+ 			"[total-num-mbufs=<number of mbufs>default:65535]'\n",
+@@ -244,6 +266,64 @@ parse_uint_value(const char *key, const char *value, void *extra_args)
+ }
+ 
+ static int
++parse_host(const char *key __rte_unused, const char *value, void *extra_args)
++{
++	struct pdump_tuples *pt = extra_args;
++	struct in_addr	inaddr;
++	struct in6_addr	inaddr6;
++	union  addr		addr;
++	int				af = 0;
++
++	if (inet_pton(AF_INET6, value, &inaddr6) > 0) {
++		af = AF_INET6;
++		addr.in6 = inaddr6;
++	} else if (inet_pton(AF_INET, value, &inaddr) > 0){
++		af = AF_INET;
++		addr.in = inaddr;
++	} else {
++		printf("IP address invaled\n");
++		return -EINVAL;
++	}
++
++	if (pt->filter && pt->filter->af != 0 && af != pt->filter->af) {
++		printf("IPv4 and IPv6 conflict\n");
++		return -EINVAL;
++	} else {
++		pt->filter->af = af;
++	}
++
++	if (!strcmp(key, PDUMP_HOST_ARG)) {
++		rte_memcpy(&pt->filter->host_addr, &addr, sizeof(addr));
++	} else if (!strcmp(key, PDUMP_SRC_ARG)) {
++		rte_memcpy(&pt->filter->s_addr, &addr, sizeof(addr));
++	} else if (!strcmp(key, PDUMP_DST_ARG)) {
++		rte_memcpy(&pt->filter->d_addr, &addr, sizeof(addr));
++	}
++
++	return 0;
++}
++
++static int
++parse_proto(const char *key __rte_unused, const char *value, void *extra_args)
++{
++	struct pdump_tuples *pt = extra_args;
++
++	if (!strcmp(value, "tcp")) {
++		pt->filter->proto = IPPROTO_TCP;
++	} else if (!strcmp(value, "udp")) {
++		pt->filter->proto = IPPROTO_UDP;
++	} else if (!strcmp(value, "icmp")) {
++		pt->filter->proto = IPPROTO_ICMP;
++	} else {
++		printf("invalid value:\"%s\" for key:\"%s\", "
++			"value must be tcp/udp/icmp\n", value, key);
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int
+ parse_pdump(const char *optarg)
+ {
+ 	struct rte_kvargs *kvlist;
+@@ -370,6 +450,75 @@ parse_pdump(const char *optarg)
+ 	} else
+ 		pt->total_num_mbufs = MBUFS_PER_POOL;
+ 
++	/* filter parsing and validation */
++	pt->filter = rte_zmalloc("pdump_filter",
++			sizeof(struct pdump_filter), 0);
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_HOST_ARG);
++	if (cnt1 == 1) {
++		ret = rte_kvargs_process(kvlist, PDUMP_HOST_ARG,
++				&parse_host, pt);
++		if (ret < 0)
++			goto free_kvlist;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_SRC_ARG);
++	if (cnt1 == 1) {
++		ret = rte_kvargs_process(kvlist, PDUMP_SRC_ARG,
++				&parse_host, pt);
++		if (ret < 0)
++			goto free_kvlist;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_DST_ARG);
++	if (cnt1 == 1) {
++		ret = rte_kvargs_process(kvlist, PDUMP_DST_ARG,
++				&parse_host, pt);
++		if (ret < 0)
++			goto free_kvlist;
++	}
++
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_PROTO_PORT_AGE);
++	if (cnt1 == 1) {
++		v.min = 1;
++		v.max = UINT16_MAX;
++		ret = rte_kvargs_process(kvlist, PDUMP_PROTO_PORT_AGE,
++				&parse_uint_value, &v);
++		if (ret < 0)
++			goto free_kvlist;
++		pt->filter->proto_port = (uint16_t) v.val;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_SPORT_ARG);
++	if (cnt1 == 1) {
++		v.min = 1;
++		v.max = UINT16_MAX;
++		ret = rte_kvargs_process(kvlist, PDUMP_SPORT_ARG,
++				&parse_uint_value, &v);
++		if (ret < 0)
++			goto free_kvlist;
++		pt->filter->s_port = (uint16_t) v.val;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_DPORT_ARG);
++	if (cnt1 == 1) {
++		v.min = 1;
++		v.max = UINT16_MAX;
++		ret = rte_kvargs_process(kvlist, PDUMP_DPORT_ARG,
++				&parse_uint_value, &v);
++		if (ret < 0)
++			goto free_kvlist;
++		pt->filter->d_port = (uint16_t) v.val;
++	}
++
++	cnt1 = rte_kvargs_count(kvlist, PDUMP_PROTO_ARG);
++	if (cnt1 == 1) {
++		ret = rte_kvargs_process(kvlist, PDUMP_PROTO_ARG,
++				&parse_proto, pt);
++		if (ret < 0)
++			goto free_kvlist;
++	}
++
+ 	num_tuples++;
+ 
+ free_kvlist:
+@@ -510,6 +659,8 @@ cleanup_rings(void)
+ 			rte_ring_free(pt->rx_ring);
+ 		if (pt->tx_ring)
+ 			rte_ring_free(pt->tx_ring);
++		if (pt->filter)
++			rte_free(pt->filter);
+ 	}
+ }
+ 
+@@ -837,20 +988,20 @@ enable_pdump(void)
+ 						pt->queue,
+ 						RTE_PDUMP_FLAG_RX,
+ 						pt->rx_ring,
+-						pt->mp, NULL);
++						pt->mp, pt->filter);
+ 				ret1 = rte_pdump_enable_by_deviceid(
+ 						pt->device_id,
+ 						pt->queue,
+ 						RTE_PDUMP_FLAG_TX,
+ 						pt->tx_ring,
+-						pt->mp, NULL);
++						pt->mp, pt->filter);
+ 			} else if (pt->dump_by_type == PORT_ID) {
+ 				ret = rte_pdump_enable(pt->port, pt->queue,
+ 						RTE_PDUMP_FLAG_RX,
+-						pt->rx_ring, pt->mp, NULL);
++						pt->rx_ring, pt->mp, pt->filter);
+ 				ret1 = rte_pdump_enable(pt->port, pt->queue,
+ 						RTE_PDUMP_FLAG_TX,
+-						pt->tx_ring, pt->mp, NULL);
++						pt->tx_ring, pt->mp, pt->filter);
+ 			}
+ 		} else if (pt->dir == RTE_PDUMP_FLAG_RX) {
+ 			if (pt->dump_by_type == DEVICE_ID)
+@@ -858,22 +1009,22 @@ enable_pdump(void)
+ 						pt->device_id,
+ 						pt->queue,
+ 						pt->dir, pt->rx_ring,
+-						pt->mp, NULL);
++						pt->mp, pt->filter);
+ 			else if (pt->dump_by_type == PORT_ID)
+ 				ret = rte_pdump_enable(pt->port, pt->queue,
+ 						pt->dir,
+-						pt->rx_ring, pt->mp, NULL);
++						pt->rx_ring, pt->mp, pt->filter);
+ 		} else if (pt->dir == RTE_PDUMP_FLAG_TX) {
+ 			if (pt->dump_by_type == DEVICE_ID)
+ 				ret = rte_pdump_enable_by_deviceid(
+ 						pt->device_id,
+ 						pt->queue,
+ 						pt->dir,
+-						pt->tx_ring, pt->mp, NULL);
++						pt->tx_ring, pt->mp, pt->filter);
+ 			else if (pt->dump_by_type == PORT_ID)
+ 				ret = rte_pdump_enable(pt->port, pt->queue,
+ 						pt->dir,
+-						pt->tx_ring, pt->mp, NULL);
++						pt->tx_ring, pt->mp, pt->filter);
+ 		}
+ 		if (ret < 0 || ret1 < 0) {
+ 			cleanup_pdump_resources();
+diff --git a/lib/librte_pdump/rte_pdump.c b/lib/librte_pdump/rte_pdump.c
+index b3c8d5c..b73fb8f 100644
+--- a/lib/librte_pdump/rte_pdump.c
++++ b/lib/librte_pdump/rte_pdump.c
+@@ -9,6 +9,10 @@
+ #include <rte_log.h>
+ #include <rte_errno.h>
+ #include <rte_string_fns.h>
++#include <rte_arp.h>
++#include <rte_ip.h>
++#include <rte_udp.h>
++#include <rte_byteorder.h>
+ 
+ #include "rte_pdump.h"
+ 
+@@ -69,6 +73,132 @@ static struct pdump_rxtx_cbs {
+ } rx_cbs[RTE_MAX_ETHPORTS][RTE_MAX_QUEUES_PER_PORT],
+ tx_cbs[RTE_MAX_ETHPORTS][RTE_MAX_QUEUES_PER_PORT];
+ 
++static int
++inet_addr_equal(int af, const union addr *a1,
++		const union addr *a2)
++{
++	switch (af) {
++	case AF_INET:
++		return a1->in.s_addr == a2->in.s_addr;
++	case AF_INET6:
++		return memcmp(a1->in6.s6_addr, a2->in6.s6_addr, 16) == 0;
++	default:
++		return memcmp(a1, a2, sizeof(union addr)) == 0;
++	}
++}
++
++static int
++inet_is_addr_any(int af, const union addr *addr)
++{
++	switch (af) {
++	case AF_INET:
++		return addr->in.s_addr == htonl(INADDR_ANY);
++	case AF_INET6:
++		return IN6_ARE_ADDR_EQUAL(&addr->in6, &in6addr_any);
++	default:
++		return -1;
++	}
++
++	return -1;
++}
++static int
++pdump_filter(struct rte_mbuf *m, struct pdump_filter *filter)
++{
++	struct rte_ether_hdr *eth_hdr;
++	struct vlan_eth_hdr *vlan_eth_hdr;
++	union addr s_addr, d_addr;
++	int prepend = 0;
++	uint16_t type = 0;
++	uint16_t iph_len = 0;
++	uint8_t proto = 0;
++
++	int af;
++
++	if (filter->af == 0 && filter->s_port == 0 &&
++			filter->d_port == 0 && filter->proto == 0 &&
++			filter->proto_port == 0)
++		return 0;
++
++	eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
++
++	if (eth_hdr->ether_type == htons(ETH_P_8021Q)) {
++		prepend += sizeof(struct vlan_eth_hdr);
++		vlan_eth_hdr = rte_pktmbuf_mtod(m, struct vlan_eth_hdr *);
++		type = vlan_eth_hdr->h_vlan_encapsulated_proto;
++	} else {
++		prepend += sizeof(struct rte_ether_hdr);
++		eth_hdr = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
++		type = eth_hdr->ether_type;
++	}
++
++	if (rte_pktmbuf_adj(m, prepend) == NULL)
++		goto prepend;
++
++	if (type == rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP)) {
++		struct rte_arp_hdr *arp = rte_pktmbuf_mtod(m, struct rte_arp_hdr *);
++		af = AF_INET;
++		s_addr.in.s_addr = arp->arp_data.arp_sip;
++		d_addr.in.s_addr = arp->arp_data.arp_tip;
++	} else if (type == rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4)) {
++		struct rte_ipv4_hdr *ip4 = rte_pktmbuf_mtod(m, struct rte_ipv4_hdr *);
++		af = AF_INET;
++		s_addr.in.s_addr = ip4->src_addr;
++		d_addr.in.s_addr = ip4->dst_addr;
++		proto = ip4->next_proto_id;
++		iph_len = (ip4->version_ihl & 0xf) << 2;
++	} else if (type == rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV6)) {
++		struct rte_ipv6_hdr *ip6 = rte_pktmbuf_mtod(m, struct rte_ipv6_hdr *);
++		af = AF_INET6;
++		rte_memcpy(&s_addr.in6, &ip6->src_addr, 16);
++		rte_memcpy(&d_addr.in6, &ip6->dst_addr, 16);
++		proto = ip6->proto;
++		iph_len = sizeof(struct rte_ipv6_hdr);
++	} else {
++		goto prepend;
++	}
++
++	/*filter*/
++	if (!inet_is_addr_any(af, &filter->s_addr) &&
++		!inet_addr_equal(af, &filter->s_addr, &s_addr))
++		goto prepend;
++	if (!inet_is_addr_any(af, &filter->d_addr) &&
++		!inet_addr_equal(af, &filter->d_addr, &d_addr))
++		goto prepend;
++	if (!inet_is_addr_any(af, &filter->host_addr) &&
++		!inet_addr_equal(af, &filter->host_addr, &s_addr) &&
++		!inet_addr_equal(af, &filter->host_addr, &d_addr))
++		goto prepend;
++
++	if (filter->proto && filter->proto != proto)
++		goto prepend;
++
++	if (filter->s_port || filter->d_port || filter->proto_port) {
++		if (proto != IPPROTO_TCP && proto != IPPROTO_UDP)
++			goto prepend;
++		struct rte_udp_hdr _uh;
++		const struct rte_udp_hdr *uh;
++		uh = rte_pktmbuf_read(m, iph_len, sizeof(_uh), &_uh);
++		if (uh == NULL)
++			goto prepend;
++		if (filter->s_port && filter->s_port != rte_cpu_to_be_16(uh->src_port))
++			goto prepend;
++
++		if (filter->d_port && filter->d_port != rte_cpu_to_be_16(uh->dst_port))
++			goto prepend;
++
++		if (filter->proto_port &&
++				filter->proto_port != rte_cpu_to_be_16(uh->src_port) &&
++				filter->proto_port != rte_cpu_to_be_16(uh->dst_port))
++			goto prepend;
++	}
++
++	rte_pktmbuf_prepend(m, prepend);
++	return 0;
++
++prepend:
++	rte_pktmbuf_prepend(m, prepend);
++	return -1;
++}
+ 
+ static inline void
+ pdump_copy(struct rte_mbuf **pkts, uint16_t nb_pkts, void *user_params)
+@@ -86,6 +216,8 @@ pdump_copy(struct rte_mbuf **pkts, uint16_t nb_pkts, void *user_params)
+ 	ring = cbs->ring;
+ 	mp = cbs->mp;
+ 	for (i = 0; i < nb_pkts; i++) {
++		if (pdump_filter(pkts[i], cbs->filter) != 0)
++			continue;
+ 		p = rte_pktmbuf_copy(pkts[i], mp, 0, UINT32_MAX);
+ 		if (p)
+ 			dup_bufs[d_pkts++] = p;
+@@ -122,7 +254,7 @@ pdump_tx(uint16_t port __rte_unused, uint16_t qidx __rte_unused,
+ static int
+ pdump_register_rx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
+ 				struct rte_ring *ring, struct rte_mempool *mp,
+-				uint16_t operation)
++				struct pdump_filter *filter, uint16_t operation)
+ {
+ 	uint16_t qid;
+ 	struct pdump_rxtx_cbs *cbs = NULL;
+@@ -140,6 +272,7 @@ pdump_register_rx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
+ 			}
+ 			cbs->ring = ring;
+ 			cbs->mp = mp;
++			cbs->filter = filter;
+ 			cbs->cb = rte_eth_add_first_rx_callback(port, qid,
+ 								pdump_rx, cbs);
+ 			if (cbs->cb == NULL) {
+@@ -176,7 +309,7 @@ pdump_register_rx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
+ static int
+ pdump_register_tx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
+ 				struct rte_ring *ring, struct rte_mempool *mp,
+-				uint16_t operation)
++				struct pdump_filter *filter, uint16_t operation)
+ {
+ 
+ 	uint16_t qid;
+@@ -195,6 +328,7 @@ pdump_register_tx_callbacks(uint16_t end_q, uint16_t port, uint16_t queue,
+ 			}
+ 			cbs->ring = ring;
+ 			cbs->mp = mp;
++			cbs->filter = filter;
+ 			cbs->cb = rte_eth_add_tx_callback(port, qid, pdump_tx,
+ 								cbs);
+ 			if (cbs->cb == NULL) {
+@@ -238,6 +372,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
+ 	uint16_t operation;
+ 	struct rte_ring *ring;
+ 	struct rte_mempool *mp;
++	struct pdump_filter *filter;
+ 
+ 	flags = p->flags;
+ 	operation = p->op;
+@@ -253,6 +388,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
+ 		queue = p->data.en_v1.queue;
+ 		ring = p->data.en_v1.ring;
+ 		mp = p->data.en_v1.mp;
++		filter = p->data.en_v1.filter;
+ 	} else {
+ 		ret = rte_eth_dev_get_port_by_name(p->data.dis_v1.device,
+ 				&port);
+@@ -265,6 +401,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
+ 		queue = p->data.dis_v1.queue;
+ 		ring = p->data.dis_v1.ring;
+ 		mp = p->data.dis_v1.mp;
++		filter = p->data.dis_v1.filter;
+ 	}
+ 
+ 	/* validation if packet capture is for all queues */
+@@ -303,7 +440,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
+ 	if (flags & RTE_PDUMP_FLAG_RX) {
+ 		end_q = (queue == RTE_PDUMP_ALL_QUEUES) ? nb_rx_q : queue + 1;
+ 		ret = pdump_register_rx_callbacks(end_q, port, queue, ring, mp,
+-							operation);
++				filter, operation);
+ 		if (ret < 0)
+ 			return ret;
+ 	}
+@@ -312,7 +449,7 @@ set_pdump_rxtx_cbs(const struct pdump_request *p)
+ 	if (flags & RTE_PDUMP_FLAG_TX) {
+ 		end_q = (queue == RTE_PDUMP_ALL_QUEUES) ? nb_tx_q : queue + 1;
+ 		ret = pdump_register_tx_callbacks(end_q, port, queue, ring, mp,
+-							operation);
++				filter, operation);
+ 		if (ret < 0)
+ 			return ret;
+ 	}
+diff --git a/lib/librte_pdump/rte_pdump.h b/lib/librte_pdump/rte_pdump.h
+index 6b00fc1..3986b07 100644
+--- a/lib/librte_pdump/rte_pdump.h
++++ b/lib/librte_pdump/rte_pdump.h
+@@ -15,6 +15,8 @@
+ #include <stdint.h>
+ #include <rte_mempool.h>
+ #include <rte_ring.h>
++#include <arpa/inet.h>
++#include <linux/if_ether.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -29,6 +31,31 @@ enum {
+ 	RTE_PDUMP_FLAG_RXTX = (RTE_PDUMP_FLAG_RX|RTE_PDUMP_FLAG_TX)
+ };
+ 
++union addr {
++	struct in_addr      in;
++	struct in6_addr     in6;
++};
++
++struct pdump_filter {
++	int         af;
++	union addr  s_addr;
++	union addr  d_addr;
++	union addr  host_addr; //s_addr or d_addr
++
++	uint8_t     proto;
++	uint16_t    proto_port; //s_port or d_port
++	uint16_t    s_port;
++	uint16_t    d_port;
++};
++
++struct vlan_eth_hdr {
++	unsigned char   h_dest[ETH_ALEN];
++	unsigned char   h_source[ETH_ALEN];
++	unsigned short  h_vlan_proto;
++	unsigned short  h_vlan_TCI;
++	unsigned short  h_vlan_encapsulated_proto;
++};
++
+ /**
+  * Initialize packet capturing handling
+  *
+-- 
+1.8.3.1
+

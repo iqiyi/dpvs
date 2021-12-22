@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "common.h"
+#include "conf/common.h"
 #include "dpip.h"
 
 const char *af_itoa(int af)

@@ -1,0 +1,144 @@
+From 38db21e38a36527a0e2e26f01a4b1f1bfd10c3d6 Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@iqiyi.com>
+Date: Wed, 4 Aug 2021 15:14:04 +0800
+Subject: [PATCH 6/6] bonding: fix bonding mode 4 problems
+
+1. Fix lacp packet receipt problem that is disscussed in issue [#725](https://github.com/iqiyi/dpvs/issues/725) of iqiyi/dpvs in detail.
+2. Don't drop multicast/broadcast packets when all-multicast isn't enabled in rx_burst_8023ad.
+3. Don't drop lacp packets received from worker queues when dedicated queue enabled.
+---
+ drivers/net/bonding/rte_eth_bond_8023ad.c | 20 ++++++++------
+ drivers/net/bonding/rte_eth_bond_pmd.c    | 46 +++++++++++++++++++------------
+ 2 files changed, 40 insertions(+), 26 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_8023ad.c b/drivers/net/bonding/rte_eth_bond_8023ad.c
+index 5fe004e..52bd960 100644
+--- a/drivers/net/bonding/rte_eth_bond_8023ad.c
++++ b/drivers/net/bonding/rte_eth_bond_8023ad.c
+@@ -831,7 +831,6 @@ bond_mode_8023ad_periodic_cb(void *arg)
+ 	struct port *port;
+ 	struct rte_eth_link link_info;
+ 	struct rte_ether_addr slave_addr;
+-	struct rte_mbuf *lacp_pkt = NULL;
+ 	uint16_t slave_id;
+ 	uint16_t i;
+ 
+@@ -903,6 +902,7 @@ bond_mode_8023ad_periodic_cb(void *arg)
+ 			/* Find LACP packet to this port. Do not check subtype,
+ 			 * it is done in function that queued packet
+ 			 */
++			struct rte_mbuf *lacp_pkt = NULL;
+ 			int retval = rte_ring_dequeue(port->rx_ring,
+ 					(void **)&lacp_pkt);
+ 
+@@ -911,15 +911,17 @@ bond_mode_8023ad_periodic_cb(void *arg)
+ 
+ 			rx_machine_update(internals, slave_id, lacp_pkt);
+ 		} else {
+-			uint16_t rx_count = rte_eth_rx_burst(slave_id,
+-					internals->mode4.dedicated_queues.rx_qid,
+-					&lacp_pkt, 1);
+-
+-			if (rx_count == 1)
+-				bond_mode_8023ad_handle_slow_pkt(internals,
+-						slave_id, lacp_pkt);
+-			else
++			uint16_t rx_count, j;
++			struct rte_mbuf *lacp_pkt[16] = { NULL };
++
++			rx_count = rte_eth_rx_burst(slave_id, internals->mode4.dedicated_queues.rx_qid,
++					&lacp_pkt[0], sizeof(lacp_pkt)/sizeof(struct rte_mbuf *));
++			if (rx_count > 0) {
++				for (j = 0; j < rx_count; j++)
++					 bond_mode_8023ad_handle_slow_pkt(internals, slave_id, lacp_pkt[j]);
++			} else {
+ 				rx_machine_update(internals, slave_id, NULL);
++			}
+ 		}
+ 
+ 		periodic_machine(internals, slave_id);
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 53f8ba3..42e436c 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -291,7 +291,6 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+ 
+ 	uint8_t collecting;  /* current slave collecting status */
+ 	const uint8_t promisc = rte_eth_promiscuous_get(internals->port_id);
+-	const uint8_t allmulti = rte_eth_allmulticast_get(internals->port_id);
+ 	uint8_t subtype;
+ 	uint16_t i;
+ 	uint16_t j;
+@@ -322,6 +321,15 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+ 
+ 		/* Handle slow protocol packets. */
+ 		while (j < num_rx_total) {
++			/* If packet is not pure L2 and is known:
++			 * Such as OSPF protocol multcast packet,
++			 * we want to handle it in user mode by ourselves,
++			 * skip slow protocol flow */
++			if ((bufs[j]->packet_type & ~RTE_PTYPE_L2_ETHER) != 0) {
++				j++;
++				continue;
++			}
++
+ 			if (j + 3 < num_rx_total)
+ 				rte_prefetch0(rte_pktmbuf_mtod(bufs[j + 3], void *));
+ 
+@@ -331,24 +339,26 @@ rx_burst_8023ad(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts,
+ 			/* Remove packet from array if:
+ 			 * - it is slow packet but no dedicated rxq is present,
+ 			 * - slave is not in collecting state,
+-			 * - bonding interface is not in promiscuous mode:
+-			 *   - packet is unicast and address does not match,
+-			 *   - packet is multicast and bonding interface
+-			 *     is not in allmulti,
++			 * - bonding interface is not in promiscuous mode and
++			 *   packet is unicast and address does not match,
+ 			 */
+ 			if (unlikely(
+-				(!dedicated_rxq &&
+-				 is_lacp_packets(hdr->ether_type, subtype,
+-						 bufs[j])) ||
+-				!collecting ||
+-				(!promisc &&
+-				 ((rte_is_unicast_ether_addr(&hdr->d_addr) &&
+-				   !rte_is_same_ether_addr(bond_mac,
+-						       &hdr->d_addr)) ||
+-				  (!allmulti &&
+-				   rte_is_multicast_ether_addr(&hdr->d_addr)))))) {
+-
++				(is_lacp_packets(hdr->ether_type, subtype, bufs[j])) ||
++				!collecting || (!promisc &&
++				 (rte_is_unicast_ether_addr(&hdr->d_addr) &&
++				   !rte_is_same_ether_addr(bond_mac, &hdr->d_addr))))) {
+ 				if (hdr->ether_type == ether_type_slow_be) {
++					if (dedicated_rxq) {
++						/* Error! Lacp packets should never appear here if
++						 * dedicated queue enabled. This can be caused by
++						 * a lack of support for ethertype rte_flow. Just
++						 * issue a warning rather than dropping the packets
++						 * so that the lacp state machine can work properly.
++						 */
++						RTE_BOND_LOG(WARNING, "receive lacp packets from queue %d "
++								"of port %d when dedicated queue enabled",
++								bd_rx_q->queue_id, slaves[idx]);
++					}
+ 					bond_mode_8023ad_handle_slow_pkt(
+ 					    internals, slaves[idx], bufs[j]);
+ 				} else
+@@ -1271,8 +1281,10 @@ skip_tx_ring:
+ 					slave_port_ids[i];
+ 	}
+ 
+-	if (unlikely(dist_slave_count < 1))
++	if (unlikely(dist_slave_count < 1)) {
++		RTE_BOND_LOG(WARNING, "no distributing slaves on bonding port %d", internals->port_id);
+ 		return 0;
++	}
+ 
+ 	return tx_burst_balance(queue, bufs, nb_bufs, dist_slave_port_ids,
+ 				dist_slave_count);
+-- 
+1.8.3.1
+

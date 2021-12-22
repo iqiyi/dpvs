@@ -43,7 +43,8 @@ MAN		= $(RPM_BUILD_ROOT)/$(MANDIR)/man8
 INIT		= $(RPM_BUILD_ROOT)/etc/rc.d/init.d
 MKDIR		= mkdir
 INSTALL		= install
-STATIC_LIBS	= ../keepalived/keepalived/libipvs-2.6/libipvs.a
+STATIC_LIBS	= ../keepalived/keepalived/check/libcheck.a
+DPVSDEPS    = ../../src/common.o
 
 ifeq "${ARCH}" "sparc64"
     CFLAGS = -Wall -Wunused -Wstrict-prototypes -g -m64 -pipe -mcpu=ultrasparc -mcmodel=medlow
@@ -82,7 +83,7 @@ POPT_DEFINE = -DHAVE_POPT
 endif
 
 OBJS		= ipvsadm.o config_stream.o dynamic_array.o
-LIBS		= $(POPT_LIB)
+LIBS		= $(POPT_LIB) -lnuma
 DEFINES		= -DVERSION=\"$(VERSION)\" -DSCHEDULERS=\"$(SCHEDULERS)\" \
 		  -DPE_LIST=\"$(PE_LIST)\" $(POPT_DEFINE)
 DEFINES		+= $(shell if [ ! -f ../ip_vs.h ]; then	\
@@ -94,7 +95,7 @@ DEFINES		+= $(shell if [ ! -f ../ip_vs.h ]; then	\
 all:            ipvsadm
 
 ipvsadm:	$(OBJS) $(STATIC_LIBS)
-		$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+		$(CC) $(CFLAGS) -o $@ $^ $(DPVSDEPS) $(LIBS)
 
 install:        all
 		if [ ! -d $(SBIN) ]; then $(MKDIR) -p $(SBIN); fi

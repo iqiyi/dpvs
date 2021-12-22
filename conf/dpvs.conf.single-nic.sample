@@ -13,7 +13,8 @@
 ! global config
 global_defs {
     log_level   WARNING
-!    log_file    /var/log/dpvs.log
+    ! log_file    /var/log/dpvs.log
+    ! log_async_mode    on
 }
 
 ! netif config
@@ -25,13 +26,14 @@ netif_defs {
         rx {
             queue_number        8
             descriptor_number   1024
-            rss                 tcp
+            rss                 all
         }
         tx {
             queue_number        8
             descriptor_number   1024
         }
-    !    promisc_mode
+        ! mtu                   1500
+        ! promisc_mode
         kni_name                dpdk0.kni
     }
 }
@@ -123,6 +125,7 @@ worker_defs {
     <init> worker   cpu8 {
         type        slave
         cpu_id      8
+        ! icmp_redirect_core
         port        dpdk0 {
             rx_queue_ids     7
             tx_queue_ids     7
@@ -130,6 +133,14 @@ worker_defs {
             ! isol_rxq_ring_sz 1048576
         }
     }
+
+    !<init> worker   cpu9 {
+    !    type        kni
+    !    cpu_id      9
+    !    port        dpdk0 {
+    !        tx_queue_ids     8
+    !    }
+    !}
 
 }
 
@@ -142,13 +153,12 @@ timer_defs {
 ! dpvs neighbor config
 neigh_defs {
     <init> unres_queue_length  128
-    <init> pktpool_size        1023
-    <init> pktpool_cache       32
-    <init> timeout             60
+    timeout                    60
 }
 
 ! dpvs ipv4 config
 ipv4_defs {
+    forwarding                 off
     <init> default_ttl         64
     fragment {
         <init> bucket_number   4096
@@ -158,12 +168,22 @@ ipv4_defs {
     }
 }
 
+! dpvs ipv6 config
+ipv6_defs {
+    disable                     off
+    forwarding                  off
+    route6 {
+        <init> method           hlist
+        recycle_time            10
+    }
+}
+
 ! control plane config
 ctrl_defs {
     lcore_msg {
         <init> ring_size                4096
-        <init> multicast_queue_length   256
-        sync_msg_timeout_us             2000
+        sync_msg_timeout_us             20000
+        priority_level                  low
     }
     ipc_msg {
         <init> unix_domain /var/run/dpvs_ctrl
@@ -176,12 +196,15 @@ ipvs_defs {
         <init> conn_pool_size       2097152
         <init> conn_pool_cache      256
         conn_init_timeout           3
-    !    expire_quiescent_template
-    !    fast_xmit_close
+        ! expire_quiescent_template
+        ! fast_xmit_close
+        ! <init> redirect           off
     }
 
     udp {
-        defence_udp_drop
+        ! defence_udp_drop
+        uoa_mode        opp
+        uoa_max_trail   3
         timeout {
             normal      300
             last        3
@@ -189,7 +212,7 @@ ipvs_defs {
     }
 
     tcp {
-        defence_tcp_drop
+        ! defence_tcp_drop
         timeout {
             none        2
             established 90
@@ -209,19 +232,19 @@ ipvs_defs {
                 mss             1452
                 ttl             63
                 sack
-            !    wscale
-            !    timestamp
+                ! wscale
+                ! timestamp
             }
-        !    defer_rs_syn
+            ! defer_rs_syn
             rs_syn_max_retry    3
             ack_storm_thresh    10
             max_ack_saved       3
             conn_reuse_state {
                 close
                 time_wait
-            !    fin_wait
-            !    close_wait
-            !    last_ack
+                ! fin_wait
+                ! close_wait
+                ! last_ack
            }
         }
     }
@@ -229,5 +252,6 @@ ipvs_defs {
 
 ! sa_pool config
 sa_pool {
-    pool_hash_size   16
+    pool_hash_size  16
+    flow_enable     on
 }

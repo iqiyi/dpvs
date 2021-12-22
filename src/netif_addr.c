@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -26,7 +26,7 @@
 #include "kni.h"
 
 static int __netif_hw_addr_add(struct netif_hw_addr_list *list,
-                               const struct ether_addr *addr)
+                               const struct rte_ether_addr *addr)
 {
     struct netif_hw_addr *ha;
 
@@ -41,7 +41,7 @@ static int __netif_hw_addr_add(struct netif_hw_addr_list *list,
     if (!ha)
         return EDPVS_NOMEM;
 
-    ether_addr_copy(addr, &ha->addr);
+    rte_ether_addr_copy(addr, &ha->addr);
     rte_atomic32_set(&ha->refcnt, 1);
     ha->sync_cnt = 0;
     list_add_tail(&ha->list, &list->addrs);
@@ -51,7 +51,7 @@ static int __netif_hw_addr_add(struct netif_hw_addr_list *list,
 }
 
 static int __netif_hw_addr_del(struct netif_hw_addr_list *list,
-                               const struct ether_addr *addr)
+                               const struct rte_ether_addr *addr)
 {
     struct netif_hw_addr *ha, *n;
 
@@ -210,17 +210,17 @@ static int __netif_hw_addr_unsync_multiple(struct netif_hw_addr_list *to,
     return EDPVS_INVAL;
 }
 
-int __netif_mc_add(struct netif_port *dev, const struct ether_addr *addr)
+int __netif_mc_add(struct netif_port *dev, const struct rte_ether_addr *addr)
 {
     return __netif_hw_addr_add(&dev->mc, addr);
 }
 
-int __netif_mc_del(struct netif_port *dev, const struct ether_addr *addr)
+int __netif_mc_del(struct netif_port *dev, const struct rte_ether_addr *addr)
 {
     return __netif_hw_addr_del(&dev->mc, addr);
 }
 
-int netif_mc_add(struct netif_port *dev, const struct ether_addr *addr)
+int netif_mc_add(struct netif_port *dev, const struct rte_ether_addr *addr)
 {
     int err;
 
@@ -233,7 +233,7 @@ int netif_mc_add(struct netif_port *dev, const struct ether_addr *addr)
     return err;
 }
 
-int netif_mc_del(struct netif_port *dev, const struct ether_addr *addr)
+int netif_mc_del(struct netif_port *dev, const struct rte_ether_addr *addr)
 {
     int err;
 
@@ -272,7 +272,7 @@ void netif_mc_init(struct netif_port *dev)
 }
 
 int __netif_mc_dump(struct netif_port *dev,
-                    struct ether_addr *addrs, size_t *naddr)
+                    struct rte_ether_addr *addrs, size_t *naddr)
 {
     struct netif_hw_addr *ha;
     int off = 0;
@@ -281,19 +281,67 @@ int __netif_mc_dump(struct netif_port *dev,
         return EDPVS_NOROOM;
 
     list_for_each_entry(ha, &dev->mc.addrs, list)
-        ether_addr_copy(&ha->addr, &addrs[off++]);
+        rte_ether_addr_copy(&ha->addr, &addrs[off++]);
 
     *naddr = off;
     return EDPVS_OK;
 }
 
 int netif_mc_dump(struct netif_port *dev,
-                  struct ether_addr *addrs, size_t *naddr)
+                  struct rte_ether_addr *addrs, size_t *naddr)
 {
     int err;
 
     rte_rwlock_read_lock(&dev->dev_lock);
     err = __netif_mc_dump(dev, addrs, naddr);
+    rte_rwlock_read_unlock(&dev->dev_lock);
+
+    return err;
+}
+
+int __netif_mc_print(struct netif_port *dev,
+                     char *buf, int *len, int *pnaddr)
+{
+    struct rte_ether_addr addrs[NETIF_MAX_HWADDR];
+    size_t naddr = NELEMS(addrs);
+    int err, i;
+    int strlen = 0;
+
+    err = __netif_mc_dump(dev, addrs, &naddr);
+    if (err != EDPVS_OK)
+        goto errout;
+
+    for (i = 0; i < naddr; i++) {
+        err = snprintf(buf + strlen, *len - strlen,
+                "        link %02x:%02x:%02x:%02x:%02x:%02x\n",
+                addrs[i].addr_bytes[0], addrs[i].addr_bytes[1],
+                addrs[i].addr_bytes[2], addrs[i].addr_bytes[3],
+                addrs[i].addr_bytes[4], addrs[i].addr_bytes[5]);
+        if (err < 0) {
+            err = EDPVS_NOROOM;
+            goto errout;
+        }
+        strlen += err;
+    }
+
+    *len = strlen;
+    *pnaddr = naddr;
+    return EDPVS_OK;
+
+errout:
+    *len = 0;
+    *pnaddr = 0;
+    buf[0] = '\0';
+    return err;
+}
+
+int netif_mc_print(struct netif_port *dev,
+                     char *buf, int *len, int *pnaddr)
+{
+    int err;
+
+    rte_rwlock_read_lock(&dev->dev_lock);
+    err = __netif_mc_print(dev, buf, len, pnaddr);
     rte_rwlock_read_unlock(&dev->dev_lock);
 
     return err;

@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,7 +18,6 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-void try_reload(void);
 int cfgfile_init(void);
 int cfgfile_term(void);
 

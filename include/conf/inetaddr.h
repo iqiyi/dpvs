@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -17,21 +17,12 @@
  */
 #ifndef __DPVS_INETADDR_CONF_H__
 #define __DPVS_INETADDR_CONF_H__
+
 #include <stdint.h>
 #include <linux/if_addr.h>
 #include "inet.h"
 #include "net/if.h"
-
-enum {
-    /* set */
-    SOCKOPT_SET_IFADDR_ADD  = 400,
-    SOCKOPT_SET_IFADDR_DEL,
-    SOCKOPT_SET_IFADDR_SET,
-    SOCKOPT_SET_IFADDR_FLUSH,
-
-    /* get */
-    SOCKOPT_GET_IFADDR_SHOW,
-};
+#include "conf/sockopts.h"
 
 enum {
     IFA_SCOPE_GLOBAL        = 0,
@@ -44,25 +35,54 @@ enum {
 /* leverage IFA_F_XXX in linux/if_addr.h*/
 #define IFA_F_SAPOOL        0x10000 /* if address with sockaddr pool */
 
-struct inet_addr_param {
+/* ifa command flags */
+#define IFA_F_OPS_VERBOSE   0x0001
+#define IFA_F_OPS_STATS     0x0002
+
+typedef enum ifaddr_ops {
+    INET_ADDR_GET       = 1,
+    INET_ADDR_ADD,
+    INET_ADDR_DEL,
+    INET_ADDR_MOD,
+    INET_ADDR_FLUSH,
+    INET_ADDR_SYNC,
+} ifaddr_ops_t;
+
+struct inet_addr_entry {
     int                 af;
     char                ifname[IFNAMSIZ];
     union inet_addr     addr;
-    uint8_t             plen;
     union inet_addr     bcast;
+    uint8_t             plen;
+    uint8_t             scope;
+    lcoreid_t           cid;
     uint32_t            valid_lft;
     uint32_t            prefered_lft;
-    uint8_t             scope;
     uint32_t            flags;
+} __attribute__((__packed__));
 
+struct inet_addr_stats {
     uint32_t            sa_used;
     uint32_t            sa_free;
     uint32_t            sa_miss;
 } __attribute__((__packed__));
 
-struct inet_addr_param_array {
-    int                 naddr;
-    struct inet_addr_param addrs[0];
-};
+struct inet_addr_param {
+    ifaddr_ops_t            ifa_ops;
+    uint32_t                ifa_ops_flags;
+    struct inet_addr_entry  ifa_entry;
+} __attribute__((__packed__));
+
+struct inet_addr_data {
+    struct inet_addr_entry  ifa_entry;
+    struct inet_addr_stats  ifa_stats;
+} __attribute__((__packed__));
+
+struct inet_addr_data_array {
+    ifaddr_ops_t            ops;
+    uint32_t                ops_flags;
+    int                     naddr;
+    struct inet_addr_data   addrs[0];
+} __attribute__((__packed__));
 
 #endif /* __DPVS_INETADDR_CONF_H__ */

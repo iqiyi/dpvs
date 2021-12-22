@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,13 +18,16 @@
 #ifndef __DPVS_CONN_H__
 #define __DPVS_CONN_H__
 #include <arpa/inet.h>
-#include "common.h"
+#include "conf/common.h"
 #include "list.h"
 #include "dpdk.h"
 #include "timer.h"
+#include "inet.h"
+#include "ipv4.h"
 #include "ipvs/conn.h"
 #include "ipvs/proto.h"
 #include "ipvs/service.h"
+#include "ipvs/redirect.h"
 
 enum {
     DPVS_CONN_DIR_INBOUND = 0,
@@ -32,12 +35,20 @@ enum {
     DPVS_CONN_DIR_MAX,
 };
 
-enum {
-    DPVS_CONN_F_HASHED      = 0x0040,
-    DPVS_CONN_F_INACTIVE    = 0x0100,
-    DPVS_CONN_F_SYNPROXY    = 0x8000,
-    DPVS_CONN_F_TEMPLATE    = 0x1000,
-};
+/*
+ * DPVS_CONN_F_XXX should always be the same with IP_VS_CONN_F_XXX.
+ */
+/* Conn flags used by both DPVS and Keepalived*/
+#define DPVS_CONN_F_SYNPROXY                IP_VS_CONN_F_SYNPROXY
+#define DPVS_CONN_F_EXPIRE_QUIESCENT        IP_VS_CONN_F_EXPIRE_QUIESCENT
+/* Conn flags used by DPVS only */
+#define DPVS_CONN_F_HASHED                  IP_VS_CONN_F_HASHED
+#define DPVS_CONN_F_INACTIVE                IP_VS_CONN_F_INACTIVE
+#define DPVS_CONN_F_TEMPLATE                IP_VS_CONN_F_TEMPLATE
+#define DPVS_CONN_F_ONE_PACKET              IP_VS_CONN_F_ONE_PACKET
+#define DPVS_CONN_F_IN_TIMER                IP_VS_CONN_F_IN_TIMER
+#define DPVS_CONN_F_REDIRECT_HASHED         IP_VS_CONN_F_REDIRECT_HASHED
+#define DPVS_CONN_F_NOFASTXMIT              IP_VS_CONN_F_NOFASTXMIT
 
 struct dp_vs_conn_param {
     int                 af;
@@ -47,6 +58,7 @@ struct dp_vs_conn_param {
     uint16_t            cport;
     uint16_t            vport;
     uint16_t            ct_dport; /* RS port for template connection */
+    bool                outwall;
 };
 
 struct conn_tuple_hash {
@@ -63,11 +75,12 @@ struct conn_tuple_hash {
 } __rte_cache_aligned;
 
 struct dp_vs_conn_stats {
-    rte_atomic64_t      inpkt;
+    rte_atomic64_t      inpkts;
     rte_atomic64_t      inbytes;
+    rte_atomic64_t      outpkts;
+    rte_atomic64_t      outbytes;
 } __rte_cache_aligned;
 
-struct dp_vs_fdir_filt;
 struct dp_vs_proto;
 
 struct dp_vs_conn {
@@ -82,12 +95,14 @@ struct dp_vs_conn {
     uint16_t                lport;
     uint16_t                dport;
 
+    struct rte_mempool      *connpool;
     struct conn_tuple_hash  tuplehash[DPVS_CONN_DIR_MAX];
     rte_atomic32_t          refcnt;
     struct dpvs_timer       timer;
     struct timeval          timeout;
     lcoreid_t               lcore;
     struct dp_vs_dest       *dest;  /* real server */
+    void                    *prot_data;  /* protocol specific data */
 
     /* for FNAT */
     struct dp_vs_laddr      *local; /* local address */
@@ -105,12 +120,16 @@ struct dp_vs_conn {
                         struct rte_mbuf *mbuf);
 
     /* L2 fast xmit */
-    struct netif_port       *in_dev;    /* inside (RS faced) */
-    struct ether_addr       in_smac;
-    struct ether_addr       in_dmac;
-    struct netif_port       *out_dev;   /* outside */
-    struct ether_addr       out_smac;
-    struct ether_addr       out_dmac;
+    struct rte_ether_addr   in_smac;
+    struct rte_ether_addr   in_dmac;
+    struct rte_ether_addr   out_smac;
+    struct rte_ether_addr   out_dmac;
+
+    /* route for neigbour */
+    struct netif_port       *in_dev;    /* inside to rs*/
+    struct netif_port       *out_dev;   /* outside to client*/
+    union inet_addr         in_nexthop;  /* to rs*/
+    union inet_addr         out_nexthop; /* to client*/
 
     /* statistics */
     struct dp_vs_conn_stats stats;
@@ -135,6 +154,14 @@ struct dp_vs_conn {
     /* controll members */
     struct dp_vs_conn *control;         /* master who controlls me */
     rte_atomic32_t n_control;           /* number of connections controlled by me*/
+    uint64_t ctime;                     /* create time */
+
+    /* connection redirect in fnat/snat/nat modes */
+    struct dp_vs_redirect  *redirect;
+
+    /* flag for gfwip */
+    bool outwall;
+
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
@@ -150,17 +177,18 @@ struct dp_vs_synproxy_ack_pakcet {
 int dp_vs_conn_init(void);
 int dp_vs_conn_term(void);
 
-struct dp_vs_conn * 
-dp_vs_conn_new(struct rte_mbuf *mbuf, 
+struct dp_vs_conn *
+dp_vs_conn_new(struct rte_mbuf *mbuf,
+               const struct dp_vs_iphdr *iph,
                struct dp_vs_conn_param *param,
                struct dp_vs_dest *dest,
                uint32_t flags);
 int dp_vs_conn_del(struct dp_vs_conn *conn);
 
 struct dp_vs_conn *
-dp_vs_conn_get(int af, uint16_t proto, 
-                const union inet_addr *saddr, 
-                const union inet_addr *daddr, 
+dp_vs_conn_get(int af, uint16_t proto,
+                const union inet_addr *saddr,
+                const union inet_addr *daddr,
                 uint16_t sport, uint16_t dport,
                 int *dir, bool reverse);
 
@@ -174,11 +202,16 @@ void dp_vs_conn_put(struct dp_vs_conn *conn);
 /* put conn without reset the timer */
 void dp_vs_conn_put_no_reset(struct dp_vs_conn *conn);
 
+unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn);
+void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp);
+
+void dp_vs_conn_expire_now(struct dp_vs_conn *conn);
+
 void ipvs_conn_keyword_value_init(void);
 void install_ipvs_conn_keywords(void);
 
-static inline void dp_vs_conn_fill_param(int af, uint8_t proto, 
-        const union inet_addr *caddr, const union inet_addr *vaddr, 
+static inline void dp_vs_conn_fill_param(int af, uint8_t proto,
+        const union inet_addr *caddr, const union inet_addr *vaddr,
         uint16_t cport, uint16_t vport, uint16_t ct_dport,
         struct dp_vs_conn_param *param)
 {
@@ -256,5 +289,62 @@ static inline void dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn 
     conn->control = ctl_conn;
     rte_atomic32_inc(&ctl_conn->n_control);
 }
+
+static inline bool
+dp_vs_conn_is_template(struct dp_vs_conn *conn)
+{
+    return  (conn->flags & DPVS_CONN_F_TEMPLATE) ? true : false;
+}
+
+static inline void
+dp_vs_conn_set_template(struct dp_vs_conn *conn)
+{
+    conn->flags |= DPVS_CONN_F_TEMPLATE;
+}
+
+static inline bool
+dp_vs_conn_is_in_timer(struct dp_vs_conn *conn)
+{
+    return (conn->flags & DPVS_CONN_F_IN_TIMER) ? true : false;
+}
+
+static inline void
+dp_vs_conn_set_in_timer(struct dp_vs_conn *conn)
+{
+    conn->flags |= DPVS_CONN_F_IN_TIMER;
+}
+
+static inline void
+dp_vs_conn_clear_in_timer(struct dp_vs_conn *conn)
+{
+    conn->flags &= ~DPVS_CONN_F_IN_TIMER;
+}
+
+static inline bool
+dp_vs_conn_is_redirect_hashed(struct dp_vs_conn *conn)
+{
+    return  (conn->flags & DPVS_CONN_F_REDIRECT_HASHED) ? true : false;
+}
+
+static inline void
+dp_vs_conn_set_redirect_hashed(struct dp_vs_conn *conn)
+{
+    conn->flags |= DPVS_CONN_F_REDIRECT_HASHED;
+}
+
+static inline void
+dp_vs_conn_clear_redirect_hashed(struct dp_vs_conn *conn)
+{
+    conn->flags &= ~DPVS_CONN_F_REDIRECT_HASHED;
+}
+
+uint32_t dp_vs_conn_hashkey(int af,
+    const union inet_addr *saddr, uint16_t sport,
+    const union inet_addr *daddr, uint16_t dport,
+    uint32_t mask);
+int dp_vs_conn_pool_size(void);
+int dp_vs_conn_pool_cache_size(void);
+
+extern bool dp_vs_redirect_disable;
 
 #endif /* __DPVS_CONN_H__ */

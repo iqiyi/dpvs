@@ -1,7 +1,7 @@
 #
 # DPVS is a software load balancer (Virtual Server) based on DPDK.
 #
-# Copyright (C) 2017 iQIYI (www.iqiyi.com).
+# Copyright (C) 2021 iQIYI (www.iqiyi.com).
 # All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or
@@ -27,9 +27,12 @@ config: keepalived_conf
 
 keepalived_conf:
 	if [ ! -f keepalived/Makefile ]; then \
-		pushd keepalived && \
-		./configure && \
-		popd; \
+		cd keepalived; \
+		if [ ! -f keepalived/configure ]; then \
+			./build_setup; \
+		fi; \
+		./configure; \
+		cd -; \
 	fi
 
 clean:

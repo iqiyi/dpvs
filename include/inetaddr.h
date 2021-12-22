@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -28,13 +28,28 @@
 
 struct inet_device {
     struct netif_port   *dev;
-    int                 af;
-    struct list_head    ifa_list;   /* inet_ifaddr list */
-    rte_atomic32_t      ifa_cnt;
-    rte_atomic32_t      refcnt;
+    struct list_head    ifa_list[DPVS_MAX_LCORE];   /* inet_ifaddr list */
+    struct list_head    ifm_list[DPVS_MAX_LCORE];   /* inet_ifmcaddr list*/
+    uint32_t            ifa_cnt[DPVS_MAX_LCORE];
+    rte_atomic32_t      refcnt;                     /* not used yet */
+#define this_ifa_list   ifa_list[rte_lcore_id()]
+#define this_ifm_list   ifm_list[rte_lcore_id()]
+#define this_ifa_cnt    ifa_cnt[rte_lcore_id()]
 };
 
-/**
+/*
+ * no timer, release me by inet_ifaddr
+ */
+struct inet_ifmcaddr {
+    struct list_head        d_list;
+    struct inet_device      *idev;
+    int                     af;
+    union  inet_addr        addr;
+    uint32_t                flags;      /* not used yet */
+    rte_atomic32_t          refcnt;
+};
+
+/*
  * do not support peer address now.
  */
 struct inet_ifaddr {
@@ -42,6 +57,7 @@ struct inet_ifaddr {
     struct list_head        h_list;     /* global hash, key is addr */
     struct inet_device      *idev;
 
+    int                     af;
     union inet_addr         addr;       /* primary address of iface */
     uint8_t                 plen;
     union inet_addr         mask;
@@ -63,20 +79,18 @@ struct inet_ifaddr {
     struct dpvs_timer       dad_timer;
 
     /* per-lcore socket address pool */
-    struct sa_pool          *sa_pools[RTE_MAX_LCORE];
-
-#define this_sa_pool sa_pools[rte_lcore_id()]
+    struct sa_pool          *sa_pool;
 };
 
-int inet_addr_add(int af, const struct netif_port *dev, 
+int inet_addr_add(int af, struct netif_port *dev,
                   const union inet_addr *addr, uint8_t plen,
-                  const union inet_addr *bcast, 
+                  const union inet_addr *bcast,
                   uint32_t valid_lft, uint32_t prefered_lft,
                   uint8_t scope, uint32_t flags);
 
-int inet_addr_mod(int af, const struct netif_port *dev, 
+int inet_addr_mod(int af, struct netif_port *dev,
                   const union inet_addr *addr, uint8_t plen,
-                  const union inet_addr *bcast, 
+                  const union inet_addr *bcast,
                   uint32_t valid_lft, uint32_t prefered_lft,
                   uint8_t scope);
 
@@ -87,17 +101,23 @@ int inet_addr_flush(int af, struct netif_port *dev);
 
 struct netif_port *inet_addr_get_iface(int af, union inet_addr *addr);
 
-void inet_addr_select(int af, const struct netif_port *dev, 
-                      const union inet_addr *dst, int scope, 
+void inet_addr_select(int af, const struct netif_port *dev,
+                      const union inet_addr *dst, int scope,
                       union inet_addr *addr);
 
 struct inet_ifaddr *inet_addr_ifa_get(int af, const struct netif_port *dev,
                                       union inet_addr *addr);
+struct inet_ifaddr *inet_addr_ifa_get_expired(int af, const struct netif_port *dev,
+                                              union inet_addr *addr);
+void inet_addr_ifa_put(struct inet_ifaddr *ifa);
 
-static inline void inet_addr_ifa_put(struct inet_ifaddr *ifa)
-{
-    rte_atomic32_dec(&ifa->refcnt);
-}
+bool inet_chk_mcast_addr(int af, struct netif_port *dev,
+                        const union inet_addr *group,
+                        const union inet_addr *src);
+
+void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa);
+
+int idev_add_mcast_init(void *args);
 
 int inet_addr_init(void);
 int inet_addr_term(void);

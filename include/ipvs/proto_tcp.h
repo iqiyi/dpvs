@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,6 +18,8 @@
 #ifndef __DP_VS_PROTO_TCP_H__
 #define __DP_VS_PROTO_TCP_H__
 
+#include <netinet/in.h>
+
 enum {
     TCP_OPT_EOL         = 0,
     TCP_OPT_NOP         = 1,
@@ -31,7 +33,8 @@ enum {
 
 #define TCP_OLEN_MSS                4
 #define TCP_OLEN_TIMESTAMP          10
-#define TCP_OLEN_ADDR               8
+#define TCP_OLEN_IP4_ADDR           8
+#define TCP_OLEN_IP6_ADDR           20
 
 #define TCP_OLEN_TSTAMP_ALIGNED     12
 #define TCP_OLEN_SACK_BASE          2
@@ -44,12 +47,25 @@ enum {
     (((tm_spec).tv_sec % 100) * 1000000 + \
      ((tm_spec).tv_nsec / 1000))
 
-/* now IPv4 only */
+struct tcpopt_ip4_addr {
+    uint8_t opcode;
+    uint8_t opsize;
+    __be16 port;
+    struct in_addr  addr;
+} __attribute__((__packed__));
+
+struct tcpopt_ip6_addr {
+    uint8_t opcode;
+    uint8_t opsize;
+    __be16 port;
+    struct in6_addr addr;
+} __attribute__((__packed__));
+
 struct tcpopt_addr {
     uint8_t opcode;
     uint8_t opsize;
-    uint16_t port;
-    uint32_t addr;
+    __be16 port;
+    uint8_t addr[16];
 } __attribute__((__packed__));
 
 enum {
@@ -84,7 +100,8 @@ struct tcp_state {
 #define sSA DPVS_TCP_S_SYNACK
 
 struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf);
-void tcp4_send_csum(struct ipv4_hdr *iph, struct tcphdr *th);
+void tcp4_send_csum(struct rte_ipv4_hdr *iph, struct tcphdr *th);
+void tcp6_send_csum(struct rte_ipv6_hdr *iph, struct tcphdr *th);
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir);
 void install_proto_tcp_keywords(void);
 void tcp_keyword_value_init(void);

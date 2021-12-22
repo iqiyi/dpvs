@@ -1,6 +1,6 @@
 Main code of DPVS is [GNU General Public License, version 2 (GPLv2)](https://www.gnu.org/licenses/gpl-2.0.html) licensed.
 
-Copyright (C) 2017 [爱奇艺](http://www.iqiyi.com/). All Rights Reserved.
+Copyright (C) 2021 [爱奇艺](http://www.iqiyi.com/). All Rights Reserved.
 
 Other Dependencies:
 ===================
@@ -38,6 +38,10 @@ Alibaba/LVS is based on LVS kernel components and related programs.
 * [quagga](http://www.nongnu.org/quagga/)
 
 Quagga Routing Software Suite, GPL licensed.
+
+* [Consistent hashing](http://www.codeproject.com/Articles/56138/Consistent-hashing)
+
+Consistent hashing library is BSD licensed.
 
 How this work (DPVS) uses those dependencies
 --------------------------------------------

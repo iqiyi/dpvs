@@ -1,7 +1,7 @@
 /*
  * DPVS is a software load balancer (Virtual Server) based on DPDK.
  *
- * Copyright (C) 2017 iQIYI (www.iqiyi.com).
+ * Copyright (C) 2021 iQIYI (www.iqiyi.com).
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -28,6 +28,7 @@ typedef enum dpip_cmd_e {
     DPIP_CMD_DEL,
     DPIP_CMD_SET,
     DPIP_CMD_SHOW,
+    DPIP_CMD_REPLACE,
     DPIP_CMD_FLUSH,
     DPIP_CMD_HELP,
 } dpip_cmd_t;
@@ -36,6 +37,8 @@ struct dpip_conf {
     int         af;
     int         verbose;
     int         stats;
+    int         interval;
+    int         count;
     bool        color;
     char        *obj;
     dpip_cmd_t  cmd;
@@ -49,8 +52,8 @@ struct dpip_obj {
     void *param;
 
     void (*help)(void);
-    /* XXX: for back compatible we reserve @conf, may remove in the future.
-     * since we have @parse() to handle @conf. */
+    /* @conf is used to passing general config like af, verbose, ...
+     * we have obj.parse() to handle obj specific parameters. */
     int (*do_cmd)(struct dpip_obj *obj, dpip_cmd_t cmd,
                   struct dpip_conf *conf);
     /* the parser can be used to parse @conf into @param */

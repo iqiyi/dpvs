@@ -1,10 +1,10 @@
-/* 
+/*
  * Soft:        Keepalived is a failover program for the LVS project
  *              <www.linuxvirtualserver.org>. It monitor & manipulate
  *              a loadbalanced server pool using multi-layer checks.
- * 
+ *
  * Part:        vrrp_parser.c include file.
- *  
+ *
  * Author:      Alexandre Cassen, <acassen@linux-vs.org>
  *
  *              This program is distributed in the hope that it will be useful,
@@ -17,15 +17,18 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Copyright (C) 2001-2012 Alexandre Cassen, <acassen@gmail.com>
+ * Copyright (C) 2001-2016 Alexandre Cassen, <acassen@gmail.com>
  */
 
 #ifndef _GLOBAL_PARSER_H
 #define _GLOBAL_PARSER_H
 
-/* local include */
+#include <stdbool.h>
+#include <sys/types.h>
+
+#include "vector.h"
 
 /* Prototypes */
-extern void global_init_keywords(void);
+extern void init_global_keywords(bool);
 
 #endif

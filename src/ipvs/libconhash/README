@@ -1,0 +1,22 @@
+
+What is libconhash?
+libconhash is a consistent hashing libraray, which can be compiled both on Windows and Linux platform, with the following features:
+
+1. High performance and easy to use, libconhash uses a red-black tree to manange all nodes to achieve high performance.
+2. By default it uses MD5 algorithm, but it also supports user-defined hash function.
+3. Easy to scale according to node's processing capacity.
+
+--------------------------------------------------------------------------------------
+To build libconhash
+on Linux using
+ make
+to build a debug version, using
+ make CFLAG=DEBUG
+on Windows there are win32 projects, just build them
+
+--------------------------------------------------------------------------------------
+To use libconhash
+Include headers libconhash.h and configure.h, and link the conhash binary library file.
+There is a sample in the project shows how to use the library.
+
+
