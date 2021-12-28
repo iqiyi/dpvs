@@ -247,7 +247,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
 
     mbuf_copy_bits(imbuf, 0, ich + 1, room);
 
-    shdr.ip6_plen = room + sizeof(struct icmp6_hdr);
+    shdr.ip6_plen = htons(room + sizeof(struct icmp6_hdr));
     icmp6_send_csum(&shdr, ich);
 
     if ((err = ipv6_xmit(mbuf, &fl6)) != EDPVS_OK) {
