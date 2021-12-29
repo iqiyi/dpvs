@@ -111,23 +111,31 @@ hash_net_adt4(int op, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-hash_net_test(struct ipset *set, struct ipset_test_param *p)
+hash_net_test4(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
+    struct ipv4_hdr *ip4hdr;
+
+    if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
+        return 0;
+
+    ip4hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip4hdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
 
-    if (p->direction == 1)
-        e.ip = p->iph->saddr;
+    if (dst_match)
+        e.ip.in.s_addr = ip4hdr->dst_addr;
     else
-        e.ip = p->iph->daddr;
+        e.ip.in.s_addr = ip4hdr->src_addr;
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }
 
 struct ipset_type_variant hash_net_variant4 = {
     .adt = hash_net_adt4,
-    .test = hash_net_test,
+    .test = hash_net_test4,
     .hash.do_compare = hash_net_data_equal4,
     .hash.do_netmask = hash_data_netmask4,
     .hash.do_list = hash_net_do_list,
@@ -171,9 +179,32 @@ hash_net_adt6(int op, struct ipset *set, struct ipset_param *param)
     return adtfn(set, &e, param->flag);
 }
 
+static int
+hash_net_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
+{
+    elem_t e;
+    struct ipv6_hdr *ip6hdr;
+
+    if (set->family != AF_INET6 || mbuf_address_family(mbuf) != AF_INET6)
+        return 0;
+
+    ip6hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip6hdr))
+        return 0;
+
+    memset(&e, 0, sizeof(e));
+
+    if (dst_match)
+        memcpy(&e.ip, ip6hdr->dst_addr, sizeof(e.ip));
+    else
+        memcpy(&e.ip, ip6hdr->src_addr, sizeof(e.ip));
+
+    return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
+}
+
 struct ipset_type_variant hash_net_variant6 = {
     .adt = hash_net_adt6,
-    .test = hash_net_test,
+    .test = hash_net_test6,
     .hash.do_compare = hash_net_data_equal6,
     .hash.do_netmask = hash_data_netmask6,
     .hash.do_list = hash_net_do_list,

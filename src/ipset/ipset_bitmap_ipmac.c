@@ -138,23 +138,31 @@ bitmap_ipmac_adt(int opcode, struct ipset *set, struct ipset_param *param)
 }
 
 static int
-bitmap_ipmac_test(struct ipset *set, struct ipset_test_param *p)
+bitmap_ipmac_test(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
     struct bitmap_ipmac *map = set->data;
     struct ether_hdr *ehdr;
+    struct ipv4_hdr *ip4hdr;
+
+    if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
+        return 0;
+    ip4hdr = mbuf_header_l3(mbuf);
+    if (unlikely(!ip4hdr))
+        return 0;
+    ehdr = mbuf_header_l2(mbuf);
+    if (unlikely(!ehdr))
+        return 0;
 
     memset(&e, 0, sizeof(e));
 
-    ehdr = (struct ether_hdr *)rte_pktmbuf_prepend(p->mbuf, sizeof(struct ether_hdr));
-    if (p->direction == 1) {
-        e.id = ip_to_id(map, ntohs(p->iph->saddr.in.s_addr));
-        e.mac = ehdr->s_addr.addr_bytes;
+    if (dst_match) {
+        e.id = ip_to_id(map, ntohl(ip4hdr->dst_addr));
+        e.mac = &ehdr->d_addr.addr_bytes[0];
     } else {
-        e.id = ip_to_id(map, ntohs(p->iph->daddr.in.s_addr));
-        e.mac = ehdr->d_addr.addr_bytes;
+        e.id = ip_to_id(map, ntohl(ip4hdr->src_addr));
+        e.mac = &ehdr->s_addr.addr_bytes[0];
     }
-    rte_pktmbuf_adj(p->mbuf, sizeof(struct ether_hdr));
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }

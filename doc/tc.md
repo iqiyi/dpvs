@@ -10,14 +10,15 @@ DPVS Traffic Control (TC)
   - [Example 2. Traffic classification and flow control (Egress)](#example2)
   - [Example 3. Access control with TC (Ingress)](#example3)
   - [Example 4. Traffic policing for services (Ingress)](#example4)
+  - [Example 5. Dynamic allow/deny access list using TC ipset classifier](#example5)
 
 <a id='concepts'/>
 
 # Concepts
 
-DPVS TC derives from [Linux Traffic Control](https://tldp.org/HOWTO/Traffic-Control-HOWTO/index.html), which encompasses the sets of mechanisms and operations by which packets are queued for transmission/reception on a network interface. The operations include enqueuing, policing, classifying, scheduling, shaping and dropping. 
+DPVS TC derives from [Linux Traffic Control](https://tldp.org/HOWTO/Traffic-Control-HOWTO/index.html), which encompasses the sets of mechanisms and operations by which packets are queued for transmission/reception on a network interface. The operations include enqueuing, policing, classifying, scheduling, shaping and dropping.
 
-- Policing: the mechanism by which traffic can be limited. Policing is most frequently used on the network border to ensure that a peer is not consuming more than its allocated bandwidth. 
+- Policing: the mechanism by which traffic can be limited. Policing is most frequently used on the network border to ensure that a peer is not consuming more than its allocated bandwidth.
 - Classifying: the mechanism by which packets are separated for different treatment, possibly different output queues.
 - Scheduling: the mechanism by which packets are arranged (or rearranged) between input and output of a particular queue.
 - Shaping: the mechanism by which packets are delayed before transmission in an output queue to meet a desired output rate.
@@ -106,7 +107,7 @@ dpip link set dpdk0 tc-ingress on    # enable tc-ingress for dpdk0
 You can verify if TC for dpdk0 is enabled by checking if "tc-egress" or "tc-ingress" flag exists in the output of the command `dpip link show dpdk0`.
 
 > It's safe to enable or disable TC of a device whenever you like, even if when TC is processing packets.
- 
+
 **2. Add a root Qsch object.**
 
 ```bash
@@ -132,7 +133,7 @@ dpip cls add dev dpdk0 qsch ingress match pattern 'icmp,iif=dpdk0' target 2:
 
 ```
 # Check Qsch on dpdk0
-[root@dpvs-test]# dpip qsch show dev dpdk0      
+[root@dpvs-test]# dpip qsch show dev dpdk0
 qsch pfifo_fast root dev dpdk0 parent 0: flags 0x0 cls 1 bands 3 priomap 1 2 2 2 1 2 0 0 1 1 1 1 1 1 1 1
 qsch pfifo ingress dev dpdk0 parent 0: flags 0x1 cls 1 limit 65536
 qsch bfifo 2: dev dpdk0 parent ingress flags 0x1 cls 0 limit 100000
@@ -584,7 +585,7 @@ Finally, disable `tc-ingress` for `dpdk0`, and ping from 2001::15, and succeed t
 ```
 [root@dpvs-test]# dpip link set dpdk0 tc-ingress off
 
-[root@client ~]# ping6 -c 3 2001::112 -m 1 -I 2001::15  
+[root@client ~]# ping6 -c 3 2001::112 -m 1 -I 2001::15
 PING 2001::112(2001::112) from 2001::15 : 56 data bytes
 64 bytes from 2001::112: icmp_seq=1 ttl=64 time=0.178 ms
 64 bytes from 2001::112: icmp_seq=2 ttl=64 time=0.054 ms
@@ -680,9 +681,9 @@ IP Virtual Server version 0.0.0 (size=0)
 Prot LocalAddress:Port Scheduler Flags
   -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
 TCP  192.168.88.30:80 wlc
-  -> 192.168.88.215:80            FullNat 1      0          0         
+  -> 192.168.88.215:80            FullNat 1      0          0
 TCP  [2001::30]:8080 wlc
-  -> 192.168.88.215:80            FullNat 1      0          0  
+  -> 192.168.88.215:80            FullNat 1      0          0
 ```
 
 Next, we configure four client IP addresses on the Client to simulate four users.
@@ -845,15 +846,15 @@ qsch tbf 2: dev dpdk0 parent ingress flags 0x1 cls 1 rate 200.00Mbps burst 20000
 Firstly, change the route for network 2001::/64 on Client to use 2001::15 as the source IP address.
 
 ```
-[root@client]# ip -6 route change 2001::/64 dev eth0 proto kernel src 2001::15    
-[root@client]# ip -6 route show 2001::/64                                      
+[root@client]# ip -6 route change 2001::/64 dev eth0 proto kernel src 2001::15
+[root@client]# ip -6 route show 2001::/64
 2001::/64 dev eth0  proto kernel  src 2001::15  metric 1024
 ```
 
 Then, try access service B with tool `curl`,
 
 ```
-[root@client]# curl -m 2 -g [2001::30]:8080 
+[root@client]# curl -m 2 -g [2001::30]:8080
 curl: (28) Connection timed out after 2001 milliseconds
 ```
 and get *failed* no surprisingly. Request from 2001::15 is rejected by service B.
@@ -861,10 +862,320 @@ and get *failed* no surprisingly. Request from 2001::15 is rejected by service B
 As a contrast, we turn off the `tc-ingress` switch of `dpdk0`, and redo the test.
 
 ```
-[root@dpvs-test]# dpip link set dpdk0 tc-ingress off 
+[root@dpvs-test]# dpip link set dpdk0 tc-ingress off
 
 [root@client]# curl -m 2 -g [2001::30]:8080
 nginx 192.168.88.215
 ```
 
 As what we expect, request from 2001::15 is accepted by service B this time.
+
+
+<a id='example5'/>
+
+## Example 5. Dynamic allow/deny access list using TC ipset classifier
+
+This example builds an IPv4 allow access list and an IPv6 deny access list using tc ipset classifiers. We can modify the access lists dynamically without changing the tc classifiers, and gain performance advantages over the match type classifier.
+
+As the diagram below shows, the tc cls 0:1 uses ipset "allowset" of type hash:net, and matches against source address of IPv4 packets. A target network cidr which covers the whole test subject range should be added to the allowset firstly, and "nomatch" entries would be added later as the allow list member. On the other hand, the deny access list is much more straightforward. It uses tc cls 0:2 to classify IPv6 packets with ipset "denyset" of type hash:ip,port,net to match packets sent from specified network to target service ip:port, and the matched packets are dropped immediately.
+
+```
+-+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+-
+                                     qsch ingress
+                                    (pfifo_fast)
+                                          |
+                              ipv4        |          ipv6
+                             -----------------------------
+                             |                           |
+          cls 0:1            |                           |     cls 0:2
+    match allowset,src       |                           |  match denyset,dst
+(hash:net, "nomatch" entries)|                           | (hash:ip,port,net)
+                             |                           |
+                           Accept                     Reject
+-+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+-
+```
+
+Firstly, create the empty "allowset" and "denyset" ipsets.
+
+```bash
+dpip ipset create allowset hash:net comment
+dpip ipset -6 create denyset hash:ip,port,net
+```
+
+Then, create a pfifo_fast qsch object to get all received packets from port dpdk0.
+
+```bash
+dpip qsch add dev dpdk0 ingress pfifo_fast
+```
+
+Next, create the qsch cls object 0:1 and 0:2, which are coresponding to the IPv4 allowset and IPv6 denyset respectively.
+
+```bash
+dpip cls add dev dpdk0 qsch ingress handle 0:1 pkttype ipv4 ipset match allowset target drop
+dpip cls add dev dpdk0 qsch ingress handle 0:2 pkttype ipv6 ipset match denyset,dst target drop
+```
+> Notes: 
+> 1. The target action of cls 0:1 is "drop" because the allow list is implemented by "nomatch" ipset entries. The idea is to add a large network that covers the whole test subjects and exclude the allowed ones with explicit nomatch ipset entries.
+> 2. The "dst" in match configuration of cls 0:2 indicates that dst port number of packet is used in the denyset. In fact, the "ip", "port", "net" parts of denyset corespond to dst-ip, dst-port, src-ip in packets respectively.
+
+Finally, enable tc-ingress on port dpdk0.
+
+```bash
+dpip link set dpdk0 tc-ingress on
+
+```
+
+Check what we configured just now.
+
+```bash
+[root@dpvs-test]# dpip link show dpdk0
+1: dpdk0: socket 0 mtu 1500 rx-queue 8 tx-queue 8
+    UP 10000 Mbps full-duplex auto-nego tc-ingress 
+    addr A0:36:9F:74:EC:F0 OF_RX_IP_CSUM OF_TX_IP_CSUM OF_TX_TCP_CSUM OF_TX_UDP_CSUM 
+[root@dpvs-test]# dpip ipset list
+Name: allowset
+Type: hash:net
+Header: family inet  hashsize 1024  maxelem 65535  comment
+Size in memory: 16384
+References: 1
+Number of entries: 0
+Members:
+
+Name: denyset
+Type: hash:ip,port,net
+Header: family inet6  hashsize 1024  maxelem 65535  
+Size in memory: 16384
+References: 1
+Number of entries: 0
+Members:
+
+[root@dpvs-test]# dpip qsch show dev dpdk0
+qsch pfifo_fast ingress dev dpdk0 parent 0: flags 0x1 cls 2 bands 3 priomap 1 2 2 2 1 2 0 0 1 1 1 1 1 1 1 1
+[root@dpvs-test]# dpip cls show dev dpdk0 qsch ingress
+cls ipset 0:1 dev dpdk0 qsch ingress pkttype 0x0800 prio 0 ipset match allowset,src target drop
+cls ipset 0:2 dev dpdk0 qsch ingress pkttype 0x86dd prio 0 ipset match denyset,dst target drop
+```
+
+Now let's begin the tests.
+
+**Test 1. IPv4 allow list test**
+
+Envrionment setup:
+
+- Add a test IP address 192.168.88.112/24 to DPVS.
+- Add test IP addresses 192.168.88.15/24, 192.168.88.115/24 on Client to simulate two users.
+
+```bash
+[root@dpvs-test]# ./bin/dpip addr add 192.168.88.112/24 dev dpdk0
+[root@client]# ip addr add 192.168.88.15/24 dev eth0
+[root@client]# ip addr add 192.168.88.115/24 dev eth0
+```
+
+The allowset is empty now, so 192.168.88.112 is supposed to be accessible from both clients.
+
+```bash
+[root@client]# ping -c 3 192.168.88.112 -I 192.168.88.15
+PING 192.168.88.112 (192.168.88.112) from 192.168.88.15 : 56(84) bytes of data.
+64 bytes from 192.168.88.112: icmp_seq=1 ttl=64 time=0.129 ms
+64 bytes from 192.168.88.112: icmp_seq=2 ttl=64 time=0.035 ms
+64 bytes from 192.168.88.112: icmp_seq=3 ttl=64 time=0.036 ms
+
+--- 192.168.88.112 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 1999ms
+rtt min/avg/max/mdev = 0.035/0.066/0.129/0.045 ms
+[root@client]# ping -c 3 192.168.88.112 -I 192.168.88.115
+PING 192.168.88.112 (192.168.88.112) from 192.168.88.115 : 56(84) bytes of data.
+64 bytes from 192.168.88.112: icmp_seq=1 ttl=64 time=0.078 ms
+64 bytes from 192.168.88.112: icmp_seq=2 ttl=64 time=0.033 ms
+64 bytes from 192.168.88.112: icmp_seq=3 ttl=64 time=0.031 ms
+
+--- 192.168.88.112 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2002ms
+rtt min/avg/max/mdev = 0.031/0.047/0.078/0.022 ms
+```
+
+Suppose all clients are from network 192.168.0.0/16, we can block all clients access to DPVS by adding the network cidr to allowset.
+
+```bash
+[root@dpvs-test]# ./bin/dpip ipset add allowset 192.168.0.0/16 comment "target subjects"
+[root@dpvs-test]# ./bin/dpip ipset list allowset
+Name: allowset
+Type: hash:net
+Header: family inet  hashsize 1024  maxelem 65535  comment
+Size in memory: 16536
+References: 1
+Number of entries: 1
+Members:
+192.168.0.0/16  comment "target subjects"
+```
+
+Check the two clients again, and find both cannot ping DPVS now.
+
+```bash
+[root@client]# ping -c 3 192.168.88.112 -I 192.168.88.15
+PING 192.168.88.112 (192.168.88.112) from 192.168.88.15 : 56(84) bytes of data.
+
+--- 192.168.88.112 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 1999ms
+
+[root@client]# ping -c 3 192.168.88.112 -I 192.168.88.115
+PING 192.168.88.112 (192.168.88.112) from 192.168.88.115 : 56(84) bytes of data.
+
+--- 192.168.88.112 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 2003ms
+
+```
+
+Actually, all clients from network 192.168.0.0/16 are rejected by DPVS. Then we can allow some clients by adding them to the allowset with nomatch option. For example, the following command allows client 192.168.88.115 to access DPVS.
+
+```bash
+[root@dpvs-test]# ./bin/dpip ipset add allowset 192.168.88.115/32 nomatch
+[root@dpvs-test]# ./bin/dpip ipset list allowset
+Name: allowset
+Type: hash:net
+Header: family inet  hashsize 1024  maxelem 65535  comment
+Size in memory: 16688
+References: 1
+Number of entries: 2
+Members:
+192.168.0.0/16  comment "target subjects"
+192.168.88.115/32 nomatch
+```
+As expected, ping DPVS 192.168.88.112 from client 192.168.88.115 is OK, while client 192.168.88.15 is still rejected.
+
+```bash
+[root@client]# ping -c 3 192.168.88.112 -I 192.168.88.115
+PING 192.168.88.112 (192.168.88.112) from 192.168.88.115 : 56(84) bytes of data.
+64 bytes from 192.168.88.112: icmp_seq=1 ttl=64 time=0.103 ms
+64 bytes from 192.168.88.112: icmp_seq=2 ttl=64 time=0.036 ms
+64 bytes from 192.168.88.112: icmp_seq=3 ttl=64 time=0.032 ms
+
+--- 192.168.88.112 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2002ms
+rtt min/avg/max/mdev = 0.032/0.057/0.103/0.032 ms
+```
+
+Benefited from hash:net ipset types, it's also possible to add network members. For example, the command below adds the whole subnet 192.168.88.0/28 to allowset.
+
+```bash
+[root@dpvs-test]# ./bin/dpip ipset add allowset 192.168.88.0/28 nomatch
+[root@dpvs-test]# ./bin/dpip ipset show allowset
+Name: allowset
+Type: hash:net
+Header: family inet  hashsize 1024  maxelem 65535  comment
+Size in memory: 16840
+References: 1
+Number of entries: 3
+Members:
+192.168.0.0/16  comment "target subjects"
+192.168.88.0/28 nomatch  
+192.168.88.115/32 nomatch 
+```
+No suprisingly, all clients from subnet 192.168.88.0/28 can ping DPVS now.
+
+
+```bash
+[root@client]# ping -c 3 192.168.88.112 -I 192.168.88.15
+PING 192.168.88.112 (192.168.88.112) from 192.168.88.15 : 56(84) bytes of data.
+64 bytes from 192.168.88.112: icmp_seq=1 ttl=64 time=0.102 ms
+64 bytes from 192.168.88.112: icmp_seq=2 ttl=64 time=0.036 ms
+64 bytes from 192.168.88.112: icmp_seq=3 ttl=64 time=0.039 ms
+
+--- 192.168.88.112 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 1999ms
+rtt min/avg/max/mdev = 0.036/0.059/0.102/0.030 ms
+```
+
+**Test 2. IPv6 deny list test**
+
+Envrionment setup:
+
+- Flush the allowset in Test 1, or fullnat outbound packets to local IP in this test would be blocked.
+- Add a test IP address 192.168.88.112/24 to DPVS (already done in Test 1).
+- Add test IP addresses 192.168.88.15/24, 192.168.88.115/24 on Client to simulate two users (already done in Test 1).
+- Set up two fullnat services -- [2001::1]:80, [2001::1]:8080
+
+```bash
+[root@dpvs-test]# ./bin/dpip ipset flush allowset
+[root@dpvs-test]# #dpip addr add 192.168.88.112/24 dev dpdk0
+[root@dpvs-test]# dpip -6 addr add 2001::1/64 dev dpdk0
+[root@dpvs-test]# ipvsadm -At [2001::1]:80 -s wrr
+[root@dpvs-test]# ipvsadm -at [2001::1]:80 -r 192.168.88.215:80 -b
+[root@dpvs-test]# ipvsadm -Pt [2001::1]:80 -z 192.168.88.241 -F dpdk0
+[root@dpvs-test]# ipvsadm -At [2001::1]:8080 -s wrr
+[root@dpvs-test]# ipvsadm -at [2001::1]:8080 -r 192.168.88.215:80 -b
+[root@dpvs-test]# ipvsadm -Pt [2001::1]:8080 -z 192.168.88.241 -F dpdk0
+[root@client]# #ip addr add 192.168.88.15/24 dev eth0
+[root@client]# #ip addr add 192.168.88.115/24 dev eth0
+[root@dpvs-test]# ./bin/dpip addr show
+inet 192.168.88.112/24 scope global dpdk0
+     valid_lft forever preferred_lft forever
+inet6 2001::1/64 scope global dpdk0
+     valid_lft forever preferred_lft forever
+inet 192.168.88.241/32 scope global dpdk0
+     valid_lft forever preferred_lft forever
+[root@dpvs-test]# ./bin/dpip -6 route show
+inet6 2001::1/128 dev dpdk0 mtu 1500 scope host
+inet6 2001::/64 src 2001::1 dev dpdk0 mtu 1500 scope link
+[root@dpvs-test]# ./bin/ipvsadm -ln
+IP Virtual Server version 0.0.0 (size=0)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  [2001::1]:80 wrr
+  -> 192.168.88.215:80            FullNat 1      0          0
+TCP  [2001::1]:8080 wrr
+  -> 192.168.88.215:80            FullNat 1      0          0
+```
+
+The denyset is empty, so both fullnat services can be accessed by both clients. Note that we can switch between the two simulated clients by changing the route source.
+
+```bash
+[root@client]# ip route change 2001::1/128 dev eth0 src 2001::15
+[root@client]# ip -6 route show 2001::1
+2001::1 dev eth0  src 2001::15  metric 1024 
+[root@client]# curl -g http://[2001::1]:80/
+nginx 192.168.88.215
+[root@client]# curl -g http://[2001::1]:8080/
+nginx 192.168.88.215
+[root@client]# ip route change 2001::1/128 dev eth0 src 2001::1:15
+[root@client]# ip -6 route show 2001::1
+2001::1 dev eth0  src 2001::1:15  metric 1024 
+[root@client]# curl -g http://[2001::1]:80/
+nginx 192.168.88.215
+[root@client]# curl -g http://[2001::1]:8080/
+nginx 192.168.88.215
+```
+
+As shown above, http requests from clients 2001::1 and 2001::1:15 to services [2001::1]:80 and [2001::1]:8080 are allowed and responsed by default.
+
+Now let's add a deny member to the denyset, which blocks clients from subnet 2001::1:0/112 to request service [2001::1]:80.
+
+```bash
+[root@dpvs-test]# ./bin/dpip ipset add denyset 2001::1,tcp:80,2001::1:0/112
+[root@dpvs-test]# ./bin/dpip ipset list denyset
+Name: denyset
+Type: hash:ip,port,net
+Header: family inet6  hashsize 1024  maxelem 65535
+Size in memory: 16536
+References: 1
+Number of entries: 1
+Members:
+2001::1,tcp:80,2001::1:0/112
+```
+
+Do the previous tests again, and we can see that http request from client 2001::1:15 to service [2001::1]:80 is refused, but to service [2001::1]:8080 is still OK, while http requests from client 2001::15 to both services also remains OK.
+
+```bash
+[root@client]# ip route change 2001::1/128 dev eth0 src 2001::15
+[root@client]# ip -6 route show 2001::1
+2001::1 dev eth0  src 2001::15  metric 1024
+[root@client]# curl -g http://[2001::1]:80/
+nginx 192.168.88.215
+[root@client]# curl -g http://[2001::1]:8080/
+nginx 192.168.88.215
+[root@client]# ip route change 2001::1/128 dev eth0 src 2001::1:15
+[root@client]# curl -g http://[2001::1]:80/
+curl: (7) Failed connect to 2001::1:80; Connection timed out
+[root@client]# curl -g http://[2001::1]:8080/
+nginx 192.168.88.215
+```

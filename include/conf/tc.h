@@ -74,6 +74,7 @@ struct tc_cls_param {
 
     union {
         struct tc_cls_match_copt match;
+        struct tc_cls_ipset_copt set;
     } copt;
 } __attribute__((__packed__));
 

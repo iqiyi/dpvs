@@ -36,7 +36,7 @@ static struct list_head ipset_types;
 static RTE_DEFINE_PER_LCORE(struct list_head *, ip_sets);
 
 static struct ipset *
-ipset_lookup(char *name)
+ipset_lookup(const char *name)
 {
     struct ipset *set;
     uint32_t hash;
@@ -51,7 +51,7 @@ ipset_lookup(char *name)
 }
 
 struct ipset *
-ipset_get(char *name)
+ipset_get(const char *name)
 {
     struct ipset *set = ipset_lookup(name);
 
@@ -79,8 +79,9 @@ ipset_local_create(struct ipset_param *param)
 {
     struct ipset *set;
     struct ipset_type *type;
-    int ret = 0;
     uint32_t hash;
+    int ret = 0;
+    struct ipset_option *opt = &param->option;
 
     if ((type = ipset_type_lookup(param->type)) == NULL) {
         RTE_LOG(ERR, IPSET, "IP set type %s not supported.\n", param->type);
@@ -96,6 +97,14 @@ ipset_local_create(struct ipset_param *param)
 
     rte_strlcpy(set->name, param->name, IPSET_MAXNAMELEN);
     set->type = type;
+
+    if (opt->family)
+        set->family = opt->family;
+    else
+        set->family = AF_INET;
+
+    if (opt->create.comment)
+        set->comment = true;
 
     ret = set->type->create(set, param);
     if (ret)

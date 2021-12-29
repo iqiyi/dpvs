@@ -2335,8 +2335,6 @@ int netif_rcv(struct netif_port *dev, __be16 eth_type, struct rte_mbuf *mbuf)
     if (!pt)
         return EDPVS_KNICONTINUE;
 
-    mbuf->l2_len = 0; /* make sense ? */
-
     return pt->func(mbuf, dev);
 }
 
@@ -2519,6 +2517,8 @@ void lcore_process_packets(struct rte_mbuf **mbufs, lcoreid_t cid, uint16_t coun
             dev = dev->bond->slave.master;
             mbuf->port = dev->id;
         }
+
+        mbuf->tx_offload = 0; /* reset l2_len, l3_len, l4_len, ... */
 
         if (t < count) {
             rte_prefetch0(rte_pktmbuf_mtod(mbufs[t], void *));

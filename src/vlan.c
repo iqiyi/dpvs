@@ -396,6 +396,7 @@ static inline int vlan_untag_mbuf(struct rte_mbuf *mbuf)
     /* strip the vlan header */
     memmove((void *)vehdr + VLAN_HLEN, vehdr, 2 * ETH_ALEN);
     rte_pktmbuf_adj(mbuf, VLAN_HLEN);
+    mbuf->l2_len = sizeof(*vehdr) - VLAN_HLEN;
     return EDPVS_OK;
 }
 
