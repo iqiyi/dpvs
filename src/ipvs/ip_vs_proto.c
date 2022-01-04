@@ -118,10 +118,10 @@ icmp6_error:
     proto_unregister(&dp_vs_proto_tcp);
 tcp_error:
     proto_unregister(&dp_vs_proto_udp);
-esp_error:
-    proto_unregister(&dp_vs_proto_esp);
 ah_error:
     proto_unregister(&dp_vs_proto_ah);	
+esp_error:
+    proto_unregister(&dp_vs_proto_esp);
     return err;
 }
 
