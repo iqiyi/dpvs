@@ -114,7 +114,7 @@ static int
 hash_net_test4(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
-    struct ipv4_hdr *ip4hdr;
+    struct rte_ipv4_hdr *ip4hdr;
 
     if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
         return 0;
@@ -183,7 +183,7 @@ static int
 hash_net_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
-    struct ipv6_hdr *ip6hdr;
+    struct rte_ipv6_hdr *ip6hdr;
 
     if (set->family != AF_INET6 || mbuf_address_family(mbuf) != AF_INET6)
         return 0;

@@ -303,8 +303,8 @@ int ipset_init(void)
         return err;
     }
 
-    rte_eal_mp_remote_launch(ipset_lcore_init, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(ipset_lcore_init, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));
@@ -323,8 +323,8 @@ int ipset_term(void)
         RTE_LOG(ERR, IPSET, "ipset ctrl term: %s.\n", dpvs_strerror(err));
     };
 
-    rte_eal_mp_remote_launch(ipset_flush_lcore, NULL, CALL_MASTER);
-    RTE_LCORE_FOREACH_SLAVE(cid) {
+    rte_eal_mp_remote_launch(ipset_flush_lcore, NULL, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
         if ((err = rte_eal_wait_lcore(cid)) < 0) {
             RTE_LOG(WARNING, IPSET, "%s: lcore %d: %s.\n",
                     __func__, cid, dpvs_strerror(err));

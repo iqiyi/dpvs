@@ -132,8 +132,8 @@ hash_netportiface_test4(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match
 {
     elem_t e;
     uint16_t proto;
-    struct ipv4_hdr *ip4hdr;
-    struct udp_hdr *l4hdr = NULL;
+    struct rte_ipv4_hdr *ip4hdr;
+    struct rte_udp_hdr *l4hdr = NULL;
 
     if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
         return 0;
@@ -230,8 +230,8 @@ hash_netportiface_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match
 {
     elem_t e;
     uint16_t proto;
-    struct ipv6_hdr *ip6hdr;
-    struct udp_hdr *l4hdr = NULL;
+    struct rte_ipv6_hdr *ip6hdr;
+    struct rte_udp_hdr *l4hdr = NULL;
 
     if (set->family != AF_INET6 || mbuf_address_family(mbuf) != AF_INET6)
         return 0;

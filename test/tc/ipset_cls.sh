@@ -9,8 +9,8 @@
 ######
 
 iface=dpdk0
-dpip=./bin/dpip
-ipvsadm=./bin/ipvsadm
+dpip=../../bin/dpip
+ipvsadm=../../bin/ipvsadm
 
 trap cleanup SIGINT SIGTERM EXIT
 
@@ -112,7 +112,7 @@ function bitmap_port()
      $dpip ipset add foo tcp:80
      # curl 192.168.88.1:80     # fail
      # curl 192.168.88.1:8080   # ok
-     # curl [2001::1]:80        # ok
+     # curl -g [2001::1]:80     # ok
 }
 
 function bitmap_port_clean()

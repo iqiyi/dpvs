@@ -238,7 +238,7 @@ uint16_t mbuf_ether_type(struct rte_mbuf *mbuf)
     if (unlikely(!ehdr))
         return 0;
     ethtype = ntohs(ehdr->ether_type);
-    if (unlikely(ethtype == ETHER_TYPE_VLAN))
+    if (unlikely(ethtype == RTE_ETHER_TYPE_VLAN))
         ethtype = ntohs(*((uint16_t *)(((void *)&ehdr->ether_type) + 4)));
     return ethtype;
 }
@@ -247,9 +247,9 @@ int mbuf_address_family(struct rte_mbuf *mbuf)
 {
     uint16_t etype = mbuf_ether_type(mbuf);
 
-    if (etype == ETHER_TYPE_IPv4)
+    if (etype == RTE_ETHER_TYPE_IPV4)
         return AF_INET;
-    if (etype == ETHER_TYPE_IPv6)
+    if (etype == RTE_ETHER_TYPE_IPV6)
         return AF_INET6;
     return 0;  // AF_UNSPEC
 }

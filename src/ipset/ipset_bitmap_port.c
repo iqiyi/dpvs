@@ -131,7 +131,7 @@ bitmap_port_test(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
     uint16_t proto;
-    struct udp_hdr *l4hdr;
+    struct rte_udp_hdr *l4hdr;
     struct bitmap_port *map = set->data;
 
     proto = mbuf_protocol(mbuf);

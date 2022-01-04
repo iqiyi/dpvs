@@ -142,8 +142,8 @@ bitmap_ipmac_test(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
     struct bitmap_ipmac *map = set->data;
-    struct ether_hdr *ehdr;
-    struct ipv4_hdr *ip4hdr;
+    struct rte_ether_hdr *ehdr;
+    struct rte_ipv4_hdr *ip4hdr;
 
     if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
         return 0;
