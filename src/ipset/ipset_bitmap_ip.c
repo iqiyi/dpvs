@@ -126,7 +126,7 @@ static int
 bitmap_ip_test(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 {
     elem_t e;
-    struct ipv4_hdr *ip4hdr;
+    struct rte_ipv4_hdr *ip4hdr;
     struct bitmap_ip *map = set->data;
 
     if (set->family != AF_INET || mbuf_address_family(mbuf) != AF_INET)
