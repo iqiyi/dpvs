@@ -132,7 +132,7 @@ static void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_se
 	strcpy(rule->user.srange, entry->user.srange);
 	strcpy(rule->user.drange, entry->user.drange);
 	strcpy(rule->user.iifname, entry->user.iifname);
-	strcpy(rule->user.iifname, entry->user.iifname);
+	strcpy(rule->user.oifname, entry->user.oifname);
 }
 
 struct ip_vs_getinfo g_ipvs_info;
@@ -690,7 +690,7 @@ ipvs_get_service(ipvs_service_t *hint, lcoreid_t cid)
 	ipvs_service_entry_t *svc;
 	size_t len, len_rcv;
 	dpvs_service_entry_t dpvs_svc, *dpvs_svc_rcv;
-	struct dp_vs_service_user dpvs_app, *dpvs_app_ptr;
+	struct dp_vs_service_entry *dpvs_svc_entry;
 
 	ipvs_func = ipvs_get_service;
 
@@ -704,10 +704,8 @@ ipvs_get_service(ipvs_service_t *hint, lcoreid_t cid)
 	len_rcv = sizeof(*dpvs_svc_rcv);
 	memset(&dpvs_svc, 0, len);
 
-	dpvs_app_ptr = &dpvs_app;
-	memset(dpvs_app_ptr, 0, sizeof(dpvs_app));
-	IPVS_2_DPVS(dpvs_app_ptr, hint);
-	memcpy(&dpvs_svc, dpvs_app_ptr, sizeof(dpvs_app));
+	dpvs_svc_entry = &dpvs_svc.user;
+	IPVS_2_DPVS(dpvs_svc_entry, hint);
 	dpvs_svc.user.cid = cid;
 
 	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICE), 
