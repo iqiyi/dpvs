@@ -71,6 +71,8 @@ int netif_pktpool_mbuf_cache = NETIF_PKTPOOL_MBUF_CACHE_DEF;
 
 #define ARP_RING_SIZE 2048
 
+#define RETA_CONF_SIZE  (ETH_RSS_RETA_SIZE_512 / RTE_RETA_GROUP_SIZE)
+
 /* physical nic id = phy_pid_base + index */
 static portid_t phy_pid_base = 0;
 static portid_t phy_pid_end = -1; // not inclusive
@@ -990,7 +992,7 @@ static inline int is_ipv4_pkt_valid(struct rte_ipv4_hdr *iph, uint32_t link_len)
     return EDPVS_OK;
 }
 
-static void parse_ipv4_hdr(struct rte_mbuf *mbuf, uint16_t port, uint16_t queue)
+__rte_unused static void parse_ipv4_hdr(struct rte_mbuf *mbuf, uint16_t port, uint16_t queue)
 {
     char saddr[16], daddr[16];
     uint16_t lcore;
@@ -1208,11 +1210,11 @@ static void config_lcores(struct list_head *worker_list)
                                 port->id, queue->rx_queues[ii],
                                 queue->isol_rxq_ring_sz,
                                 &lcore_conf[id].pqs[tk].rxqs[ii]) < 0) {
-                        RTE_LOG(ERR, NETIF, "[%s]: isol_rxq add failed for cpu%d:%s:"
+                        RTE_LOG(ERR, NETIF, "%s: isol_rxq add failed for cpu%d:%s:"
                                 "rx%d, recieving locally instead.\n", __func__,
                                 worker_min->cpu_id, port->name, queue->rx_queues[ii]);
                     } else {
-                        RTE_LOG(INFO, NETIF, "[%s]: isol_rxq on cpu%d with ring size %d is "
+                        RTE_LOG(INFO, NETIF, "%s: isol_rxq on cpu%d with ring size %d is "
                                 "added for cpu%d:%s:rx%d\n", __func__,
                                 queue->isol_rxq_lcore_ids[ii], queue->isol_rxq_ring_sz,
                                 worker_min->cpu_id, port->name, queue->rx_queues[ii]);
@@ -1239,25 +1241,30 @@ static void config_lcores(struct list_head *worker_list)
 lcoreid_t lcore2index[DPVS_MAX_LCORE+1];
 portid_t port2index[DPVS_MAX_LCORE][NETIF_MAX_PORTS];
 
-static void lcore_index_init(void)
+static int lcore_index_init(void)
 {
-    lcoreid_t ii;
-    int tk = 0;
-    for (ii = 0; ii <= DPVS_MAX_LCORE; ii++) {
-        if (rte_lcore_is_enabled(ii)) {
-            if (likely(tk))
-                lcore2index[ii] = tk - 1;
-            else
-                lcore2index[ii] = DPVS_MAX_LCORE;
-            tk++;
-        } else
-            lcore2index[ii] = DPVS_MAX_LCORE;
+    lcoreid_t cid;
+    int i;
+
+    for (i = 0; i <= DPVS_MAX_LCORE; i++)
+        lcore2index[i] = DPVS_MAX_LCORE;
+
+    for (i = 0; lcore_conf[i].nports > 0; i++) {
+        cid = lcore_conf[i].id;
+        if (!rte_lcore_is_enabled(cid))
+            return EDPVS_NONEALCORE;
+        lcore2index[cid] = i;
     }
+
 #ifdef CONFIG_DPVS_NETIF_DEBUG
     printf("lcore fast searching table: \n");
-    for (ii = 0; ii <= DPVS_MAX_LCORE; ii++)
-        printf("lcore2index[%d] = %d\n", ii, lcore2index[ii]);
+    for (i = 0; i <= DPVS_MAX_LCORE; i++) {
+        if (lcore2index[i] != DPVS_MAX_LCORE)
+            printf("\tcid: %2d --> %2d\n", i, lcore2index[i]);
+    }
 #endif
+
+    return EDPVS_OK;
 }
 
 static void port_index_init(void)
@@ -1280,9 +1287,10 @@ static void port_index_init(void)
 #ifdef CONFIG_DPVS_NETIF_DEBUG
     printf("port fast searching table(port2index[cid][pid]): \n");
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
-        for (jj = 0; jj < NETIF_MAX_PORTS; jj++)
-            printf("%d-%d:%d ", ii, jj, port2index[ii][jj]);
-        printf("\n");
+        for (jj = 0; jj < NETIF_MAX_PORTS; jj++) {
+            if (port2index[ii][jj] != NETIF_PORT_ID_INVALID)
+                printf("\tcid: %2d, pid: %2d --> index: %2d\n", ii, jj, port2index[ii][jj]);
+        }
     }
 #endif
 }
@@ -1345,6 +1353,30 @@ static void build_lcore_index(void)
     g_lcore_num = idx;
 }
 
+static inline void dump_lcore_role(void)
+{
+    dpvs_lcore_role_t role;
+    lcoreid_t cid;
+    char bufs[LCORE_ROLE_MAX][1024];
+
+    for (role = 0; role < LCORE_ROLE_MAX; role++)
+        snprintf(bufs[role], sizeof(bufs[role]), "\t%s: ",
+                dpvs_lcore_role_str(role));
+
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
+        role = g_lcore_role[cid];
+        snprintf(&bufs[role][strlen(bufs[role])], sizeof(bufs[role])
+                    - strlen(bufs[role]), "%-4d", cid);
+    }
+
+    for (role = 1; role < LCORE_ROLE_MAX; role++) {
+        strncat(bufs[0], "\n", sizeof(bufs) - strlen(bufs[0]) - 1);
+        strncat(bufs[0], bufs[role], sizeof(bufs) - strlen(bufs[0]) - 1);
+    }
+
+    RTE_LOG(INFO, NETIF, "LCORE ROLES:\n%s\n", bufs[0]);
+}
+
 static void lcore_role_init(void)
 {
     int i, cid;
@@ -1375,10 +1407,7 @@ static void lcore_role_init(void)
     }
 
     build_lcore_index();
-
-    for (cid = 0; cid < DPVS_MAX_LCORE; cid++)
-        RTE_LOG(INFO, NETIF, "[%02d]: %s\n",
-                cid, dpvs_lcore_role_str(g_lcore_role[cid]));
+    dump_lcore_role();
 }
 
 static inline void netif_copy_lcore_stats(struct netif_lcore_stats *stats)
@@ -1417,6 +1446,37 @@ static int port_tx_queues_get(portid_t pid)
         i++;
     }
     return tx_ports;
+}
+
+/*
+ * params:
+ *   @pid: [in] port id
+ *   @qids: [out] queue id array containing rss queues when return
+ *   @n_queues: [in,out], `qids` array length when input, rss queue number when return
+ */
+static int get_configured_rss_queues(portid_t pid, queueid_t *qids, int *n_queues)
+{
+    int i, j, k, tk = 0;
+    if (!qids || !n_queues || *n_queues < NETIF_MAX_QUEUES)
+        return EDPVS_INVAL;
+
+    for (i = 0; lcore_conf[i].nports > 0; i++) {
+        if (lcore_conf[i].type != LCORE_ROLE_FWD_WORKER)
+            continue;
+        for (j = 0; j < lcore_conf[i].nports; j++) {
+            if (lcore_conf[i].pqs[j].id == pid)
+                break;
+        }
+        if (lcore_conf[i].pqs[j].id != pid)
+            return EDPVS_INVAL;
+        for (k = 0; k < lcore_conf[i].pqs[j].nrxq; k++) {
+            qids[tk++] = lcore_conf[i].pqs[j].txqs[k].id;
+            if (tk > *n_queues)
+                return EDPVS_NOMEM;
+        }
+    }
+    *n_queues = tk;
+    return EDPVS_OK;
 }
 
 static uint8_t get_configured_port_nb(int lcores, const struct netif_lcore_conf *lcore_conf)
@@ -2585,29 +2645,34 @@ static struct dpvs_lcore_job_array netif_jobs[NETIF_JOB_MAX] = {
 
 static void netif_lcore_init(void)
 {
-    int i, res;
+    int i, err;
     lcoreid_t cid;
+    char buf1[1024], buf2[1024];
 
     timer_sched_interval_us = dpvs_timer_sched_interval_get();
 
+    buf1[0] = buf2[0] = '\0';
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
         if (rte_lcore_is_enabled(cid))
-            RTE_LOG(INFO, NETIF, "%s: lcore%d is enabled\n", __func__, cid);
+            snprintf(&buf1[strlen(buf1)], sizeof(buf1)-strlen(buf1), "%4d", cid);
         else
-            RTE_LOG(INFO, NETIF, "%s: lcore%d is disabled\n", __func__, cid);
+            snprintf(&buf2[strlen(buf2)], sizeof(buf2)-strlen(buf2), "%4d", cid);
     }
-
-    /* build lcore fast searching table */
-    lcore_index_init();
+    RTE_LOG(INFO, NETIF, "LCORE STATUS\n\tenabled: %s\n\tdisabled: %s\n", buf1, buf2);
 
     /* init isolate rxqueue table */
     isol_rxq_init();
 
     /* check and set lcore config */
     config_lcores(&worker_list);
-    if ((res = check_lcore_conf(rte_lcore_count(), lcore_conf)) != EDPVS_OK)
-        rte_exit(EXIT_FAILURE, "[%s] bad lcore configuration (err=%d),"
-                " exit ...\n", __func__, res);
+    if ((err = check_lcore_conf(rte_lcore_count(), lcore_conf)) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "%s: bad lcore configuration (error code: %d),"
+                " exit ...\n", __func__, err);
+
+    /* build lcore fast searching table */
+    if ((err = lcore_index_init()) != EDPVS_OK)
+        rte_exit(EXIT_FAILURE, "%s: lcore_index_init failed (cause: %s), exit ...\n",
+                __func__, dpvs_strerror(err));
 
     /* build port fast searching table */
     port_index_init();
@@ -2627,9 +2692,9 @@ static void netif_lcore_init(void)
     }
 
     for (i = 0; i < NELEMS(netif_jobs); i++) {
-        res = dpvs_lcore_job_register(&netif_jobs[i].job, netif_jobs[i].role);
-        if (res < 0) {
-            rte_exit(EXIT_FAILURE, "%s: fail to register lcore job '%s', exiting ...\n",
+        err = dpvs_lcore_job_register(&netif_jobs[i].job, netif_jobs[i].role);
+        if (err < 0) {
+            rte_exit(EXIT_FAILURE, "%s: fail to register lcore job '%s', exit ...\n",
                     __func__, netif_jobs[i].job.name);
             break;
         }
@@ -2788,6 +2853,116 @@ void kni_lcore_loop(void *dummy)
 }
 
 /********************************************* port *************************************************/
+
+static void netif_dump_rss_reta(struct netif_port *port)
+{
+    int i, len, pos;
+    uint32_t reta_id, reta_pos;
+    char buf[ETH_RSS_RETA_SIZE_512 * 8];
+    struct rte_eth_rss_reta_entry64 reta_info[RETA_CONF_SIZE];
+
+    if (port->type != PORT_TYPE_GENERAL && port->type != PORT_TYPE_BOND_SLAVE)
+        return;
+
+    if (unlikely(port->dev_info.reta_size == 0))
+        if (unlikely(rte_eth_dev_info_get(port->id, &port->dev_info)))
+            return;
+
+    memset(reta_info, 0, sizeof(reta_info));
+    for (i = 0; i < port->dev_info.reta_size; i++)
+        reta_info[i / RTE_RETA_GROUP_SIZE].mask = UINT64_MAX;
+
+    if (unlikely(rte_eth_dev_rss_reta_query(port->id, reta_info,
+                    port->dev_info.reta_size)))
+        return;
+
+    buf[0] = '\0';
+    len = pos = 0;
+    for (i = 0; i < port->dev_info.reta_size; i++) {
+        reta_id = i / RTE_RETA_GROUP_SIZE;
+        reta_pos = i % RTE_RETA_GROUP_SIZE;
+        if (i % 8 == 0) {
+            len = snprintf(&buf[pos], sizeof(buf) - pos, "\n%4d: ", i);
+            if (len >= sizeof(buf) - pos) {
+                snprintf(&buf[sizeof(buf)-16], 16, "%s", "(truncated)");
+                break;
+            }
+            pos += len;
+        }
+        len = snprintf(&buf[pos], sizeof(buf)-pos, "%-4d", reta_info[reta_id].reta[reta_pos]);
+        if (len >= sizeof(buf) - pos) {
+            snprintf(&buf[sizeof(buf)-16], 16, "%s", "(truncated)");
+            break;
+        }
+        pos += len;
+    }
+
+    RTE_LOG(INFO, NETIF, "RSS RETA(%s):%s\n", port->name, buf);
+}
+
+static int __netif_update_rss_reta(struct netif_port *port)
+{
+    int i, err;
+    int nrssq = NETIF_MAX_QUEUES;
+    queueid_t rssq[NETIF_MAX_QUEUES];
+    uint32_t reta_id, reta_pos;
+    struct rte_eth_rss_reta_entry64 reta_conf[RETA_CONF_SIZE];
+
+    if (port->type != PORT_TYPE_GENERAL && port->type != PORT_TYPE_BOND_SLAVE)
+        return EDPVS_NOTSUPP;
+
+    if (port->type == PORT_TYPE_BOND_SLAVE)
+        err = get_configured_rss_queues(port->bond->slave.master->id, rssq, &nrssq);
+    else
+        err = get_configured_rss_queues(port->id, rssq, &nrssq);
+    if (err != EDPVS_OK)
+        return err;
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+    printf("RSS QUEUES(%s): ", port->name);
+    for (i = 0; i < nrssq; i++) {
+        printf("%-4d", rssq[i]);
+    }
+    printf("\n");
+#endif
+
+    memset(reta_conf, 0, sizeof(reta_conf));
+    for (i = 0; i < port->dev_info.reta_size; i++) {
+        reta_id = i / RTE_RETA_GROUP_SIZE;
+        reta_pos = i % RTE_RETA_GROUP_SIZE;
+        reta_conf[reta_id].mask = UINT64_MAX;
+        reta_conf[reta_id].reta[reta_pos] = (uint16_t)(rssq[i % nrssq]);
+    }
+
+    if (rte_eth_dev_rss_reta_update(port->id, reta_conf, port->dev_info.reta_size))
+        return EDPVS_DPDKAPIFAIL;
+
+    netif_dump_rss_reta(port);
+    return EDPVS_OK;
+}
+
+static int netif_update_rss_reta(struct netif_port *port)
+{
+    switch (port->type) {
+        case PORT_TYPE_GENERAL:
+            return __netif_update_rss_reta(port);
+        case PORT_TYPE_BOND_MASTER:
+        {
+            // notes:
+            // rss reta of bonding slaves must be configured after bonding devices bootup,
+            // or it would be reset when bonding device bootup.
+            int i, err;
+            for (i = 0; i < port->bond->master.slave_nb; i++) {
+                err = __netif_update_rss_reta(port->bond->master.slaves[i]);
+                if (err != EDPVS_OK)
+                    return err;
+            }
+            return EDPVS_OK;
+        }
+        default:
+            return EDPVS_OK;
+    }
+}
+
 static inline int port_tab_hashkey(portid_t id)
 {
     return id & NETIF_PORT_TABLE_MASK;
@@ -3376,14 +3551,14 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
 
         port->mtu = cfg_stream->mtu;
         if (cfg_stream->rx_queue_nb > 0 && port->nrxq > cfg_stream->rx_queue_nb) {
-            RTE_LOG(WARNING, NETIF, "%s: rx-queues(%d) configured in workers != "
-                    "rx-queues(%d) configured in device, setup %d rx-queues for %s\n",
+            RTE_LOG(WARNING, NETIF, "%s: rx-queues configured in workers (%d) != "
+                    "rx-queues configured in device (%d), setup %d rx-queues for %s\n",
                     port->name, port->nrxq, cfg_stream->rx_queue_nb,
                     port->nrxq, port->name);
         }
         if (cfg_stream->tx_queue_nb > 0 && port->ntxq > cfg_stream->tx_queue_nb) {
-            RTE_LOG(WARNING, NETIF, "%s: tx-queues(%d) configured in workers != "
-                    "tx-queues(%d) configured in device, setup %d tx-queues for %s\n",
+            RTE_LOG(WARNING, NETIF, "%s: tx-queues configured in workers (%d) != "
+                    "tx-queues configured in device (%d), setup %d tx-queues for %s\n",
                     port->name, port->ntxq, cfg_stream->tx_queue_nb,
                     port->ntxq, port->name);
         }
@@ -3642,6 +3817,11 @@ int netif_port_start(struct netif_port *port)
             return ret;
         }
     }
+
+    /* update rss reta */
+    if ((ret = netif_update_rss_reta(port)) != EDPVS_OK)
+        RTE_LOG(WARNING, NETIF, "%s: %s update rss reta failed (cause: %s)\n",
+                __func__, port->name, dpvs_strerror(ret));
 
     return EDPVS_OK;
 }

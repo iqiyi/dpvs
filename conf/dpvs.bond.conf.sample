@@ -248,17 +248,18 @@ worker_defs {
         }
     }
 
-    !<init> worker cpu9 {
+    !<init> worker cpu17 {
     !    type    kni
-    !    cpu_id  9
+    !    cpu_id  17
     !    port    bond0 {
+    !        4x_queue_ids     8
     !        tx_queue_ids     8
     !    }
     !    port    bond1 {
+    !        rx_queue_ids     8
     !        tx_queue_ids     8
     !    }
     !}
-
 }
 
 ! timer config
