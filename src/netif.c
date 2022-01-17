@@ -1357,7 +1357,8 @@ static inline void dump_lcore_role(void)
 {
     dpvs_lcore_role_t role;
     lcoreid_t cid;
-    char bufs[LCORE_ROLE_MAX][1024];
+    char bufs[LCORE_ROLE_MAX+1][1024];
+    char results[sizeof bufs];
 
     for (role = 0; role < LCORE_ROLE_MAX; role++)
         snprintf(bufs[role], sizeof(bufs[role]), "\t%s: ",
@@ -1369,12 +1370,13 @@ static inline void dump_lcore_role(void)
                     - strlen(bufs[role]), "%-4d", cid);
     }
 
+    snprintf(results, sizeof(results), "%s", bufs[0]);
     for (role = 1; role < LCORE_ROLE_MAX; role++) {
-        strncat(bufs[0], "\n", sizeof(bufs) - strlen(bufs[0]) - 1);
-        strncat(bufs[0], bufs[role], sizeof(bufs) - strlen(bufs[0]) - 1);
+        strncat(results, "\n", sizeof(results) - strlen(results) - 1);
+        strncat(results, bufs[role], sizeof(results) - strlen(results) - 1);
     }
 
-    RTE_LOG(INFO, NETIF, "LCORE ROLES:\n%s\n", bufs[0]);
+    RTE_LOG(INFO, NETIF, "LCORE ROLES:\n%s\n", results);
 }
 
 static void lcore_role_init(void)
@@ -2839,6 +2841,51 @@ static void kni_ingress_process(void)
 }
 
 /*
+ * Receive packets matched kni ip addresses with rte_flow from KNI worker
+ */
+static void kni_ingress_flow_process(void)
+{
+    int i, j, k;
+    portid_t pid;
+    lcoreid_t cid;
+    unsigned pkt_num;
+    struct netif_port *dev;
+    struct netif_queue_conf *qconf;
+
+    cid = rte_lcore_id(); // kni worker
+    assert(LCORE_ID_ANY != cid);
+
+    for (i = 0; i < lcore_conf[lcore2index[cid]].nports; i++) {
+        pid = lcore_conf[lcore2index[cid]].pqs[i].id;
+        assert(pid <= bond_pid_end);
+        dev = netif_port_get(pid);
+        if (!dev || !kni_dev_exist(dev))
+            continue;
+        for (j = 0; j < lcore_conf[lcore2index[cid]].pqs[i].nrxq; j++) {
+            qconf = &lcore_conf[lcore2index[cid]].pqs[i].rxqs[j];
+            qconf->len = netif_rx_burst(pid, qconf);
+            if (!qconf->len)
+                continue;
+            lcore_stats_burst(&lcore_stats[cid], qconf->len);
+            lcore_stats[cid].ipackets += qconf->len;
+            for (k = 0; k < qconf->len; k++)
+                lcore_stats[cid].ibytes += qconf->mbufs[k]->pkt_len;
+            pkt_num = rte_kni_tx_burst(dev->kni.kni, qconf->mbufs, qconf->len);
+            if (unlikely(pkt_num < qconf->len)) {
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+                RTE_LOG(INFO, NETIF,
+                        "%s: fail to send to kni inteface %d pkts from kni rte_flow\n",
+                        __func__, qconf->len - pkt_num);
+#endif
+                free_mbufs(&(qconf->mbufs[pkt_num]), qconf->len - pkt_num);
+                lcore_stats[cid].dropped += (qconf->len - pkt_num);
+            }
+            qconf->len = 0;
+        }
+    }
+}
+
+/*
  * Use separate core to convey kni traffic if KNI lcore worker is configued.
  */
 void kni_lcore_loop(void *dummy)
@@ -2847,9 +2894,11 @@ void kni_lcore_loop(void *dummy)
     kni_egress_process();
 
     /* This is a lazy solution.
-     * `lcore_job_xmit` can be scheduled with an independent job on kni worker instead. */
-    if (g_kni_lcore_id != 0)
+     * It's better to schedule the tasks with an independent job on kni worker instead. */
+    if (g_kni_lcore_id != 0) {
+        kni_ingress_flow_process();
         lcore_job_xmit(NULL);
+    }
 }
 
 /********************************************* port *************************************************/
@@ -4084,7 +4133,7 @@ static char *find_conf_kni_name(portid_t id)
 }
 
 /* Allocate and register all DPDK ports available */
-inline static void netif_port_init(void)
+static void netif_port_init(void)
 {
     int nports, nports_cfg;
     portid_t pid;
@@ -4275,8 +4324,8 @@ int netif_init(void)
 
 int netif_term(void)
 {
-    netif_cfgfile_term();
     netif_lcore_cleanup();
+    netif_cfgfile_term();
     return EDPVS_OK;
 }
 
@@ -5210,10 +5259,13 @@ int netif_ctrl_init(void)
 {
     int err;
 
+    if ((err = lcore_stats_msg_init()) != EDPVS_OK)
+        return err;
+
     if ((err = sockopt_register(&netif_sockopt)) != EDPVS_OK)
         return err;
 
-    if ((err = lcore_stats_msg_init()) != EDPVS_OK)
+    if ((err = kni_ctrl_init()) != EDPVS_OK)
         return err;
 
     return EDPVS_OK;
@@ -5222,6 +5274,9 @@ int netif_ctrl_init(void)
 int netif_ctrl_term(void)
 {
     int err;
+
+    if ((err = kni_ctrl_term()) != EDPVS_OK)
+        return err;
 
     if ((err = sockopt_unregister(&netif_sockopt)) != EDPVS_OK)
         return err;
