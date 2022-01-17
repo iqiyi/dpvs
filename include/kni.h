@@ -28,6 +28,19 @@
 #define __DPVS_KNI_H__
 #include <stdbool.h>
 #include "netif.h"
+#include "netif_flow.h"
+
+#define MAX_KNI_FLOW    2
+
+struct kni_addr_flow {
+    struct list_head node;
+    int af;
+    int nflows;
+    lcoreid_t kni_worker;
+    struct netif_port *dev;
+    union inet_addr addr;
+    struct netif_flow_handler flows[MAX_KNI_FLOW];
+};
 
 /*
  * @dev     - real device kni attach to.
@@ -37,6 +50,8 @@ int kni_add_dev(struct netif_port *dev, const char *kniname);
 
 int kni_del_dev(struct netif_port *dev);
 int kni_init(void);
+int kni_ctrl_init(void);
+int kni_ctrl_term(void);
 
 static inline bool kni_dev_exist(const struct netif_port *dev)
 {

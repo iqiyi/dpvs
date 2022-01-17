@@ -173,6 +173,7 @@ struct netif_kni {
     struct dpvs_timer       kni_rtnl_timer;
     int                     kni_rtnl_fd;
     struct rte_ring         *rx_ring;
+    struct list_head        kni_flows;
 } __rte_cache_aligned;
 
 union netif_bond {
