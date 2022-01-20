@@ -2809,7 +2809,7 @@ static void kni_ingress_process(void)
 {
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     struct netif_port *dev;
-    uint16_t i, nb_rb, pkt_num;
+    uint16_t i, pkt_total, pkt_sent;
     portid_t id;
     lcoreid_t cid = rte_lcore_id();
 
@@ -2818,26 +2818,121 @@ static void kni_ingress_process(void)
         if (!dev || !kni_dev_exist(dev))
             continue;
 
-        nb_rb = rte_ring_dequeue_burst(dev->kni.rx_ring, (void**)mbufs,
+        pkt_total = rte_ring_dequeue_burst(dev->kni.rx_ring, (void**)mbufs,
                                        NETIF_MAX_PKT_BURST, NULL);
-        if (nb_rb == 0)
+        if (pkt_total == 0)
             continue;
-        lcore_stats[cid].ipackets += nb_rb;
-        for (i = 0; i < nb_rb; i++)
+        lcore_stats[cid].ipackets += pkt_total;
+        for (i = 0; i < pkt_total; i++)
             lcore_stats[cid].ibytes += mbufs[i]->pkt_len;
-        pkt_num = rte_kni_tx_burst(dev->kni.kni, mbufs, nb_rb);
+        pkt_sent = rte_kni_tx_burst(dev->kni.kni, mbufs, pkt_total);
 
-        if (unlikely(pkt_num < nb_rb)) {
+        if (unlikely(pkt_sent < pkt_total)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
-            RTE_LOG(INFO, NETIF,
-                    "%s: fail to send to kni inteface %d pkts from kni rx_ring\n",
-                    __func__, nb_rb - pkt_num);
+            RTE_LOG(INFO, NETIF, "%s: sent %d packets to kni %s, loss %.2f%%\n",
+                    __func__, pkt_total, dev->kni.name,
+                    (pkt_total-pkt_sent)*100.0/pkt_total);
 #endif
-            free_mbufs(&(mbufs[pkt_num]), nb_rb - pkt_num);
-            lcore_stats[cid].dropped += (nb_rb - pkt_num);
+            free_mbufs(&(mbufs[pkt_sent]), pkt_total - pkt_sent);
+            lcore_stats[cid].dropped += (pkt_total - pkt_sent);
         }
-        nb_rb = 0;
+        pkt_total = 0;
     }
+}
+
+/*
+ * note: kni_ingress_flow_xmit_vlan_trunk supports both vlan trunk and vlan access
+ */
+static inline void kni_ingress_flow_xmit_vlan_trunk(struct netif_port *dev,
+            lcoreid_t cid, struct netif_queue_conf *qconf)
+{
+    int i, left, right, len;
+    unsigned pkt_total, pkt_sent;
+    struct rte_ether_hdr *eh;
+    struct rte_mbuf *mbuf;
+    struct netif_port *rdev;
+
+    for (i = 0; i < qconf->len; i++) {
+        // the received packets may from multiple vlans,
+        // we have to process them one by one
+        mbuf = qconf->mbufs[i];
+        lcore_stats[cid].ibytes += mbuf->pkt_len;
+        eh = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
+        if (eh->ether_type == htons(ETH_P_8021Q) ||
+                mbuf->ol_flags & PKT_RX_VLAN_STRIPPED) {
+            vlan_rcv(mbuf, dev);
+        } else if (dev->type == PORT_TYPE_BOND_MASTER) {
+            mbuf->port = dev->id;
+        }
+        /*
+         * The performance is astonishingly poor (as observed only about 3K pps,
+         * dozens multiple less than normal) if xmit packets to kni one at a time!
+         *
+        if (rte_kni_tx_burst(dev->kni.kni, qconf->mbufs, 1) != 1) {
+            rte_pktmbuf_free(qconf->mbufs[i]);
+            lcore_stats[cid].dropped++;
+        }
+        */
+    }
+
+    // reorder mbufs and xmit to kni in batch for each vlan
+    len = qconf->len;
+    while (len > 0) {
+        left = 0;
+        right = len - 1;
+        mbuf = qconf->mbufs[right];
+        while (left < right) {
+            while (left < right && qconf->mbufs[left]->port != mbuf->port)
+                left++;
+            qconf->mbufs[right] = qconf->mbufs[left];
+            while (left < right && qconf->mbufs[right]->port == mbuf->port)
+                right--;
+            qconf->mbufs[left] = qconf->mbufs[right];
+        }
+        qconf->mbufs[right] = mbuf;
+
+        rdev = netif_port_get(mbuf->port);
+        if (unlikely(!rdev || !kni_dev_exist(rdev)))
+            rdev = dev;
+        pkt_total = len - right;
+        pkt_sent = rte_kni_tx_burst(rdev->kni.kni, &qconf->mbufs[right], pkt_total);
+        if (unlikely(pkt_sent < pkt_total)) {
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+            RTE_LOG(INFO, NETIF, "%s: sent %d packets to kni %s, loss %.2f%%\n",
+                    __func__, pkt_total, rdev->kni.name,
+                    (pkt_total-pkt_sent)*100.0/pkt_total);
+#endif
+            free_mbufs(&(qconf->mbufs[right+pkt_sent]), pkt_total - pkt_sent);
+            lcore_stats[cid].dropped += pkt_total - pkt_sent;
+        }
+        len = right;
+    }
+
+    qconf->len = 0;
+}
+
+static inline void kni_ingress_flow_xmit_vlan_access(struct netif_port *dev,
+            lcoreid_t cid, struct netif_queue_conf *qconf)
+{
+    int i;
+    unsigned pkt_sent;
+
+    for (i = 0; i < qconf->len; i++)
+        lcore_stats[cid].ibytes += qconf->mbufs[i]->pkt_len;
+
+    pkt_sent = rte_kni_tx_burst(dev->kni.kni, qconf->mbufs, qconf->len);
+
+    if (unlikely(pkt_sent < qconf->len)) {
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+        RTE_LOG(INFO, NETIF, "%s: sent %d packets to kni %s, loss %.2f%%\n",
+                __func__, qconf->len, dev->kni.name,
+                (qconf->len-pkt_sent)*100.0/qconf->len);
+#endif
+        free_mbufs(&(qconf->mbufs[pkt_sent]), qconf->len - pkt_sent);
+        lcore_stats[cid].dropped += (qconf->len - pkt_sent);
+    }
+
+    qconf->len = 0;
 }
 
 /*
@@ -2845,10 +2940,9 @@ static void kni_ingress_process(void)
  */
 static void kni_ingress_flow_process(void)
 {
-    int i, j, k;
+    int i, j;
     portid_t pid;
     lcoreid_t cid;
-    unsigned pkt_num;
     struct netif_port *dev;
     struct netif_queue_conf *qconf;
 
@@ -2864,23 +2958,14 @@ static void kni_ingress_flow_process(void)
         for (j = 0; j < lcore_conf[lcore2index[cid]].pqs[i].nrxq; j++) {
             qconf = &lcore_conf[lcore2index[cid]].pqs[i].rxqs[j];
             qconf->len = netif_rx_burst(pid, qconf);
+            lcore_stats_burst(&lcore_stats[cid], qconf->len);
             if (!qconf->len)
                 continue;
-            lcore_stats_burst(&lcore_stats[cid], qconf->len);
             lcore_stats[cid].ipackets += qconf->len;
-            for (k = 0; k < qconf->len; k++)
-                lcore_stats[cid].ibytes += qconf->mbufs[k]->pkt_len;
-            pkt_num = rte_kni_tx_burst(dev->kni.kni, qconf->mbufs, qconf->len);
-            if (unlikely(pkt_num < qconf->len)) {
-#ifdef CONFIG_DPVS_NETIF_DEBUG
-                RTE_LOG(INFO, NETIF,
-                        "%s: fail to send to kni inteface %d pkts from kni rte_flow\n",
-                        __func__, qconf->len - pkt_num);
-#endif
-                free_mbufs(&(qconf->mbufs[pkt_num]), qconf->len - pkt_num);
-                lcore_stats[cid].dropped += (qconf->len - pkt_num);
-            }
-            qconf->len = 0;
+            if (dev->vlan_info)
+                kni_ingress_flow_xmit_vlan_trunk(dev, cid, qconf);
+            else
+                kni_ingress_flow_xmit_vlan_access(dev, cid, qconf);
         }
     }
 }

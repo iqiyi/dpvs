@@ -321,6 +321,11 @@ static inline void *netif_priv(struct netif_port *dev)
     return (char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
 }
 
+static inline const void *netif_priv_const(const struct netif_port *dev)
+{
+    return (const char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
+}
+
 static inline struct netif_tc *netif_tc(struct netif_port *dev)
 {
     return &dev->tc[rte_lcore_id()];
