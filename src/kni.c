@@ -37,6 +37,7 @@
 #include "netif_addr.h"
 #include "ctrl.h"
 #include "kni.h"
+#include "vlan.h"
 #include "conf/kni.h"
 #include "conf/sockopts.h"
 
@@ -410,12 +411,13 @@ int kni_del_dev(struct netif_port *dev)
  * target at the address to a dedicated nic rx-queue, which may avoid disturbances
  * of dataplane when overload.
  * Note that not all nic can support this flow type under the premise of sapool.
- * See `check_kni_addr_flow_support` for supported nics as known so far.
+ * See `check_kni_addr_flow_support` for supported nics as we known so far. It's
+ * encouraged to add more nic types satisfied the flow type.
  */
 
 #define NETDEV_IXGBE_DRIVER_NAME      "ixgbe"
 #define NETDEV_I40E_DRIVER_NAME       "i40e"
-#define NETDEV_MLNX_DRIVER_NAME       "net_mlx5"
+#define NETDEV_MLNX_DRIVER_NAME       "mlx5"
 
 static bool check_kni_addr_flow_support(const struct netif_port *dev)
 {
@@ -426,10 +428,14 @@ static bool check_kni_addr_flow_support(const struct netif_port *dev)
                 return false;
         }
         return true;
+    } else if (dev->type == PORT_TYPE_VLAN) {
+        const struct vlan_dev_priv *vlan = netif_priv_const(dev);
+        assert(vlan && vlan->real_dev);
+        return check_kni_addr_flow_support(vlan->real_dev);
     }
 
     // PMD drivers support kni address flow
-    //  - net_mlx5
+    //  - mlx5
     //  - ixgbe
     //  - ...
     // PMD drivers do NOT support kni address flow
@@ -438,6 +444,9 @@ static bool check_kni_addr_flow_support(const struct netif_port *dev)
         return true;
     if (strstr(dev->dev_info.driver_name, NETDEV_IXGBE_DRIVER_NAME))
         return true;
+
+    // TODO：check and then add more supported types
+
     return false;
 }
 
@@ -446,9 +455,11 @@ static inline int kni_addr_flow_allowed(const struct netif_port *dev)
     if (!g_kni_lcore_id)
         return EDPVS_DISABLED;
 
-    if (dev->type != PORT_TYPE_GENERAL && dev->type != PORT_TYPE_BOND_MASTER) {
-        RTE_LOG(WARNING, KNI, "%s: kni addr flow only supports physical devices"
-                " (exclusive of bonding slaves) and bonding master devices\n", __func__);
+    if (dev->type != PORT_TYPE_GENERAL
+            && dev->type != PORT_TYPE_VLAN
+            && dev->type != PORT_TYPE_BOND_MASTER) {
+        RTE_LOG(WARNING, KNI, "%s: kni addr flow only supports physical (exclusive"
+                " of bonding slaves), vlan, and bonding master devices\n", __func__);
         return EDPVS_NOTSUPP;
     }
 
@@ -529,8 +540,10 @@ static int kni_addr_flow_del(struct netif_port *dev, const struct kni_addr_flow_
     flow_handlers.flow_num = flow->nflows;
     flow_handlers.handlers = &flow->flows[0];
     err = netif_kni_flow_del(dev, flow->kni_worker, flow->af, &flow->addr, &flow_handlers);
-    if (err != EDPVS_OK)
+    if (err != EDPVS_OK) {
+        list_add(&flow->node, &dev->kni.kni_flows);
         return err;
+    }
 
     rte_free(flow);
     return EDPVS_OK;
@@ -551,10 +564,12 @@ static int kni_addr_flow_flush(struct netif_port *dev)
         flow_handlers.flow_num = flow->nflows;
         flow_handlers.handlers = &flow->flows[0];
         err = netif_kni_flow_del(dev, flow->kni_worker, flow->af, &flow->addr, &flow_handlers);
-        if (err != EDPVS_OK)
+        if (err != EDPVS_OK) {
             retval = err;
-        else
+            list_add(&flow->node, &dev->kni.kni_flows);
+        } else {
             rte_free(flow);
+        }
     }
 
     return retval;

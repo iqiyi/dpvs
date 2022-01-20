@@ -252,7 +252,7 @@ worker_defs {
     !    type    kni
     !    cpu_id  17
     !    port    bond0 {
-    !        4x_queue_ids     8
+    !        rx_queue_ids     8
     !        tx_queue_ids     8
     !    }
     !    port    bond1 {
