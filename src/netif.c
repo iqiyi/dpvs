@@ -2856,7 +2856,6 @@ static inline void kni_ingress_flow_xmit_vlan_trunk(struct netif_port *dev,
         // the received packets may from multiple vlans,
         // we have to process them one by one
         mbuf = qconf->mbufs[i];
-        lcore_stats[cid].ibytes += mbuf->pkt_len;
         eh = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
         if (eh->ether_type == htons(ETH_P_8021Q) ||
                 mbuf->ol_flags & PKT_RX_VLAN_STRIPPED) {
@@ -2895,10 +2894,12 @@ static inline void kni_ingress_flow_xmit_vlan_trunk(struct netif_port *dev,
         if (unlikely(!rdev || !kni_dev_exist(rdev)))
             rdev = dev;
         pkt_total = len - right;
-        pkt_sent = rte_kni_tx_burst(rdev->kni.kni, &qconf->mbufs[right], pkt_total);
+        //pkt_sent = rte_kni_tx_burst(rdev->kni.kni, &qconf->mbufs[right], pkt_total);
+        pkt_sent = rte_ring_enqueue_bulk(rdev->kni.rx_ring,
+                    (void *const *)&qconf->mbufs[right], pkt_total, NULL);
         if (unlikely(pkt_sent < pkt_total)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
-            RTE_LOG(INFO, NETIF, "%s: sent %d packets to kni %s, loss %.2f%%\n",
+            RTE_LOG(INFO, NETIF, "%s: enqueue %d packets to kni %s, loss %.2f%%\n",
                     __func__, pkt_total, rdev->kni.name,
                     (pkt_total-pkt_sent)*100.0/pkt_total);
 #endif
@@ -2914,22 +2915,19 @@ static inline void kni_ingress_flow_xmit_vlan_trunk(struct netif_port *dev,
 static inline void kni_ingress_flow_xmit_vlan_access(struct netif_port *dev,
             lcoreid_t cid, struct netif_queue_conf *qconf)
 {
-    int i;
     unsigned pkt_sent;
 
-    for (i = 0; i < qconf->len; i++)
-        lcore_stats[cid].ibytes += qconf->mbufs[i]->pkt_len;
-
-    pkt_sent = rte_kni_tx_burst(dev->kni.kni, qconf->mbufs, qconf->len);
+    // pkt_sent = rte_kni_tx_burst(dev->kni.kni, qconf->mbufs, qconf->len);
+    pkt_sent = rte_ring_enqueue_bulk(dev->kni.rx_ring, (void *const *)qconf->mbufs, qconf->len, NULL);
 
     if (unlikely(pkt_sent < qconf->len)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
-        RTE_LOG(INFO, NETIF, "%s: sent %d packets to kni %s, loss %.2f%%\n",
+        RTE_LOG(INFO, NETIF, "%s: enqueue %d packets to rx_ring of kni %s, loss %.2f%%\n",
                 __func__, qconf->len, dev->kni.name,
                 (qconf->len-pkt_sent)*100.0/qconf->len);
 #endif
         free_mbufs(&(qconf->mbufs[pkt_sent]), qconf->len - pkt_sent);
-        lcore_stats[cid].dropped += (qconf->len - pkt_sent);
+        lcore_stats[cid].dropped += qconf->len - pkt_sent;
     }
 
     qconf->len = 0;
@@ -2961,7 +2959,6 @@ static void kni_ingress_flow_process(void)
             lcore_stats_burst(&lcore_stats[cid], qconf->len);
             if (!qconf->len)
                 continue;
-            lcore_stats[cid].ipackets += qconf->len;
             if (dev->vlan_info)
                 kni_ingress_flow_xmit_vlan_trunk(dev, cid, qconf);
             else
@@ -2975,15 +2972,15 @@ static void kni_ingress_flow_process(void)
  */
 void kni_lcore_loop(void *dummy)
 {
-    kni_ingress_process();
-    kni_egress_process();
-
     /* This is a lazy solution.
      * It's better to schedule the tasks with an independent job on kni worker instead. */
     if (g_kni_lcore_id != 0) {
         kni_ingress_flow_process();
         lcore_job_xmit(NULL);
     }
+
+    kni_ingress_process();
+    kni_egress_process();
 }
 
 /********************************************* port *************************************************/
