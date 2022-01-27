@@ -11,11 +11,13 @@
 
 ! global config
 global_defs {
-    #daemon                             <disalbe>
-    log_level         INFO              <none>
-    log_file          /var/log/dpvs.log <none>
-    <init> log_async_mode    off        <off, on|off>
-    <init> pdump      off               <off, on|off>
+    #daemon                                         <disalbe>
+    log_level                   INFO                <none>
+    log_file                    /var/log/dpvs.log   <none>
+    log_with_timestamp          off                 <off, on|off>   # note: only effective for async log now
+    <init> log_async_mode       off                 <off, on|off>
+    <init> log_async_pool_size  16383               <16383, 1023-unlimited>
+    <init> pdump                off                 <off, on|off>
 }
 
 ! netif config

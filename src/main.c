@@ -331,10 +331,11 @@ int main(int argc, char *argv[])
     RTE_LOG(INFO, DPVS, "port-queue-lcore relation array: \n%s\n",
             pql_conf_buf);
 
-    log_slave_init();
-
     /* start slave worker threads */
     dpvs_lcore_start(0);
+
+    /* start async logging worker thread */
+    log_slave_init();
 
     /* write pid file */
     if (!pidfile_write(DPVS_PIDFILE, getpid()))

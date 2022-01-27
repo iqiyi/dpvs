@@ -31,7 +31,7 @@
 #include "conf/match.h"
 #include "conf/service.h"
 
-#define RTE_LOGTYPE_SERVICE             RTE_LOGTYPE_USER3
+#define RTE_LOGTYPE_SERVICE             RTE_LOGTYPE_USER1
 
 /* DP_VS_SVC_F_XXX should always be the same with IP_VS_SVC_F_XXX */
 #define DP_VS_SVC_F_PERSISTENT          IP_VS_SVC_F_PERSISTENT

@@ -205,7 +205,7 @@ static inline int __netif_flow_flush(struct netif_port *dev)
         return EDPVS_INVAL;
 
     if (rte_flow_flush(dev->id, &flow_error)) {
-        RTE_LOG(WARNING, FLOW, "rte_flow_flush on %s failed -- %d, %s, %s\n",
+        RTE_LOG(WARNING, FLOW, "rte_flow_flush on %s failed -- %d, %p, %s\n",
                 dev->name, flow_error.type, flow_error.cause, flow_error.message);
         return EDPVS_DPDKAPIFAIL;
     }
