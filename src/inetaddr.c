@@ -769,7 +769,7 @@ static int ifa_expire(void *arg)
 
     err = inet_addr_del(ifa->af, ifa->idev->dev, &ifa->addr, ifa->plen);
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, IFA, "inet_addr_del failed\n", __func__);
+        RTE_LOG(ERR, IFA, "%s: inet_addr_del failed\n", __func__);
         return DTIMER_OK;
     }
 
@@ -1615,8 +1615,8 @@ static int ifaddr_get_verbose(struct inet_device *idev, struct inet_addr_data_ar
                           sizeof(union inet_addr)) != 0) {
                 RTE_LOG(WARNING, IFA, "%s: ifa addr does not match -- master=%X, "
                         "slave[%02d]=%X\n", __func__,
-                        array->addrs[ii].ifa_entry.addr, cur->cid,
-                        arrmsg->addrs[ii].ifa_entry.addr);
+                        array->addrs[ii].ifa_entry.addr.in.s_addr, cur->cid,
+                        arrmsg->addrs[ii].ifa_entry.addr.in.s_addr);
             }
             if (off >= ifa_cnt)
                 break;

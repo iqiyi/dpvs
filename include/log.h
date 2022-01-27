@@ -18,34 +18,17 @@
 #ifndef _DPVS_LOG_H_
 #define _DPVS_LOG_H_
 
-#define DPVS_LOG_RING_SIZE_DEF 4096
-#define DPVS_LOG_RING_SIZE_MIN 256
-#define DPVS_LOG_RING_SIZE_MAX 524288
-
-
-#define TIMEZONE   0
-#define DAY        (60*60*24) 
-#define YEARFIRST  2001 
-#define YEARSTART  (365*(YEARFIRST-1970) + 8) 
-#define YEAR400    (365*4*100 + (4*(100/4 - 1) + 1)) 
-#define YEAR100    (365*100 + (100/4 - 1)) 
-#define YEAR004    (365*4 + 1) 
-#define YEAR001    365
-
 #define LOG_SYS_TIME_LEN 20
-
-#define LOG_INTERNAL_TIME 5
-
-#define LOG_SLOW_INTERNAL_TIME (60*10)
-
 #define DPVS_LOG_MAX_LINE_LEN 1024
-
 #define LOG_BUF_MAX_LEN 4096
 
-#define DPVS_LOG_POOL_SIZE_DEF     2097151
-#define DPVS_LOG_POOL_SIZE_MIN     65536
-#define DPVS_LOG_CACHE_SIZE_DEF    256
+#define DPVS_LOG_POOL_SIZE_DEF     16383
+#define DPVS_LOG_POOL_SIZE_MIN     1023
+#define DPVS_LOG_CACHE_SIZE_DEF    64
 
+
+extern bool g_dpvs_log_async_mode;
+extern uint8_t g_dpvs_log_tslen;
 
 struct dpvs_log {
     lcoreid_t cid;          
@@ -63,14 +46,16 @@ typedef struct log_buf {
 } log_buf_t;
 
 typedef struct log_stats{
-    int log_hash;
+    unsigned int log_hash;
     uint64_t log_begin;
     int slow;
     uint64_t slow_begin;
     uint32_t missed;
 } log_stats_t;
 
-int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const char *format, ...);
+int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line,
+        const char *format, ...) __rte_format_printf(5, 6);
 int log_slave_init(void);    
+void dpvs_set_log_pool_size(int size);
 
 #endif

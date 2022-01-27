@@ -18,8 +18,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include "global_conf.h"
-
-extern bool g_dpvs_log_async_mode;
+#include "log.h"
 
 bool g_dpvs_pdump = false;
 
@@ -137,6 +136,42 @@ static void log_async_mode_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
+static void log_with_timestamp_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    assert(str);
+    if (strcasecmp(str, "on") == 0)
+        g_dpvs_log_tslen = LOG_SYS_TIME_LEN;
+    else if (strcasecmp(str, "off") == 0)
+        g_dpvs_log_tslen = 0;
+    else
+        RTE_LOG(WARNING, CFG_FILE, "invalid log_with_timestamp %s\n", str);
+
+    RTE_LOG(INFO, CFG_FILE, "log_with_timestamp = %s\n", g_dpvs_log_tslen > 0 ? "on" : "off");
+
+    FREE_PTR(str);
+}
+
+static void log_async_pool_size_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+    int poolsize;
+
+    assert(str);
+    poolsize = atoi(str);
+    if (poolsize < DPVS_LOG_POOL_SIZE_MIN) {
+        RTE_LOG(WARNING, CFG_FILE, "invalid log_async_pool_size %s, using default %d\n",
+                str, DPVS_LOG_POOL_SIZE_DEF);
+        dpvs_set_log_pool_size(DPVS_LOG_POOL_SIZE_DEF);
+    } else {
+        is_power2(poolsize, 1, &poolsize);
+        RTE_LOG(INFO, CFG_FILE, "log_async_pool_size = %d (round to 2^n-1)\n", poolsize);
+        dpvs_set_log_pool_size(poolsize - 1);
+    }
+
+    FREE_PTR(str);
+}
+
 #ifdef CONFIG_DPVS_PDUMP
 static void pdump_handler(vector_t tokens)
 {
@@ -161,6 +196,8 @@ void install_global_keywords(void)
     install_keyword("log_level", log_level_handler, KW_TYPE_NORMAL);
     install_keyword("log_file", log_file_handler, KW_TYPE_NORMAL);
     install_keyword("log_async_mode", log_async_mode_handler, KW_TYPE_INIT);
+    install_keyword("log_with_timestamp", log_with_timestamp_handler, KW_TYPE_NORMAL);
+    install_keyword("log_async_pool_size", log_async_pool_size_handler, KW_TYPE_INIT);
 #ifdef CONFIG_DPVS_PDUMP
     install_keyword("pdump", pdump_handler, KW_TYPE_INIT);
 #endif
