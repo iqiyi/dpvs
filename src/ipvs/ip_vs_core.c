@@ -502,7 +502,7 @@ static int __xmit_outbound_icmp6(struct rte_mbuf *mbuf,
 
     if (mbuf->pkt_len > rt6->rt6_mtu) {
         route6_put(rt6);
-        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(rt6->rt6_mtu));
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, rt6->rt6_mtu);
         rte_pktmbuf_free(mbuf);
         return EDPVS_FRAG;
     }
@@ -616,7 +616,7 @@ static int __xmit_inbound_icmp6(struct rte_mbuf *mbuf,
 
     if (mbuf->pkt_len > rt6->rt6_mtu) {
         route6_put(rt6);
-        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(rt6->rt6_mtu));
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, rt6->rt6_mtu);
         rte_pktmbuf_free(mbuf);
         return EDPVS_FRAG;
     }
