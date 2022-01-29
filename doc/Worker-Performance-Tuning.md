@@ -11,7 +11,7 @@ DPVS is a multi-thread DPDK application program. It is based on the "polling" fr
 * **Isolate Recieving Worker**: the optional workers used to take the responsibility of *Forwarding Worker* to receive packets to reduce NIC packets imiss.
 * **KNI Worker**: an optional worker used to do kni related jobs to avoid performance disturbance caused by work loads of *Master/Forwarding Worker*.
 
-As all other DPDK applications, each DPVS Worker is bound to a distinct CPU core to avoid they interfere with each other. By default, the first N CPUs of the system are bound with DPVS Workers. The performance may not good enough when many other work loads are scheduled into these CPUs by the system. For example, CPU0, the first CPU core in the system, is generally a lot busier than other CPU cores, because many processes, interrupts, and kernel threads run on it by default. The following of this doc would tell you how to alleviate/offload irrelative work load on DPVS Workers.
+Like other DPDK applications, each DPVS Worker is bound to a distinct CPU core to avoid they interfere with each other. By default, the first N CPUs of the system are bound with DPVS Workers. The performance may not good enough when many other work loads are scheduled into these CPUs by the system. For example, CPU0, the first CPU core in the system, is generally a lot busier than other CPU cores, because many processes, interrupts, and kernel threads run on it by default. The following of this doc would tell you how to alleviate/offload irrelative work load on DPVS Workers.
 
 ### When do you need to consider this performance tuning?
 
@@ -281,4 +281,71 @@ KiB Mem : 65685352 total, 15695352 free, 48908988 used,  1081012 buff/cache
 KiB Swap:  4194300 total,  4194300 free,        0 used. 16171432 avail Mem 
 
 ```
+
+### Assign a dedicated worker for KNI
+
+As is the diagram shown below, KNI traffic are processed by default on Master and Forwarding Workers. But we can configure a didecated worker for KNI traffic to avoid possible disturbances caused by overloaded dataplane.
+
+![kni-flow](pics/kni-flow-2.png)
+
+The configurations for KNI Worker are almost the same with the Forwarding Workers except that the `type` field should be set to `kni`. Rx/Tx queues should be configured for target NICs, receiving packets from network devices and transmitting to corresponding KNI devices, or vice versa. Note that we can configure either Rx or Tx queues only, which isolates processes of inbound or outbound traffic to/from KNI onto KNI worker, respectively.  
+Rx queues are required by DPVS's KNI address flow which directs KNI inbound traffic to the dedicated Rx queue using DPDK rte_flow. If Rx queue is not configured, Forwarding Workers are responsible for packets reception, handing over the received packets to KNI worker, and then the KNI Worker forwards the packets to KNI interfaces. If no RX queue isconfigured, creating KNI address flow would fail. On the other hand, the Tx queues must be configured if KNI Worker is enabled, or the outbound traffic from KNI interfaces is dropped due to a lack of Tx queue, as shown in the diagram below.
+
+![kni-flow](pics/kni-flow-1.png)
+
+**The steps to use dedicated worker for KNI**
+
+* S1. Add KNI worker configurations to `dpvs.conf`. For example:
+
+```
+    <init> worker cpu9 {
+        type    kni 
+        cpu_id  9
+        port    bond0 {
+            rx_queue_ids     8   
+            tx_queue_ids     8   
+        }   
+    }   
+```
+* S2. Boot up DPVS, and configure KNI interface up. For example, we configured a KNI interface on bond0.101.
+
+```
+55: bond0.101.kni: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 98:03:9b:1b:40:a4 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.88.88/24 scope global bond0.101.kni
+       valid_lft forever preferred_lft forever
+    inet6 2001::88/64 scope global 
+       valid_lft forever preferred_lft forever
+```
+Now, you can ping 192.168.88.88 and 2001::88, and all OK. 
+
+> Notes: If DPVS routes matched the KNI IPs, you should add `kni_host` routes for the KNI IPs.
+
+* S3. (If supported) Configure KNI address flow.
+
+```
+dpip flow add type kni 192.168.88.88 dev bond0.101
+dpip flow add type kni 2001::88 dev bond0.101
+```
+Now, all packets destined to 192.168.88.88 or 2001::88 are sent to Rxq8 on bond0.
+
+
+**Performance tests**
+
+We designed 5 cases to examine the performance of KNI worker, and listed the test results below.
+
+| Test   Cases                                         | ping (min/avg/max/mdev)       | bandwidth (iperf tcp) | forwarding rate |
+| ---------------------------------------------------- | ----------------------------- | --------------------- | --------------- |
+| no kni worker (idle dataplane)                       | 0.468/3.196/6.893/1.547 ms    | 2.64 Gbits/sec        | 243K packets/s  |
+| with kni worker, no addr flow (idle dataplane)       | 0.050/2.102/5.288/0.565 ms    | 4.54 Gbits/sec        | 413K packets/s  |
+| with kni worker, with addr flow (idle dataplane)     | 0.409/2.346/11.650/1.179 ms   | 4.57 Gbits/sec        | 416K packets/s  |
+| with kni worker, no addr flow (overload dataplane)   | 0.628/29.880/42.010/12.026 ms | 341 Mbits/sec         | 29K packets/s   |
+| with kni worker, with addr flow (overload dataplane) | 0.544/2.139/3.554/0.406 ms    | 4.53 Gbits/sec        | 410K packets/s  |
+
+*Notes: Overload dataplane is simulated by adding 1ms delay to each loop of forwarding workers.*
+
+We got the following conclusions from the test results.
+
+1. Dedicated KNI worker increases bandwidth of KNI interfaces.
+2. KNI address flow protects KNI traffic from load disturbances of dataplane.
 

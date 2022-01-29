@@ -173,6 +173,7 @@ struct netif_kni {
     struct dpvs_timer       kni_rtnl_timer;
     int                     kni_rtnl_fd;
     struct rte_ring         *rx_ring;
+    struct list_head        kni_flows;
 } __rte_cache_aligned;
 
 union netif_bond {
@@ -318,6 +319,11 @@ void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev);
 static inline void *netif_priv(struct netif_port *dev)
 {
     return (char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
+}
+
+static inline const void *netif_priv_const(const struct netif_port *dev)
+{
+    return (const char *)dev + __ALIGN_KERNEL(sizeof(struct netif_port), NETIF_ALIGN);
 }
 
 static inline struct netif_tc *netif_tc(struct netif_port *dev)

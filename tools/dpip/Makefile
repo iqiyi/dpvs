@@ -39,8 +39,8 @@ DEFS = -D DPVS_MAX_LCORE=64 -D DPIP_VERSION=\"$(VERSION_STRING)\"
 CFLAGS += $(DEFS)
 
 OBJS = ipset.o dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
-	   qsch.o cls.o tunnel.o ipset.o ipv6.o iftraf.o eal_mem.o ../../src/common.o \
-	   ../keepalived/keepalived/check/sockopt.o
+	   qsch.o cls.o tunnel.o ipset.o ipv6.o iftraf.o eal_mem.o flow.o \
+	   ../../src/common.o ../keepalived/keepalived/check/sockopt.o
 
 all: $(TARGET)
 
