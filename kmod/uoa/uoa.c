@@ -94,6 +94,10 @@ static int uoa_map_tab_bits = 12;
 module_param_named(uoa_map_tab_bits, uoa_map_tab_bits, int, 0444);
 MODULE_PARM_DESC(uoa_map_tab_bits, "UOA mapping table hash size");
 
+static int uoa_hook_forward = 0;
+module_param_named(uoa_hook_forward, uoa_hook_forward, int, 0444);
+MODULE_PARM_DESC(uoa_hook_forward, "also parse UOA data in netfilter FORWARD chain (INPUT chain only by default)");
+
 static int uoa_map_tab_size __read_mostly;
 static int uoa_map_tab_mask __read_mostly;
 
@@ -818,10 +822,9 @@ static struct uoa_map *uoa_opp_rcv(__be16 af, void *iph, struct sk_buff *skb)
     if (AF_INET == af) {
         if (((struct iphdr *)iph)->ihl + (opplen >> 2) < 16) {
             ((struct iphdr *)iph)->ihl += (opplen >> 2);
-            memset(opph, opplen, IPOPT_NOOP);
-
             /* need change it to parse transport layer */
             ((struct iphdr *)iph)->protocol = opph->protocol;
+            memset(opph, IPOPT_NOOP, opplen);
         } else {
             pr_warn("IP header has no room to convert uoa data into option.\n");
         }
@@ -907,18 +910,32 @@ static unsigned int uoa_ip_local_in(unsigned int hooknum,
 static struct nf_hook_ops uoa_nf_hook_ops[] __read_mostly = {
     {
         .hook        = uoa_ip_local_in,
-        .pf         = NFPROTO_IPV4,
-        .hooknum    = NF_INET_LOCAL_IN,
+        .pf          = NFPROTO_IPV4,
+        .hooknum     = NF_INET_LOCAL_IN,
         .priority    = NF_IP_PRI_NAT_SRC + 1,
+    },
+    {
+        // do NOT register unless module param `uoa_hook_forward` is enabled
+        .hook        = uoa_ip_local_in,
+        .pf          = NFPROTO_IPV4,
+        .hooknum     = NF_INET_FORWARD,
+        .priority    = NF_IP_PRI_LAST - 1,
     },
 };
 
 static struct nf_hook_ops uoa_nf_hook_ops6[] __read_mostly = {
     {
         .hook        = uoa_ip_local_in,
-        .pf         = NFPROTO_IPV6,
-        .hooknum    = NF_INET_LOCAL_IN,
+        .pf          = NFPROTO_IPV6,
+        .hooknum     = NF_INET_LOCAL_IN,
         .priority    = NF_IP_PRI_NAT_SRC + 1,
+    },
+    {
+        // do NOT register unless module param `uoa_hook_forward` is enabled
+        .hook        = uoa_ip_local_in,
+        .pf          = NFPROTO_IPV6,
+        .hooknum     = NF_INET_FORWARD,
+        .priority    = NF_IP_PRI_LAST - 1,
     },
 };
 
@@ -942,20 +959,22 @@ static __init int uoa_init(void)
      */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
     err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops,
-                                ARRAY_SIZE(uoa_nf_hook_ops));
+            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops) : ARRAY_SIZE(uoa_nf_hook_ops) - 1);
     if (err < 0) {
         pr_err("fail to register netfilter hooks.\n");
         goto hook_failed;
     }
     err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops6,
-                                ARRAY_SIZE(uoa_nf_hook_ops6));
+            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops6) : ARRAY_SIZE(uoa_nf_hook_ops6) - 1);
 #else
-    err = nf_register_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
+    err = nf_register_hooks(uoa_nf_hook_ops,
+            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops) : ARRAY_SIZE(uoa_nf_hook_ops) - 1);
     if (err < 0) {
         pr_err("fail to register netfilter hooks.\n");
         goto hook_failed;
     }
-    err = nf_register_hooks(uoa_nf_hook_ops6, ARRAY_SIZE(uoa_nf_hook_ops6));
+    err = nf_register_hooks(uoa_nf_hook_ops6,
+            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops6) : ARRAY_SIZE(uoa_nf_hook_ops6) - 1);
 #endif
     if (err < 0) {
         pr_err("fail to register netfilter hooks.\n");
@@ -976,12 +995,14 @@ static __exit void uoa_exit(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
     nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops,
-                            ARRAY_SIZE(uoa_nf_hook_ops));
+            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops) : ARRAY_SIZE(uoa_nf_hook_ops) - 1);
     nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops6,
-                            ARRAY_SIZE(uoa_nf_hook_ops6));
+            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops6) : ARRAY_SIZE(uoa_nf_hook_ops6) - 1);
 #else
-    nf_unregister_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
-    nf_unregister_hooks(uoa_nf_hook_ops6, ARRAY_SIZE(uoa_nf_hook_ops6));
+    nf_unregister_hooks(uoa_nf_hook_ops,
+            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops) : ARRAY_SIZE(uoa_nf_hook_ops) - 1);
+    nf_unregister_hooks(uoa_nf_hook_ops6,
+            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops6) : ARRAY_SIZE(uoa_nf_hook_ops6) - 1);
 #endif
     synchronize_net();
 
