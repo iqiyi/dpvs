@@ -213,7 +213,7 @@ static int dp_vs_whtlst_del(int af, uint8_t proto, const union inet_addr *vaddr,
     }
 
     /*del whtlst ip on all slave lcores*/
-    msg = msg_make(MSG_TYPE_WHTLST_DEL, 0, DPVS_MSG_MULTICAST,
+    msg = msg_make(MSG_TYPE_WHTLST_DEL, whtlst_msg_seq(), DPVS_MSG_MULTICAST,
                    cid, sizeof(struct dp_vs_whtlst_conf), &cf);
     if (!msg)
         return EDPVS_NOMEM;
