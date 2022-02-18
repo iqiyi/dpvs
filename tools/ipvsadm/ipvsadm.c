@@ -1719,7 +1719,7 @@ static void list_conn(int is_template, unsigned int format)
 		for (i = 0; i < conn_array->nconns; i++)
 			print_conn_entry(&conn_array->array[i], format);
         req.whence = conn_array->curcid;
-        more = conn_array->resl & GET_IPVS_CONN_FLAG_MORE;
+        more = conn_array->resl & GET_IPVS_CONN_RESL_MORE;
         free(conn_array);
         if (!more)
             break;
