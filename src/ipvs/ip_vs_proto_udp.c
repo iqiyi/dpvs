@@ -81,6 +81,7 @@ static inline int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
                                 struct rte_mbuf *mbuf, const struct opphdr *opp, struct netif_port *dev)
 {
     /* leverage HW TX UDP csum offload if possible */
+    struct netif_port *select_dev = NULL;
 
     if (AF_INET6 == af) {
         /* UDP checksum is mandatory for IPv6.[RFC 2460] */
@@ -89,13 +90,13 @@ static inline int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
             udp6_send_csum((struct rte_ipv6_hdr*)ip6h, uh);
         } else {
             struct route6 *rt6 = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
-            if (!dev) {
-                if (rt6 && rt6->rt6_dev)
-                    dev = rt6->rt6_dev;
-                else if (conn->out_dev)
-                    dev = conn->out_dev;
-            }
-            if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
+            if (rt6 && rt6->rt6_dev)
+                select_dev = rt6->rt6_dev;
+            else if (dev)
+                select_dev = dev;
+            else if (conn->out_dev)
+                select_dev = conn->out_dev;
+            if (likely(select_dev && (select_dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
                 mbuf->l3_len = iphdrlen;
                 mbuf->l4_len = sizeof(struct rte_udp_hdr);
                 mbuf->ol_flags |= (PKT_TX_UDP_CKSUM | PKT_TX_IPV6);
@@ -124,13 +125,13 @@ static inline int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
             uh->dgram_cksum = 0;
         } else {
             struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
-            if (!dev) {
-                if (rt && rt->port)
-                    dev = rt->port;
-                else if (conn->out_dev)
-                    dev = conn->out_dev;
-            }
-            if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
+            if (rt && rt->port)
+                select_dev = rt->port;
+            else if (dev)
+                select_dev = dev;
+            else if (conn->out_dev)
+                select_dev = conn->out_dev;
+            if (likely(select_dev && (select_dev->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD))) {
                 mbuf->l3_len = iphdrlen;
                 mbuf->l4_len = sizeof(struct rte_udp_hdr);
                 mbuf->ol_flags |= (PKT_TX_UDP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
