@@ -161,17 +161,19 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         const struct dp_vs_conn *conn, struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     /* leverage HW TX TCP csum offload if possible */
+    struct netif_port *select_dev = NULL;
 
     if (AF_INET6 == af) {
         struct route6 *rt6 = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
         struct ip6_hdr *ip6h = ip6_hdr(mbuf);
-        if (!dev) {
-            if (rt6 && rt6->rt6_dev)
-                dev = rt6->rt6_dev;
-            else if (conn->out_dev)
-                dev = conn->out_dev;
-        }
-        if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+        if (rt6 && rt6->rt6_dev)
+            select_dev = rt6->rt6_dev;
+        else if (dev)
+            select_dev = dev;
+        else if (conn->out_dev)
+            select_dev = conn->out_dev;
+
+        if (likely(select_dev && (select_dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
             mbuf->l3_len = iphdrlen;
             mbuf->l4_len = (th->doff << 2);
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
@@ -184,13 +186,13 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
     } else { /* AF_INET */
         struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
         struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
-        if (!dev) {
-            if (rt && rt->port)
-                dev = rt->port;
-            else if (conn->out_dev)
-                dev = conn->out_dev;
-        }
-        if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+        if (rt && rt->port)
+            select_dev = rt->port;
+        else if (dev)
+            select_dev = dev;
+        else if (conn->out_dev)
+            select_dev = conn->out_dev;
+        if (likely(select_dev && (select_dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
             mbuf->l3_len = iphdrlen;
             mbuf->l4_len = (th->doff << 2);
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
