@@ -175,11 +175,6 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     uint16_t csum;
     int room, err;
 
-    if (!rt) {
-        RTE_LOG(DEBUG, ICMP, "%s: no route.\n", __func__);
-        return;
-    }
-
     /* no replies to physical multicast/broadcast */
     if (etype != ETH_PKT_HOST) {
         RTE_LOG(DEBUG, ICMP, "%s: phy-multi/broadcast.\n", __func__);
@@ -220,7 +215,7 @@ void icmp_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
     }
 
     /* determing source address */
-    if (rt->flag & RTF_LOCALIN) { /* original pkt's dest is us ? */
+    if (rt && rt->flag & RTF_LOCALIN) { /* original pkt's dest is us ? */
         saddr.s_addr = iph->dst_addr;
     } else {
         /* linux select IP of ingress iface only when param
