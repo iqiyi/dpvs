@@ -462,6 +462,8 @@ script_killall(thread_master_t *m, int signo, bool requeue)
 
 	rb_for_each_entry_cached(thread, &m->child, n) {
 		c_pgid = getpgid(thread->u.c.pid);
+		if (c_pgid <= 0)
+			continue;
 		if (c_pgid != p_pgid)
 			kill(-c_pgid, signo);
 		else {
