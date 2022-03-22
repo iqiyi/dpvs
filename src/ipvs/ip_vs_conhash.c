@@ -253,7 +253,7 @@ static int dp_vs_conhash_del_dest(struct dp_vs_service *svc,
 {
     int ret;
     struct node_s *p_node;
-    struct conhash_node *p_conhash_node;
+    struct conhash_node *p_conhash_node, *next;
     struct conhash_sched_data *p_sched_data;
     int weight_gcd;
     struct dp_vs_dest *p_dest;
@@ -262,7 +262,7 @@ static int dp_vs_conhash_del_dest(struct dp_vs_service *svc,
     p_sched_data = (struct conhash_sched_data *)(svc->sched_data);
     weight_gcd = dp_vs_gcd_weight(svc);
 
-    list_for_each_entry(p_conhash_node, &(p_sched_data->nodes), list) {
+    list_for_each_entry_safe(p_conhash_node, next, &(p_sched_data->nodes), list) {
         p_dest = (struct dp_vs_dest *)p_conhash_node->node.data;
         if (p_dest == dest) {
             p_node = &(p_conhash_node->node);
@@ -272,8 +272,7 @@ static int dp_vs_conhash_del_dest(struct dp_vs_service *svc,
                 return EDPVS_INVAL;
             }
             node_fini(p_node);
-        }
-        else {
+        } else {
             weight = rte_atomic16_read(&p_dest->weight);
             if (p_conhash_node->node.replicas == weight / weight_gcd * REPLICA)
                 continue;
