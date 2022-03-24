@@ -719,6 +719,8 @@ static int __dp_vs_in_icmp4(struct rte_mbuf *mbuf, int *related)
      */
     if (cid != peer_cid) {
         /* recover mbuf.data_off to outer Ether header */
+        if (conn)
+            dp_vs_conn_put_no_reset(conn);
         rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct rte_ether_hdr) + off);
 
         return dp_vs_redirect_pkt(mbuf, peer_cid);
@@ -862,6 +864,8 @@ static int __dp_vs_in_icmp6(struct rte_mbuf *mbuf, int *related)
      */
     if (cid != peer_cid) {
         /* recover mbuf.data_off to outer Ether header */
+        if (conn)
+            dp_vs_conn_put_no_reset(conn);
         rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct rte_ether_hdr) + off);
 
         return dp_vs_redirect_pkt(mbuf, peer_cid);
@@ -985,6 +989,8 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
     conn = prot->conn_lookup(prot, &iph, mbuf, &dir, false, &drop, &peer_cid);
 
     if (unlikely(drop)) {
+        if (conn)
+            dp_vs_conn_put(conn);
         RTE_LOG(DEBUG, IPVS, "%s: deny ip try to visit.\n", __func__);
         return INET_DROP;
     }
@@ -994,6 +1000,8 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
      * forward the packet to the remote redirect owner core.
      */
     if (cid != peer_cid) {
+        if (conn)
+            dp_vs_conn_put(conn);
         /* recover mbuf.data_off to outer Ether header */
         rte_pktmbuf_prepend(mbuf, (uint16_t)sizeof(struct rte_ether_hdr));
 
