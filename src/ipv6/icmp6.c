@@ -33,7 +33,7 @@ static void icmp6_dump_hdr(const struct rte_mbuf *mbuf)
     lcoreid_t lcore = rte_lcore_id();
 
     fprintf(stderr, "lcore %d port %d icmp type %u code %u\n",
-            lcore, mbuf->port, ich->icmp_type, ich->icmp_code);
+            lcore, mbuf->port, ich->icmp6_type, ich->icmp6_code);
 
     return;
 }
