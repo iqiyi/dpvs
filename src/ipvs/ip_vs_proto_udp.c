@@ -632,10 +632,14 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
 
     if (AF_INET6 == tuplehash_out(conn).af) {
         mtu = ((struct route6*)rt)->rt6_mtu;
+    } else {
+        mtu = ((struct route_entry*) rt)->mtu;
+    }
+
+    if (AF_INET6 == conn->af) {
         iph = ip6_hdr(mbuf);
         iphdrlen = ip6_hdrlen(mbuf);
     } else {
-        mtu = ((struct route_entry*) rt)->mtu;
         iph = (struct iphdr *)ip4_hdr(mbuf);
         iphdrlen = ip4_hdrlen(mbuf);
     }
