@@ -922,6 +922,46 @@ static struct nf_hook_ops uoa_nf_hook_ops6[] __read_mostly = {
     },
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
+static int __net_init __uoa_init(struct net *net)
+{
+    int ret = -ENOMEM;
+
+    ret = nf_register_net_hooks(net, uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
+    if (ret < 0)
+        goto ops_hook_fail;
+
+    ret = nf_register_net_hooks(&init_net, uoa_nf_hook_ops6,
+                           ARRAY_SIZE(uoa_nf_hook_ops6));
+    if (ret < 0)
+        goto ops6_hook_fail;
+
+    return 0;
+
+/*
+ * Error handling
+ */
+ops6_hook_fail:
+    nf_unregister_net_hooks(net, uoa_nf_hook_ops,
+                           ARRAY_SIZE(uoa_nf_hook_ops));
+ops_hook_fail:
+    return ret;
+}
+
+static void __net_exit __uoa_cleanup(struct net *net)
+{
+    nf_unregister_net_hooks(net, uoa_nf_hook_ops,
+                            ARRAY_SIZE(uoa_nf_hook_ops));
+    nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops6,
+                            ARRAY_SIZE(uoa_nf_hook_ops6));
+}
+
+static struct pernet_operations uoa_ops = {
+    .init = __uoa_init,
+    .exit = __uoa_cleanup,
+};
+#endif
+
 static __init int uoa_init(void)
 {
     int err = -ENOMEM;
@@ -941,14 +981,7 @@ static __init int uoa_init(void)
      * to be overwirten since it handles multiple skbs.
      */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
-    err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops,
-                                ARRAY_SIZE(uoa_nf_hook_ops));
-    if (err < 0) {
-        pr_err("fail to register netfilter hooks.\n");
-        goto hook_failed;
-    }
-    err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops6,
-                                ARRAY_SIZE(uoa_nf_hook_ops6));
+    err = register_pernet_device(&uoa_ops);
 #else
     err = nf_register_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
     if (err < 0) {
@@ -975,10 +1008,7 @@ stats_failed:
 static __exit void uoa_exit(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
-    nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops,
-                            ARRAY_SIZE(uoa_nf_hook_ops));
-    nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops6,
-                            ARRAY_SIZE(uoa_nf_hook_ops6));
+    unregister_pernet_device(&uoa_ops);
 #else
     nf_unregister_hooks(uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
     nf_unregister_hooks(uoa_nf_hook_ops6, ARRAY_SIZE(uoa_nf_hook_ops6));
