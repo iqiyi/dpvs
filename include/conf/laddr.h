@@ -33,7 +33,7 @@ struct dp_vs_laddr_entry {
     uint32_t    nconns;
 };
 
-struct dp_vs_laddr_conf {
+typedef struct dp_vs_laddr_conf {
     /* identify service */
     int                 af_s;
     uint8_t             proto;
@@ -54,6 +54,6 @@ struct dp_vs_laddr_conf {
     /* for get */
     int                 nladdrs;
     struct dp_vs_laddr_entry laddrs[0];
-};
+} dpvs_laddr_table_t;
 
 #endif /* __DPVS_LADDR_CONF_H__ */

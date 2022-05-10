@@ -202,7 +202,7 @@ dns_recv_thread(thread_ref_t thread)
 	}
 
 	if (ret < (ssize_t) sizeof (r_header)) {
-		DNS_DBG("too small message. (%d bytes)", ret);
+		DNS_DBG("too small message. (%zu bytes)", ret);
 		thread_add_read(thread->master, dns_recv_thread, checker,
 				thread->u.f.fd, timeout, true);
 		return 0;

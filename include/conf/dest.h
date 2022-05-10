@@ -40,6 +40,58 @@ enum {
     DPVS_DEST_F_OVERLOAD        = 0x1<<1,
 };
 
+typedef struct dp_vs_dest_compat {
+    /* destination server address */
+    int                af;
+    uint16_t           port;
+    uint16_t           proto;
+    uint32_t           weight;     /* destination weight */
+    union inet_addr    addr;
+
+    unsigned           conn_flags;    /* connection flags */
+
+    enum dpvs_fwd_mode fwdmode;
+    /* real server options */
+
+    /* thresholds for active connections */
+    uint32_t           max_conn;    /* upper threshold */
+    uint32_t           min_conn;    /* lower threshold */
+
+    uint32_t           actconns;  /* active connections */
+    uint32_t           inactconns;   /* inactive connections */
+    uint32_t           persistconns; /* persistent connections */
+
+    /* statistics */
+    struct dp_vs_stats stats;
+#ifdef _HAVE_IPVS_TUN_TYPE_
+    int                     tun_type;
+    int                     tun_port;
+#ifdef _HAVE_IPVS_TUN_CSUM_
+    int                     tun_flags;
+#endif
+#endif
+} dpvs_dest_compat_t;
+
+typedef struct dp_vs_dest_table {
+    int             af;
+    uint16_t        proto;
+    uint16_t        port;
+    uint32_t        fwmark;
+    union inet_addr addr;
+
+    unsigned int    num_dests;
+
+    char srange[0x100];
+    char drange[0x100];
+    char iifname[IFNAMSIZ];
+    char oifname[IFNAMSIZ];
+
+    lcoreid_t       cid;
+
+    dpvs_dest_compat_t entrytable[0];
+} dpvs_dest_table_t;
+
+#if 0
 struct dp_vs_dest_conf {
     /* destination server address */
     int                af;
@@ -73,7 +125,6 @@ struct dp_vs_dest_entry {
     /* statistics */
     struct dp_vs_stats stats;
 };
-
 struct dp_vs_get_dests {
     /* which service: user fills in these */
     int              af;
@@ -108,4 +159,9 @@ struct dp_vs_dest_user {
     uint32_t        min_conn;
 };
 
+#else
+#define  dp_vs_get_dests  dp_vs_dest_table
+#define  dp_vs_dest_entry dp_vs_dest_compat
+#define  dp_vs_dest_conf  dp_vs_dest_compat
+#endif
 #endif /* __DPVS_DEST_CONF_H__ */

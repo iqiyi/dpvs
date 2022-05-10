@@ -27,7 +27,7 @@ struct dp_vs_whtlst_entry {
     union inet_addr addr;
 };
 
-struct dp_vs_whtlst_conf {
+typedef struct dp_vs_whtlst_conf {
     /* identify service */
     int                 af;
     uint8_t             proto;
@@ -37,7 +37,7 @@ struct dp_vs_whtlst_conf {
 
     /* for set */
     union inet_addr     whtlst;
-};
+} dpvs_whtlst_t;
 
 struct dp_vs_whtlst_conf_array {
     int                 naddr;

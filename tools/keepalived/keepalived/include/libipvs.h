@@ -91,45 +91,39 @@ extern int ipvs_set_timeout(ipvs_timeout_t *to);
 extern int ipvs_flush(void);
 
 /* add a virtual service */
-extern int ipvs_add_service(ipvs_service_t *svc);
+extern int dpvs_add_service(dpvs_service_compat_t *svc);
 
 /* update a virtual service with new options */
 extern int ipvs_update_service(ipvs_service_t *svc);
 
 /* update a virtual service based on option */
-extern int ipvs_update_service_by_options(ipvs_service_t *svc, unsigned int options);
+extern int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int options);
 
-/* config the service's synproxy switch */
-extern int ipvs_update_service_synproxy(ipvs_service_t *svc , int enable);
 
 /* delete a virtual service */
-extern int ipvs_del_service(ipvs_service_t *svc);
-
+extern int dpvs_del_service(dpvs_service_compat_t *svc);
 /* zero the counters of a service or all */
-extern int ipvs_zero_service(ipvs_service_t *svc);
+extern int dpvs_zero_service(dpvs_service_compat_t *svc);
 
 /* add a destination server into a service */
-extern int ipvs_add_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
-
+extern int dpvs_add_dest(dpvs_service_compat_t *svc, dpvs_dest_compat_t *dest);
 /* update a destination server with new options */
-extern int ipvs_update_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
-
+extern int dpvs_update_dest(dpvs_service_compat_t *svc, dpvs_dest_compat_t *dest);
 /* remove a destination server from a service */
-extern int ipvs_del_dest(ipvs_service_t *svc, ipvs_dest_t *dest);
+extern int dpvs_del_dest(dpvs_service_compat_t *svc, dpvs_dest_compat_t *dest);
 
 extern struct ip_vs_conn_array *ip_vs_get_conns(const struct ip_vs_conn_req *req);
-
-extern int ipvs_add_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
-extern int ipvs_del_laddr(ipvs_service_t *svc, ipvs_laddr_t * laddr);
-extern struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t cid);
+extern struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_vs_get_laddrs **laddrs);
+extern int dpvs_add_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr);
+extern int dpvs_del_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr);
 
 /*for add/delete a blacklist ip*/
-extern int ipvs_add_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
-extern int ipvs_del_blklst(ipvs_service_t *svc, ipvs_blklst_t * blklst);
+extern int dpvs_add_blklst(dpvs_service_compat_t* svc, dpvs_blklst_t *blklst);
+extern int dpvs_del_blklst(dpvs_service_compat_t* svc, dpvs_blklst_t *blklst);
 
 /*for add/delete a whitelist ip*/
-extern int ipvs_add_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
-extern int ipvs_del_whtlst(ipvs_service_t *svc, ipvs_whtlst_t * whtlst);
+extern int dpvs_add_whtlst(dpvs_service_compat_t*,dpvs_whtlst_t *whtlst);
+extern int dpvs_del_whtlst(dpvs_service_compat_t*,dpvs_whtlst_t *whtlst);
 
 /*for add/delete a tunnel*/
 extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
@@ -144,11 +138,13 @@ extern int ipvs_stop_daemon(ipvs_daemon_t *dm);
 /* get all the ipvs services */
 extern struct ip_vs_get_services_app *ipvs_get_services(lcoreid_t);
 
+extern dpvs_service_table_t *dpvs_get_services(dpvs_service_table_t *t);
+
 /* get the destination array of the specified service */
-extern struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t cid);
+extern dpvs_dest_table_t* dpvs_get_dests(dpvs_dest_table_t* table);
 
 /* get an ipvs service entry */
-extern ipvs_service_entry_t *ipvs_get_service(struct ip_vs_service_app *hint, lcoreid_t cid);
+extern dpvs_service_compat_t *dpvs_get_service(dpvs_service_compat_t*, dpvs_service_compat_t*);
 
 /* get ipvs timeout */
 extern ipvs_timeout_t *ipvs_get_timeout(void);
@@ -171,20 +167,13 @@ extern int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd);
 
 extern struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void);
 
-typedef int (*ipvs_service_cmp_t)(ipvs_service_entry_t *,
-				  ipvs_service_entry_t *);
-extern int ipvs_cmp_services(ipvs_service_entry_t *s1,
-			     ipvs_service_entry_t *s2);
-extern void ipvs_sort_services(struct ip_vs_get_services_app *s,
-			       ipvs_service_cmp_t f);
+typedef int (*dpvs_service_cmp_t)(dpvs_service_compat_t *,dpvs_service_compat_t*);
+extern void dpvs_sort_services(dpvs_service_table_t *s, dpvs_service_cmp_t f);
+extern int dpvs_cmp_services(dpvs_service_compat_t *s1, dpvs_service_compat_t *s2);
 
-typedef int (*ipvs_dest_cmp_t)(ipvs_dest_entry_t *,
-			       ipvs_dest_entry_t *);
-extern int ipvs_cmp_dests(ipvs_dest_entry_t *d1,
-			  ipvs_dest_entry_t *d2);
-extern void ipvs_sort_dests(struct ip_vs_get_dests_app *d,
-			    ipvs_dest_cmp_t f);
-
+typedef int (*dpvs_dest_cmp_t)(dpvs_dest_compat_t*, dpvs_dest_compat_t*);
+extern void dpvs_sort_dests(dpvs_dest_table_t *d, dpvs_dest_cmp_t f);
+extern int dpvs_cmp_dests(dpvs_dest_compat_t *d1, dpvs_dest_compat_t  *d2);
 
 extern struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void);
 

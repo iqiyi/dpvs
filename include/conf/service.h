@@ -43,6 +43,50 @@
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK   IP_VS_SVC_F_SCHED1  /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT       IP_VS_SVC_F_SCHED2  /* SH use port */
 
+typedef struct dp_vs_service_compat {
+    /*base*/
+    int                 af;
+    uint16_t            proto;
+    uint16_t            port;
+    uint32_t            fwmark;    /* firwall mark of service */
+    unsigned            flags;     /* virtual service flags */
+    unsigned            timeout;   /* persistent timeout in sec */
+    unsigned            conn_timeout;
+    uint32_t            netmask;   /* persistent netmask */
+    unsigned            bps;
+    unsigned            limit_proportion;
+    union inet_addr     addr;      /* virtual ip address */
+    char                sched_name[DP_VS_SCHEDNAME_MAXLEN];
+    
+    /*dp_vs_service_user & dp_vs_service_entry*/
+    char srange[0x100];
+    char drange[0x100];
+    char iifname[IFNAMSIZ];
+    char oifname[IFNAMSIZ];
+
+    char pe_name[0x10];
+
+    /*dp_vs_service_entry*/
+    unsigned int        num_dests;
+    unsigned int        num_laddrs;
+    lcoreid_t           cid;
+    struct dp_vs_stats  stats;
+
+    /*dp_vs_service_conf only*/
+    struct dp_vs_match match;
+} dpvs_service_compat_t;
+
+#define dp_vs_service_conf  dp_vs_service_compat
+#define dp_vs_service_entry dp_vs_service_compat
+#define dp_vs_service_user  dp_vs_service_compat
+
+typedef struct dp_vs_services_table {
+    lcoreid_t     cid;
+    unsigned int        num_services;
+    dpvs_service_compat_t entrytable[0];
+} dpvs_service_table_t;
+
+#if 0
 struct dp_vs_service_conf {
     /* virtual service addresses */
     uint16_t            af;
@@ -89,12 +133,6 @@ struct dp_vs_service_entry {
     char                oifname[IFNAMSIZ];
 };
 
-struct dp_vs_get_services {
-    lcoreid_t     cid;
-    unsigned int        num_services;
-    struct dp_vs_service_entry entrytable[0];
-};
-
 struct dp_vs_service_user {
     int               af;
     uint16_t          proto;
@@ -116,6 +154,15 @@ struct dp_vs_service_user {
     char              oifname[IFNAMSIZ];
 };
 
+
+struct dp_vs_get_services {
+    lcoreid_t     cid;
+    unsigned int        num_services;
+    struct dp_vs_service_entry entrytable[0];
+};
+
+#endif 
+
 struct dp_vs_getinfo {
     unsigned int version;
     unsigned int size;
@@ -123,7 +170,6 @@ struct dp_vs_getinfo {
     unsigned int num_lcores;
 };
 
-#define MAX_ARG_LEN    (sizeof(struct dp_vs_service_user) +    \
-                         sizeof(struct dp_vs_dest_user))
+#define MAX_ARG_LEN    (sizeof(dpvs_service_compat_t) + sizeof(dpvs_dest_compat_t))
 
 #endif /* __DPVS_SVC_CONF_H__ */

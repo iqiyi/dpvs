@@ -504,7 +504,7 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
     }
 
     svc->af = u->af;
-    svc->proto = u->protocol;
+    svc->proto = u->proto;
     svc->addr = u->addr;
     svc->port = u->port;
     svc->fwmark = u->fwmark;
@@ -707,7 +707,7 @@ dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
 }
 
 static int dp_vs_service_get_entries(int num_services,
-                                     struct dp_vs_get_services *uptr,
+                                     dpvs_service_table_t *uptr,
                                      lcoreid_t cid)
 {
     int idx, count = 0;
@@ -827,6 +827,7 @@ static int dp_vs_services_zero(lcoreid_t cid)
 static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
                                   struct dp_vs_service_user *user)
 {
+#if 0
     int err;
     conf->af = user->af;
     conf->protocol = user->proto;
@@ -855,12 +856,14 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
         if ((conf->match.af != AF_INET) && (conf->match.af != AF_INET6))
             return EDPVS_NOTSUPP;
     }
+#endif
+    memcpy(conf, user, sizeof(dpvs_service_compat_t));
 
     return EDPVS_OK;
 }
 
 static void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
-                                    struct dp_vs_dest_user *udest_compat)
+                                    dpvs_dest_compat_t *udest_compat)
 {
     udest->af         = udest_compat->af;
     udest->addr       = udest_compat->addr;
@@ -899,12 +902,12 @@ static int svc_msg_seq(void)
 
 static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
 {
-    int ret;
+    int ret, len_svc, len_dest;
     unsigned char arg[MAX_ARG_LEN];
-    struct dp_vs_service_user *usvc_compat;
+    dpvs_service_compat_t *usvc_compat;
     struct dp_vs_service_conf usvc;
     struct dp_vs_service *svc = NULL;
-    struct dp_vs_dest_user *udest_compat;
+    dpvs_dest_compat_t *udest_compat;
     struct dp_vs_dest_conf udest;
     struct in_addr *vip;
     lcoreid_t cid = rte_lcore_id();
@@ -933,8 +936,11 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
         return dp_vs_services_flush(cid);
 
     memcpy(arg, user, len);
-    usvc_compat = (struct dp_vs_service_user *)arg;
-    udest_compat = (struct dp_vs_dest_user *)(usvc_compat + 1);
+    usvc_compat = (dpvs_service_compat_t*)arg;
+    udest_compat = (dpvs_dest_compat_t*)(arg + sizeof(dpvs_service_compat_t));
+
+    len_svc = sizeof(dpvs_service_compat_t);
+    len_dest = sizeof(dpvs_dest_compat_t);
 
     memset(&usvc, 0, sizeof(usvc));
     ret = dp_vs_copy_usvc_compat(&usvc, usvc_compat);
@@ -950,26 +956,26 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
         }
     }
 
-    if (usvc.protocol != IPPROTO_TCP && usvc.protocol != IPPROTO_UDP &&
-        usvc.protocol != IPPROTO_ICMP && usvc.protocol != IPPROTO_ICMPV6) {
+    if (usvc.proto != IPPROTO_TCP && usvc.proto != IPPROTO_UDP &&
+        usvc.proto != IPPROTO_ICMP && usvc.proto != IPPROTO_ICMPV6) {
         RTE_LOG(ERR, SERVICE, "%s: protocol not support.\n", __func__);
         return EDPVS_INVAL;
     }
 
     if (!inet_is_addr_any(usvc.af, &usvc.addr) || usvc.port)
-        svc = __dp_vs_service_get(usvc.af, usvc.protocol,
+        svc = __dp_vs_service_get(usvc.af, usvc.proto,
                                   &usvc.addr, usvc.port, cid);
     else if (usvc.fwmark)
         svc = __dp_vs_service_fwm_get(usvc.af, usvc.fwmark, cid);
     else if (!is_empty_match(&usvc.match))
-        svc = __dp_vs_service_match_find(usvc.af, usvc.protocol, &usvc.match, cid);
+        svc = __dp_vs_service_match_find(usvc.af, usvc.proto, &usvc.match, cid);
     else {
         RTE_LOG(ERR, SERVICE, "%s: empty service.\n", __func__);
         return EDPVS_INVAL;
     }
 
     if(opt != DPVS_SO_SET_ADD &&
-            (svc == NULL || svc->proto != usvc.protocol)){
+            (svc == NULL || svc->proto != usvc.proto)){
         return EDPVS_INVAL;
     }
 
@@ -1028,8 +1034,8 @@ static inline int opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t *
 }
 
 /* copy service/dest/stats */
-static int dp_vs_services_copy_percore_stats(struct dp_vs_get_services *master_svcs,
-                                             struct dp_vs_get_services *slave_svcs)
+static int dp_vs_services_copy_percore_stats(dpvs_service_table_t *master_svcs,
+                                             dpvs_service_table_t  *slave_svcs)
 {
     int i;
     if (master_svcs->num_services != slave_svcs->num_services)
@@ -1062,11 +1068,11 @@ static int dp_vs_services_get_uc_cb(struct dpvs_msg *msg)
 {
     lcoreid_t cid = rte_lcore_id();
     size_t size;
-    struct dp_vs_get_services *get, *output;
+    dpvs_service_table_t *get, *output;
     int ret;
 
     /* service may be changed */
-    get = (struct dp_vs_get_services *)msg->data;
+    get = (dpvs_service_table_t*)msg->data;
     if (get->num_services != rte_atomic16_read(&dp_vs_num_services[cid])) {
         RTE_LOG(ERR, SERVICE, "%s: svc number %d not match %d in cid=%d.\n",
         __func__, get->num_services, rte_atomic16_read(&dp_vs_num_services[cid]), cid);
@@ -1230,12 +1236,12 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
             }
         case DPVS_SO_GET_SERVICES:
             {
-                struct dp_vs_get_services *get, *get_msg, *output;
+                dpvs_service_table_t *get, *get_msg, *output;
                 struct dpvs_msg *msg, *cur;
                 struct dpvs_multicast_queue *reply = NULL;
                 int size;
 
-                get = (struct dp_vs_get_services *)user;
+                get = (dpvs_service_table_t*)user;
                 size = sizeof(*get) + \
                        sizeof(struct dp_vs_service_entry) * (get->num_services);
                 if (len != sizeof(*get)){
@@ -1271,7 +1277,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                         return ret;
                     }
                     list_for_each_entry(cur, &reply->mq, mq_node) {
-                        get_msg = (struct dp_vs_get_services *)(cur->data);
+                        get_msg = (dpvs_service_table_t*)(cur->data);
                         ret = dp_vs_services_copy_percore_stats(output, get_msg);
                         if (ret != EDPVS_OK) {
                             msg_destroy(&msg);
@@ -1285,7 +1291,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                     return EDPVS_OK;
                 } else {
                     list_for_each_entry(cur, &reply->mq, mq_node) {
-                        get_msg = (struct dp_vs_get_services *)(cur->data);
+                        get_msg = (dpvs_service_table_t*)(cur->data);
                         if (get_msg->cid == cid) {
                             output = rte_zmalloc("get_services", size, 0);
                             if (unlikely(NULL == output)) {
@@ -1393,7 +1399,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 int size;
                 get = (struct dp_vs_get_dests *)user;
                 size = sizeof(*get) + sizeof(struct dp_vs_dest_entry) * get->num_dests;
-                if(len != sizeof(*get)){
+                if(len != sizeof(*get)) {
                     *outlen = 0;
                     return EDPVS_INVAL;
                 }
