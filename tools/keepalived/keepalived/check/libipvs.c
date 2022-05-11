@@ -132,7 +132,7 @@ static void ipvs_service_entry_2_user(const ipvs_service_entry_t *entry, ipvs_se
 	strcpy(rule->user.srange, entry->user.srange);
 	strcpy(rule->user.drange, entry->user.drange);
 	strcpy(rule->user.iifname, entry->user.iifname);
-	strcpy(rule->user.iifname, entry->user.iifname);
+	strcpy(rule->user.oifname, entry->user.oifname);
 }
 
 struct ip_vs_getinfo g_ipvs_info;
@@ -964,7 +964,7 @@ struct ip_vs_get_laddrs *ipvs_get_laddrs(ipvs_service_entry_t *svc, lcoreid_t ci
 	snprintf(conf.srange, sizeof(conf.srange), "%s", svc->user.srange);
 	snprintf(conf.drange, sizeof(conf.drange), "%s", svc->user.drange);
 	snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->user.iifname);
-	snprintf(conf.iifname, sizeof(conf.oifname), "%s", svc->user.oifname);
+	snprintf(conf.oifname, sizeof(conf.oifname), "%s", svc->user.oifname);
 
 	if (dpvs_getsockopt(cpu2opt_laddr(cid, SOCKOPT_GET_LADDR_GETALL), &conf, sizeof(conf),
 				(void **)&result, &res_size) != 0)
