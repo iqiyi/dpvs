@@ -153,7 +153,7 @@ $ make              # or "make -j" to speed up
 $ make install
 ```
 > Notes:
-> 1. Build dependencies may be needed, such as `pkg-config`(version 0.29.2+),`automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`. You can install the missing dependencies by using the package manager of the system, e.g., `yum install popt-devel` (CentOS).
+> 1. Build dependencies may be needed, such as `pkg-config`(version 0.29.2+),`automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`. You can install the missing dependencies by using the package manager of the system, e.g., `yum install popt-devel automake` (CentOS) or `apt install libpopt-dev autoconfig` (Ubuntu).
 > 2. Early `pkg-config` versions (v0.29.2 before) may cause dpvs build failure. If so, please upgrade this tool.
 
 Output files are installed to `dpvs/bin`.
