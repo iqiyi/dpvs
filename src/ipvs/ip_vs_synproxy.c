@@ -39,6 +39,7 @@
 #define DP_VS_SYNPROXY_SACK_DEFAULT             1
 #define DP_VS_SYNPROXY_WSCALE_DEFAULT           0
 #define DP_VS_SYNPROXY_TIMESTAMP_DEFAULT        0
+#define DP_VS_SYNPROXY_CLWND_DEFAULT            1
 #define DP_VS_SYNPROXY_DEFER_DEFAULT            0
 #define DP_VS_SYNPROXY_DUP_ACK_DEFAULT          10
 #define DP_VS_SYNPROXY_MAX_ACK_SAVED_DEFAULT    3
@@ -54,6 +55,7 @@ int dp_vs_synproxy_ctrl_sack = DP_VS_SYNPROXY_SACK_DEFAULT;
 int dp_vs_synproxy_ctrl_wscale = DP_VS_SYNPROXY_WSCALE_DEFAULT;
 int dp_vs_synproxy_ctrl_timestamp = DP_VS_SYNPROXY_TIMESTAMP_DEFAULT;
 int dp_vs_synproxy_ctrl_synack_ttl = DP_VS_SYNPROXY_TTL_DEFAULT;
+int dp_synproxy_ctrl_clwnd = DP_VS_SYNPROXY_CLWND_DEFAULT;
 int dp_vs_synproxy_ctrl_defer = DP_VS_SYNPROXY_DEFER_DEFAULT;
 int dp_vs_synproxy_ctrl_conn_reuse = DP_VS_SYNPROXY_CONN_REUSE_DEFAULT;
 int dp_vs_synproxy_ctrl_conn_reuse_cl = DP_VS_SYNPROXY_CONN_REUSE_CL_DEFAULT;
@@ -610,8 +612,9 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
     tmpport = th->dest;
     th->dest = th->source;
     th->source = tmpport;
-    /* set window size to zero */
-    th->window = 0;
+    /* set window size to zero if enabled */
+    if (dp_synproxy_ctrl_clwnd && !dp_vs_synproxy_ctrl_defer)
+        th->window = 0;
     /* set seq(cookie) and ack_seq */
     th->ack_seq = htonl(ntohl(th->seq) + 1);
     th->seq = htonl(isn);
@@ -773,8 +776,8 @@ syn_rcv_out:
 static inline int syn_proxy_ack_has_data(struct rte_mbuf *mbuf,
         const struct dp_vs_iphdr *iph, struct tcphdr *th)
 {
-    RTE_LOG(DEBUG, IPVS, "tot_len = %u, iph_len = %u, tcph_len = %u\n",
-            mbuf->pkt_len, iph->len, th->doff * 4);
+    RTE_LOG(DEBUG, IPVS, "%s: tot_len = %u, iph_len = %u, tcph_len = %u\n",
+            __func__, mbuf->pkt_len, iph->len, th->doff * 4);
     return (mbuf->pkt_len - iph->len - th->doff * 4) != 0;
 }
 
@@ -1455,7 +1458,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
          * The probe will be forward to RS and RS will respond a window update.
          * So DPVS has no need to send a window update.
          */
-        if (cp->ack_num == 1)
+        if (dp_synproxy_ctrl_clwnd && !dp_vs_synproxy_ctrl_defer && cp->ack_num <= 1)
             syn_proxy_send_window_update(tuplehash_out(cp).af, mbuf, cp, pp, th);
 
         list_for_each_entry_safe(tmbuf, tmbuf2, &cp->ack_mbuf, list) {
@@ -1798,6 +1801,12 @@ static void synack_timestamp_handler(vector_t tokens)
     dp_vs_synproxy_ctrl_timestamp = 1;
 }
 
+static void close_client_window_handler(vector_t tokens)
+{
+    RTE_LOG(INFO, IPVS, "close_client_window ON\n");
+    dp_synproxy_ctrl_clwnd = 1;
+}
+
 static void defer_rs_syn_handler(vector_t tokens)
 {
     RTE_LOG(INFO, IPVS, "synproxy_defer_rs_syn ON\n");
@@ -1907,6 +1916,7 @@ void synproxy_keyword_value_init(void)
     dp_vs_synproxy_ctrl_wscale = 0;
     dp_vs_synproxy_ctrl_timestamp = 0;
     dp_vs_synproxy_ctrl_synack_ttl = DP_VS_SYNPROXY_TTL_DEFAULT;
+    dp_synproxy_ctrl_clwnd = 0;
     dp_vs_synproxy_ctrl_defer = 0;
     dp_vs_synproxy_ctrl_conn_reuse = 0;
     dp_vs_synproxy_ctrl_conn_reuse_cl = 0;
@@ -1934,6 +1944,7 @@ void install_synproxy_keywords(void)
     install_keyword("timestamp", synack_timestamp_handler, KW_TYPE_NORMAL);
     install_sublevel_end();
 
+    install_keyword("close_client_window", close_client_window_handler, KW_TYPE_NORMAL);
     install_keyword("defer_rs_syn", defer_rs_syn_handler, KW_TYPE_NORMAL);
     install_keyword("rs_syn_max_retry", rs_syn_max_retry_handler, KW_TYPE_NORMAL);
     install_keyword("ack_storm_thresh", ack_storm_thresh_handler, KW_TYPE_NORMAL);

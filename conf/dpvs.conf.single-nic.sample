@@ -240,6 +240,7 @@ ipvs_defs {
                 ! wscale
                 ! timestamp
             }
+            close_client_window
             ! defer_rs_syn
             rs_syn_max_retry    3
             ack_storm_thresh    10
