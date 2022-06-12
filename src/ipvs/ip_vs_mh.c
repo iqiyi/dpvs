@@ -77,13 +77,6 @@ static inline void generate_hash_secret(hsiphash_key_t *hash1,
     hash2->key[1] = 2654446892UL;
 }
 
-/* Helper function to determine if server is unavailable */
-static inline bool is_unavailable(struct dp_vs_dest *dest)
-{
-    return rte_atomic16_read(&dest->weight) <= 0 ||
-        dest->flags & DPVS_DEST_F_OVERLOAD;
-}
-
 /* Returns hash value for IPVS MH entry */
 static inline unsigned int dp_vs_mh_hashkey(int af, const union inet_addr *addr,
         __be16 port, hsiphash_key_t *key, unsigned int offset)
@@ -231,7 +224,7 @@ static inline struct dp_vs_dest *dp_vs_mh_get(struct dp_vs_service *svc,
                             % DP_VS_MH_TAB_SIZE;
     struct dp_vs_dest *dest = s->lookup[hash].dest;
 
-    return (!dest || is_unavailable(dest)) ? NULL : dest;
+    return dp_vs_dest_is_valid(dest) ? dest:NULL;
 }
 
 /* As ip_vs_mh_get, but with fallback if selected server is unavailable */
@@ -271,7 +264,7 @@ static inline struct dp_vs_dest *dp_vs_mh_get_fallback(struct dp_vs_service *svc
         dest = s->lookup[hash].dest;
         if (!dest)
             break;
-        if (!is_unavailable(dest))
+        if (dp_vs_dest_is_valid(dest))
             return dest;
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
@@ -376,10 +369,8 @@ static int dp_vs_mh_shift_weight(struct dp_vs_service *svc, int gcd)
 
 static void dp_vs_mh_state_free(struct dp_vs_mh_state *s)
 {
-    if (s) {
         rte_free(s->lookup);
         rte_free(s);
-    }
 }
 
 static int dp_vs_mh_init_svc(struct dp_vs_service *svc)
@@ -426,12 +417,13 @@ static int dp_vs_mh_done_svc(struct dp_vs_service *svc)
 {
     struct dp_vs_mh_state *s = svc->sched_data;
 
+    if(s){
     /* Got to clean up lookup entry here */
-    dp_vs_mh_reset(s);
-
-    dp_vs_mh_state_free(s);
-    RTE_LOG(DEBUG, SERVICE, "MH lookup table (memory=%zdbytes) released\n",
-            sizeof(struct dp_vs_mh_lookup) * DP_VS_MH_TAB_SIZE);
+        dp_vs_mh_reset(s);
+        dp_vs_mh_state_free(s);
+        RTE_LOG(DEBUG, SERVICE, "MH lookup table (memory=%zdbytes) released\n",
+                sizeof(struct dp_vs_mh_lookup) * DP_VS_MH_TAB_SIZE);
+    }
 
     return EDPVS_OK;
 }
