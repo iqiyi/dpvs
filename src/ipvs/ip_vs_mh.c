@@ -244,7 +244,7 @@ static inline struct dp_vs_dest *dp_vs_mh_get_fallback(struct dp_vs_service *svc
     dest = s->lookup[ihash].dest;
     if (!dest)
         return NULL;
-    if (!is_unavailable(dest))
+    if (dp_vs_dest_is_valid(dest))
         return dest;
 
 #ifdef CONFIG_DPVS_IPVS_DEBUG
