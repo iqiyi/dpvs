@@ -25,7 +25,6 @@
 #include <stdbool.h>
 
 /* lock file */
-#define DPVS_PIDFILE "/var/run/dpvs.pid"
 #define RTE_LOGTYPE_PIDFILE RTE_LOGTYPE_USER1
 
 int pidfile_write(const char *pid_file, int pid);

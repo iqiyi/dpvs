@@ -15,6 +15,8 @@
 #define SOCKOPT_MSG_BUFFER_SIZE         (1UL << 12)
 #define SOCKOPT_ERRSTR_LEN              64
 
+#define ENV_DPVS_IPC_FILE               "DPVS_IPC_FILE"
+
 enum {
     ESOCKOPT_INVAL = -16385,
     ESOCKOPT_IO,
@@ -53,6 +55,7 @@ struct dpvs_sock_msg_reply {
 extern int dpvs_setsockopt(sockoptid_t cmd, const void *in, size_t in_len);
 extern int dpvs_getsockopt(sockoptid_t cmd, const void *in, size_t in_len,
         void **out, size_t *out_len);
+extern int dpvs_sockopt_init(void);
 
 static inline void dpvs_sockopt_msg_free(void *msg)
 {

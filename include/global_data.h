@@ -63,6 +63,14 @@ extern uint8_t g_isol_rx_lcore_num;
 extern uint64_t g_slave_lcore_mask;
 extern uint64_t g_isol_rx_lcore_mask;
 
+extern char *dpvs_conf_file;
+extern char *dpvs_pid_file;
+extern char *dpvs_ipc_file;
+
+#ifdef CONFIG_DPVS_PDUMP
+extern bool g_dpvs_pdump;
+#endif
+
 int global_data_init(void);
 int global_data_term(void);
 

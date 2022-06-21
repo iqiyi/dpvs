@@ -19,6 +19,7 @@
 #include <libgen.h>
 #include <errno.h>
 #include <glob.h>
+#include "global_data.h"
 #include "conf/common.h"
 #include "parser/parser.h"
 
@@ -483,7 +484,7 @@ void init_data(char *conf_file, vector_t (*init_keywords)(void))
 
     /* stream handling */
     g_current_keywords = g_keywords;
-    read_conf_file(conf_file ? conf_file : CFG_FILE_NAME);
+    read_conf_file(conf_file ? conf_file : dpvs_conf_file);
 
     free_keywords(g_keywords);
 }

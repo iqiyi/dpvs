@@ -145,6 +145,8 @@ int ipvs_init(lcoreid_t cid)
 
 	ipvs_func = ipvs_init;
 
+	dpvs_sockopt_init();
+
 #if !HAVE_DECL_SOCK_CLOEXEC
 	if (set_sock_flags(sockfd, F_SETFD, FD_CLOEXEC)) {
 		close(sockfd);
