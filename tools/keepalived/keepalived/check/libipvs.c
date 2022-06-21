@@ -62,6 +62,8 @@ int dpvs_ctrl_init(lcoreid_t cid)
 
     dpvs_ctrl_func = dpvs_ctrl_init;
 
+	dpvs_sockopt_init();
+
 #if !HAVE_DECL_SOCK_CLOEXEC
     if (set_sock_flags(sockfd, F_SETFD, FD_CLOEXEC)) {
         close(sockfd);
