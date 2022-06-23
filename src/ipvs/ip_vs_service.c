@@ -827,36 +827,6 @@ static int dp_vs_services_zero(lcoreid_t cid)
 static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
                                   struct dp_vs_service_user *user)
 {
-#if 0
-    int err;
-    conf->af = user->af;
-    conf->protocol = user->proto;
-    conf->addr = user->addr;
-    conf->port = user->port;
-    conf->fwmark = user->fwmark;
-
-    /* Deep copy of sched_name is not needed here */
-    conf->sched_name = user->sched_name;
-
-    conf->flags = user->flags;
-    conf->timeout = user->timeout;
-    conf->conn_timeout = user->conn_timeout;
-    conf->netmask = user->netmask;
-    conf->bps = user->bps;
-    conf->limit_proportion = user->limit_proportion;
-
-    if (user->flags & DP_VS_SVC_F_MATCH) {
-        err = dp_vs_match_parse(user->srange, user->drange,
-                                user->iifname, user->oifname,
-                                user->af, &conf->match);
-        if (err != EDPVS_OK)
-            return err;
-        if (conf->match.af && !conf->af)
-            conf->af = conf->match.af;
-        if ((conf->match.af != AF_INET) && (conf->match.af != AF_INET6))
-            return EDPVS_NOTSUPP;
-    }
-#endif
     memcpy(conf, user, sizeof(dpvs_service_compat_t));
 
     return EDPVS_OK;

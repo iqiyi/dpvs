@@ -91,77 +91,8 @@ typedef struct dp_vs_dest_table {
     dpvs_dest_compat_t entrytable[0];
 } dpvs_dest_table_t;
 
-#if 0
-struct dp_vs_dest_conf {
-    /* destination server address */
-    int                af;
-    union inet_addr    addr;
-    uint16_t           port;
-
-    enum dpvs_fwd_mode fwdmode;
-    /* real server options */
-    unsigned           conn_flags;    /* connection flags */
-    int                weight;     /* destination weight */
-
-    /* thresholds for active connections */
-    uint32_t           max_conn;    /* upper threshold */
-    uint32_t           min_conn;    /* lower threshold */
-};
-
-struct dp_vs_dest_entry {
-    int             af;
-    union inet_addr addr;        /* destination address */
-    uint16_t        port;
-    unsigned        conn_flags;    /* connection flags */
-    int             weight;     /* destination weight */
-
-    uint32_t        max_conn;  /* upper threshold */
-    uint32_t        min_conn;  /* lower threshold */
-
-    uint32_t        actconns;  /* active connections */
-    uint32_t        inactconns;   /* inactive connections */
-    uint32_t        persistconns; /* persistent connections */
-
-    /* statistics */
-    struct dp_vs_stats stats;
-};
-struct dp_vs_get_dests {
-    /* which service: user fills in these */
-    int              af;
-    uint16_t         proto;
-    union inet_addr  addr;        /* virtual address */
-    uint16_t         port;
-    uint32_t         fwmark;       /* firwall mark of service */
-
-    /* number of real servers */
-    unsigned int num_dests;
-
-    lcoreid_t        cid;
-
-    char        srange[256];
-    char        drange[256];
-    char        iifname[IFNAMSIZ];
-    char        oifname[IFNAMSIZ];
-
-    /* the real servers */
-    struct dp_vs_dest_entry entrytable[0];
-};
-
-struct dp_vs_dest_user {
-    int             af;
-    union inet_addr addr;
-    uint16_t        port;
-
-    unsigned        conn_flags;
-    int             weight;
-
-    uint32_t        max_conn;
-    uint32_t        min_conn;
-};
-
-#else
 #define  dp_vs_get_dests  dp_vs_dest_table
 #define  dp_vs_dest_entry dp_vs_dest_compat
 #define  dp_vs_dest_conf  dp_vs_dest_compat
-#endif
+
 #endif /* __DPVS_DEST_CONF_H__ */

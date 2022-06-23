@@ -296,7 +296,7 @@ struct ipvs_command_entry {
     ipvs_service_t      svc;
     ipvs_dest_t         dest;
     ipvs_timeout_t      timeout;
-    ipvs_daemon_t       daemon; // 用不到
+    ipvs_daemon_t       daemon;
     ipvs_laddr_t        laddr;
     ipvs_blklst_t       blklst;
     ipvs_whtlst_t       whtlst;
