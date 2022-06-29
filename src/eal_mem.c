@@ -27,28 +27,28 @@
 
 #if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
 #define MAX_SEGMENT_NUM         (512)
+static uint64_t s_all_socket_heap_freesz[RTE_MAX_NUMA_NODES];
 #else
 #define MAX_SEGMENT_NUM         RTE_MAX_MEMSEG
 #endif
 #define MAX_MEMZONE_NUM         RTE_MAX_MEMZONE
 
-static uint64_t eal_get_free_seg_len(int socket_id)
+#if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
+static int dp_vs_get_all_socket_heap_freesz_stats(void)
 {
-    uint64_t len = 0;
+    int i;
     struct rte_malloc_socket_stats socket_stats;
 
-    if (socket_id < 0 || socket_id > RTE_MAX_NUMA_NODES)
-        return 0;
-
-    memset(&socket_stats, 0, sizeof(struct rte_malloc_socket_stats));
-    if (rte_malloc_get_socket_stats(socket_id, &socket_stats) != 0)
-        return 0;
-    len = socket_stats.heap_freesz_bytes;
-
-    return len;
+    for (i = 0; i < RTE_MAX_NUMA_NODES; i++) {
+        s_all_socket_heap_freesz[i] = 0;
+        if (rte_malloc_get_socket_stats(i, &socket_stats) != 0) {
+            break;
+        }
+        s_all_socket_heap_freesz[i] = socket_stats.heap_freesz_bytes;
+    }
+    return 0;
 }
 
-#if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
 static int dp_vs_fill_mem_seg_info(const struct rte_memseg_list *msl, const struct rte_memseg *ms,
             void *arg)
 {
@@ -68,7 +68,7 @@ static int dp_vs_fill_mem_seg_info(const struct rte_memseg_list *msl, const stru
     seg_ret->socket_id = ms->socket_id;
     seg_ret->nchannel = ms->nchannel;
     seg_ret->nrank = ms->nrank;
-    seg_ret->free_seg_len = eal_get_free_seg_len(ms->socket_id);
+    seg_ret->free_seg_len = s_all_socket_heap_freesz[ms->socket_id];
 
     return 0;
 }
@@ -91,11 +91,28 @@ static void dp_vs_fill_mem_zone_info(const struct rte_memzone *mz, void *arg)
     zone_ret->hugepage_sz = mz->hugepage_sz;
     zone_ret->socket_id = mz->socket_id;
 }
+#else
+static uint64_t eal_get_free_seg_len(int socket_id)
+{
+    uint64_t len = 0;
+    struct rte_malloc_socket_stats socket_stats;
+
+    if (socket_id < 0 || socket_id > RTE_MAX_NUMA_NODES)
+        return 0;
+
+    memset(&socket_stats, 0, sizeof(struct rte_malloc_socket_stats));
+    if (rte_malloc_get_socket_stats(socket_id, &socket_stats) != 0)
+        return 0;
+    len = socket_stats.heap_freesz_bytes;
+
+    return len;
+}
 #endif
 
 static int dp_vs_get_eal_mem_seg(eal_all_mem_seg_ret_t *eal_mem_segs)
 {
 #if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
+    dp_vs_get_all_socket_heap_freesz_stats();
     rte_memseg_walk(dp_vs_fill_mem_seg_info, eal_mem_segs);
 #else
     const struct rte_mem_config *mcfg;
