@@ -398,14 +398,14 @@ int main(int argc, char **argv)
     /* list the table if there is no other arguement */
     if (argc == 1){
         list_all(FMT_NONE);
-        ctrl_plane_close();
+        dpvs_ctrl_close();
         return 0;
     }
 
     /* process command line arguments */
     result = process_options(argc, argv, 0);
 
-    ctrl_plane_close();
+    dpvs_ctrl_close();
     return result;
 }
 

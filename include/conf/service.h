@@ -64,8 +64,6 @@ typedef struct dp_vs_service_compat {
     char iifname[IFNAMSIZ];
     char oifname[IFNAMSIZ];
 
-    char pe_name[0x10];
-
     /*dp_vs_service_entry*/
     unsigned int        num_dests;
     unsigned int        num_laddrs;

@@ -125,7 +125,7 @@ ipvs_stop(void)
     if (no_ipvs)
         return;
 
-    ctrl_plane_close();
+    dpvs_ctrl_close();
 }
 
     void

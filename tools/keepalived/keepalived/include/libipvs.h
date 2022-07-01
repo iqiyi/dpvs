@@ -84,7 +84,7 @@ typedef struct ip_vs_stats_user	ip_vs_stats_t;
 /* init socket and get ipvs info */
 extern int dpvs_ctrl_init(lcoreid_t cid);
 /* close the socket */
-extern void ctrl_plane_close(void);
+extern void dpvs_ctrl_close(void);
 
 /* Set timeout parameters */
 extern int dpvs_set_timeout(ipvs_timeout_t *to);

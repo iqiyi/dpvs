@@ -496,7 +496,7 @@ dpvs_service_compat_t* dpvs_get_service(dpvs_service_compat_t* desc, dpvs_servic
     return detail;
 }
 
-    int __attribute__ ((pure))
+int __attribute__ ((pure))
 dpvs_cmp_services(dpvs_service_compat_t *s1, dpvs_service_compat_t *s2)
 {
     int r, i;
@@ -524,7 +524,7 @@ dpvs_cmp_services(dpvs_service_compat_t *s1, dpvs_service_compat_t *s2)
     return ntohs(s1->port) - ntohs(s2->port);
 }
 
-    int __attribute__ ((pure))
+int __attribute__ ((pure))
 dpvs_cmp_dests(dpvs_dest_compat_t *d1, dpvs_dest_compat_t *d2)
 {
     int r = 0, i;
@@ -541,8 +541,7 @@ dpvs_cmp_dests(dpvs_dest_compat_t *d1, dpvs_dest_compat_t *d2)
     return ntohs(d1->port) - ntohs(d2->port);
 }
 
-    void
-dpvs_sort_services(dpvs_service_table_t *s, dpvs_service_cmp_t f)
+void dpvs_sort_services(dpvs_service_table_t *s, dpvs_service_cmp_t f)
 {
     qsort(s->entrytable, s->num_services,
             sizeof(dpvs_service_compat_t), (qsort_cmp_t)f);
@@ -652,7 +651,7 @@ ipvs_daemon_t *dpvs_get_daemon(void)
     return NULL;
 }
 
-void ctrl_plane_close(void)
+void dpvs_ctrl_close(void)
 {
     if (sockfd != -1) {
         close(sockfd);
