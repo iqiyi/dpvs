@@ -4238,7 +4238,6 @@ static void netif_port_init(void)
 
     this_eth_conf = default_port_conf;
 
-    rte_kni_init(NETIF_MAX_KNI);
     kni_init();
 
     for (pid = 0; pid < nports; pid++) {
