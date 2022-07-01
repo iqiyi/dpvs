@@ -150,31 +150,31 @@
 #define CMD_MAX			CMD_GETWHTLST
 #define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
 
-    static const char* cmdnames[] = {
-        "add-service",
-        "edit-service",
-        "delete-service",
-        "flush",
-        "list",
-        "add-server",
-        "delete-server",
-        "edit-server",
-        "set",
-        "start-daemon",
-        "stop-daemon",
-        "restore",
-        "save",
-        "zero",
-        "add-laddr" ,
-        "del-laddr" ,
-        "get-laddr" ,
-        "add-blklst",
-        "del-blklst",
-        "get-blklst",
-        "add-whtlst",
-        "del-whtlst",
-        "get-whtlst",
-    };
+static const char* cmdnames[] = {
+    "add-service",
+    "edit-service",
+    "delete-service",
+    "flush",
+    "list",
+    "add-server",
+    "delete-server",
+    "edit-server",
+    "set",
+    "start-daemon",
+    "stop-daemon",
+    "restore",
+    "save",
+    "zero",
+    "add-laddr" ,
+    "del-laddr" ,
+    "get-laddr" ,
+    "add-blklst",
+    "del-blklst",
+    "get-blklst",
+    "add-whtlst",
+    "del-whtlst",
+    "get-whtlst",
+};
 
 static const char* optnames[] = {
     "numeric",
@@ -309,7 +309,6 @@ struct ipvs_command_entry {
     dpvs_whtlst_t dpvs_whtlst;
 
     lcoreid_t		cid;
-
 };
 
 /* Use values outside ASCII range so that if an option has
@@ -623,7 +622,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 }
 
                 parse = parse_service(optarg, 
-                            &ce->dpvs_svc);
+                        &ce->dpvs_svc);
                 if (!(parse & SERVICE_ADDR))
                     fail(2, "illegal virtual server "
                             "address[:port] specified");
@@ -675,12 +674,12 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 }
                 break;
             case 'r':
-		{
+                {
                     dpvs_service_compat_t  dpvs_svc;
 
                     set_option(options, OPT_SERVER);
                     parse = parse_service(optarg, &dpvs_svc);
-                
+
                     ce->dpvs_dest.af = dpvs_svc.af;
                     ce->dpvs_dest.port = dpvs_svc.port;
                     ce->dpvs_dest.addr = dpvs_svc.addr;
@@ -692,7 +691,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                         ce->dpvs_dest.port = dpvs_svc.port;
                     }
                     break;
-		}
+                }
             case 'i':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_TUNNEL;
@@ -832,7 +831,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     dpvs_service_compat_t  dpvs_svc;
                     set_option(options,OPT_BLKLST_ADDRESS);
                     parse = parse_service(optarg, 
-                                &dpvs_svc);
+                            &dpvs_svc);
                     if (!(parse & SERVICE_ADDR))
                         fail(2, "illegal blacklist address");
 
@@ -846,7 +845,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     dpvs_service_compat_t  dpvs_svc;
                     set_option(options,OPT_WHTLST_ADDRESS);
                     parse = parse_service(optarg, 
-                                &dpvs_svc);
+                            &dpvs_svc);
                     if (!(parse & SERVICE_ADDR))
                         fail(2, "illegal whitelist address");
 
@@ -1237,7 +1236,7 @@ static int parse_netmask(char *buf, u_int32_t *addr)
  * SERVICE_ADDR:   addr set
  * SERVICE_PORT:   port set
  */
-static int
+    static int
 parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
 {
     char *portp = NULL;
@@ -1285,8 +1284,8 @@ parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
         if ((portn = string_to_number(portp+1, 0, 65535)) != -1) {
             dpvs_svc->port = htons(portn);
         } else if (
-                    (portn = service_to_port(portp+1, dpvs_svc->proto))
-                        != -1) {
+                (portn = service_to_port(portp+1, dpvs_svc->proto))
+                != -1) {
             dpvs_svc->port = htons(portn);
         } else
             return SERVICE_NONE;
@@ -1301,7 +1300,7 @@ parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
  * SIP,TIP := dotted-decimal ip address or square-blacketed ip6 address
  * SPORT,TPORT := range(0, 65535)
  */
-static int
+    static int
 parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 {
     char *pos = buf, *end;
@@ -1471,7 +1470,7 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
     return 0;
 }
 
-static void
+    static void
 generic_opt_check(int command, unsigned int options)
 {
     int i, j;
@@ -1891,7 +1890,7 @@ static void print_title(unsigned int format)
 }
 
 
-static void
+    static void
 print_service_entry(dpvs_service_compat_t *se, unsigned int format)
 {
     char svc_name[1024];
@@ -2468,7 +2467,7 @@ static void list_all(unsigned int format)
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
-    
+
     table->cid = 0;
     table->num_services = g_ipvs_info.num_services;
 

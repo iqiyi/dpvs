@@ -52,10 +52,10 @@ void send_gratuitous_arp(ip_address_t *ipaddress)
  */
 void gratuitous_arp_init(void)
 {
-	log_message(LOG_INFO, "Registering DPVS gratuitous ARP.\n");
+    log_message(LOG_INFO, "Registering DPVS gratuitous ARP.\n");
 }
 
 void gratuitous_arp_close(void)
 {
-	log_message(LOG_INFO, "Unregistering DPVS gratuitous ARP.\n");
+    log_message(LOG_INFO, "Unregistering DPVS gratuitous ARP.\n");
 }
