@@ -82,19 +82,21 @@ typedef struct ip_vs_stats_user	ip_vs_stats_t;
 
 
 /* init socket and get ipvs info */
-extern int ipvs_init(lcoreid_t cid);
+extern int dpvs_ctrl_init(lcoreid_t cid);
+/* close the socket */
+extern void ctrl_plane_close(void);
 
 /* Set timeout parameters */
-extern int ipvs_set_timeout(ipvs_timeout_t *to);
+extern int dpvs_set_timeout(ipvs_timeout_t *to);
 
 /* flush all the rules */
-extern int ipvs_flush(void);
+extern int dpvs_flush(void);
 
 /* add a virtual service */
 extern int dpvs_add_service(dpvs_service_compat_t *svc);
 
 /* update a virtual service with new options */
-extern int ipvs_update_service(ipvs_service_t *svc);
+extern int dpvs_update_service(dpvs_service_compat_t *svc);
 
 /* update a virtual service based on option */
 extern int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int options);
@@ -112,7 +114,7 @@ extern int dpvs_update_dest(dpvs_service_compat_t *svc, dpvs_dest_compat_t *dest
 /* remove a destination server from a service */
 extern int dpvs_del_dest(dpvs_service_compat_t *svc, dpvs_dest_compat_t *dest);
 
-extern struct ip_vs_conn_array *ip_vs_get_conns(const struct ip_vs_conn_req *req);
+extern struct ip_vs_conn_array *dp_vs_get_conns(const struct ip_vs_conn_req *req);
 extern struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_vs_get_laddrs **laddrs);
 extern int dpvs_add_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr);
 extern int dpvs_del_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr);
@@ -126,18 +128,16 @@ extern int dpvs_add_whtlst(dpvs_service_compat_t*,dpvs_whtlst_t *whtlst);
 extern int dpvs_del_whtlst(dpvs_service_compat_t*,dpvs_whtlst_t *whtlst);
 
 /*for add/delete a tunnel*/
-extern int ipvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
-extern int ipvs_del_tunnel(ipvs_tunnel_t * tunnel_entry);
+extern int dpvs_add_tunnel(ipvs_tunnel_t * tunnel_entry);
+extern int dpvs_del_tunnel(ipvs_tunnel_t * tunnel_entry);
 
 /* start a connection synchronizaiton daemon (master/backup) */
-extern int ipvs_start_daemon(ipvs_daemon_t *dm);
+extern int dpvs_start_daemon(ipvs_daemon_t *dm);
 
 /* stop a connection synchronizaiton daemon (master/backup) */
-extern int ipvs_stop_daemon(ipvs_daemon_t *dm);
+extern int dpvs_stop_daemon(ipvs_daemon_t *dm);
 
 /* get all the ipvs services */
-extern struct ip_vs_get_services_app *ipvs_get_services(lcoreid_t);
-
 extern dpvs_service_table_t *dpvs_get_services(dpvs_service_table_t *t);
 
 /* get the destination array of the specified service */
@@ -147,25 +147,23 @@ extern dpvs_dest_table_t* dpvs_get_dests(dpvs_dest_table_t* table);
 extern dpvs_service_compat_t *dpvs_get_service(dpvs_service_compat_t*, dpvs_service_compat_t*);
 
 /* get ipvs timeout */
-extern ipvs_timeout_t *ipvs_get_timeout(void);
+extern ipvs_timeout_t *dpvs_get_timeout(void);
 
 /* get ipvs daemon information */
-extern ipvs_daemon_t *ipvs_get_daemon(void);
+extern ipvs_daemon_t *dpvs_get_daemon(void);
 
-/* close the socket */
-extern void ipvs_close(void);
 
 extern const char *ipvs_strerror(int err);
 
-extern int ipvs_send_gratuitous_arp(struct in_addr *in);
+extern int dpvs_send_gratuitous_arp(struct in_addr *in);
 
-extern int ipvs_set_route(struct dp_vs_route_conf*, int cmd);
+extern int dpvs_set_route(struct dp_vs_route_conf*, int cmd);
 
-extern int ipvs_set_route6(struct dp_vs_route6_conf*, int cmd);
+extern int dpvs_set_route6(struct dp_vs_route6_conf*, int cmd);
 
-extern int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd);
+extern int dpvs_set_ipaddr(struct inet_addr_param *param, int cmd);
 
-extern struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void);
+extern struct dp_vs_blklst_conf_array *dpvs_get_blklsts(void);
 
 typedef int (*dpvs_service_cmp_t)(dpvs_service_compat_t *,dpvs_service_compat_t*);
 extern void dpvs_sort_services(dpvs_service_table_t *s, dpvs_service_cmp_t f);
@@ -175,6 +173,6 @@ typedef int (*dpvs_dest_cmp_t)(dpvs_dest_compat_t*, dpvs_dest_compat_t*);
 extern void dpvs_sort_dests(dpvs_dest_table_t *d, dpvs_dest_cmp_t f);
 extern int dpvs_cmp_dests(dpvs_dest_compat_t *d1, dpvs_dest_compat_t  *d2);
 
-extern struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void);
+extern struct dp_vs_whtlst_conf_array *dpvs_get_whtlsts(void);
 
 #endif /* _LIBIPVS_H */

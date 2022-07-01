@@ -106,7 +106,7 @@ netlink_ipaddress(ip_address_t* ipaddress, char *dpdk_port, int cmd)
 	memset(&param, 0, sizeof(param));
 	dpvs_fill_addrconf(cmd == IPADDRESS_DEL ? 0 : 1, 0,
 			ipaddress, dpdk_port, &param);
-	ipvs_set_ipaddr(&param, cmd);
+	dpvs_set_ipaddr(&param, cmd);
 
 	return 1;
 }

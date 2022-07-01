@@ -44,7 +44,7 @@ void send_gratuitous_arp(ip_address_t *ipaddress)
 {
     log_message(LOG_INFO, "send garp for addr %s.\n", 
             inet_ntop2(ipaddress->u.sin.sin_addr.s_addr));
-    ipvs_send_gratuitous_arp(&(ipaddress->u.sin.sin_addr));
+    dpvs_send_gratuitous_arp(&(ipaddress->u.sin.sin_addr));
 }
 
 /*

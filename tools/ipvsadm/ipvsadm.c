@@ -387,7 +387,7 @@ int main(int argc, char **argv)
 {
     int result;
 
-    if (ipvs_init(0)) {
+    if (ctrl_plane_init(0)) {
         fail(2, "Can't initialize ipvs: %s\n"
                 "Are you sure that dpvs is running?",
                 ipvs_strerror(errno));
@@ -399,14 +399,14 @@ int main(int argc, char **argv)
     /* list the table if there is no other arguement */
     if (argc == 1){
         list_all(FMT_NONE);
-        ipvs_close();
+        ctrl_plane_close();
         return 0;
     }
 
     /* process command line arguments */
     result = process_options(argc, argv, 0);
 
-    ipvs_close();
+    ctrl_plane_close();
     return result;
 }
 
@@ -1056,7 +1056,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
             return 0;
 
         case CMD_FLUSH:
-            result = ipvs_flush();
+            result = dpvs_flush();
             break;
 
         case CMD_ADD:
@@ -1088,15 +1088,15 @@ static int process_options(int argc, char **argv, int reading_stdin)
             break;
 
         case CMD_TIMEOUT:
-            result = ipvs_set_timeout(&ce.timeout);
+            result = dpvs_set_timeout(&ce.timeout);
             break;
 
         case CMD_STARTDAEMON:
-            result = ipvs_start_daemon(&ce.daemon);
+            result = dpvs_start_daemon(&ce.daemon);
             break;
 
         case CMD_STOPDAEMON:
-            result = ipvs_stop_daemon(&ce.daemon);
+            result = dpvs_stop_daemon(&ce.daemon);
             break;
 
         case CMD_ADDLADDR:
@@ -1745,7 +1745,7 @@ static void list_conn(int is_template, unsigned int format)
         req.flag |= GET_IPVS_CONN_FLAG_TEMPLATE;
     req.flag |= GET_IPVS_CONN_FLAG_ALL;
 
-    while((conn_array = ip_vs_get_conns(&req)) != NULL) {
+    while((conn_array = dp_vs_get_conns(&req)) != NULL) {
         for (i = 0; i < conn_array->nconns; i++)
             print_conn_entry(&conn_array->array[i], format);
         req.whence = conn_array->curcid;
@@ -1772,7 +1772,7 @@ static void list_conn_sockpair(int is_template,
         req.flag |= GET_IPVS_CONN_FLAG_TEMPLATE;
     memcpy(&req.sockpair, sockpair, sizeof(ipvs_sockpair_t));
 
-    conn_array = ip_vs_get_conns(&req);
+    conn_array = dp_vs_get_conns(&req);
     if (conn_array == NULL) {
         fprintf(stderr, "connection specified not found\n");
         return;
@@ -2305,7 +2305,7 @@ static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint1
     int i;
     struct dp_vs_blklst_conf_array *get;
 
-    if (!(get = ipvs_get_blklsts())) {
+    if (!(get = dpvs_get_blklsts())) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         return -1;
     }
@@ -2393,7 +2393,7 @@ static int list_whtlst(int af, const union inet_addr *addr, uint16_t port, uint1
     int i;
     struct dp_vs_whtlst_conf_array *get;
 
-    if (!(get = ipvs_get_whtlsts())) {
+    if (!(get = dpvs_get_whtlsts())) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         return -1;
     }
@@ -2494,7 +2494,7 @@ void list_timeout(void)
 {
     ipvs_timeout_t *u;
 
-    if (!(u = ipvs_get_timeout()))
+    if (!(u = dpvs_get_timeout()))
         exit(1);
     printf("Timeout (tcp tcpfin udp): %d %d %d\n",
             u->tcp_timeout, u->tcp_fin_timeout, u->udp_timeout);
@@ -2506,7 +2506,7 @@ static void list_daemon(void)
 {
     ipvs_daemon_t *u;
 
-    if (!(u = ipvs_get_daemon()))
+    if (!(u = dpvs_get_daemon()))
         exit(1);
 
     if (u[0].state & IP_VS_STATE_MASTER)

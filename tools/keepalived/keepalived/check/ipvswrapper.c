@@ -109,7 +109,7 @@ ipvs_start(void)
 {
 	log_message(LOG_DEBUG, "%snitializing ipvs", reload ? "Rei" : "I");
 	/* Initialize IPVS module */
-	if (ipvs_init(0)) {
+	if (dpvs_ctrl_init(0)) {
 		log_message(LOG_INFO, "IPVS: Can't initialize ipvs: %s",
 				ipvs_strerror(errno));
 		no_ipvs = true;
@@ -125,7 +125,7 @@ ipvs_stop(void)
 	if (no_ipvs)
 		return;
 
-	ipvs_close();
+	ctrl_plane_close();
 }
 
 void
@@ -140,7 +140,7 @@ ipvs_set_timeouts(int tcp_timeout, int tcpfin_timeout, int udp_timeout)
 	to.tcp_fin_timeout = tcpfin_timeout;
 	to.udp_timeout = udp_timeout;
 
-	if (ipvs_set_timeout(&to))
+	if (dpvs_set_timeout(&to))
 		log_message(LOG_INFO, "Failed to set ipvs timeouts");
 }
 
@@ -163,13 +163,13 @@ ipvs_talk(int cmd,
 
 	switch (cmd) {
 		case IP_VS_SO_SET_STARTDAEMON:
-			result = ipvs_start_daemon(daemonrule);
+			result = dpvs_start_daemon(daemonrule);
 			break;
 		case IP_VS_SO_SET_STOPDAEMON:
-			result = ipvs_stop_daemon(daemonrule);
+			result = dpvs_stop_daemon(daemonrule);
 			break;
 		case IP_VS_SO_SET_FLUSH:
-			result = ipvs_flush();
+			result = dpvs_flush();
 			break;
 		case IP_VS_SO_SET_ADD:
 			result = dpvs_add_service(srule);
@@ -215,10 +215,10 @@ ipvs_talk(int cmd,
 			result = dpvs_del_whtlst(srule, whtlst_rule);
 			break;
 		case IP_VS_SO_SET_ADDTUNNEL:
-			result = ipvs_add_tunnel(tunnel_rule);
+			result = dpvs_add_tunnel(tunnel_rule);
 			break;
 		case IP_VS_SO_SET_DELTUNNEL:
-			result = ipvs_del_tunnel(tunnel_rule);
+			result = dpvs_del_tunnel(tunnel_rule);
 			break;
 	}
 

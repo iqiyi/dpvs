@@ -41,7 +41,7 @@
 typedef int (*qsort_cmp_t)(const void *, const void *);
 
 static int sockfd = -1;
-static void* ipvs_func = NULL;
+static void* dpvs_ctrl_func = NULL;
 
 typedef struct dpvs_servicedest_s {
     dpvs_service_compat_t dpvs_svc;
@@ -54,13 +54,13 @@ typedef struct dp_vs_service_entry_app {
 
 struct ip_vs_getinfo g_ipvs_info;
 
-int ipvs_init(lcoreid_t cid)
+int dpvs_ctrl_init(lcoreid_t cid)
 {
 	//socklen_t len, len_rcv;
 	size_t len, len_rcv;
 	struct ip_vs_getinfo *ipvs_info_rcv;
 
-	ipvs_func = ipvs_init;
+	dpvs_ctrl_func = dpvs_ctrl_init;
 
 #if !HAVE_DECL_SOCK_CLOEXEC
 	if (set_sock_flags(sockfd, F_SETFD, FD_CLOEXEC)) {
@@ -82,21 +82,21 @@ int ipvs_init(lcoreid_t cid)
 	return 0;
 }
 
-int ipvs_flush(void)
+int dpvs_flush(void)
 {
 	return dpvs_setsockopt(DPVS_SO_SET_FLUSH, NULL, 0);
 }
 
 int dpvs_add_service(dpvs_service_compat_t *svc)
 {
-	ipvs_func = dpvs_add_service;
+	dpvs_ctrl_func = dpvs_add_service;
 
 	return dpvs_setsockopt(DPVS_SO_SET_ADD, svc, sizeof(dpvs_service_compat_t));
 }
 
 int dpvs_update_service(dpvs_service_compat_t *svc)
 {
-	ipvs_func = dpvs_update_service;
+	dpvs_ctrl_func = dpvs_update_service;
 
 	return dpvs_setsockopt(DPVS_SO_SET_EDIT, svc, sizeof(dpvs_service_compat_t));
 }
@@ -167,14 +167,14 @@ int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int opti
 
 int dpvs_del_service(dpvs_service_compat_t *dpvs_svc)
 {
-	ipvs_func = dpvs_del_service;
+	dpvs_ctrl_func = dpvs_del_service;
 
 	return dpvs_setsockopt(DPVS_SO_SET_DEL, dpvs_svc, sizeof(dpvs_service_compat_t));
 }
 
 int dpvs_zero_service(dpvs_service_compat_t *svc)
 {
-	ipvs_func = dpvs_zero_service;
+	dpvs_ctrl_func = dpvs_zero_service;
 
 	return dpvs_setsockopt(DPVS_SO_SET_ZERO, svc, sizeof(dpvs_service_compat_t));
 }
@@ -184,7 +184,7 @@ int dpvs_add_dest(dpvs_service_compat_t *svc, dpvs_dest_compat_t *dest)
 	dpvs_servicedest_t svcdest;
         int len_svc, len_dest;
 
-	ipvs_func = dpvs_add_dest;
+	dpvs_ctrl_func = dpvs_add_dest;
 
         memcpy(&svcdest.dpvs_svc, svc, sizeof(dpvs_service_compat_t));
         memcpy(&svcdest.dpvs_dest, dest, sizeof(dpvs_dest_compat_t));
@@ -196,7 +196,7 @@ int dpvs_update_dest(dpvs_service_compat_t *svc, dpvs_dest_compat_t *dest)
 {
 	dpvs_servicedest_t svcdest;
 
-	ipvs_func = dpvs_update_dest;
+	dpvs_ctrl_func = dpvs_update_dest;
 
     	memcpy(&svcdest.dpvs_svc, svc, sizeof(dpvs_service_compat_t));
 	memcpy(&svcdest.dpvs_dest, dest, sizeof(dpvs_dest_compat_t));
@@ -208,7 +208,7 @@ int dpvs_del_dest(dpvs_service_compat_t *svc, dpvs_dest_compat_t *dest)
 {
 	dpvs_servicedest_t svcdest;
 
-	ipvs_func = dpvs_del_dest;
+	dpvs_ctrl_func = dpvs_del_dest;
 
         memcpy(&svcdest.dpvs_svc, svc, sizeof(dpvs_service_compat_t));
         memcpy(&svcdest.dpvs_dest, dest, sizeof(dpvs_dest_compat_t));
@@ -261,7 +261,7 @@ int dpvs_add_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr)
 {
 	struct inet_addr_param param;
 
-	ipvs_func = dpvs_add_laddr;
+	dpvs_ctrl_func = dpvs_add_laddr;
 
         dpvs_fill_laddr_conf(svc, laddr);
 
@@ -275,7 +275,7 @@ int dpvs_del_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr)
 {
 	struct inet_addr_param param;
 
-	ipvs_func = dpvs_del_laddr;
+	dpvs_ctrl_func = dpvs_del_laddr;
 
         dpvs_fill_laddr_conf(svc, laddr);
 
@@ -303,7 +303,7 @@ static void dpvs_fill_blklst_conf(dpvs_service_compat_t *svc, dpvs_blklst_t *blk
 
 int dpvs_add_blklst(dpvs_service_compat_t* svc, dpvs_blklst_t *blklst)
 {
-    ipvs_func = dpvs_add_blklst;
+    dpvs_ctrl_func = dpvs_add_blklst;
 
     dpvs_fill_blklst_conf(svc, blklst);
 
@@ -312,7 +312,7 @@ int dpvs_add_blklst(dpvs_service_compat_t* svc, dpvs_blklst_t *blklst)
 
 int dpvs_del_blklst(dpvs_service_compat_t* svc, dpvs_blklst_t *blklst)
 {
-    ipvs_func = dpvs_del_blklst;
+    dpvs_ctrl_func = dpvs_del_blklst;
 
     dpvs_fill_blklst_conf(svc, blklst);
 
@@ -337,7 +337,7 @@ static void dpvs_fill_whtlst_conf(dpvs_service_compat_t *svc, dpvs_whtlst_t *wht
 
 int dpvs_add_whtlst(dpvs_service_compat_t* svc, dpvs_whtlst_t *whtlst)
 {
-    ipvs_func = dpvs_add_whtlst;
+    dpvs_ctrl_func = dpvs_add_whtlst;
 
     dpvs_fill_whtlst_conf(svc, whtlst);
 
@@ -346,7 +346,7 @@ int dpvs_add_whtlst(dpvs_service_compat_t* svc, dpvs_whtlst_t *whtlst)
 
 int dpvs_del_whtlst(dpvs_service_compat_t* svc, dpvs_whtlst_t *whtlst)
 {
-    ipvs_func = dpvs_del_whtlst;
+    dpvs_ctrl_func = dpvs_del_whtlst;
 
     dpvs_fill_whtlst_conf(svc, whtlst);
 
@@ -367,48 +367,48 @@ static void ipvs_fill_tunnel_conf(ipvs_tunnel_t *tunnel_entry,
 	return;
 }
 
-int ipvs_add_tunnel(ipvs_tunnel_t *tunnel_entry)
+int dpvs_add_tunnel(ipvs_tunnel_t *tunnel_entry)
 {
 	struct ip_tunnel_param conf;
 
-	ipvs_func = ipvs_add_tunnel;
+	dpvs_ctrl_func = dpvs_add_tunnel;
 
 	ipvs_fill_tunnel_conf(tunnel_entry, &conf);
 
 	return dpvs_setsockopt(SOCKOPT_TUNNEL_ADD, &conf, sizeof(conf));
 }
 
-int ipvs_del_tunnel(ipvs_tunnel_t *tunnel_entry)
+int dpvs_del_tunnel(ipvs_tunnel_t *tunnel_entry)
 {
 	struct ip_tunnel_param conf;
 
-	ipvs_func = ipvs_del_tunnel;
+	dpvs_ctrl_func = dpvs_del_tunnel;
 
 	ipvs_fill_tunnel_conf(tunnel_entry, &conf);
 
 	return dpvs_setsockopt(SOCKOPT_TUNNEL_DEL, &conf, sizeof(conf));
 }
 
-int ipvs_set_timeout(ipvs_timeout_t *to)
+int dpvs_set_timeout(ipvs_timeout_t *to)
 {
-	ipvs_func = ipvs_set_timeout;
+	dpvs_ctrl_func = dpvs_set_timeout;
 
 	return setsockopt(sockfd, IPPROTO_IP, IP_VS_SO_SET_TIMEOUT, (char *)to,
 			  sizeof(*to));
 }
 
-int ipvs_start_daemon(ipvs_daemon_t *dm)
+int dpvs_start_daemon(ipvs_daemon_t *dm)
 {
-	ipvs_func = ipvs_start_daemon;
+	dpvs_ctrl_func = dpvs_start_daemon;
 
 	return setsockopt(sockfd, IPPROTO_IP, IP_VS_SO_SET_STARTDAEMON,
 			  (char *)&dm, sizeof(dm));
 }
 
 
-int ipvs_stop_daemon(ipvs_daemon_t *dm)
+int dpvs_stop_daemon(ipvs_daemon_t *dm)
 {
-	ipvs_func = ipvs_stop_daemon;
+	dpvs_ctrl_func = dpvs_stop_daemon;
 
 	return setsockopt(sockfd, IPPROTO_IP, IP_VS_SO_SET_STOPDAEMON,
 			  (char *)&dm, sizeof(dm));
@@ -429,7 +429,7 @@ dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
     dpvs_service_table_t* rcv;
     size_t lrcv, len;
 
-    ipvs_func = dpvs_get_services;
+    dpvs_ctrl_func = dpvs_get_services;
 
     assert(svcs);
 
@@ -477,7 +477,7 @@ dpvs_service_compat_t* dpvs_get_service(dpvs_service_compat_t* desc, dpvs_servic
     size_t len, lrcv;
     dpvs_service_compat_t *rcv;
 
-    ipvs_func = dpvs_get_service;
+    dpvs_ctrl_func = dpvs_get_service;
 
     assert(detail);
 
@@ -554,11 +554,11 @@ void dpvs_sort_dests(dpvs_dest_table_t *d, dpvs_dest_cmp_t f)
 	      sizeof(dpvs_dest_compat_t), (qsort_cmp_t)f);
 }
 
-int ipvs_set_route(struct dp_vs_route_conf *rt, int cmd)
+int dpvs_set_route(struct dp_vs_route_conf *rt, int cmd)
 {
 	int err = -1;
 
-	ipvs_func = ipvs_set_route;
+	dpvs_ctrl_func = dpvs_set_route;
 
 	if (cmd == IPROUTE_DEL){
 		err = dpvs_setsockopt(SOCKOPT_SET_ROUTE_DEL, rt, sizeof(struct dp_vs_route_conf));
@@ -569,11 +569,11 @@ int ipvs_set_route(struct dp_vs_route_conf *rt, int cmd)
 	return err;
 }
 
-int ipvs_set_route6(struct dp_vs_route6_conf *rt6_cfg, int cmd)
+int dpvs_set_route6(struct dp_vs_route6_conf *rt6_cfg, int cmd)
 {
 	int err = -1;
 
-	ipvs_func = ipvs_set_route6;
+	dpvs_ctrl_func = dpvs_set_route6;
 
 	if (cmd == IPROUTE_DEL) {
 		rt6_cfg->ops = RT6_OPS_DEL;
@@ -587,11 +587,11 @@ int ipvs_set_route6(struct dp_vs_route6_conf *rt6_cfg, int cmd)
 	return err;
 }
 
-int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd)
+int dpvs_set_ipaddr(struct inet_addr_param *param, int cmd)
 {
 	int err = -1;
 
-	ipvs_func = ipvs_set_ipaddr;
+	dpvs_ctrl_func = dpvs_set_ipaddr;
 
 	if (cmd == IPADDRESS_DEL)
 	   err = dpvs_setsockopt(SOCKOPT_SET_IFADDR_DEL, param, sizeof(struct inet_addr_param));
@@ -601,26 +601,26 @@ int ipvs_set_ipaddr(struct inet_addr_param *param, int cmd)
 	return err;
 }
 
-int ipvs_send_gratuitous_arp(struct in_addr *in)
+int dpvs_send_gratuitous_arp(struct in_addr *in)
 {
-	ipvs_func = ipvs_send_gratuitous_arp;
+	dpvs_ctrl_func = dpvs_send_gratuitous_arp;
 
 	return dpvs_setsockopt(DPVS_SO_SET_GRATARP, in, sizeof(in));
 }
 
-ipvs_timeout_t *ipvs_get_timeout(void)
+ipvs_timeout_t *dpvs_get_timeout(void)
 {
 #if 0
 	ipvs_timeout_t *u;
 	socklen_t len;
 
-	ipvs_func = ipvs_get_timeout;
+	dpvs_ctrl_func = dpvs_get_timeout;
 
 	len = sizeof(*u);
 	if (!(u = malloc(len)))
 		return NULL;
 
-	ipvs_func = ipvs_get_timeout;
+	dpvs_ctrl_func = dpvs_get_timeout;
 	if (getsockopt(sockfd, IPPROTO_IP, IP_VS_SO_GET_TIMEOUT,
 		       (char *)u, &len)) {
 		free(u);
@@ -630,7 +630,7 @@ ipvs_timeout_t *ipvs_get_timeout(void)
 	return NULL;
 }
 
-ipvs_daemon_t *ipvs_get_daemon(void)
+ipvs_daemon_t *dpvs_get_daemon(void)
 {
 #if 0
 	ipvs_daemon_t *u;
@@ -642,7 +642,7 @@ ipvs_daemon_t *ipvs_get_daemon(void)
 	if (!(u = malloc(len)))
 		return NULL;
 
-	ipvs_func = ipvs_get_daemon;
+	dpvs_ctrl_func = dpvs_get_daemon;
 	if (getsockopt(sockfd, IPPROTO_IP, IP_VS_SO_GET_DAEMON, (char *)u, &len)) {
 		free(u);
 		return NULL;
@@ -652,7 +652,7 @@ ipvs_daemon_t *ipvs_get_daemon(void)
 	return NULL;
 }
 
-void ipvs_close(void)
+void ctrl_plane_close(void)
 {
 	if (sockfd != -1) {
 		close(sockfd);
@@ -660,13 +660,13 @@ void ipvs_close(void)
 	}
 }
 
-struct ip_vs_conn_array *ip_vs_get_conns(const struct ip_vs_conn_req *req)
+struct ip_vs_conn_array *dp_vs_get_conns(const struct ip_vs_conn_req *req)
 {
 	int res;
 	size_t arrlen, rcvlen;
 	struct ip_vs_conn_array *conn_arr, *arr_rcv;
 
-	ipvs_func = ip_vs_get_conns;
+	dpvs_ctrl_func = dp_vs_get_conns;
 
 	if (req->flag & GET_IPVS_CONN_FLAG_SPECIFIED)
 		res = dpvs_getsockopt(SOCKOPT_GET_CONN_SPECIFIED, req,
@@ -712,7 +712,7 @@ struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_v
 	size_t res_size, len;
 	int i;
 
-	ipvs_func = dpvs_get_laddrs;
+	dpvs_ctrl_func = dpvs_get_laddrs;
 
 	memset(&conf, 0, sizeof(struct dp_vs_laddr_conf));
 	conf.af_s = svc->af;
@@ -733,17 +733,15 @@ struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_v
 	if (dpvs_getsockopt(cpu2opt_laddr(svc->cid, SOCKOPT_GET_LADDR_GETALL), &conf, sizeof(conf),
 				(void **)&result, &res_size) != 0) {
 		return NULL;
-        }
+    }
 
-	printf("befor malloc laddrs = %p\n", laddrs);
-        len =  sizeof(struct ip_vs_get_laddrs) + result->nladdrs * sizeof(struct ip_vs_laddr_entry);
+    len =  sizeof(struct ip_vs_get_laddrs) + result->nladdrs * sizeof(struct ip_vs_laddr_entry);
 	*laddrs = malloc(len);
-	printf("after malloc laddrs = %p\n", laddrs);
 
 	if (*laddrs == NULL) {
 		dpvs_sockopt_msg_free(result);
 		return NULL;
-        }
+    }
 
 	memset(*laddrs, 0, len);
 	(*laddrs)->protocol = result->proto;
@@ -772,13 +770,13 @@ struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_v
 	return *laddrs;
 }
 
-struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
+struct dp_vs_blklst_conf_array *dpvs_get_blklsts(void)
 {
 	struct dp_vs_blklst_conf_array *array, *result;
 	size_t size;
 	int i, err;
 
-	ipvs_func = ipvs_get_blklsts;
+	dpvs_ctrl_func = dpvs_get_blklsts;
 
 	err = dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL, NULL, 0, 
 				(void **)&result, &size);
@@ -802,13 +800,13 @@ struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
 	return array;
 }
 
-struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void)
+struct dp_vs_whtlst_conf_array *dpvs_get_whtlsts(void)
 {
 	struct dp_vs_whtlst_conf_array *array, *result;
 	size_t size;
 	int i, err;
 
-	ipvs_func = ipvs_get_whtlsts;
+	dpvs_ctrl_func = dpvs_get_whtlsts;
 
 	err = dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL, NULL, 0, 
 				(void **)&result, &size);
@@ -857,8 +855,8 @@ const char *ipvs_strerror(int err)
 		{ dpvs_update_dest, ENOENT, "No such destination" },
 		{ dpvs_del_dest, ESRCH, "Service not defined" },
 		{ dpvs_del_dest, ENOENT, "No such destination" },
-		{ ipvs_start_daemon, EEXIST, "Daemon has already run" },
-		{ ipvs_stop_daemon, ESRCH, "No daemon is running" },
+		{ dpvs_start_daemon, EEXIST, "Daemon has already run" },
+		{ dpvs_stop_daemon, ESRCH, "No daemon is running" },
 		{ dpvs_add_laddr, ESRCH, "Service not defined" },
 		{ dpvs_add_laddr, EEXIST, "Local address already exists" },
 		{ dpvs_del_laddr, ESRCH, "Service not defined" },
@@ -872,8 +870,8 @@ const char *ipvs_strerror(int err)
 		{ dpvs_add_whtlst, EEXIST, "whitelist address already exists" },
 		{ dpvs_del_whtlst, ESRCH, "Service not defined" },
 		{ dpvs_del_whtlst, ENOENT, "No such deny address" },
-		{ ipvs_get_blklsts, ESRCH, "Service not defined" },
-		{ ipvs_get_whtlsts, ESRCH, "Service not defined" },
+		{ dpvs_get_blklsts, ESRCH, "Service not defined" },
+		{ dpvs_get_whtlsts, ESRCH, "Service not defined" },
 		{ dpvs_get_dests, ESRCH, "No such service" },
 		{ 0, EPERM, "Permission denied (you must be root)" },
 		{ 0, EINVAL, "Invalid operation.  Possibly wrong module version, address not unicast, ..." },
@@ -885,7 +883,7 @@ const char *ipvs_strerror(int err)
 	};
 
 	for (i = 0; i < sizeof(table)/sizeof(struct table_struct); i++) {
-		if ((!table[i].func || table[i].func == ipvs_func)
+		if ((!table[i].func || table[i].func == dpvs_ctrl_func)
 		    && table[i].err == err)
 			return table[i].message;
 	}
