@@ -191,7 +191,7 @@ static void
 bfd_end_handler(void)
 {
 	bfd_checker_t *cbfd;
-       
+
 	if (!new_checker)
 		return;
 
@@ -205,7 +205,7 @@ bfd_end_handler(void)
 	}
 
 //	if (!bdfc->weight)
-//		bdfc->weight = 
+//		bdfc->weight =
 
 	/* Add the bfd to the RS's list */
 	if (!LIST_EXISTS(new_checker->rs->tracked_bfds))

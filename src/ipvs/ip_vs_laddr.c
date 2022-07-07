@@ -463,7 +463,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match, 
+                               laddr_conf->fwmark, NULL, &match,
                                NULL, rte_lcore_id());
     if (!svc)
         return EDPVS_NOSERV;
@@ -506,12 +506,12 @@ static int get_msg_cb(struct dpvs_msg *msg)
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match, 
+                               laddr_conf->fwmark, NULL, &match,
                                NULL, cid);
     if (!svc) {
         return EDPVS_NOSERV;
-    } 
-    err = dp_vs_laddr_getall(svc, &addrs, &naddr); 
+    }
+    err = dp_vs_laddr_getall(svc, &addrs, &naddr);
     if (err != EDPVS_OK)
         return err;
 
@@ -628,7 +628,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                     msg_destroy(&msg);
                     return err;
                 }
-                
+
                 *outsize = sizeof(*laddr_conf) + naddr * sizeof(struct dp_vs_laddr_entry);
                 *out = rte_malloc(0, *outsize, RTE_CACHE_LINE_SIZE);
                 if (!*out) {
@@ -754,7 +754,7 @@ int dp_vs_laddr_init(void)
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
         return err;
-    }   
+    }
 
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_LADDR_GET_ALL;

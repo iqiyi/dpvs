@@ -935,14 +935,14 @@ vs_weight_handler(const vector_t *strvec)
 	vs->weight = weight;
 }
 
-static void 
+static void
 laddr_gname_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
 	vs->local_addr_gname = set_value(strvec);
 }
 
-static void 
+static void
 syn_proxy_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
@@ -1056,7 +1056,7 @@ static void
 limit_proportion_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
-    char *str = vector_slot(strvec, 1); 
+    char *str = vector_slot(strvec, 1);
     vs->limit_proportion = atoi(str);
 }
 

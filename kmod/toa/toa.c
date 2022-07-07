@@ -101,7 +101,7 @@ struct toa_stats_entry toa_stats[] = {
     TOA_STAT_ITEM("syn_recv_sock_no_toa", SYN_RECV_SOCK_NO_TOA_CNT),
     TOA_STAT_ITEM("getname_toa_ok", GETNAME_TOA_OK_CNT),
     TOA_STAT_ITEM("getname_toa_mismatch", GETNAME_TOA_MISMATCH_CNT),
-    TOA_STAT_ITEM("getname_toa_bypass", GETNAME_TOA_BYPASS_CNT), 
+    TOA_STAT_ITEM("getname_toa_bypass", GETNAME_TOA_BYPASS_CNT),
     TOA_STAT_ITEM("getname_toa_empty", GETNAME_TOA_EMPTY_CNT),
 #if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
     TOA_STAT_ITEM("ip6_address_alloc", IP6_ADDR_ALLOC_CNT),
@@ -119,7 +119,7 @@ unsigned int is_ro_addr(unsigned long addr)
     {
             ro_enable = 0;
     }
-    
+
     return ro_enable;
 }
 
@@ -251,7 +251,7 @@ init_toa_ip6(void)
     return 0;
 }
 
-static void 
+static void
 tcp_v6_sk_destruct_toa(struct sock *sk) {
 
         lock_cpu_toa_ip6_sk();
@@ -831,10 +831,10 @@ hook_toa_functions(void)
     struct proto_ops *inet_stream_ops_p;
     struct inet_connection_sock_af_ops *ipv4_specific_p;
     int rw_enable = 0;
-    
+
     /* hook inet_getname for ipv4 */
     inet_stream_ops_p = (struct proto_ops *)&inet_stream_ops;
-    
+
     if (is_ro_addr((unsigned long)(&inet_stream_ops.getname))) {
             set_addr_rw((unsigned long)(&inet_stream_ops.getname));
             rw_enable = 1;
@@ -846,9 +846,9 @@ hook_toa_functions(void)
     }
     TOA_INFO("CPU [%u] hooked inet_getname <%p> --> <%p>\n",
             smp_processor_id(), inet_getname, inet_stream_ops_p->getname);
-    
+
     ipv4_specific_p = (struct inet_connection_sock_af_ops *)&ipv4_specific;
-    
+
     if (is_ro_addr((unsigned long)(&ipv4_specific.syn_recv_sock))) {
             set_addr_rw((unsigned long)(&ipv4_specific.syn_recv_sock));
             rw_enable = 1;
@@ -899,10 +899,10 @@ unhook_toa_functions(void)
     struct proto_ops *inet_stream_ops_p;
     struct inet_connection_sock_af_ops *ipv4_specific_p;
     int rw_enable = 0;
-    
+
     /* unhook inet_getname for ipv4 */
     inet_stream_ops_p = (struct proto_ops *)&inet_stream_ops;
-    
+
     if (is_ro_addr((unsigned long)(&inet_stream_ops.getname))) {
             set_addr_rw((unsigned long)(&inet_stream_ops.getname));
             rw_enable = 1;
@@ -913,7 +913,7 @@ unhook_toa_functions(void)
             rw_enable = 0;
     }
     TOA_INFO("CPU [%u] unhooked inet_getname\n", smp_processor_id());
-    
+
     /* unhook tcp_v4_syn_recv_sock for ipv4 */
     ipv4_specific_p = (struct inet_connection_sock_af_ops *)&ipv4_specific;
     if (is_ro_addr((unsigned long)(&ipv4_specific.syn_recv_sock))) {

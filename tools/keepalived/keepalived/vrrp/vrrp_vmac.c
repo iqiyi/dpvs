@@ -148,7 +148,7 @@ remove_vmac_auto_gen_addr(interface_t *ifp, struct in6_addr *addr)
 	memset(&ipaddress, 0, sizeof(ipaddress));
 
 	ipaddress.ifp = ifp;
-	ipaddress.u.sin6_addr = *addr; 
+	ipaddress.u.sin6_addr = *addr;
 	ipaddress.ifa.ifa_family = AF_INET6;
 	ipaddress.ifa.ifa_prefixlen = 64;
 	ipaddress.ifa.ifa_index = ifp->ifindex;

@@ -171,7 +171,7 @@ void dpvs_mempool_destroy(struct dpvs_mempool *mp)
 static int get_pool_array_index(const struct dpvs_mempool *mp, int size)
 {
     int lower, mid, upper;
-    
+
     lower = 0;
     upper = mp->pool_arr_size - 1;
 

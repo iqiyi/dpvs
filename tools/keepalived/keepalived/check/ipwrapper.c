@@ -1038,7 +1038,7 @@ laddr_entry_exist(local_addr_entry *laddr_entry, list l)
 	local_addr_entry *entry;
 
 	LIST_FOREACH(l, entry, e) {
-		if (sockstorage_equal(&entry->addr, &laddr_entry->addr) && 
+		if (sockstorage_equal(&entry->addr, &laddr_entry->addr) &&
 				(entry->range == laddr_entry->range) &&
                          !strcmp(entry->ifname, laddr_entry->ifname))
 			return 1;
@@ -1055,7 +1055,7 @@ clear_diff_laddr_entry(list old, list new, virtual_server_t * old_vs)
 
 	LIST_FOREACH(old, laddr_entry, e) {
 		if (!laddr_entry_exist(laddr_entry, new)) {
-			log_message(LOG_INFO, "VS [%s-%d] in local address group %s no longer exist\n" 
+			log_message(LOG_INFO, "VS [%s-%d] in local address group %s no longer exist\n"
 					    , inet_sockaddrtos(&laddr_entry->addr)
 					    , laddr_entry->range
 					    , old_vs->local_addr_gname);
@@ -1076,17 +1076,17 @@ clear_diff_laddr(virtual_server_t * old_vs)
 	local_addr_group *new;
 
 	/*
- 	 *  If old vs was not in fulllnat mod or didn't own local address group, 
- 	 * then do nothing and return 
+ 	 *  If old vs was not in fulllnat mod or didn't own local address group,
+ 	 * then do nothing and return
  	 */
-	if ((old_vs->forwarding_method != IP_VS_CONN_F_FULLNAT) || 
+	if ((old_vs->forwarding_method != IP_VS_CONN_F_FULLNAT) ||
 						!old_vs->local_addr_gname)
 		return 1;
 
 	/* Fetch local address group */
-	old = ipvs_get_laddr_group_by_name(old_vs->local_addr_gname, 
+	old = ipvs_get_laddr_group_by_name(old_vs->local_addr_gname,
 							old_check_data->laddr_group);
-	new = ipvs_get_laddr_group_by_name(old_vs->local_addr_gname, 
+	new = ipvs_get_laddr_group_by_name(old_vs->local_addr_gname,
 							check_data->laddr_group);
 
 	if (!clear_diff_laddr_entry(old->addr_ip, new->addr_ip, old_vs))
@@ -1142,8 +1142,8 @@ clear_diff_blklst(virtual_server_t * old_vs)
 	blklst_addr_group *new;
 
 	/*
-	 *  If old vs  didn't own blacklist address group, 
-	 * then do nothing and return 
+	 *  If old vs  didn't own blacklist address group,
+	 * then do nothing and return
 	 */
 	if (!old_vs->blklst_addr_gname)
 		return 1;
@@ -1489,12 +1489,12 @@ int clear_diff_tunnel(void)
 	return IPVS_SUCCESS;
 }
 
-void 
+void
 clear_tunnels(void)
 {
 	element e;
 	tunnel_group *group;
-	
+
 	LIST_FOREACH(check_data->tunnel_group, group, e) {
 		clear_tunnel_group(group);
 	}

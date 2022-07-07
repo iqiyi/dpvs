@@ -78,11 +78,11 @@ void *qsch_shm_get_or_create(struct Qsch *sch, uint32_t len)
         obj->refcnt++;
         goto done;
     }
-    
+
     obj = rte_zmalloc("qsch_shm_obj", sizeof(struct sch_shm_obj) + len, RTE_CACHE_LINE_SIZE);
     if (!obj)
         goto done;
-    
+
     obj->portid = pid;
     obj->handle = handle;
     obj->len = len;

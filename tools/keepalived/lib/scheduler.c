@@ -1249,7 +1249,7 @@ thread_add_timer_shutdown(thread_master_t *m, thread_func_t func, void *arg, uns
 		thread_t *p;
 		const thread_t *cp;
 	} thread;
-       
+
 	thread.cp = thread_add_timer(m, func, arg, timer);
 
 	thread.p->type = THREAD_TIMER_SHUTDOWN;

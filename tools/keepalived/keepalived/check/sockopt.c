@@ -88,7 +88,7 @@ static inline int sockopt_msg_send(int clt_fd,
     return 0;
 }
 
-static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg_reply *reply_hdr, 
+static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg_reply *reply_hdr,
         void **out, size_t *out_len)
 {
     void *msg = NULL;

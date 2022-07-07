@@ -257,7 +257,7 @@ alloc_vsg_entry(const vector_t *strvec)
     unsigned fwmark;
 
     new = (virtual_server_group_entry_t *) MALLOC(sizeof(virtual_server_group_entry_t));
-   
+
     if (!strcmp(strvec_slot(strvec, 0), "fwmark")) {
         if (!read_unsigned_strvec(strvec, 1, &fwmark, 0, UINT32_MAX, true)) {
             report_config_error(CONFIG_GENERAL_ERROR, "(%s): fwmark '%s' must be in [0, %u] - ignoring", vsg->gname, strvec_slot(strvec, 1), UINT32_MAX);
@@ -559,7 +559,7 @@ alloc_vs(const char *param1, const char *param2)
 		new->vfwmark = fwmark;
 	}
 	else if (!strcmp(param1, "match")) {
-		new->forwarding_method = IP_VS_CONN_F_SNAT; 
+		new->forwarding_method = IP_VS_CONN_F_SNAT;
 
 	} else {
 		/* Don't pass a zero for port number to inet_stosockaddr. This was added in v2.0.7
@@ -619,8 +619,8 @@ alloc_vs(const char *param1, const char *param2)
 }
 
 /*local address group facility functions*/
-static void 
-free_laddr_group(void *data) 
+static void
+free_laddr_group(void *data)
 {
     local_addr_group *laddr_group = (local_addr_group*)data;
     FREE_PTR(laddr_group->gname);

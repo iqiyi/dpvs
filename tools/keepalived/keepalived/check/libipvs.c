@@ -44,7 +44,7 @@ static void* ipvs_func = NULL;
 
 typedef struct dpvs_servicedest_s {
 	struct dp_vs_service_user	svc;
-	struct dp_vs_dest_user		dest; 
+	struct dp_vs_dest_user		dest;
 } dpvs_servicedest_t;
 
 typedef struct dp_vs_service_entry_app {
@@ -267,7 +267,7 @@ int ipvs_update_service_synproxy(ipvs_service_t *svc , int enable)
 		svc->user.flags |= IP_VS_CONN_F_SYNPROXY;
 	else
 		svc->user.flags &= (~IP_VS_CONN_F_SYNPROXY);
-	
+
 	return ipvs_update_service_by_options(svc, options);
 }
 
@@ -335,7 +335,7 @@ int ipvs_del_dest(ipvs_service_t *svc, ipvs_dest_t *dest)
 	return dpvs_setsockopt(DPVS_SO_SET_DELDEST, &svcdest, sizeof(svcdest));
 }
 
-static void ipvs_fill_laddr_conf(ipvs_service_t *svc, ipvs_laddr_t *laddr, 
+static void ipvs_fill_laddr_conf(ipvs_service_t *svc, ipvs_laddr_t *laddr,
                                  struct dp_vs_laddr_conf *conf)
 {
 	memset(conf, 0, sizeof(*conf));
@@ -355,7 +355,7 @@ static void ipvs_fill_laddr_conf(ipvs_service_t *svc, ipvs_laddr_t *laddr,
 	} else {
 		conf->vaddr.in6 = svc->nf_addr.in6;
 		conf->laddr.in6 = laddr->addr.in6;
-	}    
+	}
 
 	return ;
 }
@@ -629,7 +629,7 @@ struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t 
 
 	ipvs_func = ipvs_get_dests;
 
-	len = sizeof(struct ip_vs_get_dests_app) + 
+	len = sizeof(struct ip_vs_get_dests_app) +
 		sizeof(ipvs_dest_entry_t) * svc->user.num_dests;
 	if (!(d = calloc(len, 1)))
 		return NULL;
@@ -679,7 +679,7 @@ struct ip_vs_get_dests_app *ipvs_get_dests(ipvs_service_entry_t *svc, lcoreid_t 
 		if (d->user.entrytable[i].af == AF_INET)
 			d->user.entrytable[i].user.__addr_v4 = d->user.entrytable[i].nf_addr.ip;
 	}
-	free(dpvs_dests);	
+	free(dpvs_dests);
 	dpvs_sockopt_msg_free(dpvs_dests_rcv);
 	return d;
 }
@@ -710,14 +710,14 @@ ipvs_get_service(ipvs_service_t *hint, lcoreid_t cid)
 	memcpy(&dpvs_svc, dpvs_app_ptr, sizeof(dpvs_app));
 	dpvs_svc.user.cid = cid;
 
-	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICE), 
-		&dpvs_svc, 
-		len, 
-		(void **)&dpvs_svc_rcv, 
+	if (dpvs_getsockopt(cpu2opt_svc(cid, DPVS_SO_GET_SERVICE),
+		&dpvs_svc,
+		len,
+		(void **)&dpvs_svc_rcv,
 		&len_rcv)) {
 		goto out_err;
 	}
-	
+
 	DPVS_2_IPVS(svc, dpvs_svc_rcv)
 	if (svc->af == AF_INET) {
 		svc->pe_name[0] = '\0';
@@ -1010,7 +1010,7 @@ struct dp_vs_blklst_conf_array *ipvs_get_blklsts(void)
 
 	ipvs_func = ipvs_get_blklsts;
 
-	err = dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL, NULL, 0, 
+	err = dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL, NULL, 0,
 				(void **)&result, &size);
 	if (err != 0)
 		return NULL;
@@ -1040,7 +1040,7 @@ struct dp_vs_whtlst_conf_array *ipvs_get_whtlsts(void)
 
 	ipvs_func = ipvs_get_whtlsts;
 
-	err = dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL, NULL, 0, 
+	err = dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL, NULL, 0,
 				(void **)&result, &size);
 	if (err != 0)
 		return NULL;

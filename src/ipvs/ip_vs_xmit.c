@@ -1520,7 +1520,7 @@ static int __dp_vs_out_xmit_snat4(struct dp_vs_proto *proto,
         fl4.fl4_daddr = conn->caddr.in;
         fl4.fl4_saddr = conn->vaddr.in;
         fl4.fl4_tos = iph->type_of_service;
-        
+
 
         if (conn->outwall) {
 	    rt = route_gfw_net_lookup(&conn->caddr.in);

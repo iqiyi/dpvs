@@ -81,7 +81,7 @@ static const struct rte_eth_conf port_conf = {
     },
 };
 
-static inline int 
+static inline int
 is_ipv4_pkt_valid(struct ipv4_hdr *iph, uint32_t link_len)
 {
         if (link_len < sizeof(struct ipv4_hdr))
@@ -103,7 +103,7 @@ is_ipv4_pkt_valid(struct ipv4_hdr *iph, uint32_t link_len)
 
 static void dump_ipv4_hdr(const struct ipv4_hdr *iph,
                           uint16_t port, uint16_t queue,
-                          const struct udp_hdr *uh) 
+                          const struct udp_hdr *uh)
 {
     char saddr[16], daddr[16];
     uint16_t lcore;
@@ -119,11 +119,11 @@ static void dump_ipv4_hdr(const struct ipv4_hdr *iph,
 
     fprintf(stderr, "[%u] port %u queue %d ipv4 hl %u tos %u tot %u "
             "id %u ttl %u prot %u src %s dst %s sport %04x %u dport %04x %u\n",
-            lcore, port, queue, IPV4_HDR_IHL_MASK & iph->version_ihl, 
-            iph->type_of_service, ntohs(iph->total_length), 
-            ntohs(iph->packet_id), iph->time_to_live, 
-            iph->next_proto_id, saddr, daddr, 
-	    uh->src_port, ntohs(uh->src_port), 
+            lcore, port, queue, IPV4_HDR_IHL_MASK & iph->version_ihl,
+            iph->type_of_service, ntohs(iph->total_length),
+            ntohs(iph->packet_id), iph->time_to_live,
+            iph->next_proto_id, saddr, daddr,
+	    uh->src_port, ntohs(uh->src_port),
 	    uh->dst_port, ntohs(uh->dst_port));
     fflush(stdout);
     return;
@@ -138,9 +138,9 @@ static int ip_rcv(struct rte_mbuf *mbuf, uint16_t port, uint16_t queue)
 
     iph = rte_pktmbuf_mtod_offset(mbuf, struct ipv4_hdr *, sizeof(struct ether_hdr));
     if (!is_ipv4_pkt_valid(iph, mbuf->pkt_len))
-        return -1; 
+        return -1;
 
-    uh = rte_pktmbuf_mtod_offset(mbuf, struct udp_hdr *, 
+    uh = rte_pktmbuf_mtod_offset(mbuf, struct udp_hdr *,
          sizeof(struct ether_hdr) + (IPV4_HDR_IHL_MASK & iph->version_ihl) * sizeof(uint32_t));
 
     /* just for test */
@@ -153,10 +153,10 @@ static int ip_rcv(struct rte_mbuf *mbuf, uint16_t port, uint16_t queue)
     return 0;
 }
 
-__rte_unused static int fdir_filter(uint32_t soft_id, 
+__rte_unused static int fdir_filter(uint32_t soft_id,
         uint32_t src_ip,
         uint32_t dst_ip,
-        uint16_t src_port, 
+        uint16_t src_port,
         uint16_t dst_port,
         enum rte_eth_fdir_behavior fdir_behavior,
         uint8_t port,
@@ -188,7 +188,7 @@ __rte_unused static int fdir_filter(uint32_t soft_id,
     if (ret < 0)
         printf("flow director programming error: (%s)\n", strerror(-ret));
     else
-        printf("fdir setting: dst_ip=%d, dst_port=%d, rx-queue=%d\n", 
+        printf("fdir setting: dst_ip=%d, dst_port=%d, rx-queue=%d\n",
              dst_ip, dst_port, rx_queue);
     return ret;
 }
@@ -220,7 +220,7 @@ static void check_all_ports_link_status(uint8_t port_num, uint32_t port_mask)
                          (uint8_t) portid, (unsigned)link.link_speed,
                          (link.link_duplex == ETH_LINK_FULL_DUPLEX) ?
                          ("full-duplex") : ("half-duplex\n"));
-                 } else 
+                 } else
                      printf("Port %d Link Down\n", (uint8_t) portid);
                  continue;
              }
@@ -311,7 +311,7 @@ int main(int argc, char **argv)
         nb_ports = RTE_MAX_ETHPORTS;
 
     /* configure device*/
-    rte_eth_dev_configure(0, RX_QUEUES_PER_PORT, TX_QUEUES_PER_PORT, &port_conf); 
+    rte_eth_dev_configure(0, RX_QUEUES_PER_PORT, TX_QUEUES_PER_PORT, &port_conf);
     if(ret < 0)
         rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d,"
            " port=%u\n", ret, 0);
@@ -319,18 +319,18 @@ int main(int argc, char **argv)
     /* init RX queue */
     fflush(stdout);
     for(rx_queue_id = 0; rx_queue_id < RX_QUEUES_PER_PORT; rx_queue_id++){
-        ret = rte_eth_rx_queue_setup(0, rx_queue_id, nb_rxd, 
+        ret = rte_eth_rx_queue_setup(0, rx_queue_id, nb_rxd,
                 0 /*rte_eth_dev_socket_id(0)*/, NULL, dpdr_pktmbuf_pool);
         if(ret < 0){
             rte_exit(EXIT_FAILURE, "rte_eth_rx_queue_setup: err=%d, port"
                 "=%u, queue_id=%u\n", ret, 0, rx_queue_id);
         }
     }
-        
+
     /* init TX queue */
     fflush(stdout);
     for(tx_queue_id = 0; tx_queue_id < TX_QUEUES_PER_PORT; tx_queue_id++){
-        ret = rte_eth_tx_queue_setup(0, tx_queue_id, nb_txd, 
+        ret = rte_eth_tx_queue_setup(0, tx_queue_id, nb_txd,
             0 /*rte_eth_dev_socket_id(0)*/, NULL);
         if(ret < 0){
             rte_exit(EXIT_FAILURE, "rte_eth_tx_queue_setup: err=%d, port"

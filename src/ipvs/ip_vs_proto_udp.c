@@ -161,7 +161,7 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
     }
 
     /* lookup service <vip:vport> */
-    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, 
+    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr,
                      uh->dst_port, 0, mbuf, NULL, &outwall, rte_lcore_id());
     if (!svc) {
         *verdict = INET_ACCEPT;
@@ -213,7 +213,7 @@ udp_conn_lookup(struct dp_vs_proto *proto,
         return NULL;
     }
 
-    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, 
+    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr,
 							uh->dst_port, &iph->saddr)) {
         *drop = true;
         return NULL;

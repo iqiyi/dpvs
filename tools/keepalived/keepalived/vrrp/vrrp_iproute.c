@@ -344,7 +344,7 @@ static void dpvs_fill_rt4conf(ip_route_t *iproute, struct dp_vs_route_conf *rout
 	route_conf->metric = 0;
 }
 
-static void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg) 
+static void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg)
 {
 	rt6_cfg->dst.addr = ((iproute->dst)->u).sin6_addr;
 	rt6_cfg->dst.plen = iproute->dst->ifa.ifa_prefixlen;

@@ -143,14 +143,14 @@ ipvs_set_timeouts(int tcp_timeout, int tcpfin_timeout, int udp_timeout)
 
 /* Send user rules to IPVS module */
 static int
-ipvs_talk(int cmd, 
-	  ipvs_service_t *srule, 
-	  ipvs_dest_t *drule, 
-	  ipvs_daemon_t *daemonrule, 
-	  ipvs_laddr_t *laddr_rule, 
+ipvs_talk(int cmd,
+	  ipvs_service_t *srule,
+	  ipvs_dest_t *drule,
+	  ipvs_daemon_t *daemonrule,
+	  ipvs_laddr_t *laddr_rule,
 	  ipvs_blklst_t *blklst_rule,
 	  ipvs_whtlst_t *whtlst_rule,
-	  ipvs_tunnel_t *tunnel_rule, 
+	  ipvs_tunnel_t *tunnel_rule,
 	  bool ignore_error)
 {
 	int result = -1;
@@ -530,7 +530,7 @@ ipvs_laddr_vsg_cmd(int cmd, list vs_group, virtual_server_t *vs, local_addr_grou
 	l = vsg->addr_range;
 	LIST_FOREACH(l, vsg_entry, e) {
 		uint32_t addr_ip, ip;
-		
+
 		srule->af = vsg_entry->addr.ss_family;
 		if (srule->af == AF_INET6) {
 			inet_sockaddrip6(&vsg_entry->addr, &srule->nf_addr.in6);
@@ -653,10 +653,10 @@ ipvs_blklst_group_cmd(int cmd, blklst_addr_group *blklst_group, ipvs_service_t *
 }
 
 static void
-ipvs_blklst_vsg_cmd(int cmd, 
-		list vs_group, 
-		virtual_server_t *vs, 
-		blklst_addr_group *blklst_group, 
+ipvs_blklst_vsg_cmd(int cmd,
+		list vs_group,
+		virtual_server_t *vs,
+		blklst_addr_group *blklst_group,
 		ipvs_service_t *srule)
 {
 	virtual_server_group_t *vsg = ipvs_get_group_by_name(vs->vsgname, vs_group);
@@ -885,10 +885,10 @@ ipvs_whtlst_group_cmd(int cmd, whtlst_addr_group *whtlst_group, ipvs_service_t *
 }
 
 static void
-ipvs_whtlst_vsg_cmd(int cmd, 
-		list vs_group, 
-		virtual_server_t *vs, 
-		whtlst_addr_group *whtlst_group, 
+ipvs_whtlst_vsg_cmd(int cmd,
+		list vs_group,
+		virtual_server_t *vs,
+		whtlst_addr_group *whtlst_group,
 		ipvs_service_t *srule)
 {
 	virtual_server_group_t *vsg = ipvs_get_group_by_name(vs->vsgname, vs_group);
@@ -1091,7 +1091,7 @@ ipvs_group_sync_entry(virtual_server_t *vs, virtual_server_group_entry_t *vsge)
 	}
 }
 
-static void 
+static void
 ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 {
 	list l;
@@ -1100,10 +1100,10 @@ ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 	ipvs_laddr_t laddr_rule;
 	virtual_server_group_t *vsg;
 	virtual_server_group_entry_t *vsg_entry;
-	
+
 	/* Allocate the room */
 	ipvs_set_srule(IP_VS_SO_SET_DELLADDR, &srule, vs);
-	
+
 	vsg = ipvs_get_group_by_name(vs->vsgname, check_data->vs_group);
 	if (!vsg)
 		return;
@@ -1171,13 +1171,13 @@ ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 					laddr_rule.addr.ip = inet_sockaddrip4(&laddr_entry->addr);
 				strncpy(laddr_rule.ifname, laddr_entry->ifname, sizeof(laddr_rule.ifname));
 
-				ipvs_talk(IP_VS_SO_SET_DELLADDR, 
-					&srule, 
-					NULL/*drule*/, 
-					NULL/*daemonrule*/, 
-					&laddr_rule, 
-					NULL/*blklst_rule*/, 
-					NULL/*whtlst_rule*/, 
+				ipvs_talk(IP_VS_SO_SET_DELLADDR,
+					&srule,
+					NULL/*drule*/,
+					NULL/*daemonrule*/,
+					&laddr_rule,
+					NULL/*blklst_rule*/,
+					NULL/*whtlst_rule*/,
 					NULL,
 					false);
 			}
@@ -1236,7 +1236,7 @@ ipvs_rm_bentry_from_vsg(blklst_addr_entry *blklst_entry, whtlst_addr_entry *whtl
 	ipvs_whtlst_t whtlst_rule;
 
 	vsg = ipvs_get_group_by_name(vsgname, check_data->vs_group);
-	if (!vsg) return; 
+	if (!vsg) return;
 
 	l = vsg->addr_range;
 	LIST_FOREACH(l, vsg_entry, e) {

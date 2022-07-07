@@ -25,7 +25,7 @@
 
 static void ipset_help(void)
 {
-	fprintf(stderr, 
+	fprintf(stderr,
                     "Usage:\n"
                     "    dpip gfwip { add | del } IPs\n"
                     "    dpip gfwip show\n"
@@ -41,12 +41,12 @@ static int ipset_parse_args(struct dpip_conf *conf, struct dp_vs_multi_ipset_con
     struct dp_vs_multi_ipset_conf *ips;
 
     if (conf->cmd == DPIP_CMD_FLUSH || conf->cmd == DPIP_CMD_SHOW) {
-        if (conf->argc != 0) 
+        if (conf->argc != 0)
             return -1;
-        else 
+        else
             return 0;
     }
-	
+
     if (conf->argc <= 0) {
         fprintf(stderr, "no arguments\n");
         return -1;
@@ -57,10 +57,10 @@ static int ipset_parse_args(struct dpip_conf *conf, struct dp_vs_multi_ipset_con
     if (*ips_conf == NULL) {
         fprintf(stderr, "no memory\n");
         return -1;
-    }		
+    }
     memset(*ips_conf, 0, ipset_size);
     ips = *ips_conf;
-	
+
     ips->num = conf->argc;
     while (conf->argc > 0) {
         ipaddr = conf->argv[0];
@@ -121,20 +121,20 @@ static int ipset_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         if (err != 0)
             return err;
 
-        if (size < sizeof(*array) 
+        if (size < sizeof(*array)
                 || size != sizeof(*array) + \
                            array->nipset * sizeof(struct dp_vs_ipset_conf)) {
             fprintf(stderr, "corrupted response.\n");
             dpvs_sockopt_msg_free(array);
             return EDPVS_INVAL;
         }
-        
+
 
         if (array->nipset)
             printf("IPset gfwip has %d members:\n", array->nipset);
         else
             printf("IPset gfwip has no members.\n");
-            
+
         for (i = 0; i < array->nipset; i++)
             ipset_dump(&array->ips[i]);
 
@@ -154,7 +154,7 @@ struct dpip_obj dpip_ipset = {
 static void __init ipset_init(void)
 {
     dpip_register_obj(&dpip_ipset);
-} 
+}
 
 static void __exit ipset_exit(void)
 {

@@ -22,14 +22,14 @@ int main(int argc, char *argv[])
     }
 
     ptr = dpvs_mempool_get(pool, 10);
-    dpvs_mempool_put(pool, ptr); 
-    
+    dpvs_mempool_put(pool, ptr);
+
     ptr = dpvs_mempool_get(pool, 100);
-    dpvs_mempool_put(pool, ptr); 
-    
+    dpvs_mempool_put(pool, ptr);
+
     ptr = dpvs_mempool_get(pool, 1000);
     dpvs_mempool_put(pool, ptr);
-    
+
     ptr = dpvs_mempool_get(pool, 10000);
     dpvs_mempool_put(pool, ptr);
 
@@ -44,21 +44,21 @@ int main(int argc, char *argv[])
             fprintf(stderr, "dpvs_mempool_create failed!\n");
             return 1;
         }
-    
+
         for (i = 0; i < 10000; i++) {
             ptr = dpvs_mempool_get(pool, 10);
             dpvs_mempool_put(pool, ptr);
-    
+
             ptr = dpvs_mempool_get(pool, 100);
             dpvs_mempool_put(pool, ptr);
-    
+
             ptr = dpvs_mempool_get(pool, 1000);
             dpvs_mempool_put(pool, ptr);
-    
+
             ptr = dpvs_mempool_get(pool, 10000);
             dpvs_mempool_put(pool, ptr);
         }
-    
+
         dpvs_mempool_destroy(pool);
     }
 #endif
