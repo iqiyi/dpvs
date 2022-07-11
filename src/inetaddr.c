@@ -472,18 +472,11 @@ struct inet_ifaddr *inet_addr_ifa_get_expired(int af, const struct netif_port *d
     struct inet_ifaddr *ifa;
     struct inet_device *idev;
 
-    if (!dev) {
-        dev = inet_addr_get_iface(af, addr);
-        if (!dev)
-            return NULL;
-    }
-
-    idev = dev_get_idev(dev);
-    assert(idev != NULL);
-
     ifa = expired_ifa_lookup(idev, addr, 0, af);
-
-    idev_put(idev);
+    if (ifa != NULL) {
+   	assert(ifa->idev != NULL);
+    	idev_put(ifa->idev);
+    }
     return ifa;
 }
 
@@ -769,7 +762,7 @@ static int ifa_expire(void *arg)
 
     err = inet_addr_del(ifa->af, ifa->idev->dev, &ifa->addr, ifa->plen);
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, IFA, "%s: inet_addr_del failed\n", __func__);
+        RTE_LOG(ERR, IFA, "inet_addr_del failed\n", __func__);
         return DTIMER_OK;
     }
 
@@ -1615,8 +1608,8 @@ static int ifaddr_get_verbose(struct inet_device *idev, struct inet_addr_data_ar
                           sizeof(union inet_addr)) != 0) {
                 RTE_LOG(WARNING, IFA, "%s: ifa addr does not match -- master=%X, "
                         "slave[%02d]=%X\n", __func__,
-                        array->addrs[ii].ifa_entry.addr.in.s_addr, cur->cid,
-                        arrmsg->addrs[ii].ifa_entry.addr.in.s_addr);
+                        array->addrs[ii].ifa_entry.addr, cur->cid,
+                        arrmsg->addrs[ii].ifa_entry.addr);
             }
             if (off >= ifa_cnt)
                 break;
