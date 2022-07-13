@@ -48,7 +48,7 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
  *   */
 
 /* fetch virtual server group from group name */
-    virtual_server_group_t * __attribute__ ((pure))
+virtual_server_group_t * __attribute__ ((pure))
 ipvs_get_group_by_name(const char *gname, list l)
 {
     element e;
@@ -61,7 +61,7 @@ ipvs_get_group_by_name(const char *gname, list l)
     return NULL;
 }
 
-    local_addr_group * __attribute__ ((pure))
+local_addr_group * __attribute__ ((pure))
 ipvs_get_laddr_group_by_name(char *gname, list l)
 {
     element e;
@@ -77,7 +77,7 @@ ipvs_get_laddr_group_by_name(char *gname, list l)
     return NULL;
 }
 
-    blklst_addr_group * __attribute__ ((pure))
+blklst_addr_group * __attribute__ ((pure))
 ipvs_get_blklst_group_by_name(char *gname, list l)
 {
     element e;
@@ -90,7 +90,7 @@ ipvs_get_blklst_group_by_name(char *gname, list l)
     return NULL;
 }
 
-    whtlst_addr_group * __attribute__ ((pure))
+whtlst_addr_group * __attribute__ ((pure))
 ipvs_get_whtlst_group_by_name(char *gname, list l)
 {
     element e;
@@ -104,7 +104,7 @@ ipvs_get_whtlst_group_by_name(char *gname, list l)
 }
 
 /* Initialization helpers */
-    int
+int
 ipvs_start(void)
 {
     log_message(LOG_DEBUG, "%snitializing ipvs", reload ? "Rei" : "I");
@@ -119,7 +119,7 @@ ipvs_start(void)
     return IPVS_SUCCESS;
 }
 
-    void
+void
 ipvs_stop(void)
 {
     if (no_ipvs)
@@ -128,7 +128,7 @@ ipvs_stop(void)
     dpvs_ctrl_close();
 }
 
-    void
+void
 ipvs_set_timeouts(int tcp_timeout, int tcpfin_timeout, int udp_timeout)
 {
     ipvs_timeout_t to;
@@ -145,7 +145,7 @@ ipvs_set_timeouts(int tcp_timeout, int tcpfin_timeout, int udp_timeout)
 }
 
 /* Send user rules to IPVS module */
-    static int
+static int
 ipvs_talk(int cmd, 
         dpvs_service_compat_t *srule, 
         dpvs_dest_compat_t *drule, 
@@ -248,7 +248,7 @@ ipvs_talk(int cmd,
 
 #ifdef _WITH_VRRP_
 /* Note: This function is called in the context of the vrrp child process, not the checker process */
-    void
+void
 ipvs_syncd_cmd(int cmd, const struct lvs_syncd_config *config, int state, bool ignore_interface, bool ignore_error)
 {
     ipvs_daemon_t daemonrule;
@@ -286,14 +286,14 @@ ipvs_syncd_cmd(int cmd, const struct lvs_syncd_config *config, int state, bool i
 }
 #endif
 
-    void
+void
 ipvs_flush_cmd(void)
 {
     ipvs_talk(IP_VS_SO_SET_FLUSH, NULL, NULL, NULL, NULL, NULL, NULL, NULL, false);
 }
 
 /* IPVS group range rule */
-    static int
+static int
 ipvs_group_range_cmd(int cmd, dpvs_service_compat_t *srule, dpvs_dest_compat_t *drule, virtual_server_group_entry_t *vsg_entry)
 {
     uint32_t i;
@@ -320,7 +320,7 @@ ipvs_group_range_cmd(int cmd, dpvs_service_compat_t *srule, dpvs_dest_compat_t *
 }
 
 /* set IPVS group rules */
-    static bool
+static bool
 is_vsge_alive(virtual_server_group_entry_t *vsge, virtual_server_t *vs)
 {
     if (vsge->is_fwmark) {
@@ -337,7 +337,7 @@ is_vsge_alive(virtual_server_group_entry_t *vsge, virtual_server_t *vs)
         return !!vsge->sctp_alive;
 }
 
-    static void
+static void
 update_vsge_alive_count(virtual_server_group_entry_t *vsge, const virtual_server_t *vs, bool up)
 {
     unsigned *alive_p;
@@ -361,19 +361,19 @@ update_vsge_alive_count(virtual_server_group_entry_t *vsge, const virtual_server
         (*alive_p)--;
 }
 
-    static void
+static void
 set_vsge_alive(virtual_server_group_entry_t *vsge, const virtual_server_t *vs)
 {
     update_vsge_alive_count(vsge, vs, true);
 }
 
-    static void
+static void
 unset_vsge_alive(virtual_server_group_entry_t *vsge, const virtual_server_t *vs)
 {
     update_vsge_alive_count(vsge, vs, false);
 }
 
-    static bool
+static bool
 ipvs_change_needed(int cmd, virtual_server_group_entry_t *vsge, virtual_server_t *vs, real_server_t *rs)
 {
     unsigned count;
@@ -397,7 +397,7 @@ ipvs_change_needed(int cmd, virtual_server_group_entry_t *vsge, virtual_server_t
         return true;
 }
 
-    static void
+static void
 ipvs_set_vsge_alive_state(int cmd, virtual_server_group_entry_t *vsge, virtual_server_t *vs)
 {
     if (cmd == IP_VS_SO_SET_ADDDEST)
@@ -406,7 +406,7 @@ ipvs_set_vsge_alive_state(int cmd, virtual_server_group_entry_t *vsge, virtual_s
         unset_vsge_alive(vsge, vs);
 }
 
-    static int
+static int
 ipvs_group_cmd(int cmd, dpvs_service_compat_t *srule, dpvs_dest_compat_t *drule, virtual_server_t *vs, real_server_t *rs)
 {
     virtual_server_group_t *vsg = vs->vsg;
@@ -461,7 +461,7 @@ ipvs_group_cmd(int cmd, dpvs_service_compat_t *srule, dpvs_dest_compat_t *drule,
     return 0;
 }
 
-    static void
+static void
 dpvs_laddr_range_cmd(int cmd, local_addr_entry *laddr_entry, virtual_server_t *vs, dpvs_service_compat_t *srule)
 {
     uint32_t addr_ip, ip;
@@ -492,7 +492,7 @@ dpvs_laddr_range_cmd(int cmd, local_addr_entry *laddr_entry, virtual_server_t *v
     }
 }
 
-    static void
+static void
 dpvs_laddr_group_cmd(int cmd, local_addr_group *laddr_group, virtual_server_t *vs, dpvs_service_compat_t *srule)
 {
     local_addr_entry *laddr_entry;
@@ -524,7 +524,7 @@ dpvs_laddr_group_cmd(int cmd, local_addr_group *laddr_group, virtual_server_t *v
 }
 
 
-    static void
+static void
 ipvs_laddr_vsg_cmd(int cmd, list vs_group, virtual_server_t *vs, local_addr_group *laddr_group, dpvs_service_compat_t *srule)
 {
     virtual_server_group_t *vsg = ipvs_get_group_by_name(vs->vsgname, vs_group);
@@ -579,7 +579,7 @@ ipvs_laddr_vsg_cmd(int cmd, list vs_group, virtual_server_t *vs, local_addr_grou
     }
 }
 
-    static int
+static int
 ipvs_laddr_cmd(int cmd, dpvs_service_compat_t *srule, virtual_server_t *vs)
 {
     local_addr_group *laddr_group;
@@ -606,7 +606,7 @@ ipvs_laddr_cmd(int cmd, dpvs_service_compat_t *srule, virtual_server_t *vs)
     return IPVS_SUCCESS;
 }
 
-    static void
+static void
 ipvs_blklst_range_cmd(int cmd, blklst_addr_entry *blklst_entry, dpvs_service_compat_t *srule)
 {
     uint32_t addr_ip, ip;
@@ -633,7 +633,7 @@ ipvs_blklst_range_cmd(int cmd, blklst_addr_entry *blklst_entry, dpvs_service_com
     }
 }
 
-    static void
+static void
 ipvs_blklst_group_cmd(int cmd, blklst_addr_group *blklst_group, dpvs_service_compat_t *srule)
 {
     blklst_addr_entry *blklst_entry;
@@ -661,7 +661,7 @@ ipvs_blklst_group_cmd(int cmd, blklst_addr_group *blklst_group, dpvs_service_com
     }
 }
 
-    static void
+static void
 ipvs_blklst_vsg_cmd(int cmd, 
         list vs_group, 
         virtual_server_t *vs, 
@@ -720,7 +720,7 @@ ipvs_blklst_vsg_cmd(int cmd,
     }
 }
 
-    static int
+static int
 ipvs_blklst_cmd(int cmd, dpvs_service_compat_t *srule, virtual_server_t * vs)
 {
     blklst_addr_group *blklst_group = ipvs_get_blklst_group_by_name(vs->blklst_addr_gname,
@@ -751,9 +751,9 @@ ipvs_blklst_cmd(int cmd, dpvs_service_compat_t *srule, virtual_server_t * vs)
 }
 
 /* Fill IPVS rule with root vs infos */
-    static void
-ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server_t *vs)
+static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server_t *vs)
 {
+    int af;
     /* Clean service rule */
     memset(srule, 0, sizeof(dpvs_service_compat_t));
 
@@ -765,10 +765,12 @@ ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server_t *vs)
     srule->bps = vs->bps;
     srule->limit_proportion = vs->limit_proportion;
     srule->conn_timeout = vs->conn_timeout;
-    snprintf(srule->srange, 256, "%s", vs->srange);
-    snprintf(srule->drange, 256, "%s", vs->drange);
+    inet_addr_range_parse(vs->srange, &srule->srange, &af);
+    inet_addr_range_parse(vs->drange, &srule->drange, &af);
     snprintf(srule->iifname, IFNAMSIZ, "%s", vs->iifname);
     snprintf(srule->oifname, IFNAMSIZ, "%s", vs->oifname);
+    if (!srule->af && (vs->srange[0] || vs->drange[0] || vs->iifname[0] || vs->oifname[0]))
+        srule->af = af;
 
     if (vs->persistence_timeout &&
             (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_DEL)) {
@@ -800,13 +802,13 @@ ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server_t *vs)
         }
     }
 
-#ifdef _HAVE_PE_NAME_
+#if 0
     strcpy(srule->pe_name, vs->pe_name);
 #endif
 }
 
 /* Fill IPVS rule with rs infos */
-    static void
+static void
 ipvs_set_drule(int cmd, dpvs_dest_compat_t *drule, real_server_t * rs)
 {
     if (cmd != IP_VS_SO_SET_ADDDEST &&
@@ -839,7 +841,7 @@ ipvs_set_drule(int cmd, dpvs_dest_compat_t *drule, real_server_t * rs)
 
 /*check whitelist addr*/
 
-    static void
+static void
 ipvs_whtlst_range_cmd(int cmd, whtlst_addr_entry *whtlst_entry, dpvs_service_compat_t *srule)
 {
     uint32_t addr_ip, ip;
@@ -865,7 +867,7 @@ ipvs_whtlst_range_cmd(int cmd, whtlst_addr_entry *whtlst_entry, dpvs_service_com
     }
 }
 
-    static void
+static void
 ipvs_whtlst_group_cmd(int cmd, whtlst_addr_group *whtlst_group, dpvs_service_compat_t *srule)
 {
     whtlst_addr_entry *whtlst_entry;
@@ -893,7 +895,7 @@ ipvs_whtlst_group_cmd(int cmd, whtlst_addr_group *whtlst_group, dpvs_service_com
     }
 }
 
-    static void
+static void
 ipvs_whtlst_vsg_cmd(int cmd, 
         list vs_group, 
         virtual_server_t *vs, 
@@ -952,7 +954,7 @@ ipvs_whtlst_vsg_cmd(int cmd,
     }
 }
 
-    static int
+static int
 ipvs_whtlst_cmd(int cmd, dpvs_service_compat_t *srule, virtual_server_t * vs)
 {
     whtlst_addr_group *whtlst_group = ipvs_get_whtlst_group_by_name(vs->whtlst_addr_gname,
@@ -998,7 +1000,7 @@ int ipvs_tunnel_cmd(int cmd, tunnel_entry *entry)
 }
 
 /* Set/Remove a RS from a VS */
-    int
+int
 ipvs_cmd(int cmd, virtual_server_t *vs, real_server_t *rs)
 {
     dpvs_service_compat_t srule;
@@ -1046,13 +1048,12 @@ ipvs_cmd(int cmd, virtual_server_t *vs, real_server_t *rs)
     if (vs->vfwmark) {
         srule.fwmark = vs->vfwmark;
     } else if (vs->forwarding_method == IP_VS_CONN_F_SNAT) {
-        srule.af = vs->addr.ss_family;
         srule.addr.in.s_addr = 0;
         srule.port = inet_sockaddrport(&vs->addr);
         srule.flags |= IP_VS_SVC_F_MATCH;
         /* srule.af should be set in ipvs_set_srule  */
-        //if (!srule.af)
-        //	srule.af = vs->af;
+        if (!srule.af)
+            srule.af = vs->addr.ss_family;
     } else {
         if (vs->af == AF_INET6)
             inet_sockaddrip6(&vs->addr, &srule.addr.in6);
@@ -1068,7 +1069,7 @@ ipvs_cmd(int cmd, virtual_server_t *vs, real_server_t *rs)
 }
 
 /* at reload, add alive destinations to the newly created vsge */
-    void
+void
 ipvs_group_sync_entry(virtual_server_t *vs, virtual_server_group_entry_t *vsge)
 {
     real_server_t *rs;
@@ -1100,7 +1101,7 @@ ipvs_group_sync_entry(virtual_server_t *vs, virtual_server_group_entry_t *vsge)
     }
 }
 
-    static void 
+static void 
 ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
 {
     list l;
@@ -1197,7 +1198,7 @@ ipvs_rm_lentry_from_vsg(local_addr_entry *laddr_entry, virtual_server_t *vs)
     }
 }
 
-    int
+int
 ipvs_laddr_remove_entry(virtual_server_t *vs, local_addr_entry *laddr_entry)
 {
     dpvs_laddr_table_t laddr_rule;
@@ -1238,7 +1239,7 @@ ipvs_laddr_remove_entry(virtual_server_t *vs, local_addr_entry *laddr_entry)
     return IPVS_SUCCESS;
 }
 
-    static void
+static void
 ipvs_rm_bentry_from_vsg(blklst_addr_entry *blklst_entry, whtlst_addr_entry *whtlst_entry, const char *vsgname, dpvs_service_compat_t *srule)
 {
     list l;
@@ -1342,7 +1343,7 @@ ipvs_rm_bentry_from_vsg(blklst_addr_entry *blklst_entry, whtlst_addr_entry *whtl
     }
 }
 
-    int
+int
 ipvs_blklst_remove_entry(virtual_server_t *vs, blklst_addr_entry *blklst_entry)
 {
     dpvs_service_compat_t srule;
@@ -1381,7 +1382,7 @@ ipvs_blklst_remove_entry(virtual_server_t *vs, blklst_addr_entry *blklst_entry)
     return IPVS_SUCCESS;
 }
 
-    int
+int
 ipvs_whtlst_remove_entry(virtual_server_t *vs, whtlst_addr_entry *whtlst_entry)
 {
     dpvs_service_compat_t srule;
@@ -1422,7 +1423,7 @@ ipvs_whtlst_remove_entry(virtual_server_t *vs, whtlst_addr_entry *whtlst_entry)
 
 
 /* Remove a specific vs group entry */
-    void
+void
 ipvs_group_remove_entry(virtual_server_t *vs, virtual_server_group_entry_t *vsge)
 {
     real_server_t *rs;
@@ -1473,7 +1474,7 @@ ipvs_group_remove_entry(virtual_server_t *vs, virtual_server_group_entry_t *vsge
 }
 
 #ifdef _WITH_SNMP_CHECKER_
-    static inline bool
+static inline bool
 vsd_equal(real_server_t *rs, struct ip_vs_dest_entry_app *entry)
 {
     if (entry->af != AF_INET && entry->af != AF_INET6)
@@ -1494,7 +1495,7 @@ vsd_equal(real_server_t *rs, struct ip_vs_dest_entry_app *entry)
     return true;
 }
 
-    static void
+static void
 ipvs_update_vs_stats(virtual_server_t *vs, uint32_t fwmark, union nf_inet_addr *nfaddr, uint16_t port)
 {
     element e;
@@ -1563,7 +1564,7 @@ ipvs_update_vs_stats(virtual_server_t *vs, uint32_t fwmark, union nf_inet_addr *
 /* Update statistics for a given virtual server. This includes
    statistics of real servers. The update is only done if we need
    refreshing. */
-    void
+void
 ipvs_update_stats(virtual_server_t *vs)
 {
     element e, ge;
@@ -1634,7 +1635,7 @@ ipvs_update_stats(virtual_server_t *vs)
  * Common IPVS functions
  */
 /* Note: This function is called in the context of the vrrp child process, not the checker process */
-    void
+void
 ipvs_syncd_master(const struct lvs_syncd_config *config)
 {
     ipvs_syncd_cmd(IPVS_STOPDAEMON, config, IPVS_BACKUP, false, false);
@@ -1642,7 +1643,7 @@ ipvs_syncd_master(const struct lvs_syncd_config *config)
 }
 
 /* Note: This function is called in the context of the vrrp child process, not the checker process */
-    void
+void
 ipvs_syncd_backup(const struct lvs_syncd_config *config)
 {
     ipvs_syncd_cmd(IPVS_STOPDAEMON, config, IPVS_MASTER, false, false);

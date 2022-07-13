@@ -620,8 +620,8 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     nroute = rte_atomic32_read(&this_num_routes);
     
     if (cf && cf->outwalltb) {
-	nroute = rte_atomic32_read(&this_num_out_routes);
-	outwall_table = true;
+        nroute = rte_atomic32_read(&this_num_out_routes);
+        outwall_table = true;
     }
 
     *outsize = sizeof(struct dp_vs_route_conf_array) + \

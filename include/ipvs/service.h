@@ -115,4 +115,13 @@ struct dp_vs_service *dp_vs_vip_lookup(int af, uint16_t protocol,
                                        const union inet_addr *vaddr,
                                        lcoreid_t cid);
 
+#define dp_vs_match_dump(ptr, type, member, dst) do { \
+type *src = container_of(ptr, type, member);          \
+memcpy(&(dst)->srange, &src->srange, sizeof(struct inet_addr_range)); \
+memcpy(&(dst)->drange, &src->drange, sizeof(struct inet_addr_range)); \
+snprintf((dst)->iifname, sizeof((dst)->iifname), "%s", src->iifname); \
+snprintf((dst)->oifname, sizeof((dst)->oifname), "%s", src->oifname); \
+/**(int*)dst = *(int*)src;*/                    \
+} while(0)              
+
 #endif /* __DPVS_SVC_H__ */

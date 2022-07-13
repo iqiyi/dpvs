@@ -40,8 +40,8 @@ typedef struct dp_vs_laddr_conf {
     union inet_addr     vaddr;
     uint16_t            vport;
     uint32_t            fwmark;
-    char                srange[256];
-    char                drange[256];
+    struct inet_addr_range srange;
+    struct inet_addr_range drange;
     char                iifname[IFNAMSIZ];
     char                oifname[IFNAMSIZ];
     lcoreid_t           cid;

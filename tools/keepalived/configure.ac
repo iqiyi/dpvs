@@ -1908,7 +1908,7 @@ dnl ----[ Checks for pe support ]----
 # Introduced in Linux 2.6.37
 AC_CHECK_DECL([IPVS_SVC_ATTR_PE_NAME],
    [
-     AC_DEFINE([_HAVE_PE_NAME_], [ 0 ], [Define to 1 if have pe selection support])
+     AC_DEFINE([_HAVE_PE_NAME_], [ 1 ], [Define to 1 if have pe selection support])
    ],
    [], [[#include <linux/ip_vs.h>]])
 

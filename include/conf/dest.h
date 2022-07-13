@@ -81,8 +81,8 @@ typedef struct dp_vs_dest_table {
 
     unsigned int    num_dests;
 
-    char srange[0x100];
-    char drange[0x100];
+    struct inet_addr_range srange;
+    struct inet_addr_range drange;
     char iifname[IFNAMSIZ];
     char oifname[IFNAMSIZ];
 

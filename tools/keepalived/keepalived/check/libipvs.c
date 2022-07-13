@@ -724,8 +724,8 @@ struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_v
     conf.fwmark = svc->fwmark;
     conf.cid = svc->cid;
 
-    snprintf(conf.srange, sizeof(conf.srange), "%s", svc->srange);
-    snprintf(conf.drange, sizeof(conf.drange), "%s", svc->drange);
+    memcpy(&conf.srange, &svc->srange, sizeof(svc->srange));
+    memcpy(&conf.drange, &svc->drange, sizeof(svc->drange));
     snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
     snprintf(conf.iifname, sizeof(conf.oifname), "%s", svc->oifname);
 

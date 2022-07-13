@@ -386,7 +386,7 @@ int main(int argc, char **argv)
 {
     int result;
 
-    if (ctrl_plane_init(0)) {
+    if (dpvs_ctrl_init(0)) {
         fail(2, "Can't initialize ipvs: %s\n"
                 "Are you sure that dpvs is running?",
                 ipvs_strerror(errno));
@@ -817,12 +817,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     parse = parse_service(optarg, &dpvs_svc);
                     if (!(parse & SERVICE_ADDR))
                         fail(2, "illegal local address");
-                    // keepalived.libipvs.c::ipvs_fill_laddr_conf()
-                    ce->dpvs_laddr.af_l = dpvs_svc.af; // laddr->af = nsvc.af
+                    ce->dpvs_laddr.af_l = dpvs_svc.af;
                     if (dpvs_svc.af == AF_INET) {
-                        ce->dpvs_laddr.laddr.in = dpvs_svc.addr.in; // laddr->addr.in = nsvc.nf_addr.in
+                        ce->dpvs_laddr.laddr.in = dpvs_svc.addr.in;
                     } else {
-                        ce->dpvs_laddr.laddr.in6= dpvs_svc.addr.in6; // laddr->addr.in6 = nsvc.nf_addr.in6
+                        ce->dpvs_laddr.laddr.in6= dpvs_svc.addr.in6;
                     }
                     break;
                 }
@@ -971,6 +970,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
     unsigned int options = OPT_NONE;
     unsigned int format = FMT_NONE;
     int result = 0;
+    const struct inet_addr_range zero_range = {};
 
     memset(&ce, 0, sizeof(struct ipvs_command_entry));
     ce.cmd = CMD_NONE;
@@ -992,8 +992,9 @@ static int process_options(int argc, char **argv, int reading_stdin)
         /* Make sure that port zero service is persistent */
         if (!ce.dpvs_svc.fwmark && !ce.dpvs_svc.port &&
                 !(ce.dpvs_svc.flags & IP_VS_SVC_F_PERSISTENT) &&
-                (!strlen(ce.dpvs_svc.srange) && !strlen(ce.dpvs_svc.drange) &&
-                 !strlen(ce.dpvs_svc.iifname) && !strlen(ce.dpvs_svc.oifname)))
+                (!memcmp(&zero_range, &ce.dpvs_svc.srange, sizeof(ce.dpvs_svc.srange)) && 
+                !memcmp(&zero_range, &ce.dpvs_svc.drange, sizeof(ce.dpvs_svc.drange)) &&
+                !strlen(ce.dpvs_svc.iifname) && !strlen(ce.dpvs_svc.oifname)))
             fail(2, "Zero port specified "
                     "for no-match and non-persistent service");
 
@@ -1409,7 +1410,6 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
     int r;
     bool range = false;
     bool af = false;
-    struct inet_addr_range ip_range;
     int ip_af = 0;
 
     snprintf(params, sizeof(params), "%s", buf);
@@ -1444,16 +1444,14 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
                 return -1;
         } else if (strcmp(key, "src-range") == 0) {
             range = true;
-            snprintf(dpvs_svc->srange, sizeof(dpvs_svc->srange), "%s", val);
+            inet_addr_range_parse(val, &dpvs_svc->srange, &ip_af);
             if (dpvs_svc->af == 0) {
-                inet_addr_range_parse(dpvs_svc->srange, &ip_range, &ip_af);
                 dpvs_svc->af = ip_af;
             }
         } else if (strcmp(key, "dst-range") == 0) {
             range = true;
-            snprintf(dpvs_svc->drange, sizeof(dpvs_svc->drange), "%s", val);
+            inet_addr_range_parse(val, &dpvs_svc->drange, &ip_af);
             if (dpvs_svc->af == 0) {
-                inet_addr_range_parse(dpvs_svc->drange, &ip_range, &ip_af);
                 dpvs_svc->af = ip_af;
             }
         } else if (strcmp(key, "iif") == 0) {
@@ -1890,10 +1888,12 @@ static void print_title(unsigned int format)
 }
 
 
-    static void
+static void
 print_service_entry(dpvs_service_compat_t *se, unsigned int format)
 {
     char svc_name[1024];
+    char srange[0x100] = {0};
+    char drange[0x100] = {0};
     int i;
 
     dpvs_dest_table_t* table;
@@ -1912,8 +1912,9 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
 
     memcpy(&table->addr, &se->addr, sizeof(table->addr));
 
-    snprintf(table->srange, sizeof(se->srange), "%s", se->srange);
-    snprintf(table->drange, sizeof(se->drange), "%s", se->drange);
+
+    memcpy(&table->srange, &se->srange, sizeof(table->srange));
+    memcpy(&table->drange, &se->drange, sizeof(table->drange));
     snprintf(table->iifname, sizeof(se->iifname), "%s", se->iifname);
     snprintf(table->oifname, sizeof(se->oifname), "%s", se->oifname);
 
@@ -1966,6 +1967,9 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
     } else { /* match */
         char *proto;
 
+        inet_addr_range_dump(se->af, &se->srange, srange, sizeof(table->srange));
+        inet_addr_range_dump(se->af, &se->drange, drange, sizeof(table->srange));
+
         if (se->proto == IPPROTO_TCP)
             proto = "tcp";
         else if (se->proto == IPPROTO_UDP)
@@ -1978,7 +1982,7 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
         if (format & FMT_RULE) {
             snprintf(svc_name, sizeof(svc_name),
                     "-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
-                    proto, se->srange, se->drange, se->iifname, se->oifname);
+                    proto, srange, drange, se->iifname, se->oifname);
         } else {
             int left = sizeof(svc_name);
             svc_name[0] = '\0';
@@ -1986,15 +1990,15 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             left -= snprintf(svc_name + strlen(svc_name), left,
                     "MATCH %s", proto);
 
-            if (strcmp(se->srange, "[::-::]:0-0") != 0 &&
-                    strcmp(se->srange, "0.0.0.0-0.0.0.0:0-0") != 0)
+            if (strcmp(srange, "[::-::]:0-0") != 0 &&
+                    strcmp(srange, "0.0.0.0-0.0.0.0:0-0") != 0)
                 left -= snprintf(svc_name + strlen(svc_name), left,
-                        ",from=%s", se->srange);
+                        ",from=%s", srange);
 
-            if (strcmp(se->drange, "[::-::]:0-0") != 0 &&
-                    strcmp(se->drange, "0.0.0.0-0.0.0.0:0-0") != 0)
+            if (strcmp(drange, "[::-::]:0-0") != 0 &&
+                    strcmp(drange, "0.0.0.0-0.0.0.0:0-0") != 0)
                 left -= snprintf(svc_name + strlen(svc_name), left,
-                        ",to=%s", se->drange);
+                        ",to=%s", drange);
 
             if (strlen(se->iifname))
                 left -= snprintf(svc_name + strlen(svc_name), left,

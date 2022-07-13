@@ -59,8 +59,8 @@ typedef struct dp_vs_service_compat {
     char                sched_name[DP_VS_SCHEDNAME_MAXLEN];
     
     /*dp_vs_service_user & dp_vs_service_entry*/
-    char srange[0x100];
-    char drange[0x100];
+    struct inet_addr_range srange;
+    struct inet_addr_range drange;
     char iifname[IFNAMSIZ];
     char oifname[IFNAMSIZ];
 
@@ -70,8 +70,6 @@ typedef struct dp_vs_service_compat {
     lcoreid_t           cid;
     struct dp_vs_stats  stats;
 
-    /*dp_vs_service_conf only*/
-    struct dp_vs_match match;
 } dpvs_service_compat_t;
 
 #define dp_vs_service_conf  dp_vs_service_compat

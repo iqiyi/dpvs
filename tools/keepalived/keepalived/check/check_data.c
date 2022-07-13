@@ -605,7 +605,7 @@ alloc_vs(const char *param1, const char *param2)
 	new->expire_quiescent_conn = false;
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
-    new->whtlst_addr_gname = NULL;
+	new->whtlst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;
 	new->hash_target = 0;
 	new->bps = 0;
