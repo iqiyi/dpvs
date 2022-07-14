@@ -1145,8 +1145,9 @@ static int tcp_conn_expire(struct dp_vs_proto *proto,
     int err;
     assert(proto && conn && conn->dest);
 
-    if (conn->dest->fwdmode == DPVS_FWD_MODE_NAT
-            || conn->dest->fwdmode == DPVS_FWD_MODE_FNAT) {
+    if (conn->dest->fwdmode == DPVS_FWD_MODE_FNAT
+            || conn->dest->fwdmode == DPVS_FWD_MODE_SNAT
+            || conn->dest->fwdmode == DPVS_FWD_MODE_NAT) {
         /* send RST to RS and client */
         err = tcp_send_rst(proto, conn, DPVS_CONN_DIR_INBOUND);
         if (err != EDPVS_OK)
