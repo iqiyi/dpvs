@@ -23,6 +23,7 @@ TARGET = build/dpip
 
 CFLAGS = -g -O0
 CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes
+CFLAGS += -Wno-address-of-packed-member
 
 CFLAGS += -I ../../include
 CFLAGS += -I ../keepalived/keepalived/include

@@ -820,7 +820,7 @@ ipset_check(const struct dpip_obj *obj, dpip_cmd_t cmd)
 static void
 bitmap_dump_header(char *buf, struct ipset_info *info)
 {
-    char range[50];
+    char range[128];
     char addr[INET6_ADDRSTRLEN], addr2[INET6_ADDRSTRLEN];
 
     if (info->bitmap.cidr) {
