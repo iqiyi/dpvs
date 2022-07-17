@@ -253,6 +253,8 @@ Our test shows the forwarding speed (pps) of DPVS is several times than LVS and 
 
 ![performance](./pic/performance.png)
 
+Click [here](./test/release/v1.9.2/performance.md) for the lastest performance data.
+
 # License
 
 Please refer to the [License](./LICENSE.md) file for details.
