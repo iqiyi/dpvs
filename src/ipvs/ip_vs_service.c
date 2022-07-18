@@ -485,6 +485,7 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
     struct dp_vs_service *svc = NULL;
     struct dp_vs_match match = {0};
 
+    match.af = u->flags & DP_VS_SVC_F_MATCH ? u->af : 0;
     dp_vs_match_dump(&u->srange, struct dp_vs_service_conf, srange, &match);
 
     if (!u->fwmark && inet_is_addr_any(u->af, &u->addr)
@@ -518,9 +519,6 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
     svc->limit_proportion = u->limit_proportion;
     svc->netmask = u->netmask;
 
-    if (u->flags & DP_VS_SVC_F_QID_HASH) {
-        match.af = u->af;
-    }
     if (!is_empty_match(&match)) {
         svc->match = rte_zmalloc(NULL, sizeof(struct dp_vs_match),
                                  RTE_CACHE_LINE_SIZE);
@@ -919,8 +917,8 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
     if (ret != EDPVS_OK)
         return ret;
 
-    match.af = usvc.af;
     dp_vs_match_dump(&usvc.srange, struct dp_vs_service_conf, srange, &match);
+    match.af = usvc.flags & DP_VS_SVC_F_MATCH ? usvc.af : 0;
 
     if (opt == DPVS_SO_SET_ZERO) {
         if(!inet_is_addr_any(usvc.af, &usvc.addr) &&
@@ -1081,8 +1079,8 @@ dp_vs_service_get_lcore(const struct dp_vs_service_entry *entry,
         svc = __dp_vs_service_get(entry->af, entry->proto,
                                   &entry->addr, entry->port, cid);
     } else {
-        match.af = entry->af;
         dp_vs_match_dump(&entry->srange, struct dp_vs_service_entry, srange, &match);
+        match.af = entry->af;
 
         if (!is_empty_match(&match)) {
             svc = __dp_vs_service_match_find(match.af, entry->proto,

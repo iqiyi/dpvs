@@ -71,7 +71,11 @@ int dpvs_ctrl_init(lcoreid_t cid)
     len = sizeof(g_ipvs_info);
     len_rcv = len;
 
-    if (dpvs_getsockopt(DPVS_SO_GET_INFO, (const void*)&g_ipvs_info, len, (void **)&ipvs_info_rcv, &len_rcv)) {
+    if (ESOCKOPT_OK != dpvs_getsockopt(DPVS_SO_GET_INFO, 
+                (const void*)&g_ipvs_info, 
+                len, 
+                (void **)&ipvs_info_rcv, 
+                &len_rcv)) {
         return -1;
     }
 
@@ -433,7 +437,7 @@ dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
 
     assert(svcs);
 
-    if (dpvs_getsockopt(cpu2opt_svc(svcs->cid, DPVS_SO_GET_SERVICES), 
+    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(svcs->cid, DPVS_SO_GET_SERVICES), 
                 svcs,
                 sizeof(dpvs_service_table_t),
                 (void**)&rcv,
@@ -461,7 +465,11 @@ dpvs_dest_table_t* dpvs_get_dests(dpvs_dest_table_t* table)
 
     len = sizeof(dpvs_dest_table_t) + table->num_dests * sizeof(dpvs_dest_compat_t);
 
-    if (dpvs_getsockopt(cpu2opt_svc(table->cid, DPVS_SO_GET_DESTS), table, sizeof(dpvs_dest_table_t), (void**)&rcv, &lrcv) < 0) {
+    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(table->cid, 
+                DPVS_SO_GET_DESTS), table, 
+                sizeof(dpvs_dest_table_t), 
+                (void**)&rcv, 
+                &lrcv)) {
         return NULL;
     }
 
@@ -483,11 +491,11 @@ dpvs_service_compat_t* dpvs_get_service(dpvs_service_compat_t* desc, dpvs_servic
 
     len = sizeof(dpvs_service_compat_t);
 
-    if (!dpvs_getsockopt(cpu2opt_svc(desc->cid, DPVS_SO_GET_SERVICE),
+    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(desc->cid, DPVS_SO_GET_SERVICE),
                 desc,
                 len,
                 (void**)&rcv,
-                &lrcv) == 0) {
+                &lrcv)) {
         return NULL;
     }
 
@@ -729,8 +737,11 @@ struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_v
     snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
     snprintf(conf.iifname, sizeof(conf.oifname), "%s", svc->oifname);
 
-    if (dpvs_getsockopt(cpu2opt_laddr(svc->cid, SOCKOPT_GET_LADDR_GETALL), &conf, sizeof(conf),
-                (void **)&result, &res_size) != 0) {
+    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_laddr(svc->cid, SOCKOPT_GET_LADDR_GETALL), 
+                &conf, 
+                sizeof(conf),
+                (void **)&result, 
+                &res_size)) {
         return NULL;
     }
 
@@ -773,13 +784,15 @@ struct dp_vs_blklst_conf_array *dpvs_get_blklsts(void)
 {
     struct dp_vs_blklst_conf_array *array, *result;
     size_t size;
-    int i, err;
+    int i;
 
     dpvs_ctrl_func = dpvs_get_blklsts;
 
-    err = dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL, NULL, 0, 
-            (void **)&result, &size);
-    if (err != 0)
+    if (ESOCKOPT_OK != dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL, 
+                NULL, 
+                0, 
+                (void **)&result, 
+                &size))
         return NULL;
     if (size < sizeof(*result)
             || size != sizeof(*result) + \
@@ -803,14 +816,17 @@ struct dp_vs_whtlst_conf_array *dpvs_get_whtlsts(void)
 {
     struct dp_vs_whtlst_conf_array *array, *result;
     size_t size;
-    int i, err;
+    int i;
 
     dpvs_ctrl_func = dpvs_get_whtlsts;
 
-    err = dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL, NULL, 0, 
-            (void **)&result, &size);
-    if (err != 0)
+    if (ESOCKOPT_OK != dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL, 
+                NULL, 
+                0, 
+                (void **)&result, 
+                &size)) {
         return NULL;
+    }
     if (size < sizeof(*result)
             || size != sizeof(*result) + \
             result->naddr * sizeof(struct dp_vs_whtlst_conf)) {

@@ -2447,7 +2447,7 @@ static void list_service(dpvs_service_compat_t *svc, unsigned int format)
 {
     dpvs_service_compat_t get;
 
-    if (dpvs_get_service(svc, &get)) {
+    if (!dpvs_get_service(svc, &get)) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
