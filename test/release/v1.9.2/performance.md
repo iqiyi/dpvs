@@ -11,7 +11,7 @@ DPVS v1.9.2 Performance Tests
 
 # Test Platform
 
-The performance of DPVS v1.9.2 is examined on two physical servers, one serves as DPVS server, and the other as both backend server(RS) and client(Client). RS and Client take advantages of [dperf](https://github.com/baidu/dperf), a high performance benchmark tool based on DPDK developed by baidu. The dperf server process and dperf client process use isolated NIC interfaces, CPU coers, and hugepage memory in order to run both processes on a single device.
+The performance of DPVS v1.9.2 is examined on two physical servers, one serves as DPVS server, and the other as both backend server(RS) and client(Client). RS and Client take advantages of [dperf](https://github.com/baidu/dperf), a high performance benchmark tool based on DPDK developed by baidu. The dperf server process and dperf client process use isolated NIC interfaces, CPU coers, and hugepage memory in order to run both processes on a single node.
 
 ### DPVS Server
 
@@ -19,6 +19,7 @@ The performance of DPVS v1.9.2 is examined on two physical servers, one serves a
 + Memory: 188G Bytes
 + NIC: Intel Corporation Ethernet Controller 10-Gigabit X540-AT2
 + OS: Centos 7.6
++ DPVS: v1.9.2
 
 ### Dperf Server/Client
 
@@ -32,7 +33,7 @@ The performance of DPVS v1.9.2 is examined on two physical servers, one serves a
 
 # TCP CPS/CC Tests
 
-CPS(Connections per Second) and CC (Concurrent Connections) tests are performed by using the extreme small sized packets and variable `cps` of dperf clients. We gradually increase the `cps` of dperf clients until packet loss is seen in DPVS, and then the corresponding CPS and CC are the performance data that we need.
+CPS(Connections per Second) and CC (Concurrent Connections) tests are performed by using the extreme small sized packets (payload_size=1) and variable `cps` of dperf clients. We gradually increase the `cps` of dperf clients until packet loss is seen in DPVS, and then the corresponding CPS and CC are the performance data that we need.
 
 ### Dperf Client
 
@@ -117,7 +118,7 @@ Let's make a deep insight into the `cpu-clock` events of DPVS with Linux perform
 
 # UDP PPS Tests
 
-In PPS tests, dperf clients keep a fixed `cps` of 3k and `keepalive` of 2ms, and adjust concurrent connections `cc` to generate different `pps` traffic. The same with CPS/CC tests, an extreme small payload of 1 bytes is used. We use UDP protocol for the tests. Besides, `tx_burst` in dperf client is set to 1 to reduce traffic surge.
+In PPS tests, dperf clients keep a fixed `cps` of 3k and `keepalive` of 2ms, and adjust concurrent connections `cc` to generate different `pps` traffic. The same with CPS/CC tests, an extreme small payload of 1 byte is used. We use UDP protocol for the tests. Besides, `tx_burst` in dperf client is set to 1 to reduce traffic surge.
 
 ### Dperf Client
 

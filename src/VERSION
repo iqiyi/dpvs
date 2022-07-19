@@ -1,6 +1,6 @@
-#!/bin/sh -
+#!/bin/sh
 # program: dpvs
-# Jul 16, 2022
+# Jul 19, 2022
 #
 
 export VERSION=1.9
@@ -8,43 +8,46 @@ export RELEASE=2
 
 echo $VERSION-$RELEASE
 
-* Dpvs: fix a crash problem when timer scheduled from within another timer's callback
-* Dpvs: fix checksum problem caused by incorrect netif interface
-* Toa: support linux kernel verison v5.7.0+
-* Dpvs: make debug fields in dp_vs_conn configurable for memory optimization
-* Dpvs: fix weight ratio update problem in conhash schedule algorithm
-* Dpvs: fix icmp6 checksum error caused by incorrect payload length endian in ipv6 header
-* Dpvs: Add ipset framework and 12 set types(v1.8.12)
-* Dpvs: Add l2/l3/l4 header parse apis from mbuf(v1.8.12)
-* Dpvs: Add an ipset based tc classifier -- tc_cls_ipset(v1.8.12)
-* Dpvs: Add config option "dedicated_queues" for bonding mode 4 (802.3ad)(v1.8.12)
-* Keepalived: Add UDP_CHECK health checker(v1.8.12)
-* Dpvs: Fix ipvs rr/wrr/wlc problem of uneven load distribution across dests
-* Dpvs: Fix bonding mode 4 problem caused by LACP failure
-* Keepalived: fix an exit problem when reload
-* Dpvs: isolate kni ingress traffic using kni address flow
-* Dpvs: update rss reta table according to configured workers after device bootup
-* Dpvs: fix ipv6 neighbour ring full problem to kni isolated lcore
-* Dpvs: add flame graph script for performance tests
-* Dpvs: fix list/edit problem for MATCH type service (SNAT service)
-* Dpvs: fix ICMPv6 sending failure problem caused by incorrect mtu
-* Dpvs: fix a crash problem caused by incorrect mbuf pointer in IPv4 fragmentation
-* Dpvs: fix dpvs worker blocking problem when async log is enabled
-* Dpvs: make async log mempool size and log timestamp configurable
-* Dpvs: enable dpvs log only when macro CONFIG_DPVS_LOG is defined
-* Dpvs: fix some memory overflow problems when log messages are truncated
-* Uoa: fix uoa data parse problem of ipv4 opp, and add a module parameter to parse uoa data in netfilter forward chain
-* Dpvs: fix msg sequence duplicated problem in ipvs allow list
-* Dpvs: fix icmp sending failure problem when no route cached in mbuf
-* Dpvs: fix crash problem caused by using unsafe list macro in conhash
-* Dpvs: fix compiling failure problem when icmp debug is enabled
-* Dpvs: send tcp rst to both ends when snat conneciton expired
-* Dpvs: fix incorrect uoa client sport in fnat64 problem
-* Dpvs: fix incorrect oifname typo in MATCH type
-* Keepalived: fix some compile problems found on ubuntu
-* Dpvs: fix fullnat tcp forwarding problem when defer_rs_syn enabled
-* Dpvs: use unified dest validation in mh scheduling algorithm
-* Dpvs: expire quiescent connections after realserver was removed
-* Ipvsadm: Use correct flag in listing ipvs connections
-* Test: performance benchmark tests for v1.9.2
-* Docs: update some docs
+## Features
+#* Dpvs: Add ipset framework and 12 set types.
+#* Dpvs: Add an ipset based tc classifier -- tc_cls_ipset.
+#* Dpvs: Add l2/l3/l4 header parse apis for mbuf.
+#* Dpvs: Add config option "dedicated_queues" for bonding mode 4 (802.3ad).
+#* Dpvs: Isolate kni ingress traffic using kni address flow.
+#* Dpvs: Update rss reta table according to configured workers after device bootup.
+#* Dpvs: Expire quiescent connections after realserver was removed.
+#* Dpvs: Make async log mempool size and log timestamp configurable.
+#* Dpvs: Enable dpvs log only when macro CONFIG_DPVS_LOG is defined.
+#* Dpvs: Make debug fields in dp_vs_conn configurable for memory optimization.
+#* Toa: Support linux kernel verison v5.7.0+.
+#* Keepalived: Add UDP_CHECK health checker.
+#* Test: Add flame graph scripts for performance tests.
+#* Test: Add performance benchmark tests of DPVS v1.9.2.
+#* Docs: Update some docs.
+#
+## Bugfix
+#* Dpvs: Fix a crash problem when timer is scheduled from within another timer's callback.
+#* Dpvs: Fix a crash problem caused by incorrect mbuf pointer in IPv4 fragmentation.
+#* Dpvs: Fix a crash problem caused by using unsafe list macro in conhash.
+#* Dpvs: Fix the fullnat tcp forwarding failure problem when defer_rs_syn enabled.
+#* Dpvs: Fix the ipvs rr/wrr/wlc problem of uneven load distribution across dests.
+#* Dpvs: Fix the weight ratio update problem in conhash schedule algorithm.
+#* Dpvs: Send tcp rst to both ends when snat conneciton expired.
+#* Dpvs: Use unified dest validation in mh scheduling algorithm.
+#* Dpvs: Fix the icmp sending failure problem when no route cached in mbuf.
+#* Dpvs: Fix the compiling failure problem when icmp debug is enabled.
+#* Dpvs: Fix the icmpv6 sending failure problem caused by incorrect mtu.
+#* Dpvs: Fix icmpv6 checksum error caused by incorrect payload length endian in ipv6 header.
+#* Dpvs: Fix the checksum problem caused by incorrect netif interface.
+#* Dpvs: Fix the bonding mode 4 problem caused by LACP failure.
+#* Dpvs: Fix the ipv6 neighbour ring full problem to kni isolated lcore.
+#* Dpvs: Fix the list/edit problem for MATCH type service (snat service).
+#* Dpvs: Fix incorrect oifname typo in MATCH type.
+#* Dpvs: Fix the dpvs worker blocking problem when async log is enabled.
+#* Dpvs: Fix some memory overflow problems when log messages are truncated.
+#* Dpvs: Fix the msg sequence duplicated problem in ipvs allow list.
+#* Dpvs: Fix the incorrect uoa client source port problem in fnat64.
+#* Uoa: Fix uoa data parse problem of ipv4 opp, and add a module parameter to parse uoa data in netfilter forward chain.
+#* Keepalived: Fix an exit problem when reload.
+#* Keepalived: Fix some compile problems found on ubuntu.
+#* Ipvsadm: Use correct flag in listing ipvs connections.
