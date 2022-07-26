@@ -33,7 +33,7 @@ static void icmp6_dump_hdr(const struct rte_mbuf *mbuf)
     lcoreid_t lcore = rte_lcore_id();
 
     fprintf(stderr, "lcore %d port %d icmp type %u code %u\n",
-            lcore, mbuf->port, ich->icmp_type, ich->icmp_code);
+            lcore, mbuf->port, ich->icmp6_type, ich->icmp6_code);
 
     return;
 }
@@ -247,7 +247,7 @@ void icmp6_send(struct rte_mbuf *imbuf, int type, int code, uint32_t info)
 
     mbuf_copy_bits(imbuf, 0, ich + 1, room);
 
-    shdr.ip6_plen = room + sizeof(struct icmp6_hdr);
+    shdr.ip6_plen = htons(room + sizeof(struct icmp6_hdr));
     icmp6_send_csum(&shdr, ich);
 
     if ((err = ipv6_xmit(mbuf, &fl6)) != EDPVS_OK) {

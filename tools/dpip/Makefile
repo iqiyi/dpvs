@@ -23,18 +23,25 @@ TARGET = build/dpip
 
 CFLAGS = -g -O0
 CFLAGS += -Wall -Werror -Wstrict-prototypes -Wmissing-prototypes
+CFLAGS += -Wno-address-of-packed-member
 
 CFLAGS += -I ../../include
 CFLAGS += -I ../keepalived/keepalived/include
 
+ifneq ("$(wildcard ../../src/VERSION)","")
+VERSION_STRING := $(shell ../../src/VERSION)
+else
+VERSION_STRING := $(shell git describe --tags --always)
+endif
+
 LIBS = -lnuma
-DEFS = -D DPVS_MAX_LCORE=64
+DEFS = -D DPVS_MAX_LCORE=64 -D DPIP_VERSION=\"$(VERSION_STRING)\"
 
 CFLAGS += $(DEFS)
 
-OBJS = dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
-	   qsch.o cls.o tunnel.o ipset.o ipv6.o iftraf.o eal_mem.o ../../src/common.o \
-	   ../keepalived/keepalived/check/sockopt.o
+OBJS = ipset.o dpip.o utils.o route.o addr.o neigh.o link.o vlan.o \
+	   qsch.o cls.o tunnel.o ipset.o ipv6.o iftraf.o eal_mem.o flow.o \
+	   ../../src/common.o ../keepalived/keepalived/check/sockopt.o
 
 all: $(TARGET)
 

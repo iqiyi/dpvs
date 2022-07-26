@@ -21,6 +21,15 @@
  *    Address include ip+port, Now support IPV4 and IPV6
  */
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
+#include <linux/kprobes.h>
+static struct kprobe kp = {
+    .symbol_name = "kallsyms_lookup_name"
+};
+
+typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
+#endif
+
 unsigned long sk_data_ready_addr = 0;
 
 #define TOA_NIPQUAD_FMT "%u.%u.%u.%u"
@@ -681,29 +690,34 @@ inet6_getname_toa(struct socket *sock, struct sockaddr *uaddr,
 static inline int
 get_kernel_ipv6_symbol(void)
 {
-        inet6_stream_ops_p =
-                (struct proto_ops *)kallsyms_lookup_name("inet6_stream_ops");
-        if (inet6_stream_ops_p == NULL) {
-                TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol inet6_stream_ops\n",
-                        smp_processor_id());
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
+    kallsyms_lookup_name_t kallsyms_lookup_name;
+    kallsyms_lookup_name = (kallsyms_lookup_name_t) kp.addr;
+#endif
 
-                return -1;
-        }
-        ipv6_specific_p =
-                (struct inet_connection_sock_af_ops *)kallsyms_lookup_name("ipv6_specific");
-        if (ipv6_specific_p == NULL) {
-                TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol ipv6_specific\n",
-                        smp_processor_id());
-                return -1;
-        }
-        tcp_v6_syn_recv_sock_org_pt =
-                (syn_recv_sock_func_pt)kallsyms_lookup_name("tcp_v6_syn_recv_sock");
-        if (tcp_v6_syn_recv_sock_org_pt == NULL) {
-                TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol tcp_v6_syn_recv_sock\n",
-                        smp_processor_id());
-            return -1;
+    inet6_stream_ops_p =
+        (struct proto_ops *)kallsyms_lookup_name("inet6_stream_ops");
+    if (inet6_stream_ops_p == NULL) {
+        TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol inet6_stream_ops\n",
+                 smp_processor_id());
+
+        return -1;
     }
-        return 0;
+    ipv6_specific_p =
+        (struct inet_connection_sock_af_ops *)kallsyms_lookup_name("ipv6_specific");
+    if (ipv6_specific_p == NULL) {
+        TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol ipv6_specific\n",
+                 smp_processor_id());
+        return -1;
+    }
+    tcp_v6_syn_recv_sock_org_pt =
+        (syn_recv_sock_func_pt)kallsyms_lookup_name("tcp_v6_syn_recv_sock");
+    if (tcp_v6_syn_recv_sock_org_pt == NULL) {
+        TOA_INFO("CPU [%u] kallsyms_lookup_name cannot find symbol tcp_v6_syn_recv_sock\n",
+                 smp_processor_id());
+        return -1;
+    }
+    return 0;
 }
 #endif
 
@@ -996,6 +1010,14 @@ static int toa_stats_seq_open(struct inode *inode, struct file *file)
     return single_open(file, toa_stats_show, NULL);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+static const struct proc_ops toa_stats_fops = {
+    .proc_open = toa_stats_seq_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+#else
 static const struct file_operations toa_stats_fops = {
     .owner = THIS_MODULE,
     .open = toa_stats_seq_open,
@@ -1003,6 +1025,7 @@ static const struct file_operations toa_stats_fops = {
     .llseek = seq_lseek,
     .release = single_release,
 };
+#endif
 
 #ifdef TOA_NAT64_ENABLE
 static struct nf_sockopt_ops toa_sockopts = {
@@ -1019,13 +1042,21 @@ static struct nf_sockopt_ops toa_sockopts = {
 /*
  * TOA module init and destory
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+static struct proc_dir_entry *proc_net_fops_create(struct net *net,
+    const char *name, mode_t mode, const struct proc_ops *proc_ops)
+{
+    return proc_create(name, mode, net->proc_net, proc_ops);
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
 static struct proc_dir_entry *proc_net_fops_create(struct net *net,
     const char *name, mode_t mode, const struct file_operations *fops)
 {
     return proc_create(name, mode, net->proc_net, fops);
 }
+#endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
 static void proc_net_remove(struct net *net, const char *name)
 {
     remove_proc_entry(name, net->proc_net);
@@ -1036,6 +1067,15 @@ static void proc_net_remove(struct net *net, const char *name)
 static int __init
 toa_init(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
+    kallsyms_lookup_name_t kallsyms_lookup_name;
+    int ret = register_kprobe(&kp);
+    if (ret < 0) {
+        TOA_INFO("register_kprobe failed, returned %d\n", ret);
+        return 1;
+    }
+    kallsyms_lookup_name = (kallsyms_lookup_name_t) kp.addr;
+#endif
 
     TOA_INFO("TOA " TOA_VERSION " by qlb of iqiyi.\n");
 
@@ -1108,6 +1148,10 @@ toa_exit(void)
     if (0 != exit_toa_ip6()) {
         TOA_INFO("exit toa ip6 fail.\n");
     }
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
+    unregister_kprobe(&kp);
 #endif
 
     proc_net_remove(&init_net, "toa_stats");

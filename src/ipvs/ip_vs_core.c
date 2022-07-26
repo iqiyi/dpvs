@@ -86,6 +86,8 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
     assert(svc && iph && mbuf);
 
     conn_flags = (is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
+    conn_flags |= (svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT);
+
     if (svc->af == AF_INET6) {
         /* FIXME: Is OK to use svc->netmask as IPv6 prefix length ? */
         ipv6_addr_prefix_copy(&snet.in6, &iph->saddr.in6, svc->netmask);
@@ -339,12 +341,12 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                               ports[0], ports[1], 0, &param);
     }
 
-    if (is_synproxy_on) {
+    if (is_synproxy_on)
         flags |= DPVS_CONN_F_SYNPROXY;
-    }
-    if (svc->flags & DP_VS_SVC_F_ONEPACKET && iph->proto == IPPROTO_UDP) {
+    if (svc->flags & DP_VS_SVC_F_ONEPACKET && iph->proto == IPPROTO_UDP)
         flags |= DPVS_CONN_F_ONE_PACKET;
-    }
+    flags |= (svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT);
+
     conn = dp_vs_conn_new(mbuf, iph, &param, dest, flags);
     if (!conn)
         return NULL;
@@ -502,7 +504,7 @@ static int __xmit_outbound_icmp6(struct rte_mbuf *mbuf,
 
     if (mbuf->pkt_len > rt6->rt6_mtu) {
         route6_put(rt6);
-        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(rt6->rt6_mtu));
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, rt6->rt6_mtu);
         rte_pktmbuf_free(mbuf);
         return EDPVS_FRAG;
     }
@@ -616,7 +618,7 @@ static int __xmit_inbound_icmp6(struct rte_mbuf *mbuf,
 
     if (mbuf->pkt_len > rt6->rt6_mtu) {
         route6_put(rt6);
-        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, htonl(rt6->rt6_mtu));
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, rt6->rt6_mtu);
         rte_pktmbuf_free(mbuf);
         return EDPVS_FRAG;
     }
@@ -1013,17 +1015,15 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
         else
             dir = DPVS_CONN_DIR_INBOUND;
     } else {
-        /* assert(conn->dest->svc != NULL); */
-        if (conn->dest && conn->dest->svc &&
-                prot->conn_expire_quiescent &&
-                (conn->dest->svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT)) {
-            if (rte_atomic16_read(&conn->dest->weight) == 0) {
-                RTE_LOG(INFO, IPVS, "%s: the conn is quiescent, expire it right now,"
-                        " and drop the packet!\n", __func__);
-                prot->conn_expire_quiescent(conn);
-                dp_vs_conn_put(conn);
-                return INET_DROP;
-            }
+        /* assert(conn->dest != NULL); */
+        if (prot->conn_expire_quiescent && (conn->flags & DPVS_CONN_F_EXPIRE_QUIESCENT) &&
+                conn->dest && (!dp_vs_dest_is_avail(conn->dest) ||
+                    rte_atomic16_read(&conn->dest->weight) == 0)) {
+            RTE_LOG(INFO, IPVS, "%s: the conn is quiescent, expire it right now,"
+                    " and drop the packet!\n", __func__);
+            prot->conn_expire_quiescent(conn);
+            dp_vs_conn_put(conn);
+            return INET_DROP;
         }
     }
 

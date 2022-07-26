@@ -131,8 +131,10 @@ struct dp_vs_conn {
     union inet_addr         in_nexthop;  /* to rs*/
     union inet_addr         out_nexthop; /* to client*/
 
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
     /* statistics */
     struct dp_vs_conn_stats stats;
+#endif
 
     /* synproxy related members */
     struct dp_vs_seq syn_proxy_seq;     /* seq used in synproxy */
@@ -154,7 +156,9 @@ struct dp_vs_conn {
     /* controll members */
     struct dp_vs_conn *control;         /* master who controlls me */
     rte_atomic32_t n_control;           /* number of connections controlled by me*/
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
     uint64_t ctime;                     /* create time */
+#endif
 
     /* connection redirect in fnat/snat/nat modes */
     struct dp_vs_redirect  *redirect;

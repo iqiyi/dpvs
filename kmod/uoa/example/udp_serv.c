@@ -41,7 +41,8 @@
 #define MAX_SUPP_AF         2
 #define MAX_EPOLL_EVENTS    2
 #define SA                  struct sockaddr
-#define SERV_PORT           6000
+
+static __u16 SERV_PORT = 6000;
 
 void handle_reply(int efd, int fd)
 {
@@ -109,6 +110,7 @@ void handle_reply(int efd, int fd)
         len = sizeof(peer);
         sendto(fd, buff, n, 0, (SA *)&peer, len);
     }
+    fflush(stdout);
 }
 
 int main(int argc, char *argv[])
@@ -119,6 +121,10 @@ int main(int argc, char *argv[])
     struct epoll_event events[MAX_EPOLL_EVENTS];
     struct sockaddr_in local;
     struct sockaddr_in6 local6;
+
+    if (argc > 1)
+        SERV_PORT = atoi(argv[1]);
+    printf("start udp echo server on 0.0.0.0:%u\n", SERV_PORT);
 
     if ((sockfd[0] = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("Fail to create INET socket!\n");

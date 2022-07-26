@@ -160,7 +160,7 @@ static inline void put_laddr(struct dp_vs_laddr *laddr)
     if (rte_atomic32_dec_and_test(&laddr->refcnt)) {
         rte_free(laddr);
 #ifdef CONFIG_DPVS_IPVS_DEBUG
-        RTE_LOG(DEBUG, IPVS, "%s: [%02d] delete laddr.\n", rte_lcore_id(), __func__);
+        RTE_LOG(DEBUG, IPVS, "%s: [%02d] delete laddr.\n", __func__, rte_lcore_id());
 #endif
     }
 }

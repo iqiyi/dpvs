@@ -45,7 +45,7 @@ struct dp_vs_neigh_conf {
     char                    ifname[IFNAMSIZ];
     uint8_t                 flag;
     uint8_t                 cid;
-}__attribute__((__packed__));
+}__attribute__((__packed__, aligned(2)));
 
 struct dp_vs_neigh_conf_array {
     int  neigh_nums;

@@ -158,20 +158,22 @@ inline void tcp6_send_csum(struct rte_ipv6_hdr *iph, struct tcphdr *th) {
 }
 
 static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
-        const struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
+        const struct dp_vs_conn *conn, struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     /* leverage HW TX TCP csum offload if possible */
-
-    struct netif_port *dev = NULL;
+    struct netif_port *select_dev = NULL;
 
     if (AF_INET6 == af) {
         struct route6 *rt6 = MBUF_USERDATA(mbuf, struct route6 *, MBUF_FIELD_ROUTE);
         struct ip6_hdr *ip6h = ip6_hdr(mbuf);
         if (rt6 && rt6->rt6_dev)
-            dev = rt6->rt6_dev;
+            select_dev = rt6->rt6_dev;
+        else if (dev)
+            select_dev = dev;
         else if (conn->out_dev)
-            dev = conn->out_dev;
-        if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+            select_dev = conn->out_dev;
+
+        if (likely(select_dev && (select_dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
             mbuf->l3_len = iphdrlen;
             mbuf->l4_len = (th->doff << 2);
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
@@ -185,10 +187,12 @@ static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         struct route_entry *rt = MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
         struct rte_ipv4_hdr *iph = ip4_hdr(mbuf);
         if (rt && rt->port)
-            dev = rt->port;
+            select_dev = rt->port;
+        else if (dev)
+            select_dev = dev;
         else if (conn->out_dev)
-            dev = conn->out_dev;
-        if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
+            select_dev = conn->out_dev;
+        if (likely(select_dev && (select_dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
             mbuf->l3_len = iphdrlen;
             mbuf->l4_len = (th->doff << 2);
             mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
@@ -731,7 +735,7 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
     th->dest    = conn->dport;
 
 
-    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf, conn->in_dev);
 }
 
 static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
@@ -769,7 +773,7 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
     if (th->syn && th->ack)
         tcp_out_init_seq(conn, th);
 
-    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf, conn->out_dev);
 }
 
 static int tcp_snat_in_handler(struct dp_vs_proto *proto,
@@ -793,7 +797,7 @@ static int tcp_snat_in_handler(struct dp_vs_proto *proto,
     th->dest = conn->dport;
 
     /* L4 re-checksum */
-    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf, conn->in_dev);
 }
 
 static int tcp_snat_out_handler(struct dp_vs_proto *proto,
@@ -817,7 +821,7 @@ static int tcp_snat_out_handler(struct dp_vs_proto *proto,
     th->source = conn->vport;
 
     /* L4 re-checksum */
-    return tcp_send_csum(af, iphdrlen, th, conn, mbuf);
+    return tcp_send_csum(af, iphdrlen, th, conn, mbuf, conn->out_dev);
 }
 
 static inline int tcp_state_idx(struct tcphdr *th)
@@ -1141,8 +1145,9 @@ static int tcp_conn_expire(struct dp_vs_proto *proto,
     int err;
     assert(proto && conn && conn->dest);
 
-    if (conn->dest->fwdmode == DPVS_FWD_MODE_NAT
-            || conn->dest->fwdmode == DPVS_FWD_MODE_FNAT) {
+    if (conn->dest->fwdmode == DPVS_FWD_MODE_FNAT
+            || conn->dest->fwdmode == DPVS_FWD_MODE_SNAT
+            || conn->dest->fwdmode == DPVS_FWD_MODE_NAT) {
         /* send RST to RS and client */
         err = tcp_send_rst(proto, conn, DPVS_CONN_DIR_INBOUND);
         if (err != EDPVS_OK)

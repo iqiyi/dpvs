@@ -63,13 +63,15 @@
 #include <rte_pdump.h>
 #endif
 
+#ifdef CONFIG_DPVS_LOG
 #ifdef RTE_LOG
-extern int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line, const char *format, ...);
+extern int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line,
+        const char *format, ...) __rte_format_printf(5, 6);
 #undef RTE_LOG
 #define RTE_LOG(l, t, ...)                  \
     dpvs_log(RTE_LOG_ ## l,                   \
         RTE_LOGTYPE_ ## t,  __func__, __LINE__, # t ": " __VA_ARGS__)
 #endif
-
+#endif
 
 #endif /* __DPVS_DPDK_H__ */

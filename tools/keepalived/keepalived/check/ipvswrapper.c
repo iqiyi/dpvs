@@ -67,6 +67,9 @@ ipvs_get_laddr_group_by_name(char *gname, list l)
 	element e;
 	local_addr_group *laddr_group;
 
+	if (!gname)
+		return NULL;
+
 	LIST_FOREACH(l, laddr_group, e) {
 		if (!strcmp(laddr_group->gname, gname))
 			return laddr_group;

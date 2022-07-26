@@ -29,6 +29,10 @@
 #define SAPOOL_PATTERN_NUM  4
 /* sapool action stack: QUEUE | END */
 #define SAPOOL_ACTION_NUM   2
+/* kni flow pattern stack: ETH | IP | END */
+#define KNI_PATTERN_NUM  3
+/* kni flow action stack: QUEUE | END */
+#define KNI_ACTION_NUM   2
 
 /* dpvs use only one flow group */
 #define NETIF_FLOW_GROUP    0
@@ -37,6 +41,7 @@
  * The enum value matters. Lower value denotes higher priority. */
 typedef enum {
     NETIF_FLOW_PRIO_SAPOOL = 1,     // sapool flow rules
+    NETIF_FLOW_PRIO_KNI = 2,        // kni ip address flow rules
     NETIF_FLOW_PRIO_TUNNEL,         // TODO, gre tunnel flow rules
     // more ...
 } netif_flow_type_prio_t;
@@ -200,7 +205,7 @@ static inline int __netif_flow_flush(struct netif_port *dev)
         return EDPVS_INVAL;
 
     if (rte_flow_flush(dev->id, &flow_error)) {
-        RTE_LOG(WARNING, FLOW, "rte_flow_flush on %s failed -- %d, %s, %s\n",
+        RTE_LOG(WARNING, FLOW, "rte_flow_flush on %s failed -- %d, %p, %s\n",
                 dev->name, flow_error.type, flow_error.cause, flow_error.message);
         return EDPVS_DPDKAPIFAIL;
     }
@@ -406,4 +411,119 @@ int netif_sapool_flow_del(struct netif_port *dev, lcoreid_t cid,
     }
 
     return ret;
+}
+
+/*
+ * Set kni flow rules.
+ *
+ * Ether | IPv4/IPv6 | END
+ */
+int netif_kni_flow_add(struct netif_port *dev, lcoreid_t cid,
+            int af, const union inet_addr *addr,
+            netif_flow_handler_param_t *flows)
+{
+    int err;
+    char ipbuf[64];
+    struct rte_flow_attr attr = {
+        .group    = NETIF_FLOW_GROUP,
+        .priority = NETIF_FLOW_PRIO_KNI,
+        .ingress  = 1,
+        .egress   = 0,
+        //.transfer = 0,
+    };
+    struct rte_flow_item pattern[KNI_PATTERN_NUM];
+    struct rte_flow_action action[KNI_ACTION_NUM];
+    netif_flow_handler_param_t resp;
+
+    struct rte_flow_item_ipv4 ip_spec, ip_mask;
+    struct rte_flow_item_ipv6 ip6_spec, ip6_mask;
+
+    queueid_t queue_id;
+    struct rte_flow_action_queue queue;
+
+    if (unlikely(!dev || !addr || !flows))
+        return EDPVS_INVAL;
+    if (unlikely(flows->size < 2 || !flows->handlers))
+        return EDPVS_INVAL;
+
+    memset(pattern, 0, sizeof(pattern));
+    memset(action, 0, sizeof(action));
+
+    /* create action stack */
+    err = netif_get_queue(dev, cid, &queue_id);
+    if (unlikely(err != EDPVS_OK))
+        return err;
+    queue.index = queue_id;
+    action[0].type = RTE_FLOW_ACTION_TYPE_QUEUE;
+    action[0].conf = &queue;
+    action[1].type = RTE_FLOW_ACTION_TYPE_END;
+
+    /* create pattern stack */
+    pattern[0].type = RTE_FLOW_ITEM_TYPE_ETH;
+
+    if (af == AF_INET) {
+        memset(&ip_spec, 0, sizeof(struct rte_flow_item_ipv4));
+        memset(&ip_mask, 0, sizeof(struct rte_flow_item_ipv4));
+        ip_spec.hdr.dst_addr = addr->in.s_addr;
+        ip_mask.hdr.dst_addr = htonl(0xffffffff);
+        pattern[1].type = RTE_FLOW_ITEM_TYPE_IPV4;
+        pattern[1].spec = &ip_spec;
+        pattern[1].mask = &ip_mask;
+    } else if (af == AF_INET6) {
+        memset(&ip6_spec, 0, sizeof(struct rte_flow_item_ipv6));
+        memset(&ip6_mask, 0, sizeof(struct rte_flow_item_ipv6));
+        memcpy(&ip6_spec.hdr.dst_addr, &addr->in6, sizeof(ip6_spec.hdr.dst_addr));
+        memset(&ip6_mask.hdr.dst_addr, 0xff, sizeof(ip6_mask.hdr.dst_addr));
+        pattern[1].type = RTE_FLOW_ITEM_TYPE_IPV6;
+        pattern[1].spec = &ip6_spec;
+        pattern[1].mask = &ip6_mask;
+    } else {
+        return EDPVS_INVAL;
+    }
+    pattern[2].type = RTE_FLOW_ITEM_TYPE_END;
+
+    /* set kni flow */
+    resp.size = flows->size;
+    resp.flow_num = 0;
+    resp.handlers = &flows->handlers[0];
+    err = netif_flow_create(dev, &attr, pattern, action, &resp);
+    if (err) {
+        RTE_LOG(ERR, FLOW, "%s: adding kni flow failed: %s ip %s queue %d lcore %2d"
+                " (cause: %s)\n", __func__, dev->name, inet_ntop(af, addr, ipbuf,
+                sizeof(ipbuf)) ? : "::", queue_id, cid, dpvs_strerror(err));
+        return EDPVS_RESOURCE;
+    }
+
+    flows->flow_num = resp.flow_num;
+    RTE_LOG(INFO, FLOW, "%s: adding kni flow succeed: %s ip %s queue %d lcore %2d\n",
+            __func__, dev->name, inet_ntop(af, addr, ipbuf, sizeof(ipbuf)) ? : "::",
+            queue_id, cid);
+
+    return EDPVS_OK;
+}
+
+/*
+ * Delete kni flow rules.
+ *
+ * Ether | IPv4/IPv6 | END
+ */
+int netif_kni_flow_del(struct netif_port *dev, lcoreid_t cid,
+            int af, const union inet_addr *addr,
+            netif_flow_handler_param_t *flows)
+{
+    int err;
+    char ipbuf[64];
+
+    err = netif_flow_destroy(flows);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, FLOW, "%s: deleting kni flow failed: %s ip %s (cause: %s)\n",
+                __func__, dev->name, inet_ntop(af, addr, ipbuf, sizeof(ipbuf))
+                ? : "::", dpvs_strerror(err));
+        return EDPVS_RESOURCE;
+    }
+
+    flows->flow_num = 0;
+    RTE_LOG(INFO, FLOW, "%s: deleting kni flow succeed: %s ip %s\n", __func__,
+            dev->name, inet_ntop(af, addr, ipbuf, sizeof(ipbuf)) ? : "::");
+    return EDPVS_OK;
 }

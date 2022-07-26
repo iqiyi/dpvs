@@ -312,7 +312,7 @@ udp_check_thread(thread_ref_t thread)
     if (recv_buf)
     	FREE(recv_buf);
 
-	return;
+	return 0;
 }
 
 static int
@@ -331,7 +331,7 @@ udp_connect_thread(thread_ref_t thread)
 	if (!checker->enabled) {
 		thread_add_timer(thread->master, udp_connect_thread, checker,
 				 checker->delay_loop);
-		return;
+		return 0;
 	}
 
 	if ((fd = socket(co->dst.ss_family, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, IPPROTO_UDP)) == -1) {
@@ -339,7 +339,7 @@ udp_connect_thread(thread_ref_t thread)
 		thread_add_timer(thread->master, udp_connect_thread, checker,
 				checker->delay_loop);
 
-		return;
+		return 0;
 	}
 
 	status = udp_bind_connect(fd, co, udp_check->payload, udp_check->payload_len);
@@ -350,7 +350,7 @@ udp_connect_thread(thread_ref_t thread)
 		udp_epilog(thread, false);
 	}
 
-	return;
+	return 0;
 }
 
 #ifdef THREAD_DUMP

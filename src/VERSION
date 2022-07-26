@@ -1,33 +1,53 @@
-#!/bin/sh -
+#!/bin/sh
 # program: dpvs
-# Jul 28, 2021
-#
-# Major changes:
-#   - Adapt dpvs to dpdk 20.11 (dpdk-stable-20.11.1).
-#   - Create branch DPVS-1.8-LTS to support dpdk 18.11.
-#   - Obsolete supports for dpdk 17.11.
-#
-# Featurs:
-#   - Dpvs: Add netif_flow module using generic flow api (rte_flow), and replace flow director with rte_flow.
-#   - Dpvs: Replace mbuf userdata with mbuf dynfields.
-#   - Dpvs: Adapt dpvs to several renamed type names in dpdk 20.11.
-#   - Dpvs: Update Makefiles to support dpdk 20.11.
-#   - Dpvs: Add config option "dedicated_queues" for bonding mode 4 (802.3ad).
-#   - Dpdk: Add helper script to facilitate dpdk build.
-#   - Dpdk: Porting patches to dpdk 20.11 and remove patches of previous dpdk versions (18.11, 17.11).
-#   - Dpdk: Patch dpdk ixgbe pmd driver to support dpvs's flow api.
-#   - Dpdk: Patch dpdk bonding mode 4 for mlx5 to fix crash problem when debug.
-#   - Keeaplived: Add UDP_CHECK health checker.
-#   - Docs: Refine tutorial doc of section 'Full-NAT with Keepalived (one-arm)'.
-#   - Docs: Update docs for dpvs use with dpdk 20.11.
-#   - Ci: Update dpvs ci to support dpdk 20.11.
-#
-# Bugfix:
-#   - Dpvs: Fix ipvs rr/wrr/wlc problem of uneven load distribution across dests.
-#   - Dpvs: Fix bonding mode 4 problem caused by LACP failure.
+# Jul 19, 2022
 #
 
 export VERSION=1.9
-export RELEASE=0
+export RELEASE=2
 
 echo $VERSION-$RELEASE
+
+## Features
+#* Dpvs: Add ipset framework and 12 set types.
+#* Dpvs: Add an ipset based tc classifier -- tc_cls_ipset.
+#* Dpvs: Add l2/l3/l4 header parse apis for mbuf.
+#* Dpvs: Add config option "dedicated_queues" for bonding mode 4 (802.3ad).
+#* Dpvs: Isolate kni ingress traffic using kni address flow.
+#* Dpvs: Update rss reta table according to configured workers after device bootup.
+#* Dpvs: Expire quiescent connections after realserver was removed.
+#* Dpvs: Make async log mempool size and log timestamp configurable.
+#* Dpvs: Enable dpvs log only when macro CONFIG_DPVS_LOG is defined.
+#* Dpvs: Make debug fields in dp_vs_conn configurable for memory optimization.
+#* Toa: Support linux kernel verison v5.7.0+.
+#* Keepalived: Add UDP_CHECK health checker.
+#* Test: Add flame graph scripts for performance tests.
+#* Test: Add performance benchmark tests of DPVS v1.9.2.
+#* Docs: Update some docs.
+#
+## Bugfix
+#* Dpvs: Fix a crash problem when timer is scheduled from within another timer's callback.
+#* Dpvs: Fix a crash problem caused by incorrect mbuf pointer in IPv4 fragmentation.
+#* Dpvs: Fix a crash problem caused by using unsafe list macro in conhash.
+#* Dpvs: Fix the fullnat tcp forwarding failure problem when defer_rs_syn enabled.
+#* Dpvs: Fix the ipvs rr/wrr/wlc problem of uneven load distribution across dests.
+#* Dpvs: Fix the weight ratio update problem in conhash schedule algorithm.
+#* Dpvs: Send tcp rst to both ends when snat conneciton expired.
+#* Dpvs: Use unified dest validation in mh scheduling algorithm.
+#* Dpvs: Fix the icmp sending failure problem when no route cached in mbuf.
+#* Dpvs: Fix the compiling failure problem when icmp debug is enabled.
+#* Dpvs: Fix the icmpv6 sending failure problem caused by incorrect mtu.
+#* Dpvs: Fix icmpv6 checksum error caused by incorrect payload length endian in ipv6 header.
+#* Dpvs: Fix the checksum problem caused by incorrect netif interface.
+#* Dpvs: Fix the bonding mode 4 problem caused by LACP failure.
+#* Dpvs: Fix the ipv6 neighbour ring full problem to kni isolated lcore.
+#* Dpvs: Fix the list/edit problem for MATCH type service (snat service).
+#* Dpvs: Fix incorrect oifname typo in MATCH type.
+#* Dpvs: Fix the dpvs worker blocking problem when async log is enabled.
+#* Dpvs: Fix some memory overflow problems when log messages are truncated.
+#* Dpvs: Fix the msg sequence duplicated problem in ipvs allow list.
+#* Dpvs: Fix the incorrect uoa client source port problem in fnat64.
+#* Uoa: Fix uoa data parse problem of ipv4 opp, and add a module parameter to parse uoa data in netfilter forward chain.
+#* Keepalived: Fix an exit problem when reload.
+#* Keepalived: Fix some compile problems found on ubuntu.
+#* Ipvsadm: Use correct flag in listing ipvs connections.
