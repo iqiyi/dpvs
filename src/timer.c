@@ -283,7 +283,8 @@ static inline void deviation_measure(void)
 static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
 {
     struct timer_scheduler *sched = arg;
-    struct dpvs_timer *timer, *next;
+    struct dpvs_timer *timer;
+    struct list_head *head;
     uint64_t left, hash, off, remainder;
     int level, lower;
     uint32_t *cursor;
@@ -309,8 +310,9 @@ static void rte_timer_tick_cb(struct rte_timer *tim, void *arg)
             carry = true;
         }
 
-        list_for_each_entry_safe(timer, next,
-                                 &sched->hashs[level][*cursor], list) {
+        head = &sched->hashs[level][*cursor];
+        while (!list_empty(head)) {
+            timer = list_first_entry(head, struct dpvs_timer, list);
             /* is all lower levels ticks empty ? */
             left = timer->delay % get_level_ticks(level);
             if (!left) {

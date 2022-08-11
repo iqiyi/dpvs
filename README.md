@@ -104,7 +104,7 @@ $ mkdir dpdkbuild               # user desired build folder
 $ meson -Denable_kmods=true -Dprefix=dpdklib dpdkbuild
 $ ninja -C dpdkbuild
 $ cd dpdkbuild; ninja install
-$ export PKG_CONFIG_PATH=$(pwd)/../dpdklib/lib64/pkgconfig/libdpdk.pc
+$ export PKG_CONFIG_PATH=$(pwd)/../dpdklib/lib64/pkgconfig/
 ```
 
 > Tips: You can use script [dpdk-build.sh](./scripts/dpdk-build.sh) to facilitate dpdk build. Run `dpdk-build.sh -h` for the usage of the script.
@@ -146,14 +146,14 @@ $ ./usertools/dpdk-devbind.py -b uio_pci_generic 0000:06:00.0
 It's simple, just set `PKG_CONFIG_PATH` and build it.
 
 ```bash
-$ export PKG_CONFIG_PATH=<path-of-libdpdk.pc>  # normally located at dpdklib/lib64/pkgconfig/libdpdk.pc
+$ export PKG_CONFIG_PATH=<path-of-libdpdk.pc>  # normally located at dpdklib/lib64/pkgconfig/
 $ cd <path-of-dpvs>
 
 $ make              # or "make -j" to speed up
 $ make install
 ```
 > Notes:
-> 1. Build dependencies may be needed, such as `pkg-config`(version 0.29.2+),`automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`. You can install the missing dependencies by using the package manager of the system, e.g., `yum install popt-devel` (CentOS).
+> 1. Build dependencies may be needed, such as `pkg-config`(version 0.29.2+),`automake`, `libnl3`, `libnl-genl-3.0`, `openssl`, `popt` and `numactl`. You can install the missing dependencies by using the package manager of the system, e.g., `yum install popt-devel automake` (CentOS) or `apt install libpopt-dev autoconfig` (Ubuntu).
 > 2. Early `pkg-config` versions (v0.29.2 before) may cause dpvs build failure. If so, please upgrade this tool.
 
 Output files are installed to `dpvs/bin`.
@@ -252,6 +252,8 @@ We also listed some frequently asked questions in the [FAQ Document](./doc/faq.m
 Our test shows the forwarding speed (pps) of DPVS is several times than LVS and as good as Google's [Maglev](https://research.google.com/pubs/pub44824.html).
 
 ![performance](./pic/performance.png)
+
+Click [here](./test/release/v1.9.2/performance.md) for the lastest performance data.
 
 # License
 

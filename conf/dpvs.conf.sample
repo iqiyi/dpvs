@@ -65,6 +65,12 @@ netif_defs {
 }
 
 ! worker config (lcores)
+! notes: 
+!    1. rx(tx) queue ids MUST start from 0 and continous
+!    2. cpu ids and rx(tx) queue ids MUST be unique, repeated ids is forbidden
+!    3. cpu ids identify dpvs workers only, and not correspond to physical cpu cores.
+!       If you are to specify cpu cores on which to run dpvs, please use dpdk eal options,
+!       such as "-c", "-l", "--lcores". Use "dpvs -- --help" for supported eal options.
 worker_defs {
     <init> worker cpu0 {
         type    master
@@ -208,17 +214,18 @@ worker_defs {
         }
     }
 
-    !<init> worker   cpu9 {
+    !<init> worker   cpu17 {
     !    type        kni
-    !    cpu_id      9
+    !    cpu_id      17
     !    port        dpdk0 {
+    !        rx_queue_ids     8
     !        tx_queue_ids     8
     !    }
     !    port        dpdk1 {
+    !        rx_queue_ids     8
     !        tx_queue_ids     8
     !    }
     !}
-
 }
 
 ! timer config
@@ -231,6 +238,11 @@ timer_defs {
 neigh_defs {
     <init> unres_queue_length  128
     timeout                    60
+}
+
+! dpvs ipset config
+ipset_defs {
+    <init> ipset_hash_pool_size 131072
 }
 
 ! dpvs ipv4 config
@@ -312,6 +324,7 @@ ipvs_defs {
                 ! wscale
                 ! timestamp
             }
+            close_client_window
             ! defer_rs_syn
             rs_syn_max_retry    3
             ack_storm_thresh    10

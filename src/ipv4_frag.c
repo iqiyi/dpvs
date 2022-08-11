@@ -301,7 +301,7 @@ int ipv4_fragment(struct rte_mbuf *mbuf, unsigned int mtu,
         /* copy metadata from orig pkt */
         route4_get(rt);
         /* no need to hold before consume mbuf */
-        MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
+        MBUF_USERDATA(frag, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
         frag->port = mbuf->port;
         frag->ol_flags = 0; /* do not offload csum for frag */
         frag->l2_len = mbuf->l2_len;

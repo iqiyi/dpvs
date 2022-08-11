@@ -45,7 +45,7 @@
 #include "netif.h"
 #include "linux_ipv6.h"
 
-#define RTE_LOGTYPE_NEIGHBOUR RTE_LOGTYPE_USER2
+#define RTE_LOGTYPE_NEIGHBOUR RTE_LOGTYPE_USER1
 #define NEIGH_TAB_BITS 8
 #define NEIGH_TAB_SIZE (1 << NEIGH_TAB_BITS)
 #define NEIGH_TAB_MASK (NEIGH_TAB_SIZE - 1)

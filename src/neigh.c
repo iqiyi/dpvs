@@ -85,7 +85,7 @@ static struct nud_state nud_states[] = {
 /* params from config file */
 static int arp_unres_qlen = NEIGH_ENTRY_BUFF_SIZE_DEF;
 
-static struct rte_ring *neigh_ring[DPVS_MAX_LCORE];
+static struct rte_ring *neigh_ring[DPVS_MAX_LCORE] = {NULL, };
 
 static void unres_qlen_handler(vector_t tokens)
 {
@@ -751,6 +751,8 @@ static int neigh_ring_init(void)
     uint8_t cid;
     socket_id = rte_socket_id();
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++) {
+        if (false == netif_lcore_is_fwd_worker(cid))
+            continue;
         snprintf(name_buf, RTE_RING_NAMESIZE, "neigh_ring_c%d", cid);
         neigh_ring[cid] = rte_ring_create(name_buf, MAC_RING_SIZE,
                                           socket_id, RING_F_SC_DEQ);
@@ -812,6 +814,8 @@ static void neigh_process_ring(void *arg)
     struct raw_neigh *param;
     lcoreid_t cid = rte_lcore_id();
 
+    if (unlikely(NULL == neigh_ring[cid]))
+        return;
     nb_rb = rte_ring_dequeue_burst(neigh_ring[cid], (void **)params,
                                    NETIF_MAX_PKT_BURST, NULL);
     if (nb_rb > 0) {
@@ -1014,7 +1018,7 @@ int neigh_sync_core(const void *param, bool add_del, enum param_kind kind)
     cid = rte_lcore_id();
 
     for (i = 0; i < DPVS_MAX_LCORE; i++) {
-        if ((i == cid) || (!is_lcore_id_valid(i)) || (i == master_cid))
+        if ((i == cid) || (!is_lcore_id_valid(i)) || (i == master_cid) || (NULL == neigh_ring[i]))
             continue;
         switch (kind) {
         case NEIGH_ENTRY:

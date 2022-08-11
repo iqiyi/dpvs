@@ -11,11 +11,13 @@
 
 ! global config
 global_defs {
-    #daemon                             <disalbe>
-    log_level         INFO              <none>
-    log_file          /var/log/dpvs.log <none>
-    <init> log_async_mode    off        <off, on|off>
-    <init> pdump      off               <off, on|off>
+    #daemon                                         <disalbe>
+    log_level                   INFO                <none>
+    log_file                    /var/log/dpvs.log   <none>
+    log_with_timestamp          off                 <off, on|off>   # note: only effective for async log now
+    <init> log_async_mode       off                 <off, on|off>
+    <init> log_async_pool_size  16383               <16383, 1023-unlimited>
+    <init> pdump                off                 <off, on|off>
 }
 
 ! netif config
@@ -71,6 +73,12 @@ netif_defs {
 }
 
 ! worker config (lcores)
+! notes: 
+!    1. rx(tx) queue ids MUST start from 0 and continous
+!    2. cpu ids and rx(tx) queue ids MUST be unique, repeated ids is forbidden
+!    3. cpu ids identify dpvs workers only, and not correspond to physical cpu cores.
+!       If you are to specify cpu cores on which to run dpvs, please use dpdk eal options,
+!       such as "-c", "-l", "--lcores". Use "dpvs -- --help" for supported eal options.
 worker_defs {
     <init> worker cpu0 {
         cpu_id  0
@@ -139,9 +147,11 @@ worker_defs {
         cpu_id  5
         icmp_redirect_core
         port dpdk0 {
+            rx_queue_ids 4
             tx_queue_ids 6
         }
         port dpdk1 {
+            rx_queue_ids 4
             tx_queue_ids 4
         }
     }
@@ -157,6 +167,11 @@ timer_defs {
 neigh_defs {
     <init> unres_queue_length  128      <128, 16-8192>
     timeout                    60       <60, 1-3600>
+}
+
+! dpvs ipset config
+ipset_defs {
+    <init> ipset_hash_pool_size 131072  <131072, 65536-524288>
 }
 
 ! dpvs ipv4 config
@@ -245,6 +260,7 @@ ipvs_defs {
             !    wscale                      <disable>
             !    timestamp                   <disable>
             }
+            close_client_window             <enable>
             !defer_rs_syn                   <disable>
             rs_syn_max_retry    3           <3, 1-99>
             ack_storm_thresh    10          <10, 1-999>

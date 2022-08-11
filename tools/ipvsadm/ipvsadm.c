@@ -21,7 +21,7 @@
  *        Wensong Zhang       :   added the long options
  *        Wensong Zhang       :   added the hostname and portname input
  *        Wensong Zhang       :   added the hostname and portname output
- *        Lars Marowsky-Brée  :   added persistence granularity support
+ *        Lars Marowsky-BrÃ©e  :   added persistence granularity support
  *        Julian Anastasov    :   fixed the (null) print for unknown services
  *        Wensong Zhang       :   added the port_to_anyname function
  *        Horms               :   added option to read commands from stdin
@@ -1379,6 +1379,8 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
     int r;
     bool range = false;
     bool af = false;
+    struct inet_addr_range ip_range;
+    int ip_af = 0;
 
     snprintf(params, sizeof(params), "%s", buf);
 
@@ -1414,9 +1416,17 @@ static int parse_match_snat(const char *buf, ipvs_service_t *svc)
         } else if (strcmp(key, "src-range") == 0) {
             range = true;
             snprintf(svc->user.srange, sizeof(svc->user.srange), "%s", val);
+            if (svc->af == 0) {
+                inet_addr_range_parse(svc->user.srange, &ip_range, &ip_af);
+                svc->af = ip_af;
+            }
         } else if (strcmp(key, "dst-range") == 0) {
             range = true;
             snprintf(svc->user.drange, sizeof(svc->user.drange), "%s", val);
+            if (svc->af == 0) {
+                inet_addr_range_parse(svc->user.drange, &ip_range, &ip_af);
+                svc->af = ip_af;
+            }
         } else if (strcmp(key, "iif") == 0) {
             snprintf(svc->user.iifname, sizeof(svc->user.iifname), "%s", val);
         } else if (strcmp(key, "oif") == 0) {
@@ -1709,7 +1719,7 @@ static void list_conn(int is_template, unsigned int format)
 		for (i = 0; i < conn_array->nconns; i++)
 			print_conn_entry(&conn_array->array[i], format);
         req.whence = conn_array->curcid;
-        more = conn_array->resl & GET_IPVS_CONN_FLAG_MORE;
+        more = conn_array->resl & GET_IPVS_CONN_RESL_MORE;
         free(conn_array);
         if (!more)
             break;

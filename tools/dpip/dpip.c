@@ -33,9 +33,10 @@ static void usage(void)
         "Usage:\n"
         "    "DPIP_NAME" [OPTIONS] OBJECT { COMMAND | help }\n"
         "Parameters:\n"
-        "    OBJECT  := { link | addr | route | neigh | vlan | tunnel |\n"
-        "                 qsch | cls | ipv6 | iftraf | eal-mem }\n"
-        "    COMMAND := { add | del | change | replace | show | flush | enable | disable }\n"
+        "    OBJECT  := { link | addr | route | neigh | vlan | tunnel | qsch | cls |\n"
+        "                 ipv6 | iftraf | eal-mem | ipset | flow }\n"
+        "    COMMAND := { create | destroy | add | del | show (list) | set (change) |\n"
+        "                 replace | flush | test | enable | disable }\n"
         "Options:\n"
         "    -v, --verbose\n"
         "    -h, --help\n"
@@ -44,6 +45,7 @@ static void usage(void)
         "    -6, --family=inet6\n"
         "    -s, --stats, statistics\n"
         "    -C, --color\n"
+        "    -F, --force\n"
         );
 }
 
@@ -62,6 +64,7 @@ static struct dpip_obj *dpip_obj_get(const char *name)
 static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
 {
     int opt;
+    bool show_usage = false;
     struct dpip_obj *obj;
     struct option opts[] = {
         {"verbose", no_argument, NULL, 'v'},
@@ -73,6 +76,7 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         {"color",  no_argument, NULL, 'C'},
         {"interval", required_argument, NULL, 'i'},
         {"count", required_argument, NULL, 'c'},
+        {"force", no_argument, NULL, 'F'},
         {NULL, 0, NULL, 0},
     };
 
@@ -84,14 +88,14 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         exit(0);
     }
 
-    while ((opt = getopt_long(argc, argv, "vhV46f:si:c:C", opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "vhV46f:si:c:CDF", opts, NULL)) != -1) {
         switch (opt) {
         case 'v':
             conf->verbose = 1;
             break;
         case 'h':
-            usage();
-            exit(0);
+            show_usage = true;
+            break;
         case 'V':
             printf(DPIP_NAME"-"DPIP_VERSION"\n");
             exit(0);
@@ -121,7 +125,10 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
             conf->count = atoi(optarg);
             break;
         case 'C':
-                conf->color = true;
+            conf->color = true;
+            break;
+        case 'F':
+            conf->force = true;
             break;
         case '?':
         default:
@@ -143,7 +150,7 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
     argv += optind;
 
     conf->obj = argv[0];
-    if (argc < 2) {
+    if (argc < 2 || show_usage) {
         obj = dpip_obj_get(conf->obj);
         if (obj && obj->help)
             obj->help();
@@ -152,11 +159,17 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         exit(1);
     }
 
-    if (strcmp(argv[1], "add") == 0 ||
-            strcmp(argv[1], "enable") == 0)
+    if (strcmp(argv[1], "create") == 0)
+        conf->cmd = DPIP_CMD_CREATE;
+    else if (strcmp(argv[1], "destroy") == 0)
+        conf->cmd = DPIP_CMD_DESTROY;
+    else if (strcmp(argv[1], "enable") == 0)
+        conf->cmd = DPIP_CMD_ENABLE;
+    else if (strcmp(argv[1], "disable") == 0)
+        conf->cmd = DPIP_CMD_DISABLE;
+    else if (strcmp(argv[1], "add") == 0)
         conf->cmd = DPIP_CMD_ADD;
-    else if (strcmp(argv[1], "del") == 0 ||
-            strcmp(argv[1], "disable") == 0)
+    else if (strcmp(argv[1], "del") == 0)
         conf->cmd = DPIP_CMD_DEL;
     else if (strcmp(argv[1], "set") == 0 ||
              strcmp(argv[1], "change") == 0)
@@ -168,6 +181,8 @@ static int parse_args(int argc, char *argv[], struct dpip_conf *conf)
         conf->cmd = DPIP_CMD_REPLACE;
     else if (strcmp(argv[1], "flush") == 0)
         conf->cmd = DPIP_CMD_FLUSH;
+    else if (strcmp(argv[1], "test") == 0)
+        conf->cmd = DPIP_CMD_TEST;
     else if (strcmp(argv[1], "help") == 0)
         conf->cmd = DPIP_CMD_HELP;
     else {

@@ -38,6 +38,7 @@
 #include "ipv4.h"
 #include "neigh.h"
 #include "sa_pool.h"
+#include "ipset/ipset.h"
 #include "ipvs/ipvs.h"
 #include "cfgfile.h"
 #include "ip_tunnel.h"
@@ -101,14 +102,16 @@ static void inline dpdk_version_check(void)
                     sa_pool_init,        sa_pool_term),         \
         DPVS_MODULE(MODULE_IP_TUNNEL,   "tunnel",               \
                     ip_tunnel_init,      ip_tunnel_term),       \
+        DPVS_MODULE(MODULE_IPSET,       "ipset",                \
+                    ipset_init,          ipset_term),           \
         DPVS_MODULE(MODULE_VS,          "ipvs",                 \
                     dp_vs_init,          dp_vs_term),           \
         DPVS_MODULE(MODULE_NETIF_CTRL,  "netif ctrl",           \
                     netif_ctrl_init,     netif_ctrl_term),      \
         DPVS_MODULE(MODULE_IFTRAF,      "iftraf",               \
                     iftraf_init,         iftraf_term),          \
-        DPVS_MODULE(MODULE_LAST,        "iftraf",               \
-                    eal_mem_init,        eal_mem_term)          \
+        DPVS_MODULE(MODULE_LAST,        "last",                 \
+                    NULL,                NULL)                  \
     }
 
 #define DPVS_MODULE(a, b, c, d)  a
@@ -325,13 +328,14 @@ int main(int argc, char *argv[])
 
     /* print port-queue-lcore relation */
     netif_print_lcore_conf(pql_conf_buf, &pql_conf_buf_len, true, 0);
-    RTE_LOG(INFO, DPVS, "\nport-queue-lcore relation array: \n%s\n",
+    RTE_LOG(INFO, DPVS, "port-queue-lcore relation array: \n%s\n",
             pql_conf_buf);
-
-    log_slave_init();
 
     /* start slave worker threads */
     dpvs_lcore_start(0);
+
+    /* start async logging worker thread */
+    log_slave_init();
 
     /* write pid file */
     if (!pidfile_write(DPVS_PIDFILE, getpid()))
