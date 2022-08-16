@@ -9,7 +9,7 @@ outfile=$2
 [ ! -f $infile ] && echo -e "can't find input perf.data file $inflie, please use `perf record` to generate it"
 [ _$outfile = _ ] && echo -e "invalid out.file name" && exit 1
 
-perf script -i perf.data &> perf.unfold
+perf script -i $infile > perf.unfold
 ./stackcollapse-perf.pl perf.unfold &> perf.folded
 ./flamegraph.pl perf.folded > $outfile.svg
 rm -f perf.unfold 

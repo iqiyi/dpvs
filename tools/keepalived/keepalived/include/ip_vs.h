@@ -22,7 +22,7 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////
 
-#define IP_VS_VERSION_CODE              0x010808            /* DPVS v1.8.8 */
+#define IP_VS_VERSION_CODE              0x010902            /* DPVS v1.9.2 */
 #define NVERSION(version)               \
     (version >> 16) & 0xFF,             \
     (version >> 8) & 0xFF,              \
@@ -84,6 +84,19 @@
 #define IP_VS_SO_GET_DAEMON             (IP_VS_BASE_CTL+7)
 #define IP_VS_SO_GET_LADDRS             (IP_VS_BASE_CTL+8)
 #define IP_VS_SO_GET_MAX                IP_VS_SO_GET_LADDRS
+
+/* Tunnel types */
+enum {
+    IP_VS_CONN_F_TUNNEL_TYPE_IPIP = 0,  /* IPIP */
+    IP_VS_CONN_F_TUNNEL_TYPE_GUE,       /* GUE */
+    IP_VS_CONN_F_TUNNEL_TYPE_GRE,       /* GRE */
+    IP_VS_CONN_F_TUNNEL_TYPE_MAX,
+};
+
+/* Tunnel encapsulation flags */
+#define IP_VS_TUNNEL_ENCAP_FLAG_NOCSUM  (0)
+#define IP_VS_TUNNEL_ENCAP_FLAG_CSUM    (1 << 0)
+#define IP_VS_TUNNEL_ENCAP_FLAG_REMCSUM (1 << 1)
 
 /*
  *    The struct ip_vs_service_user and struct ip_vs_dest_user are

@@ -260,6 +260,7 @@ ipvs_defs {
             !    wscale                      <disable>
             !    timestamp                   <disable>
             }
+            close_client_window             <enable>
             !defer_rs_syn                   <disable>
             rs_syn_max_retry    3           <3, 1-99>
             ack_storm_thresh    10          <10, 1-999>

@@ -106,5 +106,5 @@ echo -e "DPDK library installed successfully into directory: \033[32m$(pwd)/dpdk
 ## export dpdk lib
 echo -e "You can use this library in dpvs by running the command below:"
 echo -e "\033[32m"
-echo -e "export PKG_CONFIG_PATH=$(pwd)/dpdklib/lib64/pkgconfig"
+echo -e "export PKG_CONFIG_PATH=$(find $(pwd) -name pkgconfig)"
 echo -e "\033[0m"
