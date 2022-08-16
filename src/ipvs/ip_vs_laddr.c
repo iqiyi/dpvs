@@ -456,7 +456,11 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
-    dp_vs_match_dump(&laddr_conf->srange, dpvs_laddr_table_t, srange, &match);
+    // dp_vs_match_dump(&laddr_conf->srange, dpvs_laddr_table_t, srange, &match);
+    rte_memcpy(&match.srange, &laddr_conf->srange, sizeof(match.srange));
+    rte_memcpy(&match.drange, &laddr_conf->drange, sizeof(match.drange));
+    snprintf(match.iifname, sizeof(match.iifname)-1, "%s", laddr_conf->iifname);
+    snprintf(match.oifname, sizeof(match.oifname)-1, "%s", laddr_conf->oifname);
     match.af = laddr_conf->af_s;
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
@@ -496,7 +500,11 @@ static int get_msg_cb(struct dpvs_msg *msg)
     int err, size, i;
 
     laddr_conf = (struct dp_vs_laddr_conf *)msg->data;
-    dp_vs_match_dump(&laddr_conf->srange, dpvs_laddr_table_t, srange, &match);
+    // dp_vs_match_dump(&laddr_conf->srange, dpvs_laddr_table_t, srange, &match);
+    rte_memcpy(&match.srange, &laddr_conf->srange, sizeof(match.srange));
+    rte_memcpy(&match.drange, &laddr_conf->drange, sizeof(match.drange));
+    snprintf(match.iifname, sizeof(match.iifname)-1, "%s", laddr_conf->iifname);
+    snprintf(match.oifname, sizeof(match.oifname)-1, "%s", laddr_conf->oifname);
     match.af = laddr_conf->af_s;
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
@@ -604,7 +612,11 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             }
 
             if (cid == rte_get_main_lcore()) {
-                dp_vs_match_dump(&laddr_conf->srange, dpvs_laddr_table_t, srange, &match);
+                // dp_vs_match_dump(&laddr_conf->srange, dpvs_laddr_table_t, srange, &match);
+                rte_memcpy(&match.srange, &laddr_conf->srange, sizeof(match.srange));
+                rte_memcpy(&match.drange, &laddr_conf->drange, sizeof(match.drange));
+                snprintf(match.iifname, sizeof(match.iifname)-1, "%s", laddr_conf->iifname);
+                snprintf(match.oifname, sizeof(match.oifname)-1, "%s", laddr_conf->oifname);
                 match.af = laddr_conf->af_s;
                 
                 svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
