@@ -992,9 +992,9 @@ static int process_options(int argc, char **argv, int reading_stdin)
         /* Make sure that port zero service is persistent */
         if (!ce.dpvs_svc.fwmark && !ce.dpvs_svc.port &&
                 !(ce.dpvs_svc.flags & IP_VS_SVC_F_PERSISTENT) &&
-                (!memcmp(&zero_range, &ce.dpvs_svc.srange, sizeof(ce.dpvs_svc.srange)) && 
-                !memcmp(&zero_range, &ce.dpvs_svc.drange, sizeof(ce.dpvs_svc.drange)) &&
-                !strlen(ce.dpvs_svc.iifname) && !strlen(ce.dpvs_svc.oifname)))
+                (!memcmp(&zero_range, &ce.dpvs_svc.match.srange, sizeof(ce.dpvs_svc.match.srange)) && 
+                !memcmp(&zero_range, &ce.dpvs_svc.match.drange, sizeof(ce.dpvs_svc.match.drange)) &&
+                !strlen(ce.dpvs_svc.match.iifname) && !strlen(ce.dpvs_svc.match.oifname)))
             fail(2, "Zero port specified "
                     "for no-match and non-persistent service");
 
@@ -1444,20 +1444,22 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
                 return -1;
         } else if (strcmp(key, "src-range") == 0) {
             range = true;
-            inet_addr_range_parse(val, &dpvs_svc->srange, &ip_af);
+            inet_addr_range_parse(val, &dpvs_svc->match.srange, &ip_af);
+            dpvs_svc->match.af = ip_af;
             if (dpvs_svc->af == 0) {
                 dpvs_svc->af = ip_af;
             }
         } else if (strcmp(key, "dst-range") == 0) {
             range = true;
-            inet_addr_range_parse(val, &dpvs_svc->drange, &ip_af);
+            inet_addr_range_parse(val, &dpvs_svc->match.drange, &ip_af);
+            dpvs_svc->match.af = ip_af;
             if (dpvs_svc->af == 0) {
                 dpvs_svc->af = ip_af;
             }
         } else if (strcmp(key, "iif") == 0) {
-            snprintf(dpvs_svc->iifname, sizeof(dpvs_svc->iifname), "%s", val);
+            snprintf(dpvs_svc->match.iifname, sizeof(dpvs_svc->match.iifname), "%s", val);
         } else if (strcmp(key, "oif") == 0) {
-            snprintf(dpvs_svc->oifname, sizeof(dpvs_svc->oifname), "%s", val);
+            snprintf(dpvs_svc->match.oifname, sizeof(dpvs_svc->match.oifname), "%s", val);
         } else {
             return -1;
         }
@@ -1896,8 +1898,7 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
     char drange[0x100] = {0};
     int i;
 
-    dpvs_dest_table_t* table;
-    table = (dpvs_dest_table_t*)malloc(sizeof(dpvs_dest_table_t) + sizeof(dpvs_dest_compat_t)*se->num_dests);
+    dpvs_dest_table_t *table = (dpvs_dest_table_t*)malloc(sizeof(dpvs_dest_table_t) + sizeof(dpvs_dest_compat_t)*se->num_dests);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
@@ -1911,12 +1912,7 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
     table->num_dests = se->num_dests;
 
     memcpy(&table->addr, &se->addr, sizeof(table->addr));
-
-
-    memcpy(&table->srange, &se->srange, sizeof(table->srange));
-    memcpy(&table->drange, &se->drange, sizeof(table->drange));
-    snprintf(table->iifname, sizeof(se->iifname), "%s", se->iifname);
-    snprintf(table->oifname, sizeof(se->oifname), "%s", se->oifname);
+    memcpy(&table->match, &se->match, sizeof(table->match));
 
     if (!dpvs_get_dests(table)) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
@@ -1967,8 +1963,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
     } else { /* match */
         char *proto;
 
-        inet_addr_range_dump(se->af, &se->srange, srange, sizeof(table->srange));
-        inet_addr_range_dump(se->af, &se->drange, drange, sizeof(table->srange));
+        inet_addr_range_dump(se->match.af, &se->match.srange, srange, 0x100);
+        inet_addr_range_dump(se->match.af, &se->match.drange, drange, 0x100);
 
         if (se->proto == IPPROTO_TCP)
             proto = "tcp";
@@ -1982,7 +1978,7 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
         if (format & FMT_RULE) {
             snprintf(svc_name, sizeof(svc_name),
                     "-H proto=%s,src-range=%s,dst-range=%s,iif=%s,oif=%s",
-                    proto, srange, drange, se->iifname, se->oifname);
+                    proto, srange, drange, se->match.iifname, se->match.oifname);
         } else {
             int left = sizeof(svc_name);
             svc_name[0] = '\0';
@@ -2000,13 +1996,13 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
                 left -= snprintf(svc_name + strlen(svc_name), left,
                         ",to=%s", drange);
 
-            if (strlen(se->iifname))
+            if (strlen(se->match.iifname))
                 left -= snprintf(svc_name + strlen(svc_name), left,
-                        ",iif=%s", se->iifname);
+                        ",iif=%s", se->match.iifname);
 
-            if (strlen(se->oifname))
+            if (strlen(se->match.oifname))
                 left -= snprintf(svc_name + strlen(svc_name), left,
-                        ",oif=%s", se->oifname);
+                        ",oif=%s", se->match.oifname);
         }
     }
 

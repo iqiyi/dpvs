@@ -24,6 +24,7 @@
 
 #include "inet.h"
 #include "net/if.h"
+#include "conf/match.h"
 #include "conf/sockopts.h"
 
 struct dp_vs_laddr_entry {
@@ -40,10 +41,8 @@ typedef struct dp_vs_laddr_conf {
     union inet_addr     vaddr;
     uint16_t            vport;
     uint32_t            fwmark;
-    struct inet_addr_range srange;
-    struct inet_addr_range drange;
-    char                iifname[IFNAMSIZ];
-    char                oifname[IFNAMSIZ];
+
+    struct dp_vs_match match;
     lcoreid_t           cid;
 
     /* for set */

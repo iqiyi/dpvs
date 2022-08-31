@@ -765,10 +765,13 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     srule->bps = vs->bps;
     srule->limit_proportion = vs->limit_proportion;
     srule->conn_timeout = vs->conn_timeout;
-    inet_addr_range_parse(vs->srange, &srule->srange, &af);
-    inet_addr_range_parse(vs->drange, &srule->drange, &af);
-    snprintf(srule->iifname, IFNAMSIZ, "%s", vs->iifname);
-    snprintf(srule->oifname, IFNAMSIZ, "%s", vs->oifname);
+
+    inet_addr_range_parse(vs->srange, &srule->match.srange, &af);
+    inet_addr_range_parse(vs->drange, &srule->match.drange, &af);
+    snprintf(srule->match.iifname, IFNAMSIZ, "%s", vs->iifname);
+    snprintf(srule->match.oifname, IFNAMSIZ, "%s", vs->oifname);
+    srule->match.af = af;
+
     if (!srule->af && (vs->srange[0] || vs->drange[0] || vs->iifname[0] || vs->oifname[0]))
         srule->af = af;
 

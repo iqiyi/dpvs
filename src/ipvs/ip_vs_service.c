@@ -483,17 +483,9 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
     int size;
     struct dp_vs_scheduler *sched = NULL;
     struct dp_vs_service *svc = NULL;
-    struct dp_vs_match match = {0};
-
-    match.af = u->flags & DP_VS_SVC_F_MATCH ? u->af : 0;
-    // dp_vs_match_dump(&u->srange, struct dp_vs_service_conf, srange, &match);
-    rte_memcpy(&match.srange, &u->srange, sizeof(match.srange));
-    rte_memcpy(&match.drange, &u->drange, sizeof(match.drange));
-    snprintf(match.iifname, sizeof(match.iifname)-1, "%s", u->iifname);
-    snprintf(match.oifname, sizeof(match.oifname)-1, "%s", u->oifname);
 
     if (!u->fwmark && inet_is_addr_any(u->af, &u->addr)
-        && !u->port && is_empty_match(&match)) {
+        && !u->port && is_empty_match(&u->match)) {
         RTE_LOG(ERR, SERVICE, "%s: adding inval servive\n", __func__);
         return EDPVS_INVAL;
     }
@@ -523,7 +515,7 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
     svc->limit_proportion = u->limit_proportion;
     svc->netmask = u->netmask;
 
-    if (!is_empty_match(&match)) {
+    if (!is_empty_match(&u->match)) {
         svc->match = rte_zmalloc(NULL, sizeof(struct dp_vs_match),
                                  RTE_CACHE_LINE_SIZE);
         if (!svc->match) {
@@ -531,7 +523,7 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
             goto out_err;
         }
 
-        *(svc->match) = match;
+        rte_memcpy(svc->match, &u->match, sizeof(struct dp_vs_match));
     }
 
     INIT_LIST_HEAD(&svc->laddr_list);
@@ -682,7 +674,6 @@ static int
 dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
 {
     int err = 0;
-    struct dp_vs_match *m;
 
     memset(dst, 0, sizeof(*dst));
     dst->af = src->af;
@@ -702,15 +693,9 @@ dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
 
     err = dp_vs_stats_add(&dst->stats, &src->stats);
 
-    m = src->match;
-    if (!m)
-        return err;
-
-    // dp_vs_match_dump(&m->srange, struct dp_vs_match, srange, dst);
-    rte_memcpy(&dst->srange, &m->srange, sizeof(dst->srange));
-    rte_memcpy(&dst->drange, &m->drange, sizeof(dst->drange));
-    snprintf(dst->iifname, sizeof(dst->iifname)-1, "%s", m->iifname);
-    snprintf(dst->oifname, sizeof(dst->oifname)-1, "%s", m->oifname);
+    if (src->match != NULL) {
+        rte_memcpy(&dst->match, src->match, sizeof(struct dp_vs_match));
+    }
 
     return err;
 }
@@ -889,7 +874,6 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
     struct dp_vs_dest_conf udest;
     struct in_addr *vip;
     struct dp_vs_service *svc = NULL;
-    struct dp_vs_match match = {0};
 
     lcoreid_t cid = rte_lcore_id();
 
@@ -925,17 +909,10 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
     if (ret != EDPVS_OK)
         return ret;
 
-    // dp_vs_match_dump(&usvc.srange, struct dp_vs_service_conf, srange, &match);
-    rte_memcpy(&match.srange, &usvc.srange, sizeof(match.srange));
-    rte_memcpy(&match.drange, &usvc.drange, sizeof(match.drange));
-    snprintf(match.iifname, sizeof(match.iifname)-1, "%s", usvc.iifname);
-    snprintf(match.oifname, sizeof(match.oifname)-1, "%s", usvc.oifname);
-    match.af = usvc.flags & DP_VS_SVC_F_MATCH ? usvc.af : 0;
-
     if (opt == DPVS_SO_SET_ZERO) {
         if(!inet_is_addr_any(usvc.af, &usvc.addr) &&
            !usvc.fwmark && !usvc.port &&
-           is_empty_match(&match)
+           is_empty_match(&usvc.match)
           ) {
             return dp_vs_services_zero(cid);
         }
@@ -952,8 +929,8 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
                                   &usvc.addr, usvc.port, cid);
     else if (usvc.fwmark)
         svc = __dp_vs_service_fwm_get(usvc.af, usvc.fwmark, cid);
-    else if (!is_empty_match(&match))
-        svc = __dp_vs_service_match_find(usvc.af, usvc.proto, &match, cid);
+    else if (!is_empty_match(&usvc.match))
+        svc = __dp_vs_service_match_find(usvc.af, usvc.proto, &usvc.match, cid);
     else {
         RTE_LOG(ERR, SERVICE, "%s: empty service.\n", __func__);
         return EDPVS_INVAL;
@@ -1083,7 +1060,6 @@ dp_vs_service_get_lcore(const struct dp_vs_service_entry *entry,
                                               lcoreid_t cid)
 {
     struct dp_vs_service *svc = NULL;
-    struct dp_vs_match match = {0};
 
     if(entry->fwmark) {
         svc = __dp_vs_service_fwm_get(AF_INET, entry->fwmark, cid);
@@ -1091,16 +1067,9 @@ dp_vs_service_get_lcore(const struct dp_vs_service_entry *entry,
         svc = __dp_vs_service_get(entry->af, entry->proto,
                                   &entry->addr, entry->port, cid);
     } else {
-        // dp_vs_match_dump(&entry->srange, struct dp_vs_service_entry, srange, &match);
-        rte_memcpy(&match.srange, &entry->srange, sizeof(match.srange));
-        rte_memcpy(&match.drange, &entry->drange, sizeof(match.drange));
-        snprintf(match.iifname, sizeof(match.iifname)-1, "%s", entry->iifname);
-        snprintf(match.oifname, sizeof(match.oifname)-1, "%s", entry->oifname);
-        match.af = entry->af;
-
-        if (!is_empty_match(&match)) {
-            svc = __dp_vs_service_match_find(match.af, entry->proto,
-                                         &match, cid);
+        if (!is_empty_match(&entry->match)) {
+            svc = __dp_vs_service_match_find(entry->match.af, entry->proto,
+                                         &entry->match, cid);
         }
     }
 
@@ -1151,10 +1120,7 @@ static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
     entry.port    = get->port;
     entry.proto   = get->proto;
 
-    rte_memcpy(&entry.srange, &get->srange, sizeof(get->srange));
-    rte_memcpy(&entry.drange, &get->drange, sizeof(get->drange));
-    rte_memcpy(entry.iifname, get->iifname, sizeof(get->iifname));
-    rte_memcpy(entry.oifname, get->oifname, sizeof(get->oifname));
+    rte_memcpy(&entry.match, &get->match, sizeof(struct dp_vs_match));
 
     svc = dp_vs_service_get_lcore(&entry, cid);
     if (!svc)
@@ -1394,10 +1360,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 entry.fwmark  = get->fwmark;
                 entry.port    = get->port;
                 entry.proto   = get->proto;
-                rte_memcpy(&entry.srange, &get->srange, sizeof(get->srange));
-                rte_memcpy(&entry.drange, &get->drange, sizeof(get->drange));
-                rte_memcpy(entry.iifname, get->iifname, sizeof(get->iifname));
-                rte_memcpy(entry.oifname, get->oifname, sizeof(get->oifname));
+                rte_memcpy(&entry.match, &get->match, sizeof(struct dp_vs_match));
 
                 /* get slave core svc */
                 msg = msg_make(MSG_TYPE_SVC_GET_DESTS, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),

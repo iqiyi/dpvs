@@ -59,10 +59,7 @@ typedef struct dp_vs_service_compat {
     char                sched_name[DP_VS_SCHEDNAME_MAXLEN];
     
     /*dp_vs_service_user & dp_vs_service_entry*/
-    struct inet_addr_range srange;
-    struct inet_addr_range drange;
-    char iifname[IFNAMSIZ];
-    char oifname[IFNAMSIZ];
+    struct dp_vs_match match;
 
     /*dp_vs_service_entry*/
     unsigned int        num_dests;

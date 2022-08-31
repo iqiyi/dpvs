@@ -732,10 +732,7 @@ struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_v
     conf.fwmark = svc->fwmark;
     conf.cid = svc->cid;
 
-    memcpy(&conf.srange, &svc->srange, sizeof(svc->srange));
-    memcpy(&conf.drange, &svc->drange, sizeof(svc->drange));
-    snprintf(conf.iifname, sizeof(conf.iifname), "%s", svc->iifname);
-    snprintf(conf.iifname, sizeof(conf.oifname), "%s", svc->oifname);
+    memcpy(&conf.match, &svc->match, sizeof(conf.match));
 
     if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_laddr(svc->cid, SOCKOPT_GET_LADDR_GETALL), 
                 &conf, 

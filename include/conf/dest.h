@@ -19,6 +19,7 @@
 #define __DPVS_DEST_CONF_H__
 
 #include "conf/service.h"
+#include "conf/match.h"
 #include "conf/conn.h"
 
 /*
@@ -81,10 +82,7 @@ typedef struct dp_vs_dest_table {
 
     unsigned int    num_dests;
 
-    struct inet_addr_range srange;
-    struct inet_addr_range drange;
-    char iifname[IFNAMSIZ];
-    char oifname[IFNAMSIZ];
+    struct dp_vs_match match;
 
     lcoreid_t       cid;
 
