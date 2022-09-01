@@ -20,6 +20,7 @@
 
 #include "global_data.h"
 #include "conf/common.h"
+#include "conf/sockopts.h"
 #include "list.h"
 #include "dpdk.h"
 

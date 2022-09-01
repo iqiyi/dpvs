@@ -42,6 +42,10 @@ static int g_msg_timeout = MSG_TIMEOUT_US;
 
 static uint8_t g_msg_prio = MSG_PRIO_LOW;
 
+const char* dpvs_sockopts_name[] = {
+    DPVSMSG_SOCKOPT_ENUM(ENUM_STRING)
+};
+
 #define DPVS_MT_BITS 8
 #define DPVS_MT_LEN (1 << DPVS_MT_BITS)
 #define DPVS_MT_MASK (DPVS_MT_LEN - 1)
@@ -1317,22 +1321,22 @@ static int sockopt_msg_send(int clt_fd,
     len = sizeof(struct dpvs_sock_msg_reply);
     res = sendn(clt_fd, hdr, len, MSG_NOSIGNAL);
     if (len != res) {
-        RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg header send error"
-                " -- %d/%d sent\n", __func__, hdr->id, res, len);
+        RTE_LOG(WARNING, MSGMGR, "[%s:msg#%s] sockopt reply msg header send error"
+                " -- %d/%d sent\n", __func__, dpvs_sockopts_name[hdr->id], res, len);
         return EDPVS_IO;
     }
 
     if (hdr->errcode) {
-        RTE_LOG(DEBUG, MSGMGR, "[%s:msg#%d] errcode set in sockopt msg reply: %s\n",
-                __func__, hdr->id, dpvs_strerror(hdr->errcode));
+        RTE_LOG(DEBUG, MSGMGR, "[%s:msg#%s] errcode set in sockopt msg reply: %s\n",
+                __func__, dpvs_sockopts_name[hdr->id], dpvs_strerror(hdr->errcode));
         return hdr->errcode;
     }
 
     if (data_len) {
         res = sendn(clt_fd, data, data_len, MSG_NOSIGNAL);
         if (data_len != res) {
-            RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg body send error"
-                    " -- %d/%d sent\n", __func__, hdr->id, res, data_len);
+            RTE_LOG(WARNING, MSGMGR, "[%s:msg#%s] sockopt reply msg body send error"
+                    " -- %d/%d sent\n", __func__, dpvs_sockopts_name[hdr->id], res, data_len);
             return EDPVS_IO;
         }
     }
@@ -1382,8 +1386,8 @@ static int sockopt_ctl(__rte_unused void *arg)
             reply_data = NULL;
             reply_data_len = 0;
 #ifdef CONFIG_MSG_DEBUG
-            RTE_LOG(INFO, MSGMGR, "%s: socket msg<type=%s, id=%d> callback failed\n",
-                    __func__, msg->type == SOCKOPT_GET ? "GET" : "SET", msg->id);
+            RTE_LOG(INFO, MSGMGR, "%s: socket msg<type=%s, name=%s> callback failed\n",
+                    __func__, msg->type == SOCKOPT_GET ? "GET" : "SET", dpvs_sockopts_name[msg->id]);
 #endif
         }
 
