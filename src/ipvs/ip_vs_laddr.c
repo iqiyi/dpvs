@@ -435,7 +435,6 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     const struct dp_vs_laddr_conf *laddr_conf = conf;
     struct dp_vs_service *svc;
     int err;
-    struct dp_vs_match match;
     lcoreid_t cid = rte_lcore_id();
 
     // send to slave core
@@ -456,14 +455,9 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
-    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
-                          laddr_conf->iifname, laddr_conf->oifname,
-                          laddr_conf->af_s, &match) != EDPVS_OK)
-        return EDPVS_INVAL;
-
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match, 
+                               laddr_conf->fwmark, NULL, &laddr_conf->match, 
                                NULL, rte_lcore_id());
     if (!svc)
         return EDPVS_NOSERV;
@@ -491,22 +485,16 @@ static int get_msg_cb(struct dpvs_msg *msg)
 {
     lcoreid_t cid = rte_lcore_id();
     struct dp_vs_laddr_conf *laddr_conf, *laddrs;
-    struct dp_vs_match match;
     struct dp_vs_laddr_entry *addrs;
     struct dp_vs_service *svc;
     size_t naddr;
     int err, size, i;
 
     laddr_conf = (struct dp_vs_laddr_conf *)msg->data;
-    if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
-                          laddr_conf->iifname, laddr_conf->oifname,
-                          laddr_conf->af_s, &match) != EDPVS_OK) {
-        return EDPVS_NOMEM;
-    }
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &match, 
+                               laddr_conf->fwmark, NULL, &laddr_conf->match, 
                                NULL, cid);
     if (!svc) {
         return EDPVS_NOSERV;
@@ -577,7 +565,6 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     struct dp_vs_laddr_entry *addrs;
     size_t naddr, i;
     int err;
-    struct dp_vs_match match;
     struct dpvs_multicast_queue *reply = NULL;
     struct dpvs_msg *msg, *cur;
     uint8_t num_lcores = 0;
@@ -609,15 +596,9 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             }
 
             if (cid == rte_get_main_lcore()) {
-                if (dp_vs_match_parse(laddr_conf->srange, laddr_conf->drange,
-                                      laddr_conf->iifname, laddr_conf->oifname,
-                                      laddr_conf->af_s, &match) != EDPVS_OK) {
-                    msg_destroy(&msg);
-                    return EDPVS_INVAL;
-                }
                 svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                            &laddr_conf->vaddr, laddr_conf->vport,
-                                           laddr_conf->fwmark, NULL, &match, NULL, cid);
+                                           laddr_conf->fwmark, NULL, &laddr_conf->match, NULL, cid);
                 if (!svc) {
                     msg_destroy(&msg);
                     return EDPVS_NOSERV;

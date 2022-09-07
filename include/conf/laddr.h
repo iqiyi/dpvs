@@ -24,6 +24,7 @@
 
 #include "inet.h"
 #include "net/if.h"
+#include "conf/match.h"
 #include "conf/sockopts.h"
 
 struct dp_vs_laddr_entry {
@@ -33,17 +34,15 @@ struct dp_vs_laddr_entry {
     uint32_t    nconns;
 };
 
-struct dp_vs_laddr_conf {
+typedef struct dp_vs_laddr_conf {
     /* identify service */
     int                 af_s;
     uint8_t             proto;
     union inet_addr     vaddr;
     uint16_t            vport;
     uint32_t            fwmark;
-    char                srange[256];
-    char                drange[256];
-    char                iifname[IFNAMSIZ];
-    char                oifname[IFNAMSIZ];
+
+    struct dp_vs_match match;
     lcoreid_t           cid;
 
     /* for set */
@@ -54,6 +53,6 @@ struct dp_vs_laddr_conf {
     /* for get */
     int                 nladdrs;
     struct dp_vs_laddr_entry laddrs[0];
-};
+} dpvs_laddr_table_t;
 
 #endif /* __DPVS_LADDR_CONF_H__ */
