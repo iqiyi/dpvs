@@ -308,7 +308,7 @@ struct ipvs_command_entry {
     dpvs_blklst_t dpvs_blklst;
     dpvs_whtlst_t dpvs_whtlst;
 
-    lcoreid_t		cid;
+    lcoreid_t		index;
 };
 
 /* Use values outside ASCII range so that if an option has
@@ -371,7 +371,7 @@ static void list_all(unsigned int format);
 static void list_timeout(void);
 static void list_daemon(void);
 static int list_laddrs(dpvs_service_compat_t *svc);
-static int list_all_laddrs(lcoreid_t cid);
+static int list_all_laddrs(lcoreid_t index);
 static void list_blklsts_print_title(void);
 static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint16_t protocol);
 static int list_all_blklsts(void);
@@ -617,11 +617,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     ce->dpvs_svc.proto = IPPROTO_UDP;
                 } else if (c == 'q') {
                     ce->dpvs_svc.proto = IPPROTO_ICMP;
-                } else if (c == '1') { /*a~Z is out. ipvsadm is really not friendly here*/ 
+                } else if (c == '1') { /*a~Z is out. ipvsadm is really not friendly here*/
                     ce->dpvs_svc.proto = IPPROTO_ICMPV6;
                 }
 
-                parse = parse_service(optarg, 
+                parse = parse_service(optarg,
                         &ce->dpvs_svc);
                 if (!(parse & SERVICE_ADDR))
                     fail(2, "illegal virtual server "
@@ -829,7 +829,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 {
                     dpvs_service_compat_t  dpvs_svc;
                     set_option(options,OPT_BLKLST_ADDRESS);
-                    parse = parse_service(optarg, 
+                    parse = parse_service(optarg,
                             &dpvs_svc);
                     if (!(parse & SERVICE_ADDR))
                         fail(2, "illegal blacklist address");
@@ -843,7 +843,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 {
                     dpvs_service_compat_t  dpvs_svc;
                     set_option(options,OPT_WHTLST_ADDRESS);
-                    parse = parse_service(optarg, 
+                    parse = parse_service(optarg,
                             &dpvs_svc);
                     if (!(parse & SERVICE_ADDR))
                         fail(2, "illegal whitelist address");
@@ -894,7 +894,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case TAG_CPU:
                 {
                     set_option(options, OPT_CPU);
-                    ce->cid = atoi(optarg);
+                    ce->index = atoi(optarg);
                     break;
                 }
             case TAG_CONN_EXPIRE_QUIESCENT:
@@ -981,7 +981,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
     /* Set the default persistent granularity to /32 mask */
     ce.dpvs_svc.netmask = ((u_int32_t) 0xffffffff);
     /* Set the default cpu be master */
-    ce.cid = 0;
+    ce.index = 0;
 
     if (parse_options(argc, argv, &ce, &options, &format))
         return -1;
@@ -992,7 +992,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
         /* Make sure that port zero service is persistent */
         if (!ce.dpvs_svc.fwmark && !ce.dpvs_svc.port &&
                 !(ce.dpvs_svc.flags & IP_VS_SVC_F_PERSISTENT) &&
-                (!memcmp(&zero_range, &ce.dpvs_svc.match.srange, sizeof(ce.dpvs_svc.match.srange)) && 
+                (!memcmp(&zero_range, &ce.dpvs_svc.match.srange, sizeof(ce.dpvs_svc.match.srange)) &&
                 !memcmp(&zero_range, &ce.dpvs_svc.match.drange, sizeof(ce.dpvs_svc.match.drange)) &&
                 !strlen(ce.dpvs_svc.match.iifname) && !strlen(ce.dpvs_svc.match.oifname)))
             fail(2, "Zero port specified "
@@ -1111,7 +1111,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
             if(options & OPT_SERVICE)
                 result = list_laddrs(&ce.dpvs_svc);
             else
-                result = list_all_laddrs(ce.cid);
+                result = list_all_laddrs(ce.index);
             break;
 
         case CMD_ADDBLKLST:
@@ -1643,7 +1643,7 @@ static void usage_exit(const char *program, const int exit_status)
             "  --synproxy     -j                   TCP syn proxy\n"
             "  --match        -H MATCH             select service by MATCH 'af,proto,srange,drange,iif,oif', af should be defined if no range defined\n"
             "  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
-            "  --cpu            cid                choose cid to show\n"
+            "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
             "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n",
         DEF_SCHED);
 
@@ -1904,7 +1904,7 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
         exit(1);
     }
 
-    table->cid = se->cid;
+    table->index = se->index;
     table->af = se->af;
     table->fwmark = se->fwmark;
     table->proto = se->proto;
@@ -2025,7 +2025,7 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
                     printf(" -M %i", se->netmask);
                 }
         }
-#ifdef _HAVE_PE_NAME_ 
+#ifdef _HAVE_PE_NAME_
         if (se->pe_name[0])
             printf(" pe %s", se->pe_name);
 #endif
@@ -2067,7 +2067,7 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             if (se->af == AF_INET6)
                 if (se->netmask != 128)
                     printf(" mask %i", se->netmask);
-#ifdef _HAVE_PE_NAME_ 
+#ifdef _HAVE_PE_NAME_
             if (se->pe_name[0])
                 printf(" pe %s", se->pe_name);
 #endif
@@ -2214,7 +2214,7 @@ static int list_laddrs(dpvs_service_compat_t* desc)
 }
 
 
-static int list_all_laddrs(lcoreid_t cid)
+static int list_all_laddrs(lcoreid_t index)
 {
     int i;
     dpvs_service_table_t* table;
@@ -2226,7 +2226,7 @@ static int list_all_laddrs(lcoreid_t cid)
         exit(1);
     }
 
-    table->cid = 0;
+    table->index = 0;
     table->num_services = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
@@ -2331,7 +2331,7 @@ static int list_all_blklsts(void)
         exit(1);
     }
 
-    table->cid = 0;
+    table->index = 0;
     table->num_services = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
@@ -2420,7 +2420,7 @@ static int list_all_whtlsts(void)
         exit(1);
     }
 
-    table->cid = 0;
+    table->index = 0;
     table->num_services = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
@@ -2468,7 +2468,7 @@ static void list_all(unsigned int format)
         exit(1);
     }
 
-    table->cid = 0;
+    table->index = 0;
     table->num_services = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {

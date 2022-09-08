@@ -420,15 +420,15 @@ int dpvs_stop_daemon(ipvs_daemon_t *dm)
             (char *)&dm, sizeof(dm));
 }
 
-static inline sockoptid_t cpu2opt_svc(lcoreid_t cid, sockoptid_t old_opt)
+static inline sockoptid_t cpu2opt_svc(lcoreid_t index, sockoptid_t old_opt)
 {
-    return old_opt + cid * (SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
+    return old_opt + index * (SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
 }
 
 /* now support get_all only */
-static inline sockoptid_t cpu2opt_laddr(lcoreid_t cid, sockoptid_t old_opt)
+static inline sockoptid_t cpu2opt_laddr(lcoreid_t index, sockoptid_t old_opt)
 {
-    return old_opt + cid;
+    return old_opt + index;
 }
 
 dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
@@ -439,7 +439,7 @@ dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
 
     assert(svcs);
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(svcs->cid, DPVS_SO_GET_SERVICES), 
+    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(svcs->index, DPVS_SO_GET_SERVICES), 
                 svcs,
                 sizeof(dpvs_service_table_t),
                 (void**)&rcv,
@@ -467,7 +467,7 @@ dpvs_dest_table_t* dpvs_get_dests(dpvs_dest_table_t* table)
 
     len = sizeof(dpvs_dest_table_t) + table->num_dests * sizeof(dpvs_dest_compat_t);
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(table->cid, 
+    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(table->index, 
                 DPVS_SO_GET_DESTS), table, 
                 sizeof(dpvs_dest_table_t), 
                 (void**)&rcv, 
@@ -493,7 +493,7 @@ dpvs_service_compat_t* dpvs_get_service(dpvs_service_compat_t* desc, dpvs_servic
 
     len = sizeof(dpvs_service_compat_t);
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(desc->cid, DPVS_SO_GET_SERVICE),
+    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(desc->index, DPVS_SO_GET_SERVICE),
                 desc,
                 len,
                 (void**)&rcv,
@@ -736,7 +736,7 @@ struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_v
 
     memcpy(&conf.match, &svc->match, sizeof(conf.match));
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_laddr(svc->cid, SOCKOPT_GET_LADDR_GETALL), 
+    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_laddr(svc->index, SOCKOPT_GET_LADDR_GETALL), 
                 &conf, 
                 sizeof(conf),
                 (void **)&result, 
