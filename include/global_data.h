@@ -70,11 +70,14 @@ extern char *dpvs_conf_file;
 extern char *dpvs_pid_file;
 extern char *dpvs_ipc_file;
 
+extern unsigned int g_version;
 extern bool g_kni_enabled;
 
 #ifdef CONFIG_DPVS_PDUMP
 extern bool g_dpvs_pdump;
 #endif
+
+int version_parse(const char *strver);
 
 int global_data_init(void);
 int global_data_term(void);

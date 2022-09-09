@@ -1177,7 +1177,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 info = rte_zmalloc("info", sizeof(struct dp_vs_getinfo), 0);
                 if (unlikely(NULL == info))
                     return EDPVS_NOMEM;
-                info->version = 0;
+                info->version = g_version;
                 info->size = 0;
                 info->num_services = rte_atomic16_read(&dp_vs_num_services[cid]);
                 info->num_lcores = g_slave_lcore_num;

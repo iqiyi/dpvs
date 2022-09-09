@@ -273,6 +273,8 @@ static int parse_app_args(int argc, char **argv)
     if (!dpvs_ipc_file)
         dpvs_ipc_file="/var/run/dpvs.ipc";
 
+    g_version = version_parse(DPVS_VERSION);
+
     return ret;
 }
 
