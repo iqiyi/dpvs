@@ -1349,14 +1349,13 @@ static void build_lcore_index(void)
     for (cid = 0; cid < DPVS_MAX_LCORE; cid++)
         if (g_lcore_role[cid] == LCORE_ROLE_ISOLRX_WORKER)
             g_lcore_index2id[idx++] = cid;
+    g_lcore_num = idx;
 
     for (idx = 0; idx < DPVS_MAX_LCORE; idx++) {
         cid = g_lcore_index2id[idx];
         if (cid >= 0 && cid < DPVS_MAX_LCORE)
             g_lcore_id2index[cid] = idx;
     }
-
-    g_lcore_num = idx;
 }
 
 static inline void dump_lcore_role(void)

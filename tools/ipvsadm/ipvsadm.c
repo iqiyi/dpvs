@@ -380,6 +380,7 @@ static int list_whtlst(int af, const union inet_addr *addr, uint16_t port, uint1
 static int list_all_whtlsts(void);
 
 static int process_options(int argc, char **argv, int reading_stdin);
+static struct ipvs_command_entry ce = { 0 };
 
 
 int main(int argc, char **argv)
@@ -895,6 +896,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 {
                     set_option(options, OPT_CPU);
                     ce->index = atoi(optarg);
+                    ce->dpvs_svc.index = ce->index;
+                    ce->dpvs_laddr.index = ce->index;
                     break;
                 }
             case TAG_CONN_EXPIRE_QUIESCENT:
@@ -966,7 +969,6 @@ static int restore_table(int argc, char **argv, int reading_stdin)
 
 static int process_options(int argc, char **argv, int reading_stdin)
 {
-    struct ipvs_command_entry ce;
     unsigned int options = OPT_NONE;
     unsigned int format = FMT_NONE;
     int result = 0;
@@ -2226,7 +2228,7 @@ static int list_all_laddrs(lcoreid_t index)
         exit(1);
     }
 
-    table->index = 0;
+    table->index = ce.index;
     table->num_services = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
@@ -2331,7 +2333,7 @@ static int list_all_blklsts(void)
         exit(1);
     }
 
-    table->index = 0;
+    table->index = ce.index;
     table->num_services = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
@@ -2420,7 +2422,7 @@ static int list_all_whtlsts(void)
         exit(1);
     }
 
-    table->index = 0;
+    table->index = ce.index;
     table->num_services = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
@@ -2468,7 +2470,7 @@ static void list_all(unsigned int format)
         exit(1);
     }
 
-    table->index = 0;
+    table->index = ce.index;
     table->num_services = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
