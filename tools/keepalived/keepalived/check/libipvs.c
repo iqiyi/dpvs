@@ -73,10 +73,10 @@ int dpvs_ctrl_init(lcoreid_t cid)
     len = sizeof(g_ipvs_info);
     len_rcv = len;
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(DPVS_SO_GET_INFO, 
-                (const void*)&g_ipvs_info, 
-                len, 
-                (void **)&ipvs_info_rcv, 
+    if (ESOCKOPT_OK != dpvs_getsockopt(DPVS_SO_GET_INFO,
+                (const void*)&g_ipvs_info,
+                len,
+                (void **)&ipvs_info_rcv,
                 &len_rcv)) {
         return -1;
     }
@@ -420,17 +420,6 @@ int dpvs_stop_daemon(ipvs_daemon_t *dm)
             (char *)&dm, sizeof(dm));
 }
 
-static inline sockoptid_t cpu2opt_svc(lcoreid_t index, sockoptid_t old_opt)
-{
-    return old_opt + index * (SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
-}
-
-/* now support get_all only */
-static inline sockoptid_t cpu2opt_laddr(lcoreid_t index, sockoptid_t old_opt)
-{
-    return old_opt + index;
-}
-
 dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
     dpvs_service_table_t* rcv;
     size_t lrcv, len;
@@ -439,11 +428,8 @@ dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
 
     assert(svcs);
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(svcs->index, DPVS_SO_GET_SERVICES), 
-                svcs,
-                sizeof(dpvs_service_table_t),
-                (void**)&rcv,
-                &lrcv)) {
+    if (ESOCKOPT_OK != dpvs_getsockopt(DPVS_SO_GET_SERVICES, svcs,
+                sizeof(dpvs_service_table_t), (void**)&rcv, &lrcv)) {
         return NULL;
     }
 
@@ -467,11 +453,8 @@ dpvs_dest_table_t* dpvs_get_dests(dpvs_dest_table_t* table)
 
     len = sizeof(dpvs_dest_table_t) + table->num_dests * sizeof(dpvs_dest_compat_t);
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(table->index, 
-                DPVS_SO_GET_DESTS), table, 
-                sizeof(dpvs_dest_table_t), 
-                (void**)&rcv, 
-                &lrcv)) {
+    if (ESOCKOPT_OK != dpvs_getsockopt(DPVS_SO_GET_DESTS, table,
+                sizeof(dpvs_dest_table_t), (void**)&rcv, &lrcv)) {
         return NULL;
     }
 
@@ -493,11 +476,8 @@ dpvs_service_compat_t* dpvs_get_service(dpvs_service_compat_t* desc, dpvs_servic
 
     len = sizeof(dpvs_service_compat_t);
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_svc(desc->index, DPVS_SO_GET_SERVICE),
-                desc,
-                len,
-                (void**)&rcv,
-                &lrcv)) {
+    if (ESOCKOPT_OK != dpvs_getsockopt(DPVS_SO_GET_SERVICE, desc,
+                len, (void**)&rcv, &lrcv)) {
         return NULL;
     }
 
@@ -733,14 +713,12 @@ struct ip_vs_get_laddrs *dpvs_get_laddrs(dpvs_service_compat_t *svc, struct ip_v
     conf.vport = svc->port;
     conf.fwmark = svc->fwmark;
     conf.cid = svc->cid;
+    conf.index = svc->index;
 
     memcpy(&conf.match, &svc->match, sizeof(conf.match));
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(cpu2opt_laddr(svc->index, SOCKOPT_GET_LADDR_GETALL), 
-                &conf, 
-                sizeof(conf),
-                (void **)&result, 
-                &res_size)) {
+    if (ESOCKOPT_OK != dpvs_getsockopt(SOCKOPT_GET_LADDR_GETALL, &conf, sizeof(conf),
+                (void **)&result, &res_size)) {
         return NULL;
     }
 
@@ -787,10 +765,10 @@ struct dp_vs_blklst_conf_array *dpvs_get_blklsts(void)
 
     dpvs_ctrl_func = dpvs_get_blklsts;
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL, 
-                NULL, 
-                0, 
-                (void **)&result, 
+    if (ESOCKOPT_OK != dpvs_getsockopt(SOCKOPT_GET_BLKLST_GETALL,
+                NULL,
+                0,
+                (void **)&result,
                 &size))
         return NULL;
     if (size < sizeof(*result)
@@ -819,10 +797,10 @@ struct dp_vs_whtlst_conf_array *dpvs_get_whtlsts(void)
 
     dpvs_ctrl_func = dpvs_get_whtlsts;
 
-    if (ESOCKOPT_OK != dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL, 
-                NULL, 
-                0, 
-                (void **)&result, 
+    if (ESOCKOPT_OK != dpvs_getsockopt(SOCKOPT_GET_WHTLST_GETALL,
+                NULL,
+                0,
+                (void **)&result,
                 &size)) {
         return NULL;
     }

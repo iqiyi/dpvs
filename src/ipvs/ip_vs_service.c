@@ -978,25 +978,6 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
     return ret;
 }
 
-/*
- * for example : SOCKOPT_SVC_BASE is 200, SOCKOPT_SVC_GET_CMD_MAX is 204,
- * old_opt 205 means core 1 get opt 200
- */
-static inline int opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t *cid)
-{
-    assert(old_opt >= SOCKOPT_SVC_BASE);
-    assert(old_opt <= SOCKOPT_SVC_MAX);
-    int index = (old_opt - SOCKOPT_SVC_BASE)/(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
-    if (index >= g_lcore_num) {
-        return -1;
-    }
-    *new_opt = (old_opt - SOCKOPT_SVC_BASE)%(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1)
-               + SOCKOPT_SVC_BASE;
-    *cid = g_lcore_index2id[index];
-    assert(*cid >= 0 && *cid < DPVS_MAX_LCORE);
-    return 0;
-}
-
 /* copy service/dest/stats */
 static int dp_vs_services_copy_percore_stats(dpvs_service_table_t *master_svcs,
                                              dpvs_service_table_t  *slave_svcs)
@@ -1152,15 +1133,11 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
 {
     int ret = 0;
     lcoreid_t cid;
-    sockoptid_t new_opt;
 
-    if (unlikely(opt2cpu(opt, &new_opt, &cid) < 0)) {
-        return EDPVS_INVAL;
-    }
-    if (unlikely(new_opt > SOCKOPT_SVC_MAX))
+    if (unlikely(opt > SOCKOPT_SVC_MAX))
         return EDPVS_INVAL;
 
-    switch (new_opt){
+    switch (opt){
         case DPVS_SO_GET_VERSION:
             {
                 char *buf = rte_zmalloc("info", 64, 0);
@@ -1174,9 +1151,13 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
         case DPVS_SO_GET_INFO:
             {
                 struct dp_vs_getinfo *info;
+
+                cid = g_lcore_index2id[0]; // master lcore
                 info = rte_zmalloc("info", sizeof(struct dp_vs_getinfo), 0);
-                if (unlikely(NULL == info))
+                if (unlikely(NULL == info)) {
+                    *outlen = 0;
                     return EDPVS_NOMEM;
+                }
                 info->version = g_version;
                 info->size = 0;
                 info->num_services = rte_atomic16_read(&dp_vs_num_services[cid]);
@@ -1196,6 +1177,12 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 size = sizeof(*get) + \
                        sizeof(struct dp_vs_service_entry) * (get->num_services);
                 if (len != sizeof(*get)){
+                    *outlen = 0;
+                    return EDPVS_INVAL;
+                }
+
+                cid = g_lcore_index2id[get->index];
+                if (cid < 0 || cid >= DPVS_MAX_LCORE) {
                     *outlen = 0;
                     return EDPVS_INVAL;
                 }
@@ -1269,6 +1256,9 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 struct dp_vs_service *svc = NULL;
 
                 entry = (struct dp_vs_service_entry *)user;
+                cid = g_lcore_index2id[entry->index];
+                if (cid < 0 || cid >= DPVS_MAX_LCORE)
+                    return EDPVS_INVAL;
 
                 /* get slave core svc */
                 msg = msg_make(MSG_TYPE_SVC_GET_SERVICE, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
@@ -1348,9 +1338,15 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 struct dpvs_multicast_queue *reply = NULL;
                 struct dp_vs_service_entry entry; // to get svc
                 int size;
+
                 get = (struct dp_vs_get_dests *)user;
                 size = sizeof(*get) + sizeof(struct dp_vs_dest_entry) * get->num_dests;
                 if(len != sizeof(*get)) {
+                    *outlen = 0;
+                    return EDPVS_INVAL;
+                }
+                cid = g_lcore_index2id[get->index];
+                if (cid < 0 || cid >= DPVS_MAX_LCORE) {
                     *outlen = 0;
                     return EDPVS_INVAL;
                 }
