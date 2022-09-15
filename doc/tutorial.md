@@ -22,6 +22,7 @@ DPVS Tutorial
 * [UDP Option of Address (UOA)](#uoa)
 * [Launch DPVS in Virtual Machine (Ubuntu)](#Ubuntu16.04)
 * [Traffic Control(TC)](#tc)
+* [Multiple Instances](#multi-instance)
 * [Debug DPVS](#debug)
   - [Debug with Log](#debug-with-log)
   - [Packet Capture and Tcpdump](#packet-capture)
@@ -1191,6 +1192,111 @@ worker_defs {
 
 Please refer to doc [tc.md](tc.md).
 
+<a id='multi-instance'/>
+
+# Multiple Instances
+
+Generally, DPVS is a network process running on physical server which is usually equipped with dozens of CPUs and vast sufficient memory. DPVS is CPU/memory efficient, so the CPU/memory resources on a general physical server are usually far from fully used. Thus we may hope to run multiple independent DPVS instances on a server to make the most out of it. A DPVS instance may use 1~4 NIC ports, depending on if the ports are bonding and the network topology of two-arm or one-arm. Extra NICs are needed if we want to run multiple DPVS instances because one NIC port should be managed only by one DPVS instance. Now let's make insights into the details of multiple DPVS instances.
+
+#### CPU Isolation
+
+The CPUs used by DPVS are always busy loop. If a CPU is assigned to two DPVS instances simultaneously, then both instances are to suffer from dramatic processing delay. So different instances must run on different CPUs, which is achieved by the procedures below.
+
+- Start DPVS with EAL options `-l CORELIST` or `--lcores COREMAP` or `-c COREMASK` to specify on which CPUs the instance is to run. 
+- Configure corresponding CPUs into DPVS config file (config key: worker_defs/worker */cpu_id).
+
+It's suggested we select the CPUs and NIC ports on the same numa node on numa-aware platform. Performance degrades if the NIC ports and CPUs of a DPVS instance are on different numa nodes.
+
+#### Memory Isolation
+
+As is known, DPVS takes advantage of hugepage memory. The hugepage memory of different DPVS instances can be isolated by using different memory mapping files. The DPDK EAL option `--file-prefix` specifies the name prefix of memory mapping file. Thus multiple DPVS instances can run simultaneously by specifying unique name prefixes of hugepage memory with this EAL option.
+
+#### Process Isolation
+
+* DPVS Process Isolation
+
+Every DPVS instance must have an unique PID file, a config file, and an IPC socket file, which are specified by the following DPVS options respectively.
+
+    -p, --pid-file FILE
+    -c, --conf FILE
+    -x, --ipc-file FILE
+
+For example, 
+
+```sh
+./bin/dpvs -c /etc/dpvs1.conf -p /var/run/dpvs1.pid -x /var/run/dpvs1.ipc -- --file-prefix=dpvs1 -a 0000:4b:00.0 -a 0000:4b:00.1 -l 0-8 --main-lcore 0
+```
+
+* Keepalived Process Isolation
+
+One DPVS instance corresponds to one keepalived instance, and vice versa. Similarly, different keepalived processes must have unique config files and PID files. Note that depending on the configurations, keepalived for DPVS may consist of 3 daemon processes, i.e, the main process, the health check subprocess, and the vrrp subprocess. The config files and PID files for different keepalived instances can be specified by the following options, respectively.
+
+    -f, --use-file=FILE
+    -p, --pid=FILE
+    -c, --checkers_pid=FILE
+    -r, --vrrp_pid=FILE
+
+For example,
+
+```sh
+./bin/keepalived -D -f etc/keepalived/keepalived1.conf --pid=/var/run/keepalived1.pid --vrrp_pid=/var/run/vrrp1.pid --checkers_pid=/var/run/checkers1.pid
+```
+
+#### Talk to different DPVS instances with dpip/ipvsadm
+
+`Dpip` and `ipvsadm` are the utility tools used to configure DPVS. By default, they works well on the single DPVS instance server without any extra settings. But on the multiple DPVS instance server, an envrionment variable `DPVS_IPC_FILE` should be preset as the DPVS's IPC socket file to which ipvsadm/dpip wants to talk. Refer to the the previous part "DPVS Process Isolation" for how to specify different IPC socket files for multiple DPVS instances. For example,
+
+```sh
+DPVS_IPC_FILE=/var/run/dpvs1.ipc ipvsadm -ln
+# or equivalently,
+export DPVS_IPC_FILE=/var/run/dpvs1.ipc
+ipvsadm -ln
+```
+
+#### NIC Ports, KNI and Routes
+
+The multiple DPVS instances running on a server are independent, that is DPVS adopts the deployment model [Running Multiple Independent DPDK Applications](https://doc.dpdk.org/guides/prog_guide/multi_proc_support.html#running-multiple-independent-dpdk-applications), which requires the instances cannot share any NIC ports. We can use the EAL options "-a, --allow" or "-b, --block" to allow/disable the NIC ports for a DPVS instance. However, Linux KNI kernel module only supports one DPVS instance in a specific network namespace (refer to [kernel/linux/kni/kni_misc.c](https://github.com/DPDK/dpdk/tree/main/kernel/linux/kni)). Basically, DPVS provides two solutions to the problem.
+
+* Solution 1: Disable KNI on all other DPVS instances except the first one. A global config item `kni` has been added to DPVS since now. 
+
+```
+# dpvs.conf
+global_defs {
+    ...
+    <init> kni                  on                  <default on, on|off>
+    ...
+}
+```
+
+* Solution 2: Run DPVS instances in different network namespaces. It also resolves the route conflicts for multiple KNI network ports of different DPVS instances. A typical procedure to run a DPVS instance in a network namespace is shown below.
+
+Firstly, create a new network namespace, "dpvsns" for example.
+
+```sh
+/usr/sbin/ip netns add dpvsns
+```
+Secondly, move the NIC ports for this DPVS instance to the newly created network namespace.
+
+```sh
+/usr/sbin/ip link set eth1 netns dpvsns
+/usr/sbin/ip link set eth2 netns dpvsns
+/usr/sbin/ip link set eth3 netns dpvsns
+```
+Lastly, start DPVS and all its related processes (such as keepalived, routing daemon) in the network namespace.
+
+```sh
+/usr/sbin/ip netns exec dpvsns ./bin/dpvs -c /etc/dpvs2.conf -p /var/run/dpvs2.pid -x /var/run/dpvs2.ipc -- --file-prefix=dpvs2 -a 0000:cb:00.1 -a 0000:ca:00.0 -a 0000:ca:00.1 -l 12-20 --main-lcore 12
+/usr/sbin/ip netns exec dpvsns ./bin/keepalived -D --pid=/var/run/keepalived2.pid --vrrp_pid=/var/run/vrrp2.pid --checkers_pid=/var/run/checkers2.pid -f etc/keepalived/keepalived2.conf
+/usr/sbin/ip netns exec dpvsns /usr/sbin/bird -f -c /etc/bird2.conf -s /var/run/bird2/bird.ctl
+...
+```
+
+For performance improvement, we can enable multiple kthread mode when multiple DPVS instances are deployed on a server. In this mode, each KNI port is processed by a dedicated kthread rather than a shared kthread.
+
+```sh
+insmod rte_kni.ko kthread_mode=multiple carrier=on
+```
+
 <a id='debug'/>
 
 # Debug DPVS
@@ -1361,7 +1467,7 @@ $
 
 ### dpdk-pdump
 
-The `dpdk-pdump` runs as a DPDK secondary process and is capable of enabling packet capture on dpdk ports. DPVS works as the primary process for dpdk-pdump, which shoud enable the packet capture framework by setting `global_defs/pdump` to be `on` in `/etc/dpvs.conf` when DPVS starts up. 
+The `dpdk-pdump` runs as a DPDK secondary process and is capable of enabling packet capture on dpdk ports. DPVS works as the primary process for dpdk-pdump, which should enable the packet capture framework by setting `global_defs/pdump` to be `on` in `/etc/dpvs.conf` when DPVS starts up. 
 
 Refer to [dpdk-pdump doc](https://doc.dpdk.org/guides/tools/pdump.html) for its usage. DPVS extends dpdk-pdump with a [DPDK patch](../patch/dpdk-stable-18.11.2/0005-enable-pdump-and-change-dpdk-pdump-tool-for-dpvs.patch) to add some packet filtering features. Run `dpdk-pdump  -- --help` to find all supported pdump params.
 

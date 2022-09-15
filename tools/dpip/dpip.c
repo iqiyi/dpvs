@@ -23,6 +23,7 @@
 #include <arpa/inet.h>
 #include "dpip.h"
 #include "list.h"
+#include "sockopt.h"
 #include "conf/common.h"
 
 static struct list_head dpip_objs = LIST_HEAD_INIT(dpip_objs);
@@ -234,6 +235,8 @@ int main(int argc, char *argv[])
             return EDPVS_OK;
         }
     }
+
+    dpvs_sockopt_init();
 
     if (obj->parse && (err = obj->parse(obj, &conf)) != EDPVS_OK) {
         fprintf(stderr, "%s: parse: %s\n", prog, dpvs_strerror(err));

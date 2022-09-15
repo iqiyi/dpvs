@@ -690,6 +690,7 @@ dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     dst->num_dests = src->num_dests;
     dst->num_laddrs = src->num_laddrs;
     dst->cid = rte_lcore_id();
+    dst->index = g_lcore_id2index[dst->cid];
 
     err = dp_vs_stats_add(&dst->stats, &src->stats);
 
@@ -709,6 +710,7 @@ static int dp_vs_service_get_entries(int num_services,
     int ret = 0;
 
     uptr->cid = cid;
+    uptr->index = g_lcore_id2index[cid];
     uptr->num_services = num_services;
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         list_for_each_entry(svc, &dp_vs_svc_table[cid][idx], s_list){
@@ -976,25 +978,6 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
     return ret;
 }
 
-/*
- * for example : SOCKOPT_SVC_BASE is 200, SOCKOPT_SVC_GET_CMD_MAX is 204,
- * old_opt 205 means core 1 get opt 200
- */
-static inline int opt2cpu(sockoptid_t old_opt, sockoptid_t *new_opt, lcoreid_t *cid)
-{
-    assert(old_opt >= SOCKOPT_SVC_BASE);
-    assert(old_opt <= SOCKOPT_SVC_MAX);
-    int index = (old_opt - SOCKOPT_SVC_BASE)/(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1);
-    if (index >= g_lcore_num) {
-        return -1;
-    }
-    *new_opt = (old_opt - SOCKOPT_SVC_BASE)%(SOCKOPT_SVC_GET_CMD_MAX - SOCKOPT_SVC_BASE + 1)
-               + SOCKOPT_SVC_BASE;
-    *cid = g_lcore_index[index];
-    assert(*cid >= 0 && *cid < DPVS_MAX_LCORE);
-    return 0;
-}
-
 /* copy service/dest/stats */
 static int dp_vs_services_copy_percore_stats(dpvs_service_table_t *master_svcs,
                                              dpvs_service_table_t  *slave_svcs)
@@ -1149,24 +1132,18 @@ static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
 static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void **out, size_t *outlen)
 {
     int ret = 0;
-    uint8_t num_lcores = 0;
     lcoreid_t cid;
-    sockoptid_t new_opt;
 
-    netif_get_slave_lcores(&num_lcores, NULL);
-    if (opt2cpu(opt, &new_opt, &cid) < 0) {
-        return EDPVS_INVAL;
-    }
-    if (new_opt > SOCKOPT_SVC_MAX)
+    if (unlikely(opt > SOCKOPT_SVC_MAX))
         return EDPVS_INVAL;
 
-    switch (new_opt){
+    switch (opt){
         case DPVS_SO_GET_VERSION:
             {
-                char *buf = rte_zmalloc("info",64,0);
+                char *buf = rte_zmalloc("info", 64, 0);
                 if (unlikely(NULL == buf))
                     return EDPVS_NOMEM;
-                sprintf(buf,"DPDK-FULLNAT Server version 1.1.4 (size=0)");
+                snprintf(buf, 63, "dpvs:v%s", DPVS_VERSION);
                 *out = buf;
                 *outlen = 64;
                 return EDPVS_OK;
@@ -1174,13 +1151,17 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
         case DPVS_SO_GET_INFO:
             {
                 struct dp_vs_getinfo *info;
+
+                cid = g_lcore_index2id[0]; // master lcore
                 info = rte_zmalloc("info", sizeof(struct dp_vs_getinfo), 0);
-                if (unlikely(NULL == info))
+                if (unlikely(NULL == info)) {
+                    *outlen = 0;
                     return EDPVS_NOMEM;
-                info->version = 0;
+                }
+                info->version = g_version;
                 info->size = 0;
                 info->num_services = rte_atomic16_read(&dp_vs_num_services[cid]);
-                info->num_lcores = num_lcores;
+                info->num_lcores = g_slave_lcore_num;
                 *out = info;
                 *outlen = sizeof(struct dp_vs_getinfo);
                 return EDPVS_OK;
@@ -1200,17 +1181,23 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                     return EDPVS_INVAL;
                 }
 
+                cid = g_lcore_index2id[get->index];
+                if (cid < 0 || cid >= DPVS_MAX_LCORE) {
+                    *outlen = 0;
+                    return EDPVS_INVAL;
+                }
+
                 /* get slave core svc */
                 msg = msg_make(MSG_TYPE_SVC_GET_SERVICES, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
                                sizeof(*get), user);
-                if (!msg) {
+                if (unlikely(!msg)) {
                     return EDPVS_NOMEM;
                 }
 
                 ret = multicast_msg_send(msg, 0, &reply);
                 if (ret != EDPVS_OK) {
                     msg_destroy(&msg);
-                    RTE_LOG(ERR, SERVICE, "%s: send message fail.\n", __func__);
+                    RTE_LOG(ERR, SERVICE, "%s: send message fail\n", __func__);
                     return EDPVS_MSG_FAIL;
                 }
 
@@ -1220,7 +1207,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                         msg_destroy(&msg);
                         return EDPVS_NOMEM;
                     }
-                    rte_memcpy(output, get, sizeof(*get));
+                    //rte_memcpy(output, get, sizeof(*get));
                     ret = dp_vs_service_get_entries(get->num_services, output, cid);
                     if (ret != EDPVS_OK) {
                         msg_destroy(&msg);
@@ -1256,7 +1243,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                             return EDPVS_OK;
                         }
                     }
-                    RTE_LOG(ERR, SERVICE, "%s: find no services for cid=%d.\n", __func__, cid);
+                    RTE_LOG(ERR, SERVICE, "%s: find no services for cid=%d\n", __func__, cid);
                     msg_destroy(&msg);
                     return EDPVS_NOTEXIST;
                 }
@@ -1269,6 +1256,9 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 struct dp_vs_service *svc = NULL;
 
                 entry = (struct dp_vs_service_entry *)user;
+                cid = g_lcore_index2id[entry->index];
+                if (cid < 0 || cid >= DPVS_MAX_LCORE)
+                    return EDPVS_INVAL;
 
                 /* get slave core svc */
                 msg = msg_make(MSG_TYPE_SVC_GET_SERVICE, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
@@ -1296,7 +1286,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                         msg_destroy(&msg);
                         return EDPVS_NOTEXIST;
                     }
-                    memcpy(output, entry, sizeof(struct dp_vs_service_entry));
+                    rte_memcpy(output, entry, sizeof(struct dp_vs_service_entry));
                     ret = dp_vs_service_copy(output, svc);
                     if (ret != EDPVS_OK) {
                         msg_destroy(&msg);
@@ -1334,7 +1324,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                             return EDPVS_OK;
                         }
                     }
-                    RTE_LOG(ERR, SERVICE, "%s: find no service for cid=%d.\n", __func__, cid);
+                    RTE_LOG(ERR, SERVICE, "%s: find no service for cid=%d\n", __func__, cid);
                     msg_destroy(&msg);
                     rte_free(output);
                     return EDPVS_NOTEXIST;
@@ -1348,9 +1338,15 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 struct dpvs_multicast_queue *reply = NULL;
                 struct dp_vs_service_entry entry; // to get svc
                 int size;
+
                 get = (struct dp_vs_get_dests *)user;
                 size = sizeof(*get) + sizeof(struct dp_vs_dest_entry) * get->num_dests;
                 if(len != sizeof(*get)) {
+                    *outlen = 0;
+                    return EDPVS_INVAL;
+                }
+                cid = g_lcore_index2id[get->index];
+                if (cid < 0 || cid >= DPVS_MAX_LCORE) {
                     *outlen = 0;
                     return EDPVS_INVAL;
                 }
@@ -1382,7 +1378,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                         return EDPVS_NOTEXIST;
                     }
                     if (svc->num_dests != get->num_dests) {
-                        RTE_LOG(ERR, SERVICE, "%s: dests number not match in cid=%d.\n", __func__, cid);
+                        RTE_LOG(ERR, SERVICE, "%s: dests number not match in cid=%d\n", __func__, cid);
                         msg_destroy(&msg);
                         return EDPVS_INVAL;
                     }
@@ -1428,7 +1424,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                             return EDPVS_OK;
                         }
                     }
-                    RTE_LOG(ERR, SERVICE, "%s: find no dests for cid=%d.\n", __func__, cid);
+                    RTE_LOG(ERR, SERVICE, "%s: find no dests for cid=%d\n", __func__, cid);
                     msg_destroy(&msg);
                     rte_free(output);
                     return EDPVS_NOTEXIST;

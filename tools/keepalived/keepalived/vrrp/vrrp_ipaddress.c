@@ -135,8 +135,13 @@ netlink_iplist(list ip_list, int cmd, bool force, char* dpdk_port)
 			 * and they don't exist, don't report an error */
 			if (force)
 				netlink_error_ignore = ENODEV;
-
 			if (netlink_ipaddress(ipaddr, dpdk_port, cmd) > 0) {
+				char buf[64] = { 0 };
+				log_message(LOG_WARNING, "%s: %s address %s/%u on %s failed\n", __func__,
+						cmd == IPADDRESS_ADD? "adding" : "deleting",
+						inet_ntop(ipaddr->ifa.ifa_family, &ipaddr->u, buf, sizeof(buf)),
+						ipaddr->ifa.ifa_prefixlen,
+						dpdk_port ? dpdk_port : IF_NAME(if_get_by_ifindex(ipaddr->ifa.ifa_index)));
 				ipaddr->set = (cmd == IPADDRESS_ADD);
 				changed_entries = true;
 			}

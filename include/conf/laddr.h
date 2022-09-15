@@ -44,6 +44,7 @@ typedef struct dp_vs_laddr_conf {
 
     struct dp_vs_match match;
     lcoreid_t           cid;
+    lcoreid_t           index;
 
     /* for set */
     int                 af_l;

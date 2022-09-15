@@ -85,6 +85,7 @@ typedef struct dp_vs_dest_table {
     struct dp_vs_match match;
 
     lcoreid_t       cid;
+    lcoreid_t       index;
 
     dpvs_dest_compat_t entrytable[0];
 } dpvs_dest_table_t;

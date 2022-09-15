@@ -65,6 +65,7 @@ typedef struct dp_vs_service_compat {
     unsigned int        num_dests;
     unsigned int        num_laddrs;
     lcoreid_t           cid;
+    lcoreid_t           index;
     struct dp_vs_stats  stats;
 
 } dpvs_service_compat_t;
@@ -75,6 +76,7 @@ typedef struct dp_vs_service_compat {
 
 typedef struct dp_vs_services_table {
     lcoreid_t     cid;
+    lcoreid_t     index;
     unsigned int        num_services;
     dpvs_service_compat_t entrytable[0];
 } dpvs_service_table_t;

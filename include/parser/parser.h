@@ -30,7 +30,6 @@ typedef enum {
 typedef void (*keyword_callback_t)(vector_t);
 
 /* global definitions */
-#define CFG_FILE_NAME "/etc/dpvs.conf"
 #define CFG_FILE_EOB "}"
 #define CFG_FILE_MAX_BUF_SZ 1024
 

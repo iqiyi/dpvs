@@ -514,6 +514,7 @@ static int get_msg_cb(struct dpvs_msg *msg)
     *laddrs = *laddr_conf;
     laddrs->nladdrs = naddr;
     laddrs->cid = cid;
+    laddrs->index = g_lcore_id2index[cid];
     for (i = 0; i < naddr; i++) {
         laddrs->laddrs[i].af = addrs[i].af;
         laddrs->laddrs[i].addr = addrs[i].addr;
@@ -543,19 +544,6 @@ static int dp_vs_copy_percore_laddrs_stats(struct dp_vs_laddr_conf *master_laddr
     return EDPVS_OK;
 }
 
-static int opt2cpu(sockoptid_t opt, sockoptid_t *new_opt, lcoreid_t *cid)
-{
-    int index = opt - SOCKOPT_GET_LADDR_GETALL;
-    if (index >= g_lcore_num) {
-        return -1;
-    }
-    *cid = g_lcore_index[index];
-    assert(*cid >=0 && *cid < DPVS_MAX_LCORE);
-
-    *new_opt = SOCKOPT_GET_LADDR_GETALL;
-    return 0;
-}
-
 static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                              void **out, size_t *outsize)
 {
@@ -567,21 +555,19 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     int err;
     struct dpvs_multicast_queue *reply = NULL;
     struct dpvs_msg *msg, *cur;
-    uint8_t num_lcores = 0;
-    sockoptid_t new_opt;
     lcoreid_t cid;
 
-    netif_get_slave_lcores(&num_lcores, NULL);
-    if (opt2cpu(opt, &new_opt, &cid) < 0) {
-        return EDPVS_INVAL;
-    }
-    if (new_opt > SOCKOPT_GET_LADDR_GETALL)
+    if (unlikely(opt > SOCKOPT_GET_LADDR_GETALL))
         return EDPVS_INVAL;
 
     if (!conf && size < sizeof(*laddr_conf))
         return EDPVS_INVAL;
 
-    switch (new_opt) {
+    cid = g_lcore_index2id[laddr_conf->index];
+    if (cid < 0 || cid >= DPVS_MAX_LCORE)
+        return EDPVS_INVAL;
+
+    switch (opt) {
         case SOCKOPT_GET_LADDR_GETALL:
             msg = msg_make(MSG_TYPE_LADDR_GET_ALL, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
                            sizeof(struct dp_vs_laddr_conf), laddr_conf);
@@ -623,6 +609,8 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                 *laddrs = *laddr_conf;
 
                 laddrs->nladdrs = naddr;
+                laddrs->cid = cid;
+                laddrs->index = g_lcore_id2index[cid];
                 for (i = 0; i < naddr; i++) {
                     laddrs->laddrs[i].af = addrs[i].af;
                     laddrs->laddrs[i].addr = addrs[i].addr;
