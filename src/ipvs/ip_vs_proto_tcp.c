@@ -570,7 +570,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_INVPKT;
     }
 
-    /* Syn-proxy step 2 logic: receive client's 3-handshacke ack packet */
+    /* Syn-proxy step 2 logic: receive client's 3-handshake ack packet */
     /* When synproxy disabled, only SYN packets can arrive here.
      * So don't judge SYNPROXY flag here! If SYNPROXY flag judged, and syn_proxy
      * got disbled and keepalived reloaded, SYN packets for RS may never be sent. */
