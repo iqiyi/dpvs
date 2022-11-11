@@ -127,7 +127,7 @@ static void link_help(void)
             "    ---supported items---\n"
             "    promisc [on|off], forward2kni [on|off], link [up|down],\n"
             "    tc-egress [on|off], tc-ingress [on|off], addr, \n"
-            "    bond-[mode|slave|primary|ximit-policy|monitor-interval|link-up-prop|"
+            "    bond-[mode|slave|primary|xmit-policy|monitor-interval|link-up-prop|"
             "link-down-prop]\n"
 
             "Examples:\n"
