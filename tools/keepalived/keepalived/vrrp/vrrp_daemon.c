@@ -523,6 +523,8 @@ start_vrrp(data_t *prev_global_data)
 			 * we terminated abnormally */
 			ipvs_syncd_cmd(IPVS_STOPDAEMON, NULL, IPVS_MASTER, true, true);
 			ipvs_syncd_cmd(IPVS_STOPDAEMON, NULL, IPVS_BACKUP, true, true);
+		} else {
+			dpvs_sockopt_init();
 		}
 #endif
 

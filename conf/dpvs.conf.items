@@ -18,6 +18,7 @@ global_defs {
     <init> log_async_mode       off                 <off, on|off>
     <init> log_async_pool_size  16383               <16383, 1023-unlimited>
     <init> pdump                off                 <off, on|off>
+    <init> kni                  on                  <on, on|off>
 }
 
 ! netif config

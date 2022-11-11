@@ -131,7 +131,7 @@ struct list_head * dp_vs_sched_first_dest(const struct dp_vs_service *svc)
 
     cid = rte_lcore_id();
     ini = svc->dests.next;
-    loc = (svc->num_dests / g_slave_lcore_num ?: 1) * g_lcore_index[cid] % (svc->num_dests ?: 1);
+    loc = (svc->num_dests / g_slave_lcore_num ?: 1) * g_lcore_id2index[cid] % (svc->num_dests ?: 1);
 
     for (i = 0; i < loc; i++) {
         ini = ini->next;
