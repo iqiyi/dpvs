@@ -753,7 +753,7 @@ ipvs_blklst_cmd(int cmd, dpvs_service_compat_t *srule, virtual_server_t * vs)
 /* Fill IPVS rule with root vs infos */
 static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server_t *vs)
 {
-    int af;
+    int af = 0;
     /* Clean service rule */
     memset(srule, 0, sizeof(dpvs_service_compat_t));
 
@@ -766,14 +766,16 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     srule->limit_proportion = vs->limit_proportion;
     srule->conn_timeout = vs->conn_timeout;
 
-    inet_addr_range_parse(vs->srange, &srule->match.srange, &af);
-    inet_addr_range_parse(vs->drange, &srule->match.drange, &af);
-    snprintf(srule->match.iifname, IFNAMSIZ, "%s", vs->iifname);
-    snprintf(srule->match.oifname, IFNAMSIZ, "%s", vs->oifname);
-    srule->match.af = af;
-
-    if (!srule->af && (vs->srange[0] || vs->drange[0] || vs->iifname[0] || vs->oifname[0]))
-        srule->af = af;
+    if (vs->srange[0] || vs->drange[0] || vs->iifname[0] || vs->oifname[0]) {
+        if (dp_vs_match_parse(vs->srange, vs->drange, vs->iifname,
+                    vs->oifname,vs->af, &srule->match) == EDPVS_OK) {
+            srule->af = srule->match.af;
+        } else {
+            memset(&srule->match, 0, sizeof(srule->match));
+        }
+    } else if (!vs->af) {
+        log_message(LOG_WARNING, "empty virtual server af\n");
+    }
 
     if (vs->persistence_timeout &&
             (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_DEL)) {

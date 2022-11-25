@@ -159,6 +159,7 @@ static inline int inet_addr_range_parse(const char *param,
         port1 = port2 = NULL;
     }
 
+    *af = 0;
     memset(range, 0, sizeof(*range));
 
     if (strlen(ip1) && inet_pton(AF_INET6, ip1, &range->min_addr.in6) > 0) {
