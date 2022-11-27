@@ -504,11 +504,11 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
         goto out_err;
     sched = NULL;
 
-    rte_atomic16_inc(&dp_vs_num_services[cid]);
-
     ret = dp_vs_service_hash(svc, cid);
     if (ret != EDPVS_OK)
         return ret;
+    rte_atomic16_inc(&dp_vs_num_services[cid]);
+
     rte_atomic32_set(&svc->refcnt, 1);
 
     *svc_p = svc;
