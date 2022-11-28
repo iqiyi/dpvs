@@ -341,39 +341,6 @@ __dp_vs_service_match_get(int af, const struct rte_mbuf *mbuf, bool *outwall, lc
         return NULL;
 }
 
-int dp_vs_match_parse(const char *srange, const char *drange,
-                      const char *iifname, const char *oifname,
-                      int af, struct dp_vs_match *match)
-{
-    int err;
-
-    memset(match, 0, sizeof(*match));
-
-    if (srange && strlen(srange)) {
-        err = inet_addr_range_parse(srange, &match->srange, &match->af);
-        if (err != EDPVS_OK)
-            return err;
-    }
-
-    if (drange && strlen(drange)) {
-        err = inet_addr_range_parse(drange, &match->drange, &match->af);
-        if (err != EDPVS_OK)
-            return err;
-    }
-
-    if (match->af && af && match->af != af)
-        return EDPVS_INVAL;
-
-    // no range param
-    if (!match->af)
-        match->af = af;
-
-    snprintf(match->iifname, IFNAMSIZ, "%s", iifname ? : "");
-    snprintf(match->oifname, IFNAMSIZ, "%s", oifname ? : "");
-
-    return EDPVS_OK;
-}
-
 static struct dp_vs_service *
 __dp_vs_service_match_find(int af, uint8_t proto, const struct dp_vs_match *match,
                        lcoreid_t cid)
@@ -537,11 +504,11 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
         goto out_err;
     sched = NULL;
 
-    rte_atomic16_inc(&dp_vs_num_services[cid]);
-
     ret = dp_vs_service_hash(svc, cid);
     if (ret != EDPVS_OK)
         return ret;
+    rte_atomic16_inc(&dp_vs_num_services[cid]);
+
     rte_atomic32_set(&svc->refcnt, 1);
 
     *svc_p = svc;

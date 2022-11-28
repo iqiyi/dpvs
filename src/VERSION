@@ -5,6 +5,9 @@
 # New Features:
 #   * Ctrl Plane Improvements
 #   * Multi-instance Supports
+#
+# Nov 28, 2022
+# * Fix using uninitialized "af" variable problem in keepalived
 
 export VERSION=1.9
 export RELEASE=3

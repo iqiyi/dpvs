@@ -42,6 +42,41 @@ static inline bool is_empty_match(const struct dp_vs_match *match)
     return !memcmp(match, &zero_match, sizeof(*match));
 }
 
+static inline int dp_vs_match_parse(const char *srange, const char *drange,
+                                    const char *iifname, const char *oifname,
+                                    int af, struct dp_vs_match *match)
+{
+    int s_af = 0, d_af = 0, err;
+
+    memset(match, 0, sizeof(*match));
+
+    if (srange && strlen(srange)) {
+        err = inet_addr_range_parse(srange, &match->srange, &s_af);
+        if (err != EDPVS_OK)
+            return err;
+    }
+
+    if (drange && strlen(drange)) {
+        err = inet_addr_range_parse(drange, &match->drange, &d_af);
+        if (err != EDPVS_OK)
+            return err;
+    }
+
+    if (s_af && d_af && s_af != d_af) {
+        return EDPVS_INVAL;
+    }
+    match->af = s_af | d_af;
+
+    if (af && match->af && af != match->af) {
+        return EDPVS_INVAL;
+    }
+
+    snprintf(match->iifname, IFNAMSIZ, "%s", iifname ? : "");
+    snprintf(match->oifname, IFNAMSIZ, "%s", oifname ? : "");
+
+    return EDPVS_OK;
+}
+
 static inline int parse_match(const char *pattern, uint8_t *proto,
                               struct dp_vs_match *match)
 {
