@@ -27,7 +27,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <linux/icmp.h>
+#include <netinet/ip_icmp.h>
 #include <linux/icmpv6.h>
 #ifdef ERRQUEUE_NEEDS_SYS_TIME
 #include <sys/time.h>
