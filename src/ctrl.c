@@ -434,6 +434,15 @@ int msg_destroy(struct dpvs_msg **pmsg)
         msg->reply.len = 0;
     }
     dpvs_mempool_put(msg_pool, msg);
+    /*
+    *   Be careful: 
+    *       pmsg MUST NOT pointer to mcq->org_msg when seting *pmsg = NULL, bacause mcq is freed now.
+    *       In that special case, if the space of freed mcq is newly allocted as a struct msg by other lcore, 
+    *       set *pmsg = NULL here may cause step on the memory of the newly allocted msg.
+    *   PS: the offset of member org_msg in struct dpvs_multicast_queue is 32, and it's size is 8B.
+    *       the offset of member flags in struct dpvs_msg is 32, and it's size is 4.
+    *       the offset of member refcnt in struct dpvs_msg is 36, and it's size is 2. 
+    */
     *pmsg = NULL;
 
     msg_debug_free();
@@ -638,7 +647,7 @@ int multicast_msg_send(struct dpvs_msg *msg, uint32_t flags, struct dpvs_multica
 static int msg_master_process(int step)
 {
     int n = 0;
-    struct dpvs_msg *msg;
+    struct dpvs_msg *msg, *orig_msg;
     struct dpvs_msg_type *msg_type;
     struct dpvs_multicast_queue *mcq;
 
@@ -694,7 +703,8 @@ static int msg_master_process(int step)
 #endif
                     }
                     add_msg_flags(mcq->org_msg, DPVS_MSG_F_STATE_FIN);
-                    msg_destroy(&mcq->org_msg);
+                    orig_msg = mcq->org_msg;
+                    msg_destroy(&orig_msg);
                 }
                 msg_type_put(msg_type);
                 continue;
