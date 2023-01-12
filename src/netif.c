@@ -1033,7 +1033,7 @@ __rte_unused static void pkt_send_back(struct rte_mbuf *mbuf, struct netif_port 
 #endif
 
 /********************************************* mbufpool *******************************************/
-static struct rte_mempool *pktmbuf_pool[DPVS_MAX_SOCKET];
+struct rte_mempool *pktmbuf_pool[DPVS_MAX_SOCKET];
 
 static inline void netif_pktmbuf_pool_init(void)
 {
@@ -4238,7 +4238,6 @@ static void netif_port_init(void)
 
     this_eth_conf = default_port_conf;
 
-    rte_kni_init(NETIF_MAX_KNI);
     kni_init();
 
     for (pid = 0; pid < nports; pid++) {
