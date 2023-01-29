@@ -78,7 +78,7 @@ static RTE_DEFINE_PER_LCORE(struct list_head*, dpvs_rt6_hash);
 
 static inline bool rt6_default(const struct rt6_prefix *rt6_p)
 {
-    return ipv6_addr_any(&rt6_p->addr) && (rt6_p->plen == 0);
+    return ipv6_addr_any(&rt6_p->addr.in6) && (rt6_p->plen == 0);
 }
 
 static inline int rt6_find_free_array_idx(uint32_t *idx)
@@ -260,7 +260,7 @@ static struct route6* rt6_lpm_get(const struct dp_vs_route6_conf *rt6_cfg)
     hashkey = rt6_hash_key(&rt6_cfg->dst);
     list_for_each_entry_safe(entry, next, &this_rt6_hash[hashkey], hnode) {
         if (entry->rt6_dst.plen == rt6_cfg->dst.plen &&
-                ipv6_prefix_equal(&entry->rt6_dst.addr, &rt6_cfg->dst.addr,
+                ipv6_prefix_equal(&entry->rt6_dst.addr.in6, &rt6_cfg->dst.addr.in6,
                     rt6_cfg->dst.plen)) {
             /* Do not match rt6_cfg->ifname, because LPM6 does not support
              * the same rt6_prefix with different ifname */
@@ -268,7 +268,7 @@ static struct route6* rt6_lpm_get(const struct dp_vs_route6_conf *rt6_cfg)
         }
     }
 
-    if (rt6_cfg->dst.plen == 0 && ipv6_addr_any(&rt6_cfg->dst.addr))
+    if (rt6_cfg->dst.plen == 0 && ipv6_addr_any(&rt6_cfg->dst.addr.in6))
         return this_rt6_default;
 
     return NULL;
@@ -389,7 +389,7 @@ static int rt6_lpm_del_lcore(const struct dp_vs_route6_conf *rt6_cfg)
     list_for_each_entry_safe(entry, next, &this_rt6_hash[hashkey], hnode) {
         if (entry->rt6_dst.plen == rt6_cfg->dst.plen &&
                 strcmp(rt6_cfg->ifname, entry->rt6_dev->name) == 0 &&
-                ipv6_prefix_equal(&entry->rt6_dst.addr, &rt6_cfg->dst.addr,
+                ipv6_prefix_equal(&entry->rt6_dst.addr.in6, &rt6_cfg->dst.addr.in6,
                     rt6_cfg->dst.plen)) {
             /* hit! route source is not checked */
             ret = rte_lpm6_delete(this_lpm6_struct, (uint8_t *)&entry->rt6_dst.addr,

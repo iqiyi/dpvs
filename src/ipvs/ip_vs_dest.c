@@ -24,6 +24,7 @@
 #include "ipvs/sched.h"
 #include "ipvs/laddr.h"
 #include "ipvs/conn.h"
+#include "ctrl.h"
 
 /*
  * Trash for destinations
@@ -321,12 +322,341 @@ int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
     return ret;
 }
 
+static int dp_vs_dest_get_details(const struct dp_vs_service *svc, 
+                            struct dp_vs_dest_front *uptr)
+{
+    int ret = 0;
+    int count = 0;
+    struct dp_vs_dest *dest;
+    struct dp_vs_dest_entry entry, *detail;
+
+    uptr->cid = rte_lcore_id();
+    uptr->index = g_lcore_id2index[uptr->cid];
+    uptr->num_dests = svc->num_dests;
+    detail = (struct dp_vs_dest_entry*)((char*)uptr + sizeof(*uptr));
+
+    list_for_each_entry(dest, &svc->dests, n_list){
+        if(count >= svc->num_dests)
+            break;
+        memset(&entry, 0, sizeof(entry));
+        entry.af   = dest->af;
+        entry.addr = dest->addr;
+        entry.port = dest->port;
+        entry.conn_flags = dest->fwdmode;
+        entry.weight = rte_atomic16_read(&dest->weight);
+        entry.max_conn = dest->max_conn;
+        entry.min_conn = dest->min_conn;
+        entry.actconns = rte_atomic32_read(&dest->actconns);
+        entry.inactconns = rte_atomic32_read(&dest->inactconns);
+        entry.persistconns = rte_atomic32_read(&dest->persistconns);
+        ret = dp_vs_stats_add(&(entry.stats), &dest->stats);
+        if (ret != EDPVS_OK)
+            break;
+
+        memcpy(detail, &entry, sizeof(entry));
+        detail += 1;
+        count++;
+    }
+
+    return ret;
+}
+
+static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len);
+static int dp_vs_dest_get(sockoptid_t opt, const void *user, size_t len, void **out, size_t *outlen);
+
+struct dpvs_sockopts sockopts_dest = {
+    .version        = SOCKOPT_VERSION,
+    .set_opt_min    = DPVSAGENT_VS_ADD_DESTS,
+    .set_opt_max    = DPVSAGENT_VS_DEL_DESTS,
+    .set            = dp_vs_dest_set,
+    .get_opt_min    = DPVSAGENT_VS_GET_DESTS,
+    .get_opt_max    = DPVSAGENT_VS_GET_DESTS,
+    .get            = dp_vs_dest_get,
+};
+
+static int dest_msg_seq(void) {
+    static uint32_t seq = 0;
+    return seq++;
+}
+
+static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len)
+{
+    struct dp_vs_dest_front *insvc;
+    struct dp_vs_dest_detail *details;
+    struct dp_vs_dest_conf udest;
+    struct dpvs_msg *msg;
+    struct dp_vs_service *getsvc;
+    int i, ret = EDPVS_INVAL;
+    lcoreid_t cid;
+
+    insvc = (struct dp_vs_dest_front*)user;
+    if (len != sizeof(*insvc) + insvc->num_dests*sizeof(struct dp_vs_dest_detail)) {
+        return EDPVS_INVAL;
+    }
+    details = (struct dp_vs_dest_detail*)(user + sizeof(struct dp_vs_dest_front));
+
+    cid = rte_lcore_id();
+    if (cid < 0 || cid >= DPVS_MAX_LCORE) {
+        return EDPVS_INVAL;
+    }
+
+    if (cid == rte_get_main_lcore()) {
+        if (opt == DPVSAGENT_VS_ADD_DESTS) {
+            msg = msg_make(MSG_TYPE_AGENT_ADD_DESTS, dest_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
+        } else if (opt == DPVSAGENT_VS_DEL_DESTS) {
+            msg = msg_make(MSG_TYPE_AGENT_DEL_DESTS, dest_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
+        } else {
+            return EDPVS_NOTSUPP;
+        }
+        if (!msg)
+            return EDPVS_NOMEM;
+
+        ret = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+        if (ret != EDPVS_OK) {
+            RTE_LOG(ERR, SERVICE, "[%s] fail to send multicast message\n", __func__);
+        }
+        msg_destroy(&msg);
+    }
+
+    getsvc = dp_vs_service_lookup(insvc->af, insvc->proto, &insvc->addr, insvc->port, insvc->fwmark, NULL, &insvc->match, NULL, cid);
+    if (!getsvc || getsvc->proto != insvc->proto) {
+        return EDPVS_INVAL;
+    }
+
+    for (i = 0; i < insvc->num_dests; i++) {
+        memset(&udest, 0, sizeof(struct dp_vs_dest_conf));
+        dp_vs_copy_udest_compat(&udest, &details[i]);
+        switch (opt) {
+            case DPVSAGENT_VS_ADD_DESTS:
+                ret = dp_vs_dest_add(getsvc, &udest);
+                if (ret == EDPVS_EXIST)
+                    ret = dp_vs_dest_edit(getsvc, &udest);
+                break;
+            case DPVSAGENT_VS_DEL_DESTS:
+                ret = dp_vs_dest_del(getsvc, &udest);
+                break;
+            default:
+                return EDPVS_NOTSUPP;
+        }
+    }
+    return ret;
+}
+
+static int dp_vs_dest_get(sockoptid_t opt, const void *user, size_t len, void **out, size_t *outlen)
+{
+    struct dp_vs_dest_front *insvc, *outsvc, *front;
+    struct dp_vs_dest_detail *outdest, *slave_dest;
+    struct dp_vs_service *getsvc;
+    struct dp_vs_dest *dest;
+    int size, ret, i;
+    struct dpvs_msg *msg, *cur;
+    struct dpvs_multicast_queue *reply = NULL;
+    lcoreid_t cid;
+
+    switch (opt) {
+        case DPVSAGENT_VS_GET_DESTS:
+            insvc = (struct dp_vs_dest_front*)user;
+            if (len != sizeof(*insvc)) {
+                *outlen = 0;
+                return EDPVS_INVAL;
+            }
+
+            cid = g_lcore_index2id[insvc->index];
+            if (cid < 0 || cid >= DPVS_MAX_LCORE) {
+                *outlen = 0;
+                return EDPVS_INVAL;
+            }
+
+            size = sizeof(*insvc) + insvc->num_dests*sizeof(struct dp_vs_dest_detail);
+
+            msg = msg_make(MSG_TYPE_AGENT_GET_DESTS, 0, DPVS_MSG_MULTICAST, rte_lcore_id(), len, user);
+            if (!msg) {
+                return EDPVS_NOMEM;
+            }
+
+            ret = multicast_msg_send(msg, 0, &reply);
+            if (ret != EDPVS_OK) {
+                RTE_LOG(ERR, SERVICE, "%s: send message fail.\n", __func__);
+                msg_destroy(&msg);
+                return EDPVS_MSG_FAIL;
+            }
+
+            if (cid == rte_get_main_lcore()) {
+                // getsvc = dp_vs_service_get_lcore(&outsvc, cid);
+                getsvc = dp_vs_service_lookup(insvc->af, insvc->proto, &insvc->addr, insvc->port, insvc->fwmark, NULL, &insvc->match, NULL, cid);
+                if (!getsvc) {
+                    msg_destroy(&msg);
+                    return EDPVS_NOTEXIST;
+                }
+
+                size = sizeof(*insvc) + getsvc->num_dests*sizeof(struct dp_vs_dest_detail);
+                *out = rte_zmalloc("get_dests", size, 0);
+                if (!*out) {
+                    msg_destroy(&msg);
+                    return EDPVS_NOMEM;
+                }
+
+                rte_memcpy(*out, insvc, sizeof(insvc));
+                outsvc = (struct dp_vs_dest_front*)*out;
+                outsvc->cid = rte_lcore_id();
+                outsvc->index = g_lcore_id2index[outsvc->cid];
+                outsvc->num_dests = getsvc->num_dests;
+                outdest = (struct dp_vs_dest_detail*)(*out + sizeof(outsvc));
+
+                list_for_each_entry(dest, &getsvc->dests, n_list) {
+                    outdest->af           = dest->af;
+                    outdest->addr         = dest->addr;
+                    outdest->port         = dest->port;
+                    outdest->conn_flags   = dest->fwdmode;
+                    outdest->max_conn     = dest->max_conn;
+                    outdest->min_conn     = dest->min_conn;
+                    outdest->weight       = rte_atomic16_read(&dest->weight);
+                    outdest->actconns     = rte_atomic32_read(&dest->actconns);
+                    outdest->inactconns   = rte_atomic32_read(&dest->inactconns);
+                    outdest->persistconns = rte_atomic32_read(&dest->persistconns);
+
+                    ret = dp_vs_stats_add(&outdest->stats, &dest->stats);
+                    if (ret != EDPVS_OK)  {
+                        msg_destroy(&msg);
+                        rte_free(out);
+                        return ret;
+                    }
+                    outdest += 1; 
+                }
+
+                list_for_each_entry(cur, &reply->mq, mq_node) {
+                    slave_dest = (struct dp_vs_dest_detail*)(cur->data + sizeof(struct dp_vs_dest_front));
+                    outdest = (struct dp_vs_dest_detail*)(*out + sizeof(outsvc));
+                    for (i = 0; i < outsvc->num_dests; i++) {
+                        outdest->max_conn += slave_dest->max_conn;
+                        outdest->min_conn += slave_dest->min_conn;
+                        outdest->actconns += slave_dest->actconns;
+                        outdest->inactconns+= slave_dest->inactconns;
+                        outdest->persistconns += slave_dest->persistconns;
+                        dp_vs_stats_add(&outdest->stats, &slave_dest->stats);
+
+                        outdest    += 1;
+                        slave_dest += 1;
+                    }
+                }
+
+                *outlen = size;
+                msg_destroy(&msg);
+                return EDPVS_OK;
+            } else {
+                *out = rte_zmalloc("get_dests", size, 0);
+                if (!*out) {
+                    msg_destroy(&msg);
+                    return EDPVS_NOMEM;
+                }
+
+                list_for_each_entry(cur, &reply->mq, mq_node) {
+                    front = (struct dp_vs_dest_front*)cur->data;
+                    if (cid == front->cid) {
+                        rte_memcpy(*out, cur->data, size);
+                    }
+                }
+                *outlen = size;
+                msg_destroy(&msg);
+                return EDPVS_OK;
+            }
+            break;
+        default:
+            return EDPVS_NOTSUPP;
+    }
+    return EDPVS_INVAL;
+}
+
+static int adddest_msg_cb(struct dpvs_msg *msg)
+{
+    return dp_vs_dest_set(DPVSAGENT_VS_ADD_DESTS, msg->data, msg->len);
+}
+
+static int deldest_msg_cb(struct dpvs_msg *msg)
+{
+    return dp_vs_dest_set(DPVSAGENT_VS_DEL_DESTS, msg->data, msg->len);
+}
+
+static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
+{
+    lcoreid_t cid = rte_lcore_id();
+    int ret = EDPVS_INVAL;
+    size_t size;
+    struct dp_vs_dest_front *get, *output;
+    struct dp_vs_service *svc;
+
+    get = (struct dp_vs_dest_front*)msg->data;
+    svc = dp_vs_service_lookup(get->af, get->proto, &get->addr, get->port, get->fwmark, NULL, &get->match, NULL, cid);
+    if (!svc)
+        return EDPVS_NOTEXIST;
+    if (svc->num_dests != get->num_dests) {
+        RTE_LOG(ERR, SERVICE, "%s: dests number not match in cid=%d.\n", __func__, cid);
+        return EDPVS_INVAL;
+    }
+
+    size = sizeof(*get) + sizeof(struct dp_vs_dest_detail) * (svc->num_dests);
+    output = msg_reply_alloc(size);
+    if (output == NULL)
+        return EDPVS_NOMEM;
+
+    rte_memcpy(output, get, sizeof(*get));
+    ret = dp_vs_dest_get_details(svc, output);
+
+    if (ret != EDPVS_OK) {
+        msg_reply_free(output);
+        return ret;
+    }
+
+    msg->reply.len = size;
+    msg->reply.data = (void *)output;
+    return EDPVS_OK;
+}
+
 int dp_vs_dest_init(void)
 {
-    return EDPVS_OK;
+    int err;
+    struct dpvs_msg_type msg_type;
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_ADD_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = adddest_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_DEL_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = deldest_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_GET_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = dp_vs_dests_get_uc_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         return err;
+    }
+
+    return sockopt_register(&sockopts_dest);
 }
 
 int dp_vs_dest_term(void)
 {
-    return EDPVS_OK;
+    return sockopt_unregister(&sockopts_dest);
 }

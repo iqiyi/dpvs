@@ -508,47 +508,53 @@ int route_flush(void)
 
 static int route_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
-    struct dp_vs_route_conf *cf = (void *)conf;
+    struct dp_vs_route_detail *detail = (struct dp_vs_route_detail*)conf;
     struct netif_port *dev;
+    union inet_addr *src, *dst, *gw;
+    uint32_t af, plen, metric, mtu; 
     uint32_t flags = 0;
 
-    if (!conf || size < sizeof(*cf))
+    if (!conf || size != sizeof(*detail))
         return EDPVS_INVAL;
 
-    if (cf->af != AF_INET && cf->af != AF_UNSPEC)
+    af     = detail->af;
+    plen   = detail->dst.plen;
+    metric = detail->metric;
+    mtu    = detail->mtu;
+    flags  = detail->flags;
+
+    dst = &detail->dst.addr;
+    src = &detail->src.addr;
+    gw  = &detail->gateway.addr;
+
+    if (af != AF_INET && af != AF_UNSPEC)
         return EDPVS_NOTSUPP;
 
-    if (cf->scope == ROUTE_CF_SCOPE_HOST) {
-        flags |= RTF_LOCALIN;
+    if (flags & RTF_LOCALIN || flags & RTF_KNI)
+        if (inet_is_addr_any(af, dst) || plen != 32)
+            return EDPVS_INVAL;
 
-        if (inet_is_addr_any(cf->af, &cf->dst) || cf->plen != 32)
-            return EDPVS_INVAL;
-    }
-    else if (cf->scope == ROUTE_CF_SCOPE_KNI) {
-        flags |= RTF_KNI;
-        if (inet_is_addr_any(cf->af, &cf->dst) || cf->plen != 32)
-            return EDPVS_INVAL;
-    }
-    else {
-        flags |= RTF_FORWARD;
-        if (inet_is_addr_any(cf->af, &cf->dst))
+    if (flags & RTF_FORWARD)
+        if (inet_is_addr_any(af, dst))
             flags |= RTF_DEFAULT;
-    }
 
-    if (cf->outwalltb)
-        flags |= RTF_OUTWALL;
-
-    dev = netif_port_get_by_name(cf->ifname);
+    dev = netif_port_get_by_name(detail->ifname);
     if (!dev) /* no dev is OK ? */
         return EDPVS_INVAL;
 
     switch (opt) {
+    case DPVSAGENT_ROUTE_ADD:
+        /*fallthrough*/
     case SOCKOPT_SET_ROUTE_ADD:
-        return route_add(&cf->dst.in, cf->plen, flags,
-                         &cf->via.in, dev, &cf->src.in, cf->mtu, cf->metric);
+        return route_add(&dst->in, plen, flags,
+                     &gw->in, dev, &src->in, mtu, metric);
+
+    case DPVSAGENT_ROUTE_DEL:
+        /*fallthrough*/
     case SOCKOPT_SET_ROUTE_DEL:
-        return route_del(&cf->dst.in, cf->plen, flags,
-                         &cf->via.in, dev, &cf->src.in, cf->mtu, cf->metric);
+        return route_del(&dst->in, plen, flags,
+                     &gw->in, dev, &src->in, mtu, metric);
+
     case SOCKOPT_SET_ROUTE_SET:
         return EDPVS_NOTSUPP;
     case SOCKOPT_SET_ROUTE_FLUSH:
@@ -556,90 +562,54 @@ static int route_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     default:
         return EDPVS_NOTSUPP;
     }
+
+    return EDPVS_NOTSUPP;
 }
 
-static void route_fill_conf(int af, struct dp_vs_route_conf *cf,
-                           const struct route_entry *entry)
+static void route_fill_conf(int af, struct dp_vs_route_detail *detail, const struct route_entry *entry)
 {
-    memset(cf, 0, sizeof(*cf));
+    memset(detail, 0, sizeof(*detail));
+    detail->af = af;
+    detail->mtu = entry->mtu;
+    detail->metric = entry->metric;
+    detail->flags = entry->flag;
 
-    /*
-     * FIXME:
-     * some config fields are not implemented in route_entry.
-     */
-    cf->af      = af;
-    cf->dst.in  = entry->dest;
-    cf->plen    = entry->netmask;
-    cf->via.in  = entry->gw;
-    cf->src.in  = entry->src;
-    cf->mtu     = entry->mtu;
-    cf->metric  = entry->metric;
+    detail->dst.plen = entry->netmask;
 
-    if (entry->flag & RTF_LOCALIN){
-        cf->scope = ROUTE_CF_SCOPE_HOST;
-    } else if (entry->flag & RTF_KNI) {
-        cf->scope = ROUTE_CF_SCOPE_KNI;
-    } else if (entry->gw.s_addr == htonl(INADDR_ANY)) {
-        cf->scope = ROUTE_CF_SCOPE_LINK;
-        cf->flags |= ROUTE_CF_FLAG_ONLINK;
-    } else {
-        cf->scope = ROUTE_CF_SCOPE_GLOBAL;
-    }
+    detail->dst.addr.in = entry->dest;
+    detail->src.addr.in = entry->src;
+    detail->gateway.addr.in = entry->gw;
 
     if (entry->port)
-        snprintf(cf->ifname, sizeof(cf->ifname), "%s", entry->port->name);
-
-    return;
+        snprintf(detail->ifname, sizeof(detail->ifname), "%s", entry->port->name);
 }
 
 static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                              void **out, size_t *outsize)
 {
-    const struct dp_vs_route_conf *cf;
     struct dp_vs_route_conf_array *array;
     size_t nroute, hash;
     struct route_entry *entry;
     struct netif_port *port = NULL;
     int off = 0;
-    bool outwall_table=false;
-
-    if (conf && size >= sizeof(*cf))
-        cf = conf;
-    else
-        cf = NULL;
-
-    if (cf && strlen(cf->ifname)) {
-        port = netif_port_get_by_name(cf->ifname);
+    char *ifname = ((struct dp_vs_route_detail*)conf)->ifname;
+    if (conf && strlen(ifname)) {
+        port = netif_port_get_by_name(ifname);
         if (!port) {
             RTE_LOG(WARNING, ROUTE, "%s: no such device: %s\n",
-                    __func__, cf->ifname);
+                    __func__, ifname);
             return EDPVS_NOTEXIST;
         }
     }
 
     nroute = rte_atomic32_read(&this_num_routes);
     
-    if (cf && cf->outwalltb) {
-        nroute = rte_atomic32_read(&this_num_out_routes);
-        outwall_table = true;
-    }
+    *outsize = sizeof(struct dp_vs_route_conf_array) + nroute * sizeof(struct dp_vs_route_detail);
 
-    *outsize = sizeof(struct dp_vs_route_conf_array) + \
-               nroute * sizeof(struct dp_vs_route_conf);
     *out = rte_calloc(NULL, 1, *outsize, 0);
     if (!(*out))
         return EDPVS_NOMEM;
-    array = *out;
-
-    if (outwall_table) {
-        list_for_each_entry(entry, &this_gfw_route_table, list) {
-            if (off >= nroute)
-                break;
-            route_fill_conf(AF_INET, &array->routes[off++], entry);
-        }
-        array->nroute = off;
-        return EDPVS_OK;
-    }  
+    array = (struct dp_vs_route_conf_array*)*out;
 
     if (port) {
         for (hash = 0; hash < LOCAL_ROUTE_TAB_SIZE; hash++) {
@@ -716,6 +686,16 @@ static int route_del_msg_cb(struct dpvs_msg *msg)
 {
     return route_msg_process(false, msg);
 }
+
+static struct dpvs_sockopts agent_route_sockopts = {
+    .version        = SOCKOPT_VERSION,
+    .set_opt_min    = DPVSAGENT_ROUTE_ADD,
+    .set_opt_max    = DPVSAGENT_ROUTE_DEL,
+    .set            = route_sockopt_set,
+    .get_opt_min    = DPVSAGENT_ROUTE_GET,
+    .get_opt_max    = DPVSAGENT_ROUTE_GET,
+    .get            = route_sockopt_get,
+};
 
 static struct dpvs_sockopts route_sockopts = {
     .version        = SOCKOPT_VERSION,
@@ -795,6 +775,9 @@ int route_init(void)
     if ((err = sockopt_register(&route_sockopts)) != EDPVS_OK)
         return err;
 
+    if ((err = sockopt_register(&agent_route_sockopts)) != EDPVS_OK)
+        return err;
+
     return EDPVS_OK;
 }
 
@@ -802,6 +785,9 @@ int route_term(void)
 {
     int err;
     lcoreid_t cid;
+
+    if ((err = sockopt_unregister(&agent_route_sockopts)) != EDPVS_OK)
+        return err;
 
     if ((err = sockopt_unregister(&route_sockopts)) != EDPVS_OK)
         return err;

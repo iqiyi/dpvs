@@ -103,7 +103,7 @@ static inline bool rt6_match(const struct route6 *rt6, const struct dp_vs_route6
 {
     /* Note: Do not use `ipv6_masked_addr_cmp` here for performance consideration
      *      here. We ensure the route6 entry is masked when added to route table. */
-    if (ipv6_addr_cmp(&rt6->rt6_dst.addr, &cf->dst.addr) != 0)
+    if (ipv6_addr_cmp(&rt6->rt6_dst.addr.in6, &cf->dst.addr.in6) != 0)
         return false;
     if (rt6->rt6_dst.plen != cf->dst.plen)
         return false;
@@ -131,7 +131,7 @@ static struct route6 *__rt6_hlist_get(const struct dp_vs_route6_conf *cf,
             continue;
         if (hlist->plen < cf->dst.plen)
             break;
-        hashkey = rt6_hlist_hashkey(&cf->dst.addr, hlist->plen, hlist->nbuckets);
+        hashkey = rt6_hlist_hashkey(&cf->dst.addr.in6, hlist->plen, hlist->nbuckets);
         list_for_each_entry(rt6, &hlist->hlist[hashkey], hnode) {
             if (rt6_match(rt6, cf)) {
                 if (phlist)
@@ -215,7 +215,7 @@ static int rt6_hlist_add_lcore(const struct dp_vs_route6_conf *cf)
     rt6_fill_with_cfg(rt6, cf);
     rte_atomic32_set(&rt6->refcnt, 1);
 
-    hashkey = rt6_hlist_hashkey(&cf->dst.addr, cf->dst.plen, hlist->nbuckets);
+    hashkey = rt6_hlist_hashkey(&cf->dst.addr.in6, cf->dst.plen, hlist->nbuckets);
     list_add_tail(&rt6->hnode, &hlist->hlist[hashkey]);
     hlist->nroutes++;
     this_rt6_nroutes++;
@@ -270,10 +270,10 @@ static inline bool
 rt6_hlist_flow_match(const struct route6 *rt6, const struct flow6 *fl6)
 {
     if (rt6->rt6_dst.plen < 128) {
-        if (!ipv6_prefix_equal(&fl6->fl6_daddr, &rt6->rt6_dst.addr, rt6->rt6_dst.plen))
+        if (!ipv6_prefix_equal(&fl6->fl6_daddr, &rt6->rt6_dst.addr.in6, rt6->rt6_dst.plen))
             return false;
     } else {
-        if (!ipv6_addr_equal(&fl6->fl6_daddr, &rt6->rt6_dst.addr))
+        if (!ipv6_addr_equal(&fl6->fl6_daddr, &rt6->rt6_dst.addr.in6))
             return false;
     }
 

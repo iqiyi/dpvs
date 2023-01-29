@@ -20,6 +20,7 @@
 
 #include "global_data.h"
 #include "conf/common.h"
+#include "conf/sockopts.h"
 #include "list.h"
 #include "dpdk.h"
 
@@ -229,8 +230,15 @@ enum {
     MSG_TYPE_SVC_GET_SERVICES,
     MSG_TYPE_SVC_GET_SERVICE,
     MSG_TYPE_SVC_GET_DESTS,
+    MSG_TYPE_AGENT_GET_DESTS,
     MSG_TYPE_LADDR_GET_ALL,
+    MSG_TYPE_AGENT_GET_LADDR,
+    MSG_TYPE_AGENT_ADD_LADDR,
+    MSG_TYPE_AGENT_DEL_LADDR,
+    MSG_TYPE_AGENT_ADD_DESTS,
+    MSG_TYPE_AGENT_DEL_DESTS,
 };
+
 #define MSG_TYPE_SVC_SET_BASE MSG_TYPE_SVC_SET_FLUSH
 #define MSG_TYPE_SVC_GET_BASE MSG_TYPE_SVC_GET_INFO
 #define MSG_TYPE_SET_LADDR_BASE MSG_TYPE_LADDR_SET_ADD
