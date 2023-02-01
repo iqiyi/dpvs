@@ -775,7 +775,7 @@ static void conn_flush(void)
 
                         saddr6->sin6_family = AF_INET6;
                         saddr6->sin6_addr = conn->vaddr.in6;
-                        saddr6->sin6_port = conn->cport;
+                        saddr6->sin6_port = conn->vport;
                     } else {
                         RTE_LOG(WARNING, IPVS, "%s: conn address family %d "
                                 "not supported!\n", __func__, conn->af);
