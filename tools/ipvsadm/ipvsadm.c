@@ -836,7 +836,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                         fail(2, "illegal blacklist address");
 
                     ce->dpvs_blklst.af     = dpvs_svc.af;
-                    ce->dpvs_blklst.vaddr = dpvs_svc.addr;
+                    ce->dpvs_blklst.blklst = dpvs_svc.addr;
                     break;
 
                 }
@@ -850,7 +850,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                         fail(2, "illegal whitelist address");
 
                     ce->dpvs_whtlst.af     = dpvs_svc.af;
-                    ce->dpvs_whtlst.vaddr     = dpvs_svc.addr;
+                    ce->dpvs_whtlst.whtlst = dpvs_svc.addr;
                     break;
 
                 }
