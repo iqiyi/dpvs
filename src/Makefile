@@ -37,6 +37,11 @@ SRCDIR := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 # Addtional libs below are needed when using dynamic link.
 LIBS += -lpthread -lnuma -lrt -lm -ldl -lcrypto
 
+ifeq ($(shell pkg-config --exists libssl && echo 0),0)
+CFLAGS += $(shell pkg-config --cflags libssl)
+LIBS += $(shell pkg-config --static --libs libssl)
+endif
+
 include $(SRCDIR)/config.mk
 include $(SRCDIR)/dpdk.mk
 

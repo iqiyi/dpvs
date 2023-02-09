@@ -29,7 +29,7 @@ struct dp_vs_blklst_entry {
     union inet_addr addr;
 };
 
-struct dp_vs_blklst_conf {
+typedef struct dp_vs_blklst_conf {
     /* identify service */
     int                 af;
     uint8_t             proto;
@@ -39,7 +39,7 @@ struct dp_vs_blklst_conf {
 
     /* for set */
     union inet_addr     blklst;
-};
+} dpvs_blklst_t;
 
 struct dp_vs_blklst_conf_array {
     int                 naddr;

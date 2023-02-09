@@ -605,15 +605,15 @@ alloc_vs(const char *param1, const char *param2)
 	new->expire_quiescent_conn = false;
 	new->local_addr_gname = NULL;
 	new->blklst_addr_gname = NULL;
-    new->whtlst_addr_gname = NULL;
+	new->whtlst_addr_gname = NULL;
 	new->vip_bind_dev = NULL;
 	new->hash_target = 0;
 	new->bps = 0;
 	new->limit_proportion = 100;
-	memset(new->srange, 0, 256);
-	memset(new->drange, 0, 256);
-	memset(new->iifname, 0, IFNAMSIZ);
-	memset(new->oifname, 0, IFNAMSIZ);
+	memset(new->srange, 0, sizeof(new->srange));
+	memset(new->drange, 0, sizeof(new->drange));
+	memset(new->iifname, 0, sizeof(new->iifname));
+	memset(new->oifname, 0, sizeof(new->oifname));
 
 	list_add(check_data->vs, new);
 }

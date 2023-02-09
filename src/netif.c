@@ -1338,19 +1338,24 @@ static void netif_get_isol_rx_lcores(uint8_t *nb, uint64_t *mask)
 
 static void build_lcore_index(void)
 {
-    int i, idx = 0;
+    int cid, idx = 0;
 
-    g_lcore_index[idx++] = rte_get_main_lcore();
+    g_lcore_index2id[idx++] = rte_get_main_lcore();
 
-    for (i = 0; i < DPVS_MAX_LCORE; i++)
-        if (g_lcore_role[i] == LCORE_ROLE_FWD_WORKER)
-            g_lcore_index[idx++] = i;
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++)
+        if (g_lcore_role[cid] == LCORE_ROLE_FWD_WORKER)
+            g_lcore_index2id[idx++] = cid;
 
-    for (i = 0; i < DPVS_MAX_LCORE; i++)
-        if (g_lcore_role[i] == LCORE_ROLE_ISOLRX_WORKER)
-            g_lcore_index[idx++] = i;
-
+    for (cid = 0; cid < DPVS_MAX_LCORE; cid++)
+        if (g_lcore_role[cid] == LCORE_ROLE_ISOLRX_WORKER)
+            g_lcore_index2id[idx++] = cid;
     g_lcore_num = idx;
+
+    for (idx = 0; idx < DPVS_MAX_LCORE; idx++) {
+        cid = g_lcore_index2id[idx];
+        if (cid >= 0 && cid < DPVS_MAX_LCORE)
+            g_lcore_id2index[cid] = idx;
+    }
 }
 
 static inline void dump_lcore_role(void)

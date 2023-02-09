@@ -45,6 +45,7 @@
 #define RTE_LOGTYPE_Kni     RTE_LOGTYPE_USER1
 
 #define KNI_RX_RING_ELEMS       2048
+bool g_kni_enabled = true;
 
 static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
                           struct rte_kni_conf *conf)
@@ -345,6 +346,9 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
     char ring_name[RTE_RING_NAMESIZE];
     struct rte_ring *rb;
 
+    if (!g_kni_enabled)
+        return EDPVS_OK;
+
     if (!dev)
         return EDPVS_INVAL;
 
@@ -389,6 +393,9 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
 
 int kni_del_dev(struct netif_port *dev)
 {
+    if (!g_kni_enabled)
+        return EDPVS_OK;
+
     if (!kni_dev_exist(dev))
         return EDPVS_INVAL;
 
@@ -682,13 +689,21 @@ static struct dpvs_sockopts kni_sockopts = {
 
 int kni_init(void)
 {
-    rte_kni_init(NETIF_MAX_KNI);
+    if (!g_kni_enabled)
+        return EDPVS_OK;
+
+    if (rte_kni_init(NETIF_MAX_KNI) < 0)
+        rte_exit(EXIT_FAILURE, "rte_kni_init failed");
+
     return EDPVS_OK;
 }
 
 int kni_ctrl_init(void)
 {
     int err;
+
+    if (!g_kni_enabled)
+        return EDPVS_OK;
 
     err = sockopt_register(&kni_sockopts);
     if (err != EDPVS_OK) {
@@ -703,6 +718,9 @@ int kni_ctrl_init(void)
 int kni_ctrl_term(void)
 {
     int err;
+
+    if (!g_kni_enabled)
+        return EDPVS_OK;
 
     err = sockopt_unregister(&kni_sockopts);
     if (err != EDPVS_OK) {

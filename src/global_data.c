@@ -16,15 +16,18 @@
  *
  */
 
+#include <string.h>
 #include <rte_cycles.h>
 #include "global_data.h"
 
 RTE_DEFINE_PER_LCORE(uint32_t, g_dpvs_poll_tick);
 
+unsigned int g_version;
 uint64_t g_cycles_per_sec;
 
 dpvs_lcore_role_t g_lcore_role[DPVS_MAX_LCORE];
-int g_lcore_index[DPVS_MAX_LCORE];
+int g_lcore_index2id[DPVS_MAX_LCORE];
+int g_lcore_id2index[DPVS_MAX_LCORE];
 
 int g_lcore_num;
 lcoreid_t g_master_lcore_id;
@@ -43,10 +46,46 @@ int global_data_init(void)
 
     for (i = 0; i < DPVS_MAX_LCORE; i++) {
         g_lcore_role[i] = LCORE_ROLE_IDLE;
-        g_lcore_index[i] = -1;
+        g_lcore_index2id[i] = -1;
+        g_lcore_id2index[i] = -1;
     }
 
     return EDPVS_OK;
+}
+
+int version_parse(const char *strver)
+{
+    int i, j = 0;
+    size_t len;
+    unsigned int version = 0, mask = 0xFF;
+    char *sver;
+
+    if (strver[0] == 'v' || strver[0] == 'V') {
+        sver = strdup(&strver[1]);
+        len = strlen(&strver[1]);
+    } else {
+        sver = strdup(strver);
+        len = strlen(strver);
+    }
+
+    if (unlikely(sver == NULL))
+        return 0;
+
+    for (i = 0; i < len && mask < 0xFFFFFF; i++) {
+        if ('.' == sver[i] || '-' == sver[i]) {
+            sver[i] = '\0';
+            version = ((version << 8) | atoi(&sver[j])) & mask;
+            mask |= mask << 8;
+            j = i + 1;
+            continue;
+        }
+        if (!isdigit(sver[i]))
+            break;
+    }
+    version = ((version << 8) | atoi(&sver[j])) & mask;
+
+    free(sver);
+    return version;
 }
 
 int global_data_term(void)
