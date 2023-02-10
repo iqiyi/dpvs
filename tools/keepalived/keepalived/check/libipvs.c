@@ -347,7 +347,7 @@ int dpvs_add_whtlst(dpvs_service_compat_t* svc, dpvs_whtlst_t *whtlst)
 
     dpvs_fill_whtlst_conf(svc, whtlst);
 
-    return dpvs_setsockopt(SOCKOPT_SET_WHTLST_ADD, &whtlst, sizeof(dpvs_whtlst_t));
+    return dpvs_setsockopt(SOCKOPT_SET_WHTLST_ADD, whtlst, sizeof(dpvs_whtlst_t));
 }
 
 int dpvs_del_whtlst(dpvs_service_compat_t* svc, dpvs_whtlst_t *whtlst)
@@ -356,7 +356,7 @@ int dpvs_del_whtlst(dpvs_service_compat_t* svc, dpvs_whtlst_t *whtlst)
 
     dpvs_fill_whtlst_conf(svc, whtlst);
 
-    return dpvs_setsockopt(SOCKOPT_SET_WHTLST_DEL, &whtlst, sizeof(dpvs_whtlst_t));
+    return dpvs_setsockopt(SOCKOPT_SET_WHTLST_DEL, whtlst, sizeof(dpvs_whtlst_t));
 }
 
 /* for tunnel entry */
