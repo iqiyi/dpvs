@@ -322,7 +322,7 @@ int dpvs_del_blklst(dpvs_service_compat_t* svc, dpvs_blklst_t *blklst)
 
     dpvs_fill_blklst_conf(svc, blklst);
 
-    return dpvs_setsockopt(SOCKOPT_SET_BLKLST_DEL, blklst, sizeof(blklst));
+    return dpvs_setsockopt(SOCKOPT_SET_BLKLST_DEL, blklst, sizeof(dpvs_blklst_t));
 }
 
 /*for white list*/
