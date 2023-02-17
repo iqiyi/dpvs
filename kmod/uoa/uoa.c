@@ -55,6 +55,10 @@
 #include <net/ipv6.h> /* ipv6_skip_exthdr */
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+#define HAVE_PROC_OPS
+#endif
+
 #define UOA_NEED_EXTRA
 #include "uoa_extra.h"
 #include "uoa.h"
@@ -226,6 +230,21 @@ static int uoa_stats_percpu_seq_open(struct inode *inode, struct file *file)
     return single_open(file, uoa_stats_percpu_show, NULL);
 }
 
+#ifdef HAVE_PROC_OPS
+static const struct proc_ops uoa_stats_fops = {
+    .proc_open = uoa_stats_seq_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+
+static const struct proc_ops uoa_stats_percpu_fops = {
+    .proc_open = uoa_stats_percpu_seq_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+#else
 static const struct file_operations uoa_stats_fops = {
     .owner      = THIS_MODULE,
     .open       = uoa_stats_seq_open,
@@ -241,6 +260,7 @@ static const struct file_operations uoa_stats_percpu_fops = {
     .llseek     = seq_lseek,
     .release    = single_release,
 };
+#endif
 
 static int uoa_stats_init(void)
 {
@@ -520,7 +540,12 @@ flush_again:
     }
 }
 
-static int uoa_so_set(struct sock *sk, int cmd, void __user *user,
+static int uoa_so_set(struct sock *sk, int cmd,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+            void __user *user,
+#else
+            sockptr_t arg,
+#endif
             unsigned int len)
 {
     return 0;
