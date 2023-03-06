@@ -2070,6 +2070,7 @@ int inet_addr_init(void)
                         break;
                 }
             }
+            sockopt_unregister(&agent_ifa_sockopts);
             sockopt_unregister(&ifa_sockopts);
             return err;
         }
