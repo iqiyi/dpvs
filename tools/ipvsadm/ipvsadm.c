@@ -2219,24 +2219,24 @@ static int list_laddrs(dpvs_service_compat_t* desc)
 static int list_all_laddrs(lcoreid_t index)
 {
     int i;
-    dpvs_service_table_t* table;
+    dpvs_agent_services_front_t* table;
     struct ip_vs_get_laddrs   *d = NULL;
 
-    table = (dpvs_service_table_t*)malloc(sizeof(dpvs_service_table_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_agent_services_front_t*)malloc(sizeof(dpvs_agent_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
     table->index = ce.index;
-    table->num_services = g_ipvs_info.num_services;
+    table->count = (uint16_t)g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
-    for (i = 0; i < table->num_services; i++) {
+    for (i = 0; i < table->count; i++) {
         if(!dpvs_get_laddrs(&(table->entrytable[i]), &d)) {
             free(table);
             fprintf(stderr, "%s\n", ipvs_strerror(errno));
@@ -2325,16 +2325,16 @@ static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint1
 static int list_all_blklsts(void)
 {
     int i;
-    dpvs_service_table_t* table;
+    dpvs_agent_services_front_t* table;
 
-    table = (dpvs_service_table_t*)malloc(sizeof(dpvs_service_table_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_agent_services_front_t*)malloc(sizeof(dpvs_agent_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
     table->index = ce.index;
-    table->num_services = g_ipvs_info.num_services;
+    table->count = (uint16_t)g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
@@ -2342,7 +2342,7 @@ static int list_all_blklsts(void)
     }
 
     list_blklsts_print_title();
-    for (i = 0; i < table->num_services; i++) {
+    for (i = 0; i < table->count; i++) {
         list_blklst(table->entrytable[i].af, &table->entrytable[i].addr,
                 table->entrytable[i].port, table->entrytable[i].proto);
     }
@@ -2413,17 +2413,17 @@ static int list_whtlst(int af, const union inet_addr *addr, uint16_t port, uint1
 
 static int list_all_whtlsts(void)
 {
-    dpvs_service_table_t* table;
+    dpvs_agent_services_front_t* table;
     int i;
 
-    table = (dpvs_service_table_t*)malloc(sizeof(dpvs_service_table_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_agent_services_front_t*)malloc(sizeof(dpvs_agent_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
     table->index = ce.index;
-    table->num_services = g_ipvs_info.num_services;
+    table->count = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
@@ -2431,7 +2431,7 @@ static int list_all_whtlsts(void)
     }
 
     list_whtlsts_print_title();
-    for (i = 0; i < table->num_services; i++) {
+    for (i = 0; i < table->count; i++) {
         list_whtlst(table->entrytable[i].af, &table->entrytable[i].addr,
                 table->entrytable[i].port, table->entrytable[i].proto);
     }
@@ -2458,20 +2458,20 @@ static void list_service(dpvs_service_compat_t *svc, unsigned int format)
 static void list_all(unsigned int format)
 {
     int i;
-    dpvs_service_table_t* table;
+    dpvs_agent_services_front_t* table;
 
     if (!(format & FMT_RULE))
         printf("IP Virtual Server version %d.%d.%d (size=%d)\n",
                 NVERSION(g_ipvs_info.version), g_ipvs_info.size);
 
-    table = (dpvs_service_table_t*)malloc(sizeof(dpvs_service_table_t) + sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_agent_services_front_t*)malloc(sizeof(dpvs_agent_services_front_t) + sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
     table->index = ce.index;
-    table->num_services = g_ipvs_info.num_services;
+    table->count = (uint16_t)g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
         free(table);
@@ -2483,7 +2483,7 @@ static void list_all(unsigned int format)
     }
 
     print_title(format);
-    for (i = 0; i < table->num_services; i++) {
+    for (i = 0; i < table->count; i++) {
         print_service_entry(&table->entrytable[i], format);
     }
 

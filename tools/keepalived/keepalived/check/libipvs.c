@@ -420,8 +420,8 @@ int dpvs_stop_daemon(ipvs_daemon_t *dm)
             (char *)&dm, sizeof(dm));
 }
 
-dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
-    dpvs_service_table_t* rcv;
+dpvs_agent_services_front_t* dpvs_get_services(dpvs_agent_services_front_t* svcs) {
+    dpvs_agent_services_front_t* rcv;
     size_t lrcv, len;
 
     dpvs_ctrl_func = dpvs_get_services;
@@ -429,11 +429,11 @@ dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
     assert(svcs);
 
     if (ESOCKOPT_OK != dpvs_getsockopt(DPVS_SO_GET_SERVICES, svcs,
-                sizeof(dpvs_service_table_t), (void**)&rcv, &lrcv)) {
+                sizeof(dpvs_agent_services_front_t), (void**)&rcv, &lrcv)) {
         return NULL;
     }
 
-    len = svcs->num_services * sizeof(dpvs_service_compat_t) + sizeof(dpvs_service_table_t);
+    len = svcs->count * sizeof(dpvs_service_compat_t) + sizeof(dpvs_agent_services_front_t);
 
     memcpy(svcs, rcv, len < lrcv ? len : lrcv);
 
@@ -531,9 +531,9 @@ dpvs_cmp_dests(dpvs_dest_compat_t *d1, dpvs_dest_compat_t *d2)
     return ntohs(d1->port) - ntohs(d2->port);
 }
 
-void dpvs_sort_services(dpvs_service_table_t *s, dpvs_service_cmp_t f)
+void dpvs_sort_services(dpvs_agent_services_front_t *s, dpvs_service_cmp_t f)
 {
-    qsort(s->entrytable, s->num_services,
+    qsort(s->entrytable, s->count,
             sizeof(dpvs_service_compat_t), (qsort_cmp_t)f);
 }
 

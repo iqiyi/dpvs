@@ -74,16 +74,9 @@ typedef struct dp_vs_service_compat {
 #define dp_vs_service_entry dp_vs_service_compat
 #define dp_vs_service_user  dp_vs_service_compat
 
-typedef struct dp_vs_services_table {
-    lcoreid_t     cid;
-    lcoreid_t     index;
-    unsigned int  num_services;
-    dpvs_service_compat_t entrytable[0];
-} dpvs_service_table_t;
-
 typedef struct dp_vs_agent_services_front {
-    uint8_t  cid;
-    uint8_t  index;
+    lcoreid_t cid;
+    lcoreid_t index;
     uint16_t count;
     dpvs_service_compat_t entrytable[0];
 } dpvs_agent_services_front_t;
