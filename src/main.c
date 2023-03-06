@@ -109,6 +109,8 @@ static void inline dpdk_version_check(void)
                     netif_ctrl_init,     netif_ctrl_term),      \
         DPVS_MODULE(MODULE_IFTRAF,      "iftraf",               \
                     iftraf_init,         iftraf_term),          \
+        DPVS_MODULE(MODULE_EAL_MEM,     "eal_mem",              \
+                    eal_mem_init,        eal_mem_term),         \
         DPVS_MODULE(MODULE_LAST,        "last",                 \
                     NULL,                NULL)                  \
     }

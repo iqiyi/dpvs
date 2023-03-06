@@ -256,6 +256,9 @@ struct netif_port {
     struct netif_ops        *netif_ops;
 } __rte_cache_aligned;
 
+/**************************** mbuf pool ********************************/
+extern struct rte_mempool *pktmbuf_pool[DPVS_MAX_SOCKET];
+
 /**************************** lcore API *******************************/
 int netif_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev);
