@@ -27,9 +27,9 @@
 #define RT6_METHOD_NAME_SZ      32
 
 struct route6 {
-    struct rt6_prefix   rt6_dst;
-    struct rt6_prefix   rt6_src;
-    struct rt6_prefix   rt6_prefsrc;
+    rt_addr_t   rt6_dst;
+    rt_addr_t   rt6_src;
+    rt_addr_t   rt6_prefsrc;
     struct in6_addr     rt6_gateway;
     struct netif_port   *rt6_dev;
     uint32_t            rt6_mtu;
@@ -60,7 +60,7 @@ int route6_del(const struct in6_addr *dest, int plen, uint32_t flags,
 /* for route6_xxx.c only */
 void route6_free(struct route6*);
 
-static inline int dump_rt6_prefix(const struct rt6_prefix *rt6_p, char *buf, int len)
+static inline int dump_rt6_prefix(const rt_addr_t *rt6_p, char *buf, int len)
 {
     size_t rlen;
 

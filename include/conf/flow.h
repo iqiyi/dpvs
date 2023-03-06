@@ -48,7 +48,7 @@
 #define RTF_KNI         0X2000
 #define RTF_OUTWALL     0x4000
 
-typedef struct rt6_prefix {
+typedef struct rt_addr {
     union inet_addr addr;
     int             plen; /*prefix len*/
 } rt_addr_t;

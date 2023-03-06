@@ -49,7 +49,7 @@ static int rt6_msg_seq(void)
     return seq++;
 }
 
-static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
+static inline void rt6_zero_prefix_tail(rt_addr_t *rt6_p)
 {
     struct in6_addr addr6;
 
@@ -349,9 +349,9 @@ static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
     struct dp_vs_route6_conf rt6_cfg;
 
     if (opt == DPVSAGENT_ROUTE6_ADD || opt == DPVSAGENT_ROUTE6_DEL) {
-        memcpy(&rt6_cfg.dst, &detail->dst, sizeof(struct rt6_prefix));
-        memcpy(&rt6_cfg.src, &detail->src, sizeof(struct rt6_prefix));
-        memcpy(&rt6_cfg.prefsrc, &detail->prefsrc, sizeof(struct rt6_prefix));
+        memcpy(&rt6_cfg.dst, &detail->dst, sizeof(rt_addr_t));
+        memcpy(&rt6_cfg.src, &detail->src, sizeof(rt_addr_t));
+        memcpy(&rt6_cfg.prefsrc, &detail->prefsrc, sizeof(rt_addr_t));
         memcpy(&rt6_cfg.gateway, &detail->gateway.addr, sizeof(struct in6_addr));
         memcpy(rt6_cfg.ifname, detail->ifname, IFNAMSIZ);
         rt6_cfg.mtu = detail->mtu;
