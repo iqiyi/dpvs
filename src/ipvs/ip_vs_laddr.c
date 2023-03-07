@@ -501,13 +501,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     if (cid == rte_get_main_lcore()) {
         struct dpvs_msg *msg;
 
-        if (opt == DPVSAGENT_VS_ADD_LADDR) {
-            msg = msg_make(MSG_TYPE_AGENT_ADD_LADDR, laddr_msg_seq(), DPVS_MSG_MULTICAST, cid, size, conf);
-        } else if (opt == DPVSAGENT_VS_DEL_LADDR) {
-            msg = msg_make(MSG_TYPE_AGENT_DEL_LADDR, laddr_msg_seq(), DPVS_MSG_MULTICAST, cid, size, conf);
-        } else {
-            msg = msg_make(set_opt_so2msg(opt), laddr_msg_seq(), DPVS_MSG_MULTICAST, cid, size, conf);
-        }
+        msg = msg_make(set_opt_so2msg(opt), laddr_msg_seq(), DPVS_MSG_MULTICAST, cid, size, conf);
         if (!msg)
             return EDPVS_NOMEM;
 
@@ -528,7 +522,6 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         fwmark = (uint32_t)laddr_front->fwmark;
         addr   = &laddr_front->addr;
         match  = &laddr_front->match;
-        details = (struct dp_vs_laddr_detail*)((char*)conf + sizeof(struct dp_vs_laddr_front));
     } else {
         af     = (int)laddr_conf->af_s;
         proto  = (uint16_t)laddr_conf->proto;
@@ -825,9 +818,13 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             laddr_front = conf;
             if (!conf || size != sizeof(*laddr_front)) 
                 return EDPVS_INVAL;
+
             msg = msg_make(MSG_TYPE_AGENT_GET_LADDR, 0, DPVS_MSG_MULTICAST, rte_lcore_id(), sizeof(struct dp_vs_laddr_front), laddr_front);
             if (!msg)
                 return EDPVS_NOMEM;
+
+            if (rte_lcore_id() != rte_get_main_lcore())
+                return EDPVS_INVAL;
 
             err = multicast_msg_send(msg, 0, &reply);
             if (err != EDPVS_OK) {
@@ -876,6 +873,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                     msg_destroy(&msg);
                     rte_free(*out);
                     *out = NULL;
+                    RTE_LOG(ERR, SERVICE, "%s: The count(%d) of laddr in core(id = %d) not equal as main core laddr count(%d)\n", __func__, iter_front->count, iter_front->cid, out_front->count);
                     return EDPVS_INVAL;
                 }
                 for (i = 0; i < out_front->count; i++) {
