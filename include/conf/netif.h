@@ -140,6 +140,18 @@ typedef struct netif_nic_stats_get {
     portid_t port_id;
 } netif_nic_stats_get_t;
 
+struct netif_nic_xstats_entry {
+    uint64_t id;
+    uint64_t val;
+    char name[64];
+};
+
+typedef struct netif_nic_xstats_get {
+    portid_t pid;
+    uint16_t nentries;
+    struct netif_nic_xstats_entry entries[0];
+} netif_nic_xstats_get_t;
+
 /* dev info specified by port_id */
 struct netif_nic_dev_get
 {

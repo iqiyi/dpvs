@@ -3313,13 +3313,71 @@ static int dpdk_set_mc_list(struct netif_port *dev)
     return EDPVS_OK;
 }
 
+static int netif_op_get_xstats(struct netif_port *dev, netif_nic_xstats_get_t **pget)
+{
+    int i, nentries, err;
+    struct rte_eth_xstat *xstats = NULL;
+    struct rte_eth_xstat_name *xstats_names = NULL;
+    netif_nic_xstats_get_t *get = NULL;
+
+    nentries = rte_eth_xstats_get(dev->id, NULL, 0);
+    if (nentries < 0)
+        return EDPVS_DPDKAPIFAIL;
+
+    get = rte_calloc("xstats_get", 1, nentries * sizeof(struct netif_nic_xstats_entry), 0);
+    if (unlikely(!get))
+        return EDPVS_NOMEM;
+    xstats = rte_calloc("xstats", 1, nentries * sizeof(struct rte_eth_xstat), 0);
+    if (unlikely(!xstats)) {
+        err = EDPVS_NOMEM;
+        goto errout;
+    }
+    xstats_names = rte_calloc("xstats_names", 1, nentries * sizeof(struct rte_eth_xstat_name), 0);
+    if (unlikely(!xstats_names)) {
+        err = EDPVS_NOMEM;
+        goto errout;
+    }
+
+    err = rte_eth_xstats_get(dev->id, xstats, nentries);
+    if (err < 0 || err != nentries)
+        goto errout;
+    err = rte_eth_xstats_get_names(dev->id, xstats_names, nentries);
+    if (err < 0 || err != nentries)
+        goto errout;
+    get->pid = dev->id;
+    get->nentries = nentries;
+    for (i = 0; i < nentries; i++) {
+        get->entries[i].id = xstats[i].id;
+        get->entries[i].val = xstats[i].value;
+        rte_memcpy(get->entries[i].name, xstats_names[i].name, sizeof(get->entries[i].name)-1);
+    }
+
+    *pget = get;
+    rte_free(xstats);
+    rte_free(xstats_names);
+    return EDPVS_OK;
+errout:
+    if (xstats)
+        rte_free(xstats);
+    if (xstats_names)
+        rte_free(xstats_names);
+    if (get)
+        rte_free(get);
+    if (err == EDPVS_OK)
+        err = EDPVS_RESOURCE;
+    *pget = NULL;
+    return err;
+}
+
 static struct netif_ops dpdk_netif_ops = {
     .op_set_mc_list      = dpdk_set_mc_list,
+    .op_get_xstats       = netif_op_get_xstats,
 };
 
 static struct netif_ops bond_netif_ops = {
     .op_update_addr      = update_bond_macaddr,
     .op_set_mc_list      = bond_set_mc_list,
+    .op_get_xstats       = netif_op_get_xstats,
 };
 
 static inline void setup_dev_of_flags(struct netif_port *port)
@@ -3535,6 +3593,16 @@ int netif_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
         return EDPVS_DPDKAPIFAIL;
 
     return EDPVS_OK;
+}
+
+int netif_get_xstats(struct netif_port *dev, netif_nic_xstats_get_t **xstats)
+{
+    assert (dev && dev->netif_ops && xstats);
+
+    if (dev->netif_ops->op_get_xstats)
+        return dev->netif_ops->op_get_xstats(dev, xstats);
+
+    return EDPVS_NOTSUPP;
 }
 
 int netif_port_conf_get(struct netif_port *port, struct rte_eth_conf *eth_conf)
@@ -4908,6 +4976,25 @@ static int get_port_stats(struct netif_port *port, void **out, size_t *out_len)
     return EDPVS_OK;
 }
 
+static int get_port_xstats(struct netif_port *port, void **out, size_t *out_len)
+{
+    int err;
+    assert(out && out_len);
+
+    netif_nic_xstats_get_t *get;
+    err = netif_get_xstats(port, &get);
+    if (err != EDPVS_OK) {
+        if (err == EDPVS_NOTSUPP)
+            return EDPVS_OK;
+        return err;
+    }
+
+    *out = get;
+    *out_len = sizeof(netif_nic_xstats_get_t) + get->nentries * sizeof(struct netif_nic_xstats_entry);
+
+    return EDPVS_OK;
+}
+
 static int get_bond_status(struct netif_port *port, void **out, size_t *out_len)
 {
     bool is_active;
@@ -5031,6 +5118,15 @@ static int netif_sockopt_get(sockoptid_t opt, const void *in, size_t inlen,
             if (!port)
                 return EDPVS_NOTEXIST;
             ret = get_port_stats(port, out, outlen);
+            break;
+        case SOCKOPT_NETIF_GET_PORT_XSTATS:
+            if (!in)
+                return EDPVS_INVAL;
+            name = (char *)in;
+            port = netif_port_get_by_name(name);
+            if (!port)
+                return EDPVS_NOTEXIST;
+            ret = get_port_xstats(port, out, outlen);
             break;
         case SOCKOPT_NETIF_GET_PORT_EXT_INFO:
             if (!in)
