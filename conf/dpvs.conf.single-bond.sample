@@ -216,9 +216,6 @@ ctrl_defs {
         sync_msg_timeout_us             20000
         priority_level                  low
     }
-    ipc_msg {
-        <init> unix_domain /var/run/dpvs_ctrl
-    }
 }
 
 ! ipvs config
