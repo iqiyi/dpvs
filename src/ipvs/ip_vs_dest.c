@@ -482,17 +482,12 @@ static int dp_vs_dest_get(sockoptid_t opt, const void *user, size_t len, void **
             }
 
             if (cid == rte_get_main_lcore()) {
-                // getsvc = dp_vs_service_get_lcore(&outsvc, cid);
                 getsvc = dp_vs_service_lookup(insvc->af, insvc->proto, &insvc->addr, insvc->port, insvc->fwmark, NULL, &insvc->match, NULL, cid);
                 if (!getsvc) {
                     msg_destroy(&msg);
                     return EDPVS_NOTEXIST;
                 }
-
-                if (getsvc->num_dests != insvc->num_dests) {
-                    msg_destroy(&msg);
-                    return EDPVS_INVAL;
-                }
+                size = sizeof(*insvc) + getsvc->num_dests*sizeof(struct dp_vs_dest_detail);
 
                 *out = rte_zmalloc("get_dests", size, 0);
                 if (!*out) {
@@ -594,10 +589,6 @@ static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
     svc = dp_vs_service_lookup(get->af, get->proto, &get->addr, get->port, get->fwmark, NULL, &get->match, NULL, cid);
     if (!svc)
         return EDPVS_NOTEXIST;
-    if (svc->num_dests != get->num_dests) {
-        RTE_LOG(ERR, SERVICE, "%s: dests number not match in cid=%d.\n", __func__, cid);
-        return EDPVS_INVAL;
-    }
 
     size = sizeof(*get) + sizeof(struct dp_vs_dest_detail) * (svc->num_dests);
     output = msg_reply_alloc(size);
