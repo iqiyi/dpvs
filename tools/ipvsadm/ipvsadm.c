@@ -211,6 +211,9 @@ static const char* optnames[] = {
     "whtlst-address",
 };
 
+static const char* optnames_ext[] = {
+    "inhibit-on-fail",
+};
 /*
  * Table of legal combinations of commands and options.
  * Key:
@@ -331,6 +334,7 @@ enum {
     TAG_SOCKPAIR,
     TAG_CPU,
     TAG_CONN_EXPIRE_QUIESCENT,
+    TAG_CONN_INHIBIT_ON_FAIL,
 };
 
 /* various parsing helpers & parsing functions */
@@ -356,6 +360,7 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t*);
 static void generic_opt_check(int command, unsigned int options);
 static void set_command(int *cmd, const int newcmd);
 static void set_option(unsigned int *options, unsigned int option);
+static void set_option_ext(unsigned int *options, unsigned int option);
 
 static void tryhelp_exit(const char *program, const int exit_status);
 static void usage_exit(const char *program, const int exit_status);
@@ -411,9 +416,9 @@ int main(int argc, char **argv)
 }
 
 
-    static int
+static int
 parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
-        unsigned int *options, unsigned int *format)
+        unsigned int *options, unsigned int *options_ext, unsigned int *format)
 {
     int c, parse;
     poptContext context;
@@ -506,6 +511,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         { "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
         { "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
         { "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
+        { "inhibit-on-fail", '\0', POPT_ARG_STRING, &optarg, TAG_CONN_INHIBIT_ON_FAIL, NULL, NULL },
         { NULL, 0, 0, NULL, 0, NULL, NULL }
     };
 
@@ -906,6 +912,17 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_CONN_F_EXPIRE_QUIESCENT;
                     break;
                 }
+            case TAG_CONN_INHIBIT_ON_FAIL:
+                {
+                    set_option_ext(options_ext, OPT_EXT_INHIBIT_ON_FAIL);
+                    if(!memcmp(optarg , "enable" , strlen("enable"))) {
+                        ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_DEST_CHECK;
+                    } else if(!memcmp(optarg , "disable" , strlen("disable"))) {
+                        ce->dpvs_svc.flags = ce->dpvs_svc.flags & (~IP_VS_SVC_F_DEST_CHECK);
+                    } else
+                        fail(2 , "inhibit-on-fail switch must be enable or disable\n");
+                    break;
+                }
             default:
                 fail(2, "invalid option `%s'",
                         poptBadOption(context, POPT_BADOPTION_NOALIAS));
@@ -969,7 +986,7 @@ static int restore_table(int argc, char **argv, int reading_stdin)
 
 static int process_options(int argc, char **argv, int reading_stdin)
 {
-    unsigned int options = OPT_NONE;
+    unsigned int options = OPT_NONE, options_ext = OPT_EXT_NONE;
     unsigned int format = FMT_NONE;
     int result = 0;
     const struct inet_addr_range zero_range = {};
@@ -985,7 +1002,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
     /* Set the default cpu be master */
     ce.index = 0;
 
-    if (parse_options(argc, argv, &ce, &options, &format))
+    if (parse_options(argc, argv, &ce, &options, &options_ext, &format))
         return -1;
 
     generic_opt_check(ce.cmd, options);
@@ -1066,7 +1083,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
             break;
 
         case CMD_EDIT:
-            result = dpvs_update_service_by_options(&ce.dpvs_svc, options);
+            result = dpvs_update_service_by_options(&ce.dpvs_svc, options, options_ext);
             break;
 
         case CMD_DEL:
@@ -1239,7 +1256,7 @@ static int parse_netmask(char *buf, u_int32_t *addr)
  * SERVICE_ADDR:   addr set
  * SERVICE_PORT:   port set
  */
-    static int
+static int
 parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
 {
     char *portp = NULL;
@@ -1303,7 +1320,7 @@ parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
  * SIP,TIP := dotted-decimal ip address or square-blacketed ip6 address
  * SPORT,TPORT := range(0, 65535)
  */
-    static int
+static int
 parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 {
     char *pos = buf, *end;
@@ -1472,7 +1489,7 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
     return 0;
 }
 
-    static void
+static void
 generic_opt_check(int command, unsigned int options)
 {
     int i, j;
@@ -1506,7 +1523,7 @@ generic_opt_check(int command, unsigned int options)
     }
 }
 
-    static inline const char *
+static inline const char *
 opt2name(int option)
 {
     const char **ptr;
@@ -1515,7 +1532,7 @@ opt2name(int option)
     return *ptr;
 }
 
-    static void
+static void
 set_command(int *cmd, const int newcmd)
 {
     if (*cmd != CMD_NONE)
@@ -1523,7 +1540,7 @@ set_command(int *cmd, const int newcmd)
     *cmd = newcmd;
 }
 
-    static void
+static void
 set_option(unsigned int *options, unsigned int option)
 {
     if (*options & option)
@@ -1531,6 +1548,22 @@ set_option(unsigned int *options, unsigned int option)
     *options |= option;
 }
 
+static inline const char *
+opt2name_ext(int option)
+{
+    const char **ptr;
+    for (ptr = optnames_ext; option > 1; option >>= 1, ptr++);
+
+    return *ptr;
+}
+
+static void
+set_option_ext(unsigned int *options, unsigned int option)
+{
+    if (*options & option)
+        fail(2, "multiple '%s' options specified", opt2name_ext(option));
+    *options |= option;
+}
 
 static void tryhelp_exit(const char *program, const int exit_status)
 {
@@ -1646,7 +1679,8 @@ static void usage_exit(const char *program, const int exit_status)
             "  --match        -H MATCH             select service by MATCH 'af,proto,srange,drange,iif,oif', af should be defined if no range defined\n"
             "  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
             "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
-            "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n",
+            "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
+            "  --inhibit-on-fail                   enable passive health check, inhibit failed realservers scheduling\n",
         DEF_SCHED);
 
     exit(exit_status);
@@ -2082,6 +2116,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             printf(" conn_timeout %u", se->conn_timeout);
         if (se->flags & IP_VS_CONN_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
+        if (se->flags & IP_VS_SVC_F_DEST_CHECK)
+            printf(" inhibit-on-fail");
     }
     printf("\n");
 
@@ -2616,7 +2652,7 @@ static char * port_to_anyname(unsigned short port, unsigned short proto)
 }
 
 
-    static char *
+static char *
 addrport_to_anyname(int af, const void *addr, unsigned short port,
         unsigned short proto, unsigned int format)
 {

@@ -1417,6 +1417,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
             rte_atomic32_inc(&dest->actconns);
             rte_atomic32_dec(&dest->inactconns);
             cp->flags &= ~DPVS_CONN_F_INACTIVE;
+            dp_vs_dest_detected_alive(dest);
         }
 
         /* Save tcp sequence for fullnat/nat, inside to outside */
@@ -1484,6 +1485,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
             (cp->state == DPVS_TCP_S_SYN_SENT)) {
         RTE_LOG(DEBUG, IPVS, "%s: get rst from rs, seq = %u ack_seq = %u\n",
                 __func__, ntohl(th->seq), ntohl(th->ack_seq));
+        dp_vs_dest_detected_dead(dest);
 
         /* Count the delta of seq */
         cp->syn_proxy_seq.delta = ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);

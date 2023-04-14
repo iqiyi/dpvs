@@ -37,8 +37,9 @@ enum dpvs_fwd_mode {
 };
 
 enum {
-    DPVS_DEST_F_AVAILABLE       = 0x1<<0,
-    DPVS_DEST_F_OVERLOAD        = 0x1<<1,
+    DPVS_DEST_F_AVAILABLE   = 0x1<<0, // dest removed
+    DPVS_DEST_F_OVERLOAD    = 0x1<<1, // too many conns
+    DPVS_DEST_F_INHIBITED   = 0x1<<2, // dest forwarding failure
 };
 
 typedef struct dp_vs_dest_compat {

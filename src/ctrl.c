@@ -378,7 +378,7 @@ struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
     msg->mode = mode;
     msg->cid = cid;
     msg->len = len;
-    if (len)
+    if (len && data)
         rte_memcpy(msg->data, data, len);
     msg->reply.data = NULL;
     msg->reply.len = 0;

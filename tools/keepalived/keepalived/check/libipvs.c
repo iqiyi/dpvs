@@ -108,7 +108,7 @@ int dpvs_update_service(dpvs_service_compat_t *svc)
 }
 
 
-int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int options)
+int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int options, unsigned int options_ext)
 {
     dpvs_service_compat_t entry;
 
@@ -165,6 +165,14 @@ int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int opti
             entry.flags |= IP_VS_SVC_F_QID_HASH;
         } else {
             entry.flags |= IP_VS_SVC_F_SIP_HASH;
+        }
+    }
+
+    if (options_ext & OPT_EXT_INHIBIT_ON_FAIL) {
+        if (svc->flags & IP_VS_SVC_F_DEST_CHECK) {
+            entry.flags |= IP_VS_SVC_F_DEST_CHECK;
+        } else {
+            entry.flags &= ~IP_VS_SVC_F_DEST_CHECK;
         }
     }
 

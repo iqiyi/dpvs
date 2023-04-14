@@ -43,6 +43,7 @@
 #define DP_VS_SVC_F_SIP_HASH            IP_VS_SVC_F_SIP_HASH
 #define DP_VS_SVC_F_QID_HASH            IP_VS_SVC_F_QID_HASH
 #define DP_VS_SVC_F_MATCH               IP_VS_SVC_F_MATCH
+#define DP_VS_SVC_F_DEST_CHECK          IP_VS_SVC_F_DEST_CHECK
 
 /* virtual service */
 struct dp_vs_service {

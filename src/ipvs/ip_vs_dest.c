@@ -26,6 +26,31 @@
 #include "ipvs/conn.h"
 #include "ctrl.h"
 
+#define DEST_DOWN_NOTICE_DEFAULT        3
+#define DEST_UP_NOTICE_DEFAULT          3
+#define DEST_DOWN_WAIT_DURATION         3       // 3s
+#define DEST_INHIBIT_DURATION_MIN       5       // 5s
+#define DEST_INHIBIT_DURATION_MAX       3600    // 1h
+
+enum {
+    dest_notification_down = 1,
+    dest_notification_up,
+    dest_notification_close,
+    dest_notification_open,
+};
+
+struct dest_notification {
+    union inet_addr vaddr;
+    union inet_addr daddr;
+    uint16_t af;
+    uint16_t svc_af;
+    uint16_t proto;
+    uint16_t vport;
+    uint16_t dport;
+    uint16_t weight;
+    uint16_t notification;
+};
+
 /*
  * Trash for destinations
  */
@@ -53,9 +78,7 @@ static void __dp_vs_dest_update(struct dp_vs_service *svc,
                                 struct dp_vs_dest_conf *udest)
 {
     int conn_flags;
-    uint8_t num_lcores;
 
-    netif_get_slave_lcores(&num_lcores, NULL);
     rte_atomic16_set(&dest->weight, udest->weight);
     conn_flags = udest->conn_flags | DPVS_CONN_F_INACTIVE;
     rte_atomic16_set(&dest->conn_flags, conn_flags);
@@ -64,16 +87,16 @@ static void __dp_vs_dest_update(struct dp_vs_service *svc,
 
     if (udest->max_conn == 0 || udest->max_conn > dest->max_conn)
         dest->flags &= ~DPVS_DEST_F_OVERLOAD;
-    if (rte_lcore_id() != rte_get_main_lcore()) {
-        dest->max_conn = udest->max_conn / num_lcores;
-        dest->min_conn = udest->min_conn / num_lcores;
+    if (rte_lcore_id() != g_master_lcore_id) {
+        dest->max_conn = udest->max_conn / g_slave_lcore_num;
+        dest->min_conn = udest->min_conn / g_slave_lcore_num;
     } else {
         /*
             Ensure that the sum of rs's max_conn in all lcores is equal to the configured max_conn,
             to prevent the operation of modifying rs from keepalived when reloading.
         */
-        dest->max_conn = udest->max_conn % num_lcores;
-        dest->min_conn = udest->min_conn % num_lcores;
+        dest->max_conn = udest->max_conn % g_slave_lcore_num;
+        dest->min_conn = udest->min_conn % g_slave_lcore_num;
     }
 }
 
@@ -224,6 +247,8 @@ void dp_vs_dest_put(struct dp_vs_dest *dest)
         return;
 
     if (rte_atomic32_dec_and_test(&dest->refcnt)) {
+        if (rte_lcore_id() == g_master_lcore_id)
+            dpvs_timer_cancel(&dest->dfc.master.timer, true);
         dp_vs_service_unbind(dest);
         rte_free(dest);
     }
@@ -322,6 +347,297 @@ int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
     return ret;
 }
 
+static int dest_msg_seq(void) {
+    static uint32_t seq = 0;
+    return seq++;
+}
+
+static void dest_inhibit_logging(const struct dp_vs_dest *dest, const char *msg)
+{
+    char str_vaddr[64], str_daddr[64];
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid == g_master_lcore_id) {
+        RTE_LOG(INFO, SERVICE, "[cid %02d, %s, svc %s:%d, rs %s:%d, weight %d, inhibited %s,"
+                " down_notice_recvd %d, inhibit_duration %ds, origin_weight %d] %s\n",
+                cid,
+                dest->proto == IPPROTO_TCP ? "tcp" : "udp",
+                inet_ntop(dest->svc->af, &dest->svc->addr, str_vaddr, sizeof(str_vaddr)) ? str_vaddr : "::",
+                ntohs(dest->svc->port),
+                inet_ntop(dest->af, &dest->addr, str_daddr, sizeof(str_daddr)) ? str_daddr : "::",
+                ntohs(dest->port),
+                rte_atomic16_read(&dest->weight),
+                dp_vs_dest_is_inhibited(dest) ? "yes" : "no",
+                dest->dfc.master.down_notice_recvd,
+                dest->dfc.master.inhibit_duration,
+                dest->dfc.master.origin_weight,
+                msg ?: ""
+                );
+    } else {
+        RTE_LOG(DEBUG, SERVICE, "[cid %02d, %s, svc %s:%d, rs %s:%d, weight %d, inhibited %s, warm_up_count %d] %s\n",
+                cid,
+                dest->proto == IPPROTO_TCP ? "tcp" : "udp",
+                inet_ntop(dest->svc->af, &dest->svc->addr, str_vaddr, sizeof(str_vaddr)) ? str_vaddr : "::",
+                ntohs(dest->svc->port),
+                inet_ntop(dest->af, &dest->addr, str_daddr, sizeof(str_daddr)) ? str_daddr : "::",
+                ntohs(dest->port),
+                rte_atomic16_read(&dest->weight),
+                dp_vs_dest_is_inhibited(dest) ? "yes" : "no",
+                dest->dfc.slave.warm_up_count,
+                msg ?: ""
+                );
+    }
+}
+
+static inline void dest_notification_fill(const struct dp_vs_dest *dest, struct dest_notification *notice)
+{
+    notice->vaddr  = dest->svc->addr;
+    notice->daddr  = dest->addr;
+    notice->af     = dest->af;
+    notice->svc_af = dest->svc->af;
+    notice->proto  = dest->proto;
+    notice->vport  = dest->svc->port;
+    notice->dport  = dest->port;
+    notice->weight = rte_atomic16_read(&dest->weight);
+}
+
+static struct dp_vs_dest *get_dest_from_notification(const struct dest_notification *notice)
+{
+    struct dp_vs_service *svc;
+
+    svc = dp_vs_service_lookup(notice->svc_af, notice->proto, &notice->vaddr, notice->vport,
+            0, NULL, NULL, NULL, rte_lcore_id());
+    if (!svc)
+        return NULL;
+    return dp_vs_dest_lookup(notice->af, svc, &notice->daddr, notice->dport);
+}
+
+static int dest_down_wait_timeout(void *arg)
+{
+    struct dp_vs_dest *dest;
+
+    dest = (struct dp_vs_dest *)arg;
+
+    // This should never happen, just in case!
+    dp_vs_dest_clear_inhibited(dest);
+    if (dest->dfc.master.origin_weight > 0 && rte_atomic16_read(&dest->weight) == 0)
+        rte_atomic16_set(&dest->weight, dest->dfc.master.origin_weight);
+    dest->dfc.master.origin_weight = 0;
+
+    dest->dfc.master.down_notice_recvd = 0;
+    return EDPVS_OK;
+}
+
+static int dest_inhibit_timeout(void *arg)
+{
+    int err;
+    struct dp_vs_dest *dest;
+    struct dpvs_msg *msg;
+    struct dest_notification *notice;
+
+    dest = (struct dp_vs_dest *)arg;
+    msg = msg_make(MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES, dest_msg_seq(),
+            DPVS_MSG_MULTICAST, rte_lcore_id(), sizeof(*notice), NULL);
+    if (unlikely(msg == NULL))
+        return EDPVS_NOMEM;
+    notice = (struct dest_notification *)msg->data;
+    dest_notification_fill(dest, notice);
+    notice->weight = dest->dfc.master.origin_weight;
+    notice->notification = dest_notification_open;
+    err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+    if (err != EDPVS_OK) {
+        msg_destroy(&msg);
+        return err;
+    }
+    msg_destroy(&msg);
+
+    dest_inhibit_logging(dest, "notify slaves UP");
+    dp_vs_dest_clear_inhibited(dest);
+    rte_atomic16_set(&dest->weight, dest->dfc.master.origin_weight);
+    dest->dfc.master.origin_weight = 0;
+    dest->dfc.master.down_notice_recvd = 0;
+
+    return EDPVS_OK;
+}
+
+static int msg_cb_notify_master(struct dpvs_msg *msg)
+{
+    int err;
+    struct dp_vs_dest *dest;
+    struct dest_notification *notice, *notice_sent;
+    struct timeval delay;
+    struct dpvs_msg *msg_sent;
+
+    notice = (struct dest_notification *)msg->data;
+    if (unlikely(notice->notification != dest_notification_down &&
+                notice->notification != dest_notification_up)) {
+        RTE_LOG(WARNING, SERVICE,"%s:invalid notification %d\n", __func__, notice->notification);
+        return EDPVS_INVAL;
+    }
+    dest = get_dest_from_notification(notice);
+    if (!dest)
+        return EDPVS_NOTEXIST;
+
+    if (notice->notification == dest_notification_down) {
+        if (dp_vs_dest_is_inhibited(dest) || rte_atomic16_read(&dest->weight) == 0) {
+            return EDPVS_OK;
+        }
+        dest->dfc.master.down_notice_recvd++;
+
+        // start down-wait-timer on the first DOWN notice
+        if (dest->dfc.master.down_notice_recvd == 1 && DEST_DOWN_NOTICE_DEFAULT > 1) {
+            delay.tv_sec = DEST_DOWN_WAIT_DURATION - 1;
+            delay.tv_usec = 500000;
+            dpvs_time_rand_delay(&delay, 1000000);
+            err = dpvs_timer_sched(&dest->dfc.master.timer, &delay, dest_down_wait_timeout, (void *)dest, true);
+            if (err != EDPVS_OK) {
+                // FIXME: reschedule time without changing dfc.master.down_notice_recvd
+                dest->dfc.master.down_notice_recvd--;
+                return err;
+            }
+            return EDPVS_OK;
+        }
+        if (dest->dfc.master.down_notice_recvd < DEST_DOWN_NOTICE_DEFAULT)
+            return EDPVS_OK;
+
+        // send CLOSE notice to all slaves, remove the dest from service, start rs-inhibit-timer
+        err = dpvs_timer_cancel(&dest->dfc.master.timer, true);
+        if (unlikely(err != EDPVS_OK))
+            return err;
+        dp_vs_dest_set_inhibited(dest);
+        if (dest->dfc.master.inhibit_duration > DEST_INHIBIT_DURATION_MAX)
+            dest->dfc.master.inhibit_duration = DEST_INHIBIT_DURATION_MAX;
+        if (dest->dfc.master.inhibit_duration < DEST_INHIBIT_DURATION_MIN)
+            dest->dfc.master.inhibit_duration = DEST_INHIBIT_DURATION_MIN;
+        delay.tv_sec = dest->dfc.master.inhibit_duration - 1;
+        delay.tv_usec = 500000;
+        dpvs_time_rand_delay(&delay, 1000000);
+        err = dpvs_timer_sched(&dest->dfc.master.timer, &delay, dest_inhibit_timeout, (void *)dest, true);
+        if (err != EDPVS_OK) {
+            dp_vs_dest_clear_inhibited(dest);
+            return err;
+        }
+        msg_sent = msg_make(MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES, dest_msg_seq(),
+                DPVS_MSG_MULTICAST, rte_lcore_id(), sizeof(*notice), notice);
+        if (unlikely(msg_sent == NULL)) {
+            dpvs_timer_cancel(&dest->dfc.master.timer, true);
+            dp_vs_dest_clear_inhibited(dest);
+            return EDPVS_NOMEM;
+        }
+        notice_sent = (struct dest_notification *)msg_sent->data;
+        notice_sent->notification = dest_notification_close;
+        err = multicast_msg_send(msg_sent, DPVS_MSG_F_ASYNC, NULL);
+        if (err != EDPVS_OK) {
+            dpvs_timer_cancel(&dest->dfc.master.timer, true);
+            dp_vs_dest_clear_inhibited(dest);
+            msg_destroy(&msg_sent);
+            return err;
+        }
+        msg_destroy(&msg_sent);
+
+        dest_inhibit_logging(dest, "notify slaves DOWN");
+        if (dest->dfc.master.inhibit_duration < DEST_INHIBIT_DURATION_MAX)
+            dest->dfc.master.inhibit_duration <<= 1;
+        dest->dfc.master.origin_weight = rte_atomic16_read(&dest->weight);
+        rte_atomic16_clear(&dest->weight);
+    } else { // dest_notification_up
+        dest->dfc.master.inhibit_duration >>= 1;
+        if (dest->dfc.master.inhibit_duration < DEST_INHIBIT_DURATION_MIN)
+            dest->dfc.master.inhibit_duration = DEST_INHIBIT_DURATION_MIN;
+    }
+    return EDPVS_OK;
+}
+
+static int msg_cb_notify_slaves(struct dpvs_msg *msg)
+{
+    struct dp_vs_dest *dest;
+    struct dest_notification *notice;
+
+    notice = (struct dest_notification *)msg->data;
+    if (unlikely(notice->notification != dest_notification_close &&
+                notice->notification != dest_notification_open)) {
+        RTE_LOG(WARNING, SERVICE,"%s:invalid notification %d\n", __func__, notice->notification);
+        return EDPVS_INVAL;
+    }
+    dest = get_dest_from_notification(notice);
+    if (!dest)
+        return EDPVS_NOTEXIST;
+
+    if (notice->notification == dest_notification_close) {
+        dest->dfc.slave.origin_weight = rte_atomic16_read(&dest->weight);
+        rte_atomic16_clear(&dest->weight);
+        dp_vs_dest_set_inhibited(dest);
+    } else { // dest_notification_open
+        rte_atomic16_set(&dest->weight, dest->dfc.slave.origin_weight);
+        dp_vs_dest_clear_inhibited(dest);
+        dest->dfc.slave.warm_up_count = DEST_UP_NOTICE_DEFAULT;
+        dest->dfc.slave.origin_weight = 0;
+    }
+    return EDPVS_OK;
+}
+
+int dp_vs_dest_detected_alive(struct dp_vs_dest *dest)
+{
+    int err;
+    struct dpvs_msg *msg;
+    struct dest_notification *notice;
+
+    if (!(dest->svc->flags & DP_VS_SVC_F_DEST_CHECK))
+        return EDPVS_DISABLED;
+
+    if (likely(dest->dfc.slave.warm_up_count == 0))
+        return EDPVS_OK;
+
+    msg = msg_make(MSG_TYPE_DEST_CHECK_NOTIFY_MASTER, dest_msg_seq(),
+            DPVS_MSG_UNICAST, rte_lcore_id(), sizeof(*notice), NULL);
+    if (unlikely(msg == NULL))
+        return EDPVS_NOMEM;
+    notice = (struct dest_notification *)msg->data;
+    dest_notification_fill(dest, notice);
+    notice->notification = dest_notification_up;
+
+    err = msg_send(msg, g_master_lcore_id, DPVS_MSG_F_ASYNC, NULL);
+    if (err != EDPVS_OK) {
+        msg_destroy(&msg);
+        return err;
+    }
+    msg_destroy(&msg);
+
+    dest_inhibit_logging(dest, "detect dest UP");
+    dest->dfc.slave.warm_up_count--;
+    return EDPVS_OK;
+}
+
+int dp_vs_dest_detected_dead(struct dp_vs_dest *dest)
+{
+    int err;
+    struct dpvs_msg *msg;
+    struct dest_notification *notice;
+
+    if (!(dest->svc->flags & DP_VS_SVC_F_DEST_CHECK))
+        return EDPVS_DISABLED;
+
+    if (dp_vs_dest_is_inhibited(dest) || rte_atomic16_read(&dest->weight) == 0)
+        return EDPVS_OK;
+
+    msg = msg_make(MSG_TYPE_DEST_CHECK_NOTIFY_MASTER, dest_msg_seq(),
+            DPVS_MSG_UNICAST, rte_lcore_id(), sizeof(*notice), 0);
+    if (unlikely(msg == NULL))
+        return EDPVS_NOMEM;
+    notice = (struct dest_notification *)msg->data;
+    dest_notification_fill(dest, notice);
+    notice->notification = dest_notification_down;
+
+    err = msg_send(msg, g_master_lcore_id, DPVS_MSG_F_ASYNC, NULL);
+    if (err != EDPVS_OK) {
+        msg_destroy(&msg);
+        return err;
+    }
+    msg_destroy(&msg);
+    dest_inhibit_logging(dest, "detect dest DOWN");
+    return EDPVS_OK;
+}
+
 #ifdef CONFIG_DPVS_AGENT
 static int dp_vs_dest_get_details(const struct dp_vs_service *svc, 
                             struct dp_vs_dest_front *uptr)
@@ -358,11 +674,6 @@ static int dp_vs_dest_get_details(const struct dp_vs_service *svc,
     }
 
     return ret;
-}
-
-static int dest_msg_seq(void) {
-    static uint32_t seq = 0;
-    return seq++;
 }
 
 static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len)
@@ -612,65 +923,6 @@ static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
     return EDPVS_OK;
 }
 
-static int dest_unregister_msg_cb(void)
-{
-    struct dpvs_msg_type msg_type;
-	int err, rterr = EDPVS_OK;
-
-    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
-    msg_type.type   = MSG_TYPE_AGENT_ADD_DESTS;
-    msg_type.mode   = DPVS_MSG_MULTICAST;
-    msg_type.prio   = MSG_PRIO_NORM;
-    msg_type.cid    = rte_lcore_id();
-    msg_type.unicast_msg_cb = adddest_msg_cb;
-    err = msg_type_mc_unregister(&msg_type);
-    if (err != EDPVS_OK) {
-        RTE_LOG(ERR, SERVICE, "%s: fail to unregister msg.\n", __func__);
-        rterr = err;
-    }
-
-    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
-    msg_type.type   = MSG_TYPE_AGENT_DEL_DESTS;
-    msg_type.mode   = DPVS_MSG_MULTICAST;
-    msg_type.prio   = MSG_PRIO_NORM;
-    msg_type.cid    = rte_lcore_id();
-    msg_type.unicast_msg_cb = deldest_msg_cb;
-    err = msg_type_mc_unregister(&msg_type);
-    if (err != EDPVS_OK) {
-         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
-         if (rterr == EDPVS_OK)
-             rterr = err;
-    }
-
-    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
-    msg_type.type   = MSG_TYPE_AGENT_EDIT_DESTS;
-    msg_type.mode   = DPVS_MSG_MULTICAST;
-    msg_type.prio   = MSG_PRIO_NORM;
-    msg_type.cid    = rte_lcore_id();
-    msg_type.unicast_msg_cb = editdest_msg_cb;
-    err = msg_type_mc_unregister(&msg_type);
-    if (err != EDPVS_OK) {
-         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
-         if (rterr == EDPVS_OK)
-             rterr = err;
-    }
-
-    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
-    msg_type.type   = MSG_TYPE_AGENT_GET_DESTS;
-    msg_type.mode   = DPVS_MSG_MULTICAST;
-    msg_type.prio   = MSG_PRIO_LOW;
-    msg_type.cid    = rte_lcore_id();
-    msg_type.unicast_msg_cb = dp_vs_dests_get_uc_cb;
-    err = msg_type_mc_unregister(&msg_type);
-    if (err != EDPVS_OK) {
-         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
-         if (rterr == EDPVS_OK)
-             rterr = err;
-    }
-
-    return rterr;
-}
-
 struct dpvs_sockopts sockopts_dest = {
     .version        = SOCKOPT_VERSION,
     .set_opt_min    = DPVSAGENT_VS_ADD_DESTS,
@@ -683,12 +935,120 @@ struct dpvs_sockopts sockopts_dest = {
 
 #endif /* CONFIG_DPVS_AGENT */
 
-int dp_vs_dest_init(void)
+static int dest_unregister_msg_cb(void)
 {
-    int err = EDPVS_OK;
-#ifdef CONFIG_DPVS_AGENT
+	int err, rterr = EDPVS_OK;
     struct dpvs_msg_type msg_type;
 
+    memset(&msg_type, 0, sizeof(msg_type));
+    msg_type.type = MSG_TYPE_DEST_CHECK_NOTIFY_MASTER;
+    msg_type.mode = DPVS_MSG_UNICAST;
+    msg_type.prio = MSG_PRIO_NORM;
+    msg_type.cid  = g_master_lcore_id;
+    msg_type.unicast_msg_cb = msg_cb_notify_master;
+    if ((err = msg_type_unregister(&msg_type)) != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to unregister MSG_TYPE_DEST_CHECK_NOTIFY_MASTER -- %s\n",
+                __func__, dpvs_strerror(err));
+    }
+
+    memset(&msg_type, 0, sizeof(msg_type));
+    msg_type.type = MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES;
+    msg_type.mode = DPVS_MSG_MULTICAST;
+    msg_type.prio = MSG_PRIO_NORM;
+    msg_type.unicast_msg_cb = msg_cb_notify_slaves;
+    if ((err = msg_type_mc_unregister(&msg_type)) != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to unregister MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES -- %s\n",
+                __func__, dpvs_strerror(err));
+        return err;
+    }
+
+#ifdef CONFIG_DPVS_AGENT
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_ADD_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = adddest_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to unregister MSG_TYPE_AGENT_ADD_DESTS -- %s\n",
+                __func__, dpvs_strerror(err));
+        rterr = err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_DEL_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = deldest_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register MSG_TYPE_AGENT_DEL_DESTS -- %s\n",
+                 __func__, dpvs_strerror(err));
+         if (rterr == EDPVS_OK)
+             rterr = err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_EDIT_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = editdest_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         if (rterr == EDPVS_OK)
+             rterr = err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_GET_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_LOW;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = dp_vs_dests_get_uc_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register MSG_TYPE_AGENT_GET_DESTS -- %s\n",
+                 __func__, dpvs_strerror(err));
+         if (rterr == EDPVS_OK)
+             rterr = err;
+    }
+#endif
+
+    return rterr;
+}
+
+static int dest_register_msg_cb(void) {
+    int err;
+    struct dpvs_msg_type msg_type;
+
+    memset(&msg_type, 0, sizeof(msg_type));
+    msg_type.type = MSG_TYPE_DEST_CHECK_NOTIFY_MASTER;
+    msg_type.mode = DPVS_MSG_UNICAST;
+    msg_type.prio = MSG_PRIO_NORM;
+    msg_type.cid  = g_master_lcore_id;
+    msg_type.unicast_msg_cb = msg_cb_notify_master;
+    if ((err = msg_type_register(&msg_type)) != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to register MSG_TYPE_DEST_CHECK_NOTIFY_MASTER -- %s\n",
+                __func__, dpvs_strerror(err));
+        return err;
+    }
+
+    memset(&msg_type, 0, sizeof(msg_type));
+    msg_type.type = MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES;
+    msg_type.mode = DPVS_MSG_MULTICAST;
+    msg_type.prio = MSG_PRIO_NORM;
+    msg_type.unicast_msg_cb = msg_cb_notify_slaves;
+    if ((err = msg_type_mc_register(&msg_type)) != EDPVS_OK) {
+        RTE_LOG(ERR, SERVICE, "%s: fail to register MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES -- %s\n",
+                __func__, dpvs_strerror(err));
+        return err;
+    }
+
+#ifdef CONFIG_DPVS_AGENT
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_AGENT_ADD_DESTS;
     msg_type.mode   = DPVS_MSG_MULTICAST;
@@ -697,7 +1057,8 @@ int dp_vs_dest_init(void)
     msg_type.unicast_msg_cb = adddest_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
-         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         RTE_LOG(ERR, SERVICE, "%s: fail to register MSG_TYPE_AGENT_ADD_DESTS -- %s\n",
+                 __func__, dpvs_strerror(err));
          return err;
     }
 
@@ -709,7 +1070,8 @@ int dp_vs_dest_init(void)
     msg_type.unicast_msg_cb = deldest_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
-         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         RTE_LOG(ERR, SERVICE, "%s: fail to register MSG_TYPE_AGENT_DEL_DESTS -- %s\n",
+                 __func__, dpvs_strerror(err));
          return err;
     }
 
@@ -733,7 +1095,8 @@ int dp_vs_dest_init(void)
     msg_type.unicast_msg_cb = dp_vs_dests_get_uc_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
-         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         RTE_LOG(ERR, SERVICE, "%s: fail to register MSG_TYPE_AGENT_GET_DESTS -- %s\n",
+                 __func__, dpvs_strerror(err));
          return err;
     }
 
@@ -742,15 +1105,20 @@ int dp_vs_dest_init(void)
         return err;
     }
 #endif /* CONFIG_DPVS_AGENT */
-    return err;
+    return EDPVS_OK;
+};
+
+int dp_vs_dest_init(void)
+{
+    dest_register_msg_cb();
+    return EDPVS_OK;
 }
 
 int dp_vs_dest_term(void)
 {
-#ifdef CONFIG_DPVS_AGENT
     dest_unregister_msg_cb();
-    return sockopt_unregister(&sockopts_dest);
-#else
-    return EDPVS_OK;
+#ifdef CONFIG_DPVS_AGENT
+    sockopt_unregister(&sockopts_dest);
 #endif
+    return EDPVS_OK;
 }
