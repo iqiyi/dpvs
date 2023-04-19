@@ -333,6 +333,7 @@ enum {
     TAG_CPU,
     TAG_CONN_EXPIRE_QUIESCENT,
     TAG_DEST_CHECK,
+    TAG_CONN_TIMEOUT,
 };
 
 /* various parsing helpers & parsing functions */
@@ -455,7 +456,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 {
     int c, parse;
     poptContext context;
-    char *optarg=NULL;
+    char *optarg= NULL;
+    int intarg = NULL;
     struct poptOption options_table[] = {
         { "add-service", 'A', POPT_ARG_NONE, NULL, 'A', NULL, NULL },
         { "edit-service", 'E', POPT_ARG_NONE, NULL, 'E', NULL, NULL },
@@ -545,6 +547,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         { "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
         { "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
         { "dest-check", '\0', POPT_ARG_STRING, &optarg, TAG_DEST_CHECK, NULL, NULL},
+        { "conn-timeout", '\0', POPT_ARG_INT, &intarg, TAG_CONN_TIMEOUT, NULL, NULL},
         { NULL, 0, 0, NULL, 0, NULL, NULL }
     };
 
@@ -950,6 +953,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     if (parse_dest_check(optarg, &ce->dpvs_svc.check_conf) != 0) {
                         fail(2, "invalid dest_check config");
                     }
+                    break;
+                }
+            case TAG_CONN_TIMEOUT:
+                {
+                    ce->dpvs_svc.conn_timeout = intarg;
                     break;
                 }
             default:
@@ -1674,6 +1682,7 @@ static void usage_exit(const char *program, const int exit_status)
             "  --syncid sid                        syncid for connection sync (default=255)\n"
             "  --connection   -c                   output of current IPVS connections\n"
             "  --timeout                           output of timeout (tcp tcpfin udp)\n"
+            "  --conn-timeout                      set connection established timeout\n"
             "  --daemon                            output of daemon information\n"
             "  --stats                             output of statistics information\n"
             "  --rate                              output of rate information\n"
@@ -2125,7 +2134,7 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
         if (se->flags & IP_VS_CONN_F_SYNPROXY)
             printf(" synproxy");
         if (se->conn_timeout != 0)
-            printf(" conn_timeout %u", se->conn_timeout);
+            printf(" conn-timeout %u", se->conn_timeout);
         if (se->flags & IP_VS_CONN_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
         if (se->check_conf.enabled) {

@@ -505,8 +505,8 @@ static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn);
 
 unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn)
 {
-    if (conn && conn->dest)
-        return conn->dest->conn_timeout;
+    if (conn && conn->dest && conn->dest->svc)
+        return conn->dest->svc->conn_timeout;
 
     return 0;
 }

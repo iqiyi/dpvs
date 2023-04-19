@@ -113,7 +113,6 @@ int dp_vs_dest_new(struct dp_vs_service *svc,
     dest->proto = svc->proto;
     dest->vaddr = svc->addr;
     dest->vport = svc->port;
-    dest->conn_timeout = svc->conn_timeout;
     dest->limit_proportion = svc->limit_proportion;
     dest->vfwmark = svc->fwmark;
     dest->addr = udest->addr;

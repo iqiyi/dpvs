@@ -131,6 +131,7 @@ int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int opti
         entry.flags  |= IP_VS_SVC_F_PERSISTENT;
         entry.timeout = svc->timeout;
     }
+    entry.conn_timeout = svc->conn_timeout;
 
     if (options & OPT_NETMASK) {
         entry.netmask = svc->netmask;
