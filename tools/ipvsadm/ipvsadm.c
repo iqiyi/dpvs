@@ -330,6 +330,7 @@ enum {
     TAG_NO_SORT,
     TAG_PERSISTENCE_ENGINE,
     TAG_SOCKPAIR,
+    TAG_HASH_TARGET,
     TAG_CPU,
     TAG_CONN_EXPIRE_QUIESCENT,
     TAG_DEST_CHECK,
@@ -543,7 +544,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         { "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
         { "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
         { "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
-        { "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
+        { "hash-target", '\0', POPT_ARG_STRING, &optarg, TAG_HASH_TARGET, NULL, NULL },
         { "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
         { "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
         { "dest-check", '\0', POPT_ARG_STRING, &optarg, TAG_DEST_CHECK, NULL, NULL},
@@ -915,7 +916,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 
                     break;
                 }
-            case 'Y':
+            case TAG_HASH_TARGET:
                 {
                     set_option(options, OPT_HASHTAG);
                     if (strcmp(ce->dpvs_svc.sched_name, "conhash"))
@@ -1697,10 +1698,11 @@ static void usage_exit(const char *program, const int exit_status)
             "  --ifname       -F                   nic interface for laddrs\n"
             "  --synproxy     -j                   TCP syn proxy\n"
             "  --match        -H MATCH             select service by MATCH 'af,proto,srange,drange,iif,oif', af should be defined if no range defined\n"
-            "  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
+            "  --hash-target  hashtag              choose target for conhash (support sip or qid for quic)\n"
             "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
             "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
-            "  --dest-check                        config passive health check, inhibit failed realservers scheduling,disable|default|DETAIL\n"
+            "  --dest-check   check_conf           config passive health check, inhibit scheduling to failed backends\n"
+            "                                      check_conf := disable|default|DETAIL\n"
             "                                      DETAIL:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n",
         DEF_SCHED);
 
