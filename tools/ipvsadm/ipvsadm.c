@@ -98,6 +98,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -211,9 +212,6 @@ static const char* optnames[] = {
     "whtlst-address",
 };
 
-static const char* optnames_ext[] = {
-    "inhibit-on-fail",
-};
 /*
  * Table of legal combinations of commands and options.
  * Key:
@@ -334,7 +332,7 @@ enum {
     TAG_SOCKPAIR,
     TAG_CPU,
     TAG_CONN_EXPIRE_QUIESCENT,
-    TAG_CONN_INHIBIT_ON_FAIL,
+    TAG_DEST_CHECK,
 };
 
 /* various parsing helpers & parsing functions */
@@ -360,7 +358,6 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t*);
 static void generic_opt_check(int command, unsigned int options);
 static void set_command(int *cmd, const int newcmd);
 static void set_option(unsigned int *options, unsigned int option);
-static void set_option_ext(unsigned int *options, unsigned int option);
 
 static void tryhelp_exit(const char *program, const int exit_status);
 static void usage_exit(const char *program, const int exit_status);
@@ -415,10 +412,46 @@ int main(int argc, char **argv)
     return result;
 }
 
+static bool is_dest_check_conf_default(const struct dest_check_configs *conf)
+{
+    return conf->dest_down_notice_num == DEST_DOWN_NOTICE_DEFAULT &&
+        conf->dest_up_notice_num == DEST_UP_NOTICE_DEFAULT &&
+        conf->dest_down_wait == DEST_DOWN_WAIT_DURATION &&
+        conf->dest_inhibit_min == DEST_INHIBIT_DURATION_MIN &&
+        conf->dest_inhibit_max == DEST_INHIBIT_DURATION_MAX;
+}
+
+static int parse_dest_check(const char *optarg, struct dest_check_configs *conf)
+{
+    memset(conf, 0, sizeof(*conf));
+    if (!strcmp(optarg, "disable")) {
+        conf->enabled = 0;
+    } else if (!strcmp(optarg, "default")) {
+        conf->enabled = 1;
+        conf->dest_down_notice_num = DEST_DOWN_NOTICE_DEFAULT;
+        conf->dest_up_notice_num   = DEST_UP_NOTICE_DEFAULT;
+        conf->dest_down_wait       = DEST_DOWN_WAIT_DURATION;
+        conf->dest_inhibit_min     = DEST_INHIBIT_DURATION_MIN;
+        conf->dest_inhibit_max     = DEST_INHIBIT_DURATION_MAX;
+    } else {
+        if (sscanf(optarg, "%hhu,%hhu,%hhus,%hu-%hus",
+                    &conf->dest_down_notice_num,
+                    &conf->dest_up_notice_num,
+                    &conf->dest_down_wait,
+                    &conf->dest_inhibit_min,
+                    &conf->dest_inhibit_max) != 5) {
+            return -1;
+        }
+        if (!dest_check_configs_sanity(conf))
+            return -1;
+        conf->enabled = 1;
+    }
+    return 0;
+}
 
 static int
 parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
-        unsigned int *options, unsigned int *options_ext, unsigned int *format)
+        unsigned int *options, unsigned int *format)
 {
     int c, parse;
     poptContext context;
@@ -511,7 +544,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         { "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
         { "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
         { "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
-        { "inhibit-on-fail", '\0', POPT_ARG_STRING, &optarg, TAG_CONN_INHIBIT_ON_FAIL, NULL, NULL },
+        { "dest-check", '\0', POPT_ARG_STRING, &optarg, TAG_DEST_CHECK, NULL, NULL},
         { NULL, 0, 0, NULL, 0, NULL, NULL }
     };
 
@@ -912,15 +945,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_CONN_F_EXPIRE_QUIESCENT;
                     break;
                 }
-            case TAG_CONN_INHIBIT_ON_FAIL:
+            case TAG_DEST_CHECK:
                 {
-                    set_option_ext(options_ext, OPT_EXT_INHIBIT_ON_FAIL);
-                    if(!memcmp(optarg , "enable" , strlen("enable"))) {
-                        ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_DEST_CHECK;
-                    } else if(!memcmp(optarg , "disable" , strlen("disable"))) {
-                        ce->dpvs_svc.flags = ce->dpvs_svc.flags & (~IP_VS_SVC_F_DEST_CHECK);
-                    } else
-                        fail(2 , "inhibit-on-fail switch must be enable or disable\n");
+                    if (parse_dest_check(optarg, &ce->dpvs_svc.check_conf) != 0) {
+                        fail(2, "invalid dest_check config");
+                    }
                     break;
                 }
             default:
@@ -986,7 +1015,7 @@ static int restore_table(int argc, char **argv, int reading_stdin)
 
 static int process_options(int argc, char **argv, int reading_stdin)
 {
-    unsigned int options = OPT_NONE, options_ext = OPT_EXT_NONE;
+    unsigned int options = OPT_NONE;
     unsigned int format = FMT_NONE;
     int result = 0;
     const struct inet_addr_range zero_range = {};
@@ -1002,7 +1031,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
     /* Set the default cpu be master */
     ce.index = 0;
 
-    if (parse_options(argc, argv, &ce, &options, &options_ext, &format))
+    if (parse_options(argc, argv, &ce, &options, &format))
         return -1;
 
     generic_opt_check(ce.cmd, options);
@@ -1083,7 +1112,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
             break;
 
         case CMD_EDIT:
-            result = dpvs_update_service_by_options(&ce.dpvs_svc, options, options_ext);
+            result = dpvs_update_service_by_options(&ce.dpvs_svc, options);
             break;
 
         case CMD_DEL:
@@ -1548,30 +1577,12 @@ set_option(unsigned int *options, unsigned int option)
     *options |= option;
 }
 
-static inline const char *
-opt2name_ext(int option)
-{
-    const char **ptr;
-    for (ptr = optnames_ext; option > 1; option >>= 1, ptr++);
-
-    return *ptr;
-}
-
-static void
-set_option_ext(unsigned int *options, unsigned int option)
-{
-    if (*options & option)
-        fail(2, "multiple '%s' options specified", opt2name_ext(option));
-    *options |= option;
-}
-
 static void tryhelp_exit(const char *program, const int exit_status)
 {
     fprintf(stderr, "Try `%s -h' or '%s --help' for more information.\n",
             program, program);
     exit(exit_status);
 }
-
 
 static void usage_exit(const char *program, const int exit_status)
 {
@@ -1680,7 +1691,8 @@ static void usage_exit(const char *program, const int exit_status)
             "  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
             "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
             "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
-            "  --inhibit-on-fail                   enable passive health check, inhibit failed realservers scheduling\n",
+            "  --dest-check                        config passive health check, inhibit failed realservers scheduling,disable|default|DETAIL\n"
+            "                                      DETAIL:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n",
         DEF_SCHED);
 
     exit(exit_status);
@@ -2116,8 +2128,17 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             printf(" conn_timeout %u", se->conn_timeout);
         if (se->flags & IP_VS_CONN_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
-        if (se->flags & IP_VS_SVC_F_DEST_CHECK)
-            printf(" inhibit-on-fail");
+        if (se->check_conf.enabled) {
+            printf(" dest-check");
+            if (!is_dest_check_conf_default(&se->check_conf)) {
+                printf( " %d,%d,%ds,%d-%ds",
+                        se->check_conf.dest_down_notice_num,
+                        se->check_conf.dest_up_notice_num,
+                        se->check_conf.dest_down_wait,
+                        se->check_conf.dest_inhibit_min,
+                        se->check_conf.dest_inhibit_max);
+            }
+        }
     }
     printf("\n");
 

@@ -43,7 +43,6 @@
 #define DP_VS_SVC_F_SIP_HASH            IP_VS_SVC_F_SIP_HASH
 #define DP_VS_SVC_F_QID_HASH            IP_VS_SVC_F_QID_HASH
 #define DP_VS_SVC_F_MATCH               IP_VS_SVC_F_MATCH
-#define DP_VS_SVC_F_DEST_CHECK          IP_VS_SVC_F_DEST_CHECK
 
 /* virtual service */
 struct dp_vs_service {
@@ -76,6 +75,7 @@ struct dp_vs_service {
     struct list_head    dests;      /* real services (dp_vs_dest{}) */
     uint32_t            num_dests;
     long                weight;     /* sum of servers weight */
+    struct dest_check_configs check_conf;
 
     struct dp_vs_scheduler  *scheduler;
     void                *sched_data;

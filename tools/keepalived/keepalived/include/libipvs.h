@@ -46,9 +46,6 @@
 #define OPT_WHTLST_ADDRESS         0x80000000
 #define NUMBER_OF_OPT                   33
 
-#define OPT_EXT_NONE               0x00000000
-#define OPT_EXT_INHIBIT_ON_FAIL    0x00000001
-
 #define MINIMUM_IPVS_VERSION_MAJOR      1
 #define MINIMUM_IPVS_VERSION_MINOR      1
 #define MINIMUM_IPVS_VERSION_PATCH      4
@@ -102,8 +99,7 @@ extern int dpvs_add_service(dpvs_service_compat_t *svc);
 extern int dpvs_update_service(dpvs_service_compat_t *svc);
 
 /* update a virtual service based on option */
-extern int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int options, unsigned int options_ext);
-
+extern int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int options);
 
 /* delete a virtual service */
 extern int dpvs_del_service(dpvs_service_compat_t *svc);
@@ -154,7 +150,6 @@ extern ipvs_timeout_t *dpvs_get_timeout(void);
 
 /* get ipvs daemon information */
 extern ipvs_daemon_t *dpvs_get_daemon(void);
-
 
 extern const char *ipvs_strerror(int err);
 

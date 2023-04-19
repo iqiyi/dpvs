@@ -498,6 +498,8 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
     svc->laddr_curr = &svc->laddr_list;
 
     INIT_LIST_HEAD(&svc->dests);
+    svc->check_conf= u->check_conf;
+    dest_check_configs_sanity(&svc->check_conf);
 
     ret = dp_vs_bind_scheduler(svc, sched);
     if (ret)
@@ -554,6 +556,8 @@ static int dp_vs_service_edit(struct dp_vs_service *svc, struct dp_vs_service_co
     svc->netmask = u->netmask;
     svc->bps = u->bps;
     svc->limit_proportion = u->limit_proportion;
+    svc->check_conf= u->check_conf;
+    dest_check_configs_sanity(&svc->check_conf);
 
     old_sched = svc->scheduler;
     if (sched != old_sched) {
@@ -658,6 +662,7 @@ dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     dst->num_laddrs = src->num_laddrs;
     dst->cid = rte_lcore_id();
     dst->index = g_lcore_id2index[dst->cid];
+    dst->check_conf = src->check_conf;
 
     err = dp_vs_stats_add(&dst->stats, &src->stats);
 

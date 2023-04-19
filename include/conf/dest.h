@@ -18,7 +18,6 @@
 #ifndef __DPVS_DEST_CONF_H__
 #define __DPVS_DEST_CONF_H__
 
-#include "conf/service.h"
 #include "conf/match.h"
 #include "conf/conn.h"
 

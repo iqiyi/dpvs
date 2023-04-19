@@ -40,9 +40,26 @@
 #define IP_VS_SVC_F_SIP_HASH            0x0100              /* sip hash target */
 #define IP_VS_SVC_F_QID_HASH            0x0200              /* quic cid hash target */
 #define IP_VS_SVC_F_MATCH               0x0400              /* snat match */
-#define IP_VS_SVC_F_DEST_CHECK          0x0800              /* inhibit rs on failure */
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK   IP_VS_SVC_F_SCHED1  /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT       IP_VS_SVC_F_SCHED2  /* SH use port */
+
+#define MAX_ARG_LEN    (sizeof(dpvs_service_compat_t) + sizeof(dpvs_dest_compat_t))
+
+/* defaults for dest passive health check */
+#define DEST_DOWN_NOTICE_DEFAULT        1
+#define DEST_UP_NOTICE_DEFAULT          1
+#define DEST_DOWN_WAIT_DURATION         3       // 3s
+#define DEST_INHIBIT_DURATION_MIN       5       // 5s
+#define DEST_INHIBIT_DURATION_MAX       3600    // 1h
+
+struct dest_check_configs {
+    uint8_t enabled;
+    uint8_t dest_down_notice_num;   // how many DOWNs detected in `dest_down_wait` before inhibiting the dest
+    uint8_t dest_up_notice_num;     // how many notifications sent when UPs detected after inhibitation
+    uint8_t dest_down_wait;
+    uint16_t dest_inhibit_min;      // the inhibitation duration range [dest_inhibit_min, dest_inhibit_max]
+    uint16_t dest_inhibit_max;
+};
 
 typedef struct dp_vs_service_compat {
     /*base*/
@@ -60,7 +77,7 @@ typedef struct dp_vs_service_compat {
     char                sched_name[DP_VS_SCHEDNAME_MAXLEN];
     
     /*dp_vs_service_user & dp_vs_service_entry*/
-    struct dp_vs_match match;
+    struct dp_vs_match  match;
 
     /*dp_vs_service_entry*/
     unsigned int        num_dests;
@@ -68,7 +85,7 @@ typedef struct dp_vs_service_compat {
     lcoreid_t           cid;
     lcoreid_t           index;
     struct dp_vs_stats  stats;
-
+    struct dest_check_configs   check_conf;
 } dpvs_service_compat_t;
 
 #define dp_vs_service_conf  dp_vs_service_compat
@@ -89,6 +106,36 @@ struct dp_vs_getinfo {
     unsigned int num_lcores;
 };
 
-#define MAX_ARG_LEN    (sizeof(dpvs_service_compat_t) + sizeof(dpvs_dest_compat_t))
+static inline bool
+dest_check_configs_sanity(struct dest_check_configs *conf) {
+    bool res = true;
+    if (conf->dest_down_notice_num < 1) {
+        conf->dest_down_notice_num = DEST_DOWN_NOTICE_DEFAULT;
+        res = false;
+    }
+    if (conf->dest_up_notice_num < 1) {
+        conf->dest_up_notice_num = DEST_UP_NOTICE_DEFAULT;
+        res = false;
+    }
+    if (conf->dest_down_wait < 1) {
+        conf->dest_down_wait = DEST_DOWN_WAIT_DURATION;
+        res = false;
+    }
+    if (conf->dest_inhibit_min < 1) {
+        conf->dest_inhibit_min = DEST_INHIBIT_DURATION_MIN;
+        res = false;
+    }
+    if (conf->dest_inhibit_max < 1) {
+        conf->dest_inhibit_max = DEST_INHIBIT_DURATION_MAX;
+        res = false;
+    }
+    if (conf->dest_inhibit_min > conf->dest_inhibit_max) {
+        conf->dest_inhibit_min = DEST_INHIBIT_DURATION_MIN;
+        conf->dest_inhibit_max = DEST_INHIBIT_DURATION_MAX;
+        res = false;
+    }
+    return res;
+};
+
 
 #endif /* __DPVS_SVC_CONF_H__ */

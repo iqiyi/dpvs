@@ -26,12 +26,6 @@
 #include "ipvs/conn.h"
 #include "ctrl.h"
 
-#define DEST_DOWN_NOTICE_DEFAULT        3
-#define DEST_UP_NOTICE_DEFAULT          3
-#define DEST_DOWN_WAIT_DURATION         3       // 3s
-#define DEST_INHIBIT_DURATION_MIN       5       // 5s
-#define DEST_INHIBIT_DURATION_MAX       3600    // 1h
-
 enum {
     dest_notification_down = 1,
     dest_notification_up,
@@ -463,9 +457,10 @@ static int dest_inhibit_timeout(void *arg)
 static int msg_cb_notify_master(struct dpvs_msg *msg)
 {
     int err;
+    struct timeval delay;
     struct dp_vs_dest *dest;
     struct dest_notification *notice, *notice_sent;
-    struct timeval delay;
+    struct dest_check_configs *configs;
     struct dpvs_msg *msg_sent;
 
     notice = (struct dest_notification *)msg->data;
@@ -477,6 +472,7 @@ static int msg_cb_notify_master(struct dpvs_msg *msg)
     dest = get_dest_from_notification(notice);
     if (!dest)
         return EDPVS_NOTEXIST;
+    configs = &dest->svc->check_conf;
 
     if (notice->notification == dest_notification_down) {
         if (dp_vs_dest_is_inhibited(dest) || rte_atomic16_read(&dest->weight) == 0) {
@@ -485,8 +481,8 @@ static int msg_cb_notify_master(struct dpvs_msg *msg)
         dest->dfc.master.down_notice_recvd++;
 
         // start down-wait-timer on the first DOWN notice
-        if (dest->dfc.master.down_notice_recvd == 1 && DEST_DOWN_NOTICE_DEFAULT > 1) {
-            delay.tv_sec = DEST_DOWN_WAIT_DURATION - 1;
+        if (dest->dfc.master.down_notice_recvd == 1 && configs->dest_down_notice_num > 1) {
+            delay.tv_sec = configs->dest_down_wait - 1;
             delay.tv_usec = 500000;
             dpvs_time_rand_delay(&delay, 1000000);
             err = dpvs_timer_sched(&dest->dfc.master.timer, &delay, dest_down_wait_timeout, (void *)dest, true);
@@ -497,7 +493,7 @@ static int msg_cb_notify_master(struct dpvs_msg *msg)
             }
             return EDPVS_OK;
         }
-        if (dest->dfc.master.down_notice_recvd < DEST_DOWN_NOTICE_DEFAULT)
+        if (dest->dfc.master.down_notice_recvd < configs->dest_down_notice_num)
             return EDPVS_OK;
 
         // send CLOSE notice to all slaves, remove the dest from service, start rs-inhibit-timer
@@ -505,10 +501,10 @@ static int msg_cb_notify_master(struct dpvs_msg *msg)
         if (unlikely(err != EDPVS_OK))
             return err;
         dp_vs_dest_set_inhibited(dest);
-        if (dest->dfc.master.inhibit_duration > DEST_INHIBIT_DURATION_MAX)
-            dest->dfc.master.inhibit_duration = DEST_INHIBIT_DURATION_MAX;
-        if (dest->dfc.master.inhibit_duration < DEST_INHIBIT_DURATION_MIN)
-            dest->dfc.master.inhibit_duration = DEST_INHIBIT_DURATION_MIN;
+        if (dest->dfc.master.inhibit_duration > configs->dest_inhibit_max)
+            dest->dfc.master.inhibit_duration = configs->dest_inhibit_max;
+        if (dest->dfc.master.inhibit_duration < configs->dest_inhibit_min)
+            dest->dfc.master.inhibit_duration = configs->dest_inhibit_min;
         delay.tv_sec = dest->dfc.master.inhibit_duration - 1;
         delay.tv_usec = 500000;
         dpvs_time_rand_delay(&delay, 1000000);
@@ -542,8 +538,8 @@ static int msg_cb_notify_master(struct dpvs_msg *msg)
         rte_atomic16_clear(&dest->weight);
     } else { // dest_notification_up
         dest->dfc.master.inhibit_duration >>= 1;
-        if (dest->dfc.master.inhibit_duration < DEST_INHIBIT_DURATION_MIN)
-            dest->dfc.master.inhibit_duration = DEST_INHIBIT_DURATION_MIN;
+        if (dest->dfc.master.inhibit_duration < configs->dest_inhibit_min)
+            dest->dfc.master.inhibit_duration = configs->dest_inhibit_min;
     }
     return EDPVS_OK;
 }
@@ -552,6 +548,7 @@ static int msg_cb_notify_slaves(struct dpvs_msg *msg)
 {
     struct dp_vs_dest *dest;
     struct dest_notification *notice;
+    struct dest_check_configs *configs;
 
     notice = (struct dest_notification *)msg->data;
     if (unlikely(notice->notification != dest_notification_close &&
@@ -562,6 +559,7 @@ static int msg_cb_notify_slaves(struct dpvs_msg *msg)
     dest = get_dest_from_notification(notice);
     if (!dest)
         return EDPVS_NOTEXIST;
+    configs = &dest->svc->check_conf;
 
     if (notice->notification == dest_notification_close) {
         dest->dfc.slave.origin_weight = rte_atomic16_read(&dest->weight);
@@ -570,7 +568,7 @@ static int msg_cb_notify_slaves(struct dpvs_msg *msg)
     } else { // dest_notification_open
         rte_atomic16_set(&dest->weight, dest->dfc.slave.origin_weight);
         dp_vs_dest_clear_inhibited(dest);
-        dest->dfc.slave.warm_up_count = DEST_UP_NOTICE_DEFAULT;
+        dest->dfc.slave.warm_up_count = configs->dest_up_notice_num;
         dest->dfc.slave.origin_weight = 0;
     }
     return EDPVS_OK;
@@ -582,7 +580,7 @@ int dp_vs_dest_detected_alive(struct dp_vs_dest *dest)
     struct dpvs_msg *msg;
     struct dest_notification *notice;
 
-    if (!(dest->svc->flags & DP_VS_SVC_F_DEST_CHECK))
+    if (!dest->svc->check_conf.enabled)
         return EDPVS_DISABLED;
 
     if (likely(dest->dfc.slave.warm_up_count == 0))
@@ -614,7 +612,7 @@ int dp_vs_dest_detected_dead(struct dp_vs_dest *dest)
     struct dpvs_msg *msg;
     struct dest_notification *notice;
 
-    if (!(dest->svc->flags & DP_VS_SVC_F_DEST_CHECK))
+    if (!dest->svc->check_conf.enabled)
         return EDPVS_DISABLED;
 
     if (dp_vs_dest_is_inhibited(dest) || rte_atomic16_read(&dest->weight) == 0)
