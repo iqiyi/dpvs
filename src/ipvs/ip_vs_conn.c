@@ -517,7 +517,7 @@ void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp)
 
     /* set proper timeout */
     if ((conn->proto == IPPROTO_TCP && conn->state == DPVS_TCP_S_ESTABLISHED)
-        || (conn->proto == IPPROTO_UDP && conn->state == DPVS_UDP_S_NORMAL)) {
+            || conn->proto == IPPROTO_UDP) {
         conn_timeout = dp_vs_conn_get_timeout(conn);
 
         if (conn_timeout > 0) {
@@ -1287,6 +1287,12 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
             break;
         case IPPROTO_UDP:
             switch (state) {
+                case DPVS_UDP_S_NONE:
+                    return "UDP_NONE";
+                    break;
+                case DPVS_UDP_S_ONEWAY:
+                    return "UDP_ONEWAY";
+                    break;
                 case DPVS_UDP_S_NORMAL:
                     return "UDP_NORM";
                     break;
