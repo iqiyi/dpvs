@@ -30,6 +30,7 @@
 #include "pidfile.h"
 #include "dpdk.h"
 #include "conf/common.h"
+#include "log.h"
 #include "netif.h"
 #include "vlan.h"
 #include "inet.h"
@@ -54,11 +55,9 @@
 
 #define LCORE_CONF_BUFFER_LEN 4096
 
-#ifdef CONFIG_DPVS_PDUMP
-extern bool g_dpvs_pdump;
-#endif
-extern int log_slave_init(void);
-
+char *dpvs_pid_file;
+char *dpvs_ipc_file;
+char *dpvs_conf_file;
 
 static void inline dpdk_version_check(void)
 {
@@ -110,6 +109,8 @@ static void inline dpdk_version_check(void)
                     netif_ctrl_init,     netif_ctrl_term),      \
         DPVS_MODULE(MODULE_IFTRAF,      "iftraf",               \
                     iftraf_init,         iftraf_term),          \
+        DPVS_MODULE(MODULE_EAL_MEM,     "eal_mem",              \
+                    eal_mem_init,        eal_mem_term),         \
         DPVS_MODULE(MODULE_LAST,        "last",                 \
                     NULL,                NULL)                  \
     }
@@ -201,14 +202,17 @@ static void dpvs_usage(const char *prgname)
 {
     printf("\nUsage: %s ", prgname);
     printf("DPVS application options:\n"
-            "   -v  version     display DPVS version info\n"
-            "   -h  help        display DPVS help info\n"
+            "   -v, --version           display DPVS version info\n"
+            "   -c, --conf FILE         specify config file for DPVS\n"
+            "   -p, --pid-file FILE     specify pid file of DPVS process\n"
+            "   -x, --ipc-file FILE     specify unix socket file for ipc communication between DPVS and Tools\n"
+            "   -h, --help              display DPVS help info\n"
     );
 }
 
 static int parse_app_args(int argc, char **argv)
 {
-    const char *short_options = "vh";
+    const char *short_options = "vhc:p:x:";
     char *prgname = argv[0];
     int c, ret = -1;
 
@@ -218,6 +222,9 @@ static int parse_app_args(int argc, char **argv)
 
     struct option long_options[] = {
         {"version", 0, NULL, 'v'},
+        {"conf", required_argument, NULL, 'c'},
+        {"pid-file", required_argument, NULL, 'p'},
+        {"ipc-file", required_argument, NULL, 'x'},
         {"help", 0, NULL, 'h'},
         {NULL, 0, 0, 0}
     };
@@ -231,6 +238,15 @@ static int parse_app_args(int argc, char **argv)
                         DPVS_VERSION,
                         DPVS_BUILD_DATE);
                 exit(EXIT_SUCCESS);
+            case 'c':
+                dpvs_conf_file=optarg;
+                break;
+            case 'p':
+                dpvs_pid_file=optarg;
+                break;
+            case 'x':
+                dpvs_ipc_file=optarg;
+                break;
             case 'h':
                 dpvs_usage(prgname);
                 exit(EXIT_SUCCESS);
@@ -250,6 +266,16 @@ static int parse_app_args(int argc, char **argv)
     optind = old_optind;
     optopt = old_optopt;
     optarg = old_optarg;
+
+    /* check */
+    if (!dpvs_conf_file)
+        dpvs_conf_file="/etc/dpvs.conf";
+    if (!dpvs_pid_file)
+        dpvs_pid_file="/var/run/dpvs.pid";
+    if (!dpvs_ipc_file)
+        dpvs_ipc_file="/var/run/dpvs.ipc";
+
+    g_version = version_parse(DPVS_VERSION);
 
     return ret;
 }
@@ -280,7 +306,7 @@ int main(int argc, char *argv[])
     argc -= err, argv += err;
 
     /* check if dpvs is running and remove zombie pidfile */
-    if (dpvs_running(DPVS_PIDFILE)) {
+    if (dpvs_running(dpvs_pid_file)) {
         fprintf(stderr, "dpvs is already running\n");
         exit(EXIT_FAILURE);
     }
@@ -306,6 +332,9 @@ int main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "Invalid EAL parameters\n");
 
     RTE_LOG(INFO, DPVS, "dpvs version: %s, build on %s\n", DPVS_VERSION, DPVS_BUILD_DATE);
+    RTE_LOG(INFO, DPVS, "dpvs-conf-file: %s\n", dpvs_conf_file);
+    RTE_LOG(INFO, DPVS, "dpvs-pid-file: %s\n", dpvs_pid_file);
+    RTE_LOG(INFO, DPVS, "dpvs-ipc-file: %s\n", dpvs_ipc_file);
 
     rte_timer_subsystem_init();
 
@@ -338,7 +367,7 @@ int main(int argc, char *argv[])
     log_slave_init();
 
     /* write pid file */
-    if (!pidfile_write(DPVS_PIDFILE, getpid()))
+    if (!pidfile_write(dpvs_pid_file, getpid()))
         goto end;
 
     dpvs_state_set(DPVS_STATE_NORMAL);
@@ -350,7 +379,7 @@ end:
     dpvs_state_set(DPVS_STATE_FINISH);
     modules_term();
 
-    pidfile_rm(DPVS_PIDFILE);
+    pidfile_rm(dpvs_pid_file);
 
     exit(0);
 }

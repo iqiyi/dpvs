@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include "../include/conf/common.h"
 
-#define UNIX_DOMAIN "/var/run/dpvs_ctrl"
+static char dpvs_ipc_file[108];
 
 /* send "n" bytes to a descriptor */
 ssize_t send_n(int fd, const void *vptr, size_t n, int flags)
@@ -167,7 +167,7 @@ int dpvs_setsockopt(sockoptid_t cmd, const void *in, size_t in_len)
 
     memset(&clt_addr, 0, sizeof(struct sockaddr_un));
     clt_addr.sun_family = AF_UNIX;
-    strncpy(clt_addr.sun_path, UNIX_DOMAIN, sizeof(clt_addr.sun_path) - 1);
+    strncpy(clt_addr.sun_path, dpvs_ipc_file, sizeof(clt_addr.sun_path) - 1);
 
     msg_len = sizeof(struct dpvs_sock_msg);
     msg = malloc(msg_len);
@@ -235,7 +235,7 @@ int dpvs_getsockopt(sockoptid_t cmd, const void *in, size_t in_len,
 
     memset(&clt_addr, 0, sizeof(struct sockaddr_un));
     clt_addr.sun_family = AF_UNIX;
-    strncpy(clt_addr.sun_path, UNIX_DOMAIN, sizeof(clt_addr.sun_path) - 1);
+    strncpy(clt_addr.sun_path, dpvs_ipc_file, sizeof(clt_addr.sun_path) - 1);
 
     msg_len = sizeof(struct dpvs_sock_msg);
     msg = malloc(msg_len);
@@ -281,5 +281,16 @@ int dpvs_getsockopt(sockoptid_t cmd, const void *in, size_t in_len,
     }
 
     close(clt_fd);
+    return ESOCKOPT_OK;
+}
+
+int dpvs_sockopt_init(void)
+{
+    const char *ipc_pfile = getenv(ENV_DPVS_IPC_FILE);
+    if (ipc_pfile) {
+        strncpy(dpvs_ipc_file, ipc_pfile, sizeof(dpvs_ipc_file)-1);
+    } else {
+        strncpy(dpvs_ipc_file, "/var/run/dpvs.ipc", sizeof(dpvs_ipc_file)-1);
+    }
     return ESOCKOPT_OK;
 }

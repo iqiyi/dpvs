@@ -21,7 +21,7 @@
  * raychen@qiyi.com, July 2017.
  */
 #include <assert.h>
-#include <linux/icmp.h>
+#include <netinet/ip_icmp.h>
 #include <netinet/icmp6.h>
 #include "dpdk.h"
 #include "conf/common.h"
@@ -99,7 +99,7 @@ static int icmp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_INVPKT;
     }
 
-    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, 0, 0, 
+    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, 0, 0,
                                mbuf, NULL, &outwall, rte_lcore_id());
     if (!svc) {
         *verdict = INET_ACCEPT;

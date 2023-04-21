@@ -282,7 +282,7 @@ static inline void dp_vs_control_add(struct dp_vs_conn *conn, struct dp_vs_conn 
                 ntohs(conn->vport));
         dp_vs_control_del(conn);
     }
-#ifdef CONFIG_OPVS_IPVS_DEBUG
+#ifdef CONFIG_DPVS_IPVS_DEBUG
     RTE_LOG(DEBUG, IPVS, "%s: Adding control for: conn.client=%s:%u "
             "ctrl_conn.client=%s:%u\n", __func__,
             inet_ntop(conn->af, &conn->caddr, cbuf, sizeof(cbuf)) ? cbuf : "::",

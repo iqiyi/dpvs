@@ -55,6 +55,10 @@
 #include <net/ipv6.h> /* ipv6_skip_exthdr */
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+#define HAVE_PROC_OPS
+#endif
+
 #define UOA_NEED_EXTRA
 #include "uoa_extra.h"
 #include "uoa.h"
@@ -226,6 +230,21 @@ static int uoa_stats_percpu_seq_open(struct inode *inode, struct file *file)
     return single_open(file, uoa_stats_percpu_show, NULL);
 }
 
+#ifdef HAVE_PROC_OPS
+static const struct proc_ops uoa_stats_fops = {
+    .proc_open = uoa_stats_seq_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+
+static const struct proc_ops uoa_stats_percpu_fops = {
+    .proc_open = uoa_stats_percpu_seq_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = single_release,
+};
+#else
 static const struct file_operations uoa_stats_fops = {
     .owner      = THIS_MODULE,
     .open       = uoa_stats_seq_open,
@@ -241,6 +260,7 @@ static const struct file_operations uoa_stats_percpu_fops = {
     .llseek     = seq_lseek,
     .release    = single_release,
 };
+#endif
 
 static int uoa_stats_init(void)
 {
@@ -520,7 +540,12 @@ flush_again:
     }
 }
 
-static int uoa_so_set(struct sock *sk, int cmd, void __user *user,
+static int uoa_so_set(struct sock *sk, int cmd,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+            void __user *user,
+#else
+            sockptr_t arg,
+#endif
             unsigned int len)
 {
     return 0;
@@ -939,6 +964,46 @@ static struct nf_hook_ops uoa_nf_hook_ops6[] __read_mostly = {
     },
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
+static int __net_init __uoa_init(struct net *net)
+{
+    int ret = -ENOMEM;
+
+    ret = nf_register_net_hooks(net, uoa_nf_hook_ops, ARRAY_SIZE(uoa_nf_hook_ops));
+    if (ret < 0)
+        goto ops_hook_fail;
+
+    ret = nf_register_net_hooks(&init_net, uoa_nf_hook_ops6,
+                           ARRAY_SIZE(uoa_nf_hook_ops6));
+    if (ret < 0)
+        goto ops6_hook_fail;
+
+    return 0;
+
+/*
+ * Error handling
+ */
+ops6_hook_fail:
+    nf_unregister_net_hooks(net, uoa_nf_hook_ops,
+                           ARRAY_SIZE(uoa_nf_hook_ops));
+ops_hook_fail:
+    return ret;
+}
+
+static void __net_exit __uoa_cleanup(struct net *net)
+{
+    nf_unregister_net_hooks(net, uoa_nf_hook_ops,
+                            ARRAY_SIZE(uoa_nf_hook_ops));
+    nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops6,
+                            ARRAY_SIZE(uoa_nf_hook_ops6));
+}
+
+static struct pernet_operations uoa_ops = {
+    .init = __uoa_init,
+    .exit = __uoa_cleanup,
+};
+#endif
+
 static __init int uoa_init(void)
 {
     int err = -ENOMEM;
@@ -958,14 +1023,7 @@ static __init int uoa_init(void)
      * to be overwirten since it handles multiple skbs.
      */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
-    err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops,
-            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops) : ARRAY_SIZE(uoa_nf_hook_ops) - 1);
-    if (err < 0) {
-        pr_err("fail to register netfilter hooks.\n");
-        goto hook_failed;
-    }
-    err = nf_register_net_hooks(&init_net, uoa_nf_hook_ops6,
-            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops6) : ARRAY_SIZE(uoa_nf_hook_ops6) - 1);
+    err = register_pernet_device(&uoa_ops);
 #else
     err = nf_register_hooks(uoa_nf_hook_ops,
             uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops) : ARRAY_SIZE(uoa_nf_hook_ops) - 1);
@@ -994,10 +1052,7 @@ stats_failed:
 static __exit void uoa_exit(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,3,0)
-    nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops,
-            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops) : ARRAY_SIZE(uoa_nf_hook_ops) - 1);
-    nf_unregister_net_hooks(&init_net, uoa_nf_hook_ops6,
-            uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops6) : ARRAY_SIZE(uoa_nf_hook_ops6) - 1);
+    unregister_pernet_device(&uoa_ops);
 #else
     nf_unregister_hooks(uoa_nf_hook_ops,
             uoa_hook_forward ? ARRAY_SIZE(uoa_nf_hook_ops) : ARRAY_SIZE(uoa_nf_hook_ops) - 1);

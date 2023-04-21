@@ -294,6 +294,7 @@ int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
     struct dp_vs_dest_entry entry;
 
     uptr->cid = rte_lcore_id();
+    uptr->index = g_lcore_id2index[uptr->cid];
     uptr->num_dests = svc->num_dests;
     list_for_each_entry(dest, &svc->dests, n_list){
         if(count >= svc->num_dests)

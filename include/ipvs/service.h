@@ -101,10 +101,6 @@ dp_vs_service_lookup(int af, uint16_t protocol,
                      const struct dp_vs_match *match,
                      bool *outwall, lcoreid_t cid);
 
-int dp_vs_match_parse(const char *srange, const char *drange,
-                      const char *iifname, const char *oifname,
-                      int af, struct dp_vs_match *match);
-
 void dp_vs_service_bind(struct dp_vs_dest *dest, struct dp_vs_service *svc);
 
 void dp_vs_service_unbind(struct dp_vs_dest *dest);

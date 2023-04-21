@@ -44,11 +44,8 @@
 #define Kni /* KNI is defined */
 #define RTE_LOGTYPE_Kni     RTE_LOGTYPE_USER1
 
-#define KNI_DEF_MBUF_SIZE       2048
-#define KNI_MBUFPOOL_ELEMS      65535
-#define KNI_MBUFPOOL_CACHE_SIZE 256
-
-static struct rte_mempool *kni_mbuf_pool[DPVS_MAX_SOCKET];
+#define KNI_RX_RING_ELEMS       2048
+bool g_kni_enabled = true;
 
 static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
                           struct rte_kni_conf *conf)
@@ -57,7 +54,7 @@ static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
 
     memset(conf, 0, sizeof(*conf));
     conf->group_id = dev->id;
-    conf->mbuf_size = KNI_DEF_MBUF_SIZE;
+    conf->mbuf_size = rte_pktmbuf_data_room_size(pktmbuf_pool[dev->socket]) - RTE_PKTMBUF_HEADROOM;
 
     /*
      * kni device should use same mac as real device,
@@ -349,6 +346,9 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
     char ring_name[RTE_RING_NAMESIZE];
     struct rte_ring *rb;
 
+    if (!g_kni_enabled)
+        return EDPVS_OK;
+
     if (!dev)
         return EDPVS_INVAL;
 
@@ -363,7 +363,7 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
 
     kni_fill_conf(dev, kniname, &conf);
 
-    kni = rte_kni_alloc(kni_mbuf_pool[dev->socket], &conf, NULL);
+    kni = rte_kni_alloc(pktmbuf_pool[dev->socket], &conf, NULL);
     if (!kni)
         return EDPVS_DPDKAPIFAIL;
 
@@ -375,7 +375,7 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
 
     snprintf(ring_name, sizeof(ring_name), "kni_rx_ring_%s",
              conf.name);
-    rb = rte_ring_create(ring_name, KNI_DEF_MBUF_SIZE,
+    rb = rte_ring_create(ring_name, KNI_RX_RING_ELEMS,
                          rte_socket_id(), RING_F_SC_DEQ);
     if (unlikely(!rb)) {
         RTE_LOG(ERR, KNI, "[%s] Failed to create kni rx ring.\n", __func__);
@@ -393,6 +393,9 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
 
 int kni_del_dev(struct netif_port *dev)
 {
+    if (!g_kni_enabled)
+        return EDPVS_OK;
+
     if (!kni_dev_exist(dev))
         return EDPVS_INVAL;
 
@@ -686,18 +689,11 @@ static struct dpvs_sockopts kni_sockopts = {
 
 int kni_init(void)
 {
-    int i;
-    char poolname[32];
+    if (!g_kni_enabled)
+        return EDPVS_OK;
 
-    for (i = 0; i < get_numa_nodes(); i++) {
-        memset(poolname, 0, sizeof(poolname));
-        snprintf(poolname, sizeof(poolname) - 1, "kni_mbuf_pool_%d", i);
-
-        kni_mbuf_pool[i] = rte_pktmbuf_pool_create(poolname, KNI_MBUFPOOL_ELEMS,
-                KNI_MBUFPOOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, i);
-        if (!kni_mbuf_pool[i])
-            rte_exit(EXIT_FAILURE, "Fail to create pktmbuf_pool for kni.");
-    }
+    if (rte_kni_init(NETIF_MAX_KNI) < 0)
+        rte_exit(EXIT_FAILURE, "rte_kni_init failed");
 
     return EDPVS_OK;
 }
@@ -705,6 +701,9 @@ int kni_init(void)
 int kni_ctrl_init(void)
 {
     int err;
+
+    if (!g_kni_enabled)
+        return EDPVS_OK;
 
     err = sockopt_register(&kni_sockopts);
     if (err != EDPVS_OK) {
@@ -719,6 +718,9 @@ int kni_ctrl_init(void)
 int kni_ctrl_term(void)
 {
     int err;
+
+    if (!g_kni_enabled)
+        return EDPVS_OK;
 
     err = sockopt_unregister(&kni_sockopts);
     if (err != EDPVS_OK) {
