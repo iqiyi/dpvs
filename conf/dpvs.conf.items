@@ -40,6 +40,7 @@ netif_defs {
         }
     !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>
+    !    allmulticast                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
     }
 
@@ -56,6 +57,7 @@ netif_defs {
         }
     !    mtu                    1500
     !    promisc_mode
+    !    allmulticast                       <disable>
     !    kni_name               dpdk1.kni
     }
 

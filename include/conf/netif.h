@@ -103,6 +103,7 @@ typedef struct netif_nic_basic_get
     portid_t port_id;
     uint16_t mtu;
     uint16_t promisc:1; /* promiscuous mode */
+    uint16_t allmulticast:1;
     uint16_t fwd2kni:1;
     uint16_t tc_egress:1;
     uint16_t tc_ingress:1;
@@ -224,6 +225,8 @@ typedef struct netif_nic_set {
     char macaddr[18];
     uint16_t promisc_on:1;
     uint16_t promisc_off:1;
+    uint16_t allmulticast_on:1;
+    uint16_t allmulticast_off:1;
     uint16_t link_status_up:1;
     uint16_t link_status_down:1;
     uint16_t forward2kni_on:1;

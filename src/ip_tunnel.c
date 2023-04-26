@@ -934,3 +934,15 @@ int ip_tunnel_get_promisc(struct netif_port *dev, bool *promisc)
         return EDPVS_OK;
     }
 }
+
+int ip_tunnel_get_allmulticast(struct netif_port *dev, bool *allmulticast)
+{
+    struct ip_tunnel *tnl = netif_priv(dev);
+
+    if (tnl->link) {
+        return netif_get_allmulticast(tnl->link, allmulticast);
+    } else {
+        *allmulticast = false;
+        return EDPVS_OK;
+    }
+}

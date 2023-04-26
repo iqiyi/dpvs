@@ -104,6 +104,7 @@ struct port_conf_stream {
     int tx_desc_nb;
 
     bool promisc_mode;
+    bool allmulticast;
 
     struct list_head port_list_node;
 };
@@ -297,6 +298,7 @@ static void device_handler(vector_t tokens)
     port_cfg->mtu = NETIF_DEFAULT_ETH_MTU;
 
     port_cfg->promisc_mode = false;
+    port_cfg->allmulticast = false;
     strncpy(port_cfg->rss, "tcp", sizeof(port_cfg->rss));
 
     list_add(&port_cfg->port_list_node, &port_list);
@@ -418,6 +420,13 @@ static void promisc_mode_handler(vector_t tokens)
     struct port_conf_stream *current_device = list_entry(port_list.next,
             struct port_conf_stream, port_list_node);
     current_device->promisc_mode = true;
+}
+
+static void allmulticast_handler(vector_t tokens)
+{
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+    current_device->allmulticast = true;
 }
 
 static void custom_mtu_handler(vector_t tokens)
@@ -897,6 +906,7 @@ void install_netif_keywords(void)
     install_keyword("descriptor_number", tx_desc_nb_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
+    install_keyword("allmulticast", allmulticast_handler, KW_TYPE_INIT);
     install_keyword("mtu", custom_mtu_handler,KW_TYPE_INIT);
     install_keyword("kni_name", kni_name_handler, KW_TYPE_INIT);
     install_sublevel_end();
@@ -3514,7 +3524,18 @@ int netif_get_promisc(struct netif_port *dev, bool *promisc)
     if (dev->netif_ops->op_get_promisc)
         return dev->netif_ops->op_get_promisc(dev, promisc);
 
-    *promisc = rte_eth_promiscuous_get((uint8_t)dev->id) ? true : false;
+    *promisc = rte_eth_promiscuous_get(dev->id) ? true : false;
+    return EDPVS_OK;
+}
+
+int netif_get_allmulticast(struct netif_port *dev, bool *allmulticast)
+{
+    assert(dev && dev->netif_ops && allmulticast);
+
+    if (dev->netif_ops->op_get_allmulticast)
+        return dev->netif_ops->op_get_allmulticast(dev, allmulticast);
+
+    *allmulticast = rte_eth_allmulticast_get(dev->id) ? true : false;
     return EDPVS_OK;
 }
 
@@ -3642,7 +3663,7 @@ static void adapt_device_conf(portid_t port_id, uint64_t *rss_hf,
 
 /* fill in rx/tx queue configurations, including queue number,
  * decriptor number, bonding device's rss */
-static void fill_port_config(struct netif_port *port, char *promisc_on)
+static void fill_port_config(struct netif_port *port, char *promisc_on, char *allmulticast)
 {
     assert(port);
 
@@ -3737,6 +3758,12 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         else
             *promisc_on = 0;
     }
+    if (allmulticast) {
+        if (cfg_stream && cfg_stream->allmulticast)
+            *allmulticast = 1;
+        else
+            *allmulticast = 0;
+    }
 }
 
 static int add_bond_slaves(struct netif_port *port)
@@ -3807,7 +3834,7 @@ int netif_port_start(struct netif_port *port)
     int ii, ret;
     lcoreid_t cid;
     queueid_t qid;
-    char promisc_on;
+    char promisc_on, allmulticast;
     char buf[512];
     struct rte_eth_txconf txconf;
     struct rte_eth_link link;
@@ -3817,7 +3844,7 @@ int netif_port_start(struct netif_port *port)
     if (unlikely(NULL == port))
         return EDPVS_INVAL;
 
-    fill_port_config(port, &promisc_on);
+    fill_port_config(port, &promisc_on, &allmulticast);
     if (!port->nrxq && !port->ntxq) {
         RTE_LOG(WARNING, NETIF, "%s: no queues to setup for %s\n", __func__, port->name);
         return EDPVS_DPDKAPIFAIL;
@@ -3934,6 +3961,12 @@ int netif_port_start(struct netif_port *port)
     if (promisc_on) {
         RTE_LOG(INFO, NETIF, "promiscous mode enabled for device %s\n", port->name);
         rte_eth_promiscuous_enable(port->id);
+    }
+
+    // enable allmulticast mode if configured
+    if (allmulticast) {
+        RTE_LOG(INFO, NETIF, "allmulticast enabled for device %s\n", port->name);
+        rte_eth_allmulticast_enable(port->id);
     }
 
      /* update mac addr to netif_port and netif_kni after start */
@@ -4655,6 +4688,7 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
     struct rte_eth_link link;
     netif_nic_basic_get_t *get;
     bool promisc;
+    bool allmulticast;
     int err;
 
     get = rte_zmalloc(NULL, sizeof(netif_nic_basic_get_t),
@@ -4712,6 +4746,13 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
         return err;
     }
     get->promisc = promisc ? 1 : 0;
+
+    err = netif_get_allmulticast(port, &allmulticast);
+    if (err != EDPVS_OK) {
+        rte_free(get);
+        return err;
+    }
+    get->allmulticast = allmulticast ? 1 : 0;
 
     if (port->flag & NETIF_PORT_FLAG_FORWARD2KNI)
         get->fwd2kni = 1;
@@ -5073,17 +5114,25 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
     assert(port_cfg);
 
     if (port_cfg->promisc_on) {
-        if (!rte_eth_promiscuous_get(port->id)) {
+        if (rte_eth_promiscuous_get(port->id) != 1)
             rte_eth_promiscuous_enable(port->id);
-            RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s enabled\n",
-                    __func__, port_cfg->pname);
-        }
+        RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s enabled\n", __func__, port_cfg->pname);
     } else if (port_cfg->promisc_off) {
-        if (rte_eth_promiscuous_get(port->id)) {
+        if (rte_eth_promiscuous_get(port->id) != 0)
             rte_eth_promiscuous_disable(port->id);
-            RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s disabled\n",
-                    __func__, port_cfg->pname);
+        RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s disabled\n", __func__, port_cfg->pname);
+    }
+
+    if (port_cfg->allmulticast_on) {
+        if (rte_eth_allmulticast_get(port->id) != 1)
+            rte_eth_allmulticast_enable(port->id);
+        RTE_LOG(INFO, NETIF, "[%s] allmulticast for %s enabled\n", __func__, port_cfg->pname);
+    } else if (port_cfg->allmulticast_off) {
+        if (rte_eth_allmulticast_get(port->id) != 0) {
+            rte_eth_allmulticast_disable(port->id);
+            netif_set_mc_list(port);
         }
+        RTE_LOG(INFO, NETIF, "[%s] allmulticast for %s disabled\n", __func__, port_cfg->pname);
     }
 
     if (port_cfg->forward2kni_on) {
