@@ -192,7 +192,9 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add, bool is_master)
 
     if (add) {
         err = idev_mc_add(ifa->af, ifa->idev, &iaddr);
-        if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST)
+        if (EDPVS_EXIST == err)
+            return EDPVS_OK;
+        if (err)
             return err;
         if (is_master) {
             err = netif_mc_add(ifa->idev->dev, &eaddr);
@@ -203,7 +205,9 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add, bool is_master)
         }
     } else {
         err = idev_mc_del(ifa->af, ifa->idev, &iaddr);
-        if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST)
+        if (EDPVS_NOTEXIST == err)
+            return EDPVS_OK;
+        if (err)
             return err;
         if (is_master) {
             err = netif_mc_del(ifa->idev->dev, &eaddr);

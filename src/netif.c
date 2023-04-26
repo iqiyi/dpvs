@@ -3289,25 +3289,21 @@ static int dpdk_set_mc_list(struct netif_port *dev)
 {
     struct rte_ether_addr addrs[NETIF_MAX_HWADDR];
     int err;
-    int ret;
     size_t naddr = NELEMS(addrs);
+
+    if (rte_eth_allmulticast_get(dev->id) == 1)
+        return EDPVS_OK;
 
     err = __netif_mc_dump(dev, addrs, &naddr);
     if (err != EDPVS_OK)
         return err;
 
-    ret = rte_eth_dev_set_mc_addr_list((uint8_t)dev->id, addrs, naddr);
-    if (ret == -ENOTSUP) {
-        /* If nic doesn't support to set multicast filter, enable all. */
-        RTE_LOG(WARNING, NETIF, "%s: rte_eth_dev_set_mc_addr_list is not supported, "
-                "enable all multicast.\n", __func__);
+    err = rte_eth_dev_set_mc_addr_list(dev->id, addrs, naddr);
+    if (err) {
+        RTE_LOG(WARNING, NETIF, "%s: rte_eth_dev_set_mc_addr_list failed -- %s,"
+                "enable all multicast\n", dev->name, rte_strerror(-err));
         rte_eth_allmulticast_enable(dev->id);
-        return  EDPVS_OK;
-    }
-    if (ret) {
-        RTE_LOG(WARNING, NETIF, "%s: rte_eth_dev_set_mc_addr_list failed -- %s",
-                dev->name, rte_strerror(ret));
-        return EDPVS_DPDKAPIFAIL;
+        return EDPVS_OK;
     }
 
     return EDPVS_OK;
