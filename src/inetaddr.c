@@ -175,7 +175,7 @@ static int idev_mc_del(int af, struct inet_device *idev,
     return EDPVS_OK;
 }
 
-static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add)
+static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add, bool is_master)
 {
     int err;
     union inet_addr iaddr;
@@ -194,19 +194,23 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add)
         err = idev_mc_add(ifa->af, ifa->idev, &iaddr);
         if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST)
             return err;
-        err = netif_mc_add(ifa->idev->dev, &eaddr);
-        if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST) {
-            idev_mc_del(ifa->af, ifa->idev, &iaddr);
-            return err;
+        if (is_master) {
+            err = netif_mc_add(ifa->idev->dev, &eaddr);
+            if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST) {
+                idev_mc_del(ifa->af, ifa->idev, &iaddr);
+                return err;
+            }
         }
     } else {
         err = idev_mc_del(ifa->af, ifa->idev, &iaddr);
         if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST)
             return err;
-        err = netif_mc_del(ifa->idev->dev, &eaddr);
-        if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST) {
-            idev_mc_add(ifa->af, ifa->idev, &iaddr);
-            return err;
+        if (is_master) {
+            err = netif_mc_del(ifa->idev->dev, &eaddr);
+            if (err && err != EDPVS_EXIST && err != EDPVS_NOTEXIST) {
+                idev_mc_add(ifa->af, ifa->idev, &iaddr);
+                return err;
+            }
         }
     }
 
@@ -220,6 +224,7 @@ int idev_add_mcast_init(void *args)
     struct inet_device *idev;
     union inet_addr all_nodes, all_routers;
     struct rte_ether_addr eaddr_nodes, eaddr_routers;
+    bool is_master = (rte_lcore_id() == g_master_lcore_id);
 
     struct netif_port *dev = (struct netif_port *) args;
 
@@ -238,17 +243,21 @@ int idev_add_mcast_init(void *args)
     if (err != EDPVS_OK)
         goto errout;
 
-    err = netif_mc_add(idev->dev, &eaddr_nodes);
-    if (err != EDPVS_OK)
-        goto free_idev_nodes;
+    if (is_master) {
+        err = netif_mc_add(idev->dev, &eaddr_nodes);
+        if (err != EDPVS_OK)
+            goto free_idev_nodes;
+    }
 
     err = idev_mc_add(AF_INET6, idev, &all_routers);
     if (err != EDPVS_OK)
         goto free_netif_nodes;
 
-    err = netif_mc_add(idev->dev, &eaddr_routers);
-    if (err != EDPVS_OK)
-        goto free_idev_routers;
+    if (is_master) {
+        err = netif_mc_add(idev->dev, &eaddr_routers);
+        if (err != EDPVS_OK)
+            goto free_idev_routers;
+    }
 
     idev_put(idev);
     return EDPVS_OK;
@@ -256,7 +265,8 @@ int idev_add_mcast_init(void *args)
 free_idev_routers:
     idev_mc_del(AF_INET6, idev, &all_routers);
 free_netif_nodes:
-    netif_mc_del(idev->dev, &eaddr_nodes);
+    if (is_master)
+        netif_mc_del(idev->dev, &eaddr_nodes);
 free_idev_nodes:
     idev_mc_del(AF_INET6, idev, &all_nodes);
 errout:
@@ -783,7 +793,7 @@ static int ifa_entry_add(const struct ifaddr_action *param)
     struct inet_device *idev;
     struct inet_ifaddr *ifa;
     struct timeval timeo = { 0 };
-    bool is_master = (rte_lcore_id() == rte_get_main_lcore());
+    bool is_master = (rte_lcore_id() == g_master_lcore_id);
 
     if (!param || !param->dev || !ifa_prefix_check(param->af,
                 &param->addr, param->plen))
@@ -839,7 +849,7 @@ static int ifa_entry_add(const struct ifaddr_action *param)
     dpvs_time_now(&ifa->tstemp, is_master); /* mod time */
     dpvs_time_now(&ifa->cstemp, is_master); /* create time */
 
-    err = ifa_add_del_mcast(ifa, true);
+    err = ifa_add_del_mcast(ifa, true, is_master);
     if (err != EDPVS_OK)
         goto free_ifa;
 
@@ -883,7 +893,7 @@ static int ifa_entry_add(const struct ifaddr_action *param)
 del_route:
     ifa_del_route(ifa);
 del_mc:
-    ifa_add_del_mcast(ifa, false);
+    ifa_add_del_mcast(ifa, false, is_master);
 free_ifa:
     rte_free(ifa);
 errout:
@@ -900,7 +910,7 @@ static int ifa_entry_mod(const struct ifaddr_action *param)
     struct inet_device *idev;
     struct inet_ifaddr *ifa;
     struct timeval timeo = { 0 };
-    bool is_master = (rte_lcore_id() == rte_get_main_lcore());
+    bool is_master = (rte_lcore_id() == g_master_lcore_id);
 
     if (!param || !param->dev || !ifa_prefix_check(param->af,
                 &param->addr, param->plen))
@@ -1034,6 +1044,7 @@ static void ifa_free(struct inet_ifaddr **ifa_p)
     char ipstr[64];
     struct inet_ifaddr *ifa;
     lcoreid_t cid = rte_lcore_id();
+    bool is_master = (cid == g_master_lcore_id);
 
     assert(ifa_p != NULL && *ifa_p != NULL);
     ifa = *ifa_p;
@@ -1041,7 +1052,7 @@ static void ifa_free(struct inet_ifaddr **ifa_p)
     /* remove @ifa from @ifa_expired_list */
     list_del_init(&ifa->h_list);
 
-    if (cid == rte_get_main_lcore()) {
+    if (is_master) {
         /* it's safe to cancel timer not pending but zeroed */
         dpvs_timer_cancel(&ifa->dad_timer, true);
         dpvs_timer_cancel(&ifa->timer, true);
@@ -1052,7 +1063,7 @@ static void ifa_free(struct inet_ifaddr **ifa_p)
      *   If sapool destroyed here, the ifa would not be freed.
      * */
 
-    ifa_add_del_mcast(ifa, false);
+    ifa_add_del_mcast(ifa, false, is_master);
     ifa_del_route(ifa);
 
     /* release @idev held by @ifa */
