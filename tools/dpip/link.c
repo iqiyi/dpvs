@@ -350,16 +350,20 @@ static int dump_nic_verbose(char *name, int namelen)
             ext_get->dev_info.speed_capa);
 
     if (ext_get->cfg_queues.data_len) {
-        assert(ext_get->cfg_queues.data_len == strlen(ext_get->data +
-                    ext_get->cfg_queues.data_offset));
         printf("    Queue Configuration:\n%s", ext_get->data +
                 ext_get->cfg_queues.data_offset);
+        if (ext_get->cfg_queues.data_len > strlen(ext_get->data +
+                    ext_get->cfg_queues.data_offset)) {
+            printf("     ... (truncated)");
+        }
     }
 
     if (ext_get->mc_list.data_len) {
-        assert(ext_get->mc_list.data_len == strlen(ext_get->data +
-                    ext_get->mc_list.data_offset));
         printf("    HW mcast list:\n%s", ext_get->data + ext_get->mc_list.data_offset);
+        if (ext_get->mc_list.data_len > strlen(ext_get->data +
+                    ext_get->mc_list.data_offset)) {
+            printf("     ... (truncated)");
+        }
     }
 
     dpvs_sockopt_msg_free(ext_get);
