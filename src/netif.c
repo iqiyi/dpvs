@@ -2212,7 +2212,7 @@ static inline int validate_xmit_mbuf(struct rte_mbuf *mbuf,
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     lcoreid_t cid;
-    int pid, qindex;
+    int pid, qindex, ntxq;
     struct netif_queue_conf *txq;
     struct netif_ops *ops;
     int ret = EDPVS_OK;
@@ -2268,9 +2268,15 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 
     /* port id is determined by routing */
     pid = dev->id;
+    ntxq = lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].ntxq;
+    if (unlikely(ntxq <= 0)) {
+        RTE_LOG(WARNING, NETIF, "%s: no txq on device %s, drop the sending packet\n", __func__, dev->name);
+        rte_pktmbuf_free(mbuf);
+        lcore_stats[cid].dropped++;
+        return EDPVS_RESOURCE;
+    }
     /* qindex is hashed by physical address of mbuf */
-    qindex = (((uint32_t) mbuf->buf_iova) >> 8) %
-        (lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].ntxq);
+    qindex = (((uint32_t) mbuf->buf_iova) >> 8) % ntxq;
     //RTE_LOG(DEBUG, NETIF, "tx-queue hash(%x) = %d\n", ((uint32_t)mbuf->buf_iova) >> 8, qindex);
     txq = &lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].txqs[qindex];
 
