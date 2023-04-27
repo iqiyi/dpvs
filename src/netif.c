@@ -160,6 +160,16 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 /* function declarations */
 static void kni_lcore_loop(void *dummy);
 
+static inline bool is_physical_port(portid_t pid)
+{
+    return pid >= phy_pid_base && pid < phy_pid_end;
+}
+
+static inline bool is_bond_port(portid_t pid)
+{
+    return pid >= bond_pid_base && pid < bond_pid_end;
+}
+
 bool is_lcore_id_valid(lcoreid_t cid)
 {
     if (unlikely(cid >= DPVS_MAX_LCORE))
@@ -3152,7 +3162,7 @@ static inline int port_name_alloc(portid_t pid, char *pname, size_t buflen)
 {
     assert(pname && buflen > 0);
     memset(pname, 0, buflen);
-    if (pid >= phy_pid_base && pid < phy_pid_end) {
+    if (is_physical_port(pid)) {
         struct port_conf_stream *current_cfg;
         list_for_each_entry_reverse(current_cfg, &port_list, port_list_node) {
             if (current_cfg->port_id < 0) {
@@ -3166,7 +3176,7 @@ static inline int port_name_alloc(portid_t pid, char *pname, size_t buflen)
         }
         RTE_LOG(ERR, NETIF, "%s: not enough ports configured in dpvs.conf\n", __func__);
         return EDPVS_NOTEXIST;
-    } else if (pid >= bond_pid_base && pid < bond_pid_end) {
+    } else if (is_bond_port(pid)) {
         struct bond_conf_stream *current_cfg;
         list_for_each_entry_reverse(current_cfg, &bond_list, bond_list_node) {
             if (current_cfg->port_id == pid) {
@@ -3396,10 +3406,10 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
 
     port->id = id;
     port->bond = (union netif_bond *)(port + 1);
-    if (id >= phy_pid_base && id < phy_pid_end) {
+    if (is_physical_port(id)) {
         port->type = PORT_TYPE_GENERAL; /* update later in netif_rte_port_alloc */
         port->netif_ops = &dpdk_netif_ops;
-    } else if (id >= bond_pid_base && id < bond_pid_end) {
+    } else if (is_bond_port(id)) {
         port->type = PORT_TYPE_BOND_MASTER;
         port->netif_ops = &bond_netif_ops;
     } else {
@@ -4831,7 +4841,7 @@ static int get_port_ext_info(struct netif_port *port, void **out, size_t *out_le
 {
     assert(out || out_len);
 
-    struct rte_eth_dev_info dev_info;
+    struct rte_eth_dev_info dev_info = { 0 };
     netif_nic_ext_get_t *get, *new;
     char ctrlbuf[NETIF_CTRL_BUFFER_LEN];
     int len, naddr, err;
@@ -4844,8 +4854,10 @@ static int get_port_ext_info(struct netif_port *port, void **out, size_t *out_le
     get->port_id = port->id;
 
     /* dev info */
-    rte_eth_dev_info_get(port->id, &dev_info);
-    copy_dev_info(&get->dev_info, &dev_info);
+    if (is_physical_port( port->id) || is_bond_port(port->id)) {
+        rte_eth_dev_info_get(port->id, &dev_info);
+        copy_dev_info(&get->dev_info, &dev_info);
+    }
 
     /* cfg_queues */
     if (port->type == PORT_TYPE_GENERAL ||
