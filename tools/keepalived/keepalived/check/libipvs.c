@@ -169,7 +169,8 @@ int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int opti
         }
     }
 
-    entry.check_conf = svc->check_conf;
+    if (dest_check_configs_sanity(&svc->check_conf))
+        entry.check_conf = svc->check_conf;
 
     return dpvs_update_service(&entry);
 }

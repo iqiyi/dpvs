@@ -442,7 +442,12 @@ static int parse_dest_check(const char *optarg, struct dest_check_configs *conf)
                     &conf->dest_down_wait,
                     &conf->dest_inhibit_min,
                     &conf->dest_inhibit_max) != 5) {
-            return -1;
+            memset(conf, 0, sizeof(*conf));
+            if (sscanf(optarg, "%hhu,%hhus",
+                        &conf->dest_down_notice_num,
+                        &conf->dest_down_wait) != 2) {
+                return -1;
+            }
         }
         if (!dest_check_configs_sanity(conf))
             return -1;
@@ -1701,9 +1706,10 @@ static void usage_exit(const char *program, const int exit_status)
             "  --hash-target  hashtag              choose target for conhash (support sip or qid for quic)\n"
             "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
             "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
-            "  --dest-check   check_conf           config passive health check, inhibit scheduling to failed backends\n"
-            "                                      check_conf := disable|default|DETAIL\n"
-            "                                      DETAIL:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n",
+            "  --dest-check   CHECK_CONF           config passive health check, inhibit scheduling to failed backends\n"
+            "                                      CHECK_CONF:=disable|default|DETAIL, DETAIL:=UPDOWN|DOWNONLY\n"
+            "                                      UPDOWN:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n"
+            "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n",
         DEF_SCHED);
 
     exit(exit_status);
@@ -2142,12 +2148,18 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
         if (se->check_conf.enabled) {
             printf(" dest-check");
             if (!is_dest_check_conf_default(&se->check_conf)) {
-                printf( " %d,%d,%ds,%d-%ds",
-                        se->check_conf.dest_down_notice_num,
-                        se->check_conf.dest_up_notice_num,
-                        se->check_conf.dest_down_wait,
-                        se->check_conf.dest_inhibit_min,
-                        se->check_conf.dest_inhibit_max);
+                if (dest_check_down_only(&se->check_conf)) {
+                    printf(" %d,%ds",
+                            se->check_conf.dest_down_notice_num,
+                            se->check_conf.dest_down_wait);
+                } else {
+                    printf( " %d,%d,%ds,%d-%ds",
+                            se->check_conf.dest_down_notice_num,
+                            se->check_conf.dest_up_notice_num,
+                            se->check_conf.dest_down_wait,
+                            se->check_conf.dest_inhibit_min,
+                            se->check_conf.dest_inhibit_max);
+                }
             }
         }
     }

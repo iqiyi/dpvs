@@ -107,18 +107,26 @@ struct dp_vs_getinfo {
 };
 
 static inline bool
+dest_check_down_only(const struct dest_check_configs *conf) {
+    return !(conf->dest_inhibit_min
+            | conf->dest_inhibit_max | conf->dest_up_notice_num);
+}
+
+static inline bool
 dest_check_configs_sanity(struct dest_check_configs *conf) {
     bool res = true;
     if (conf->dest_down_notice_num < 1) {
         conf->dest_down_notice_num = DEST_DOWN_NOTICE_DEFAULT;
         res = false;
     }
-    if (conf->dest_up_notice_num < 1) {
-        conf->dest_up_notice_num = DEST_UP_NOTICE_DEFAULT;
-        res = false;
-    }
     if (conf->dest_down_wait < 1) {
         conf->dest_down_wait = DEST_DOWN_WAIT_DURATION;
+        res = false;
+    }
+    if (dest_check_down_only(conf))
+        return res;
+    if (conf->dest_up_notice_num < 1) {
+        conf->dest_up_notice_num = DEST_UP_NOTICE_DEFAULT;
         res = false;
     }
     if (conf->dest_inhibit_min < 1) {
