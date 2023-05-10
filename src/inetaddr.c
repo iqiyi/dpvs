@@ -1121,6 +1121,7 @@ static void fill_ifaddr_entry(lcoreid_t cid, const struct inet_ifaddr *ifa, stru
     }
 }
 
+#ifdef CONFIG_DPVS_AGENT
 static void fill_ifaddr_basic(lcoreid_t cid, const struct inet_ifaddr *ifa, struct inet_addr_entry *entry)
 {
     entry->af       = ifa->af;
@@ -1167,6 +1168,7 @@ static int agent_copy_lcore_entries(const struct inet_device *idev, struct inet_
     }
     return EDPVS_OK;
 }
+#endif /* CONFIG_DPVS_AGENT */
 
 static int copy_lcore_entries(const struct inet_device *idev,
                               int max_entries, struct inet_addr_data_array *array)
@@ -1526,6 +1528,8 @@ static int inet_addr_sync(const struct ifaddr_action *param)
 
     return err;
 }
+
+#ifdef CONFIG_DPVS_AGENT
 static int ifaddr_agent_get_basic(struct inet_device *idev, struct inet_addr_front** parray, int *plen)
 {
     lcoreid_t cid;
@@ -1558,6 +1562,7 @@ static int ifaddr_agent_get_basic(struct inet_device *idev, struct inet_addr_fro
     *plen   = len;
     return EDPVS_OK;
 }
+#endif /* CONFIG_DPVS_AGENT */
 
 static int ifaddr_get_basic(struct inet_device *idev, struct inet_addr_data_array **parray, int *plen)
 {
@@ -1590,6 +1595,7 @@ static int ifaddr_get_basic(struct inet_device *idev, struct inet_addr_data_arra
     return EDPVS_OK;
 }
 
+#ifdef CONFIG_DPVS_AGENT
 static int ifaddr_agent_get_stats(struct inet_device *idev, struct inet_addr_front **parray, int *plen)
 {
     int err, i;
@@ -1656,6 +1662,7 @@ errout:
     }
     return err;
 }
+#endif /* CONFIG_DPVS_AGENT */
 
 static int ifaddr_get_stats(struct inet_device *idev, struct inet_addr_data_array **parray, int *plen)
 {
@@ -1799,8 +1806,12 @@ static int ifa_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 
     if (opt >= SOCKOPT_SET_IFADDR_ADD && opt <= SOCKOPT_SET_IFADDR_FLUSH)
         entry = &param->ifa_entry;
+#ifdef CONFIG_DPVS_AGENT
     else if (opt >= DPVSAGENT_IFADDR_ADD && opt <= DPVSAGENT_IFADDR_DEL)
         entry = conf;
+#endif
+    else
+        return EDPVS_INVAL;
 
     if (opt != SOCKOPT_SET_IFADDR_FLUSH) {
         if (!ifa_prefix_check(entry->af,
@@ -1821,8 +1832,10 @@ static int ifa_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     }
 
     switch (opt) {
+#ifdef CONFIG_DPVS_AGENT
         case DPVSAGENT_IFADDR_ADD:
             /*fallthrough*/
+#endif
         case SOCKOPT_SET_IFADDR_ADD:
             return inet_addr_add(entry->af, dev,
                                  &entry->addr,
@@ -1832,9 +1845,10 @@ static int ifa_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
                                  entry->prefered_lft,
                                  entry->scope,
                                  entry->flags);
-
+#ifdef CONFIG_DPVS_AGENT
         case DPVSAGENT_IFADDR_DEL:
             /*fallthrough*/
+#endif
         case SOCKOPT_SET_IFADDR_DEL:
             return inet_addr_del(entry->af, dev,
                                  &entry->addr,
@@ -1852,7 +1866,6 @@ static int ifa_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         case SOCKOPT_SET_IFADDR_FLUSH:
             return inet_addr_flush(entry->af, dev);
 
-
         default:
             return EDPVS_NOTSUPP;
     }
@@ -1860,6 +1873,7 @@ static int ifa_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     return EDPVS_OK;
 }
 
+#ifdef CONFIG_DPVS_AGENT
 static int ifa_sockopt_agent_get(sockoptid_t opt, const void *conf, size_t size, void **out, size_t *outsize) {
     struct netif_port *dev;
     struct inet_device *idev = NULL;
@@ -1907,6 +1921,7 @@ static int ifa_sockopt_agent_get(sockoptid_t opt, const void *conf, size_t size,
     *outsize = len;
     return EDPVS_OK;
 }
+#endif /* CONFIG_DPVS_AGENT */
 
 static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                            void **out, size_t *outsize)
@@ -1996,6 +2011,7 @@ static struct dpvs_msg_type ifa_msg_types[] = {
     }
 };
 
+#ifdef CONFIG_DPVS_AGENT
 static struct dpvs_sockopts agent_ifa_sockopts = {
     .version        = SOCKOPT_VERSION,
     .set_opt_min    = DPVSAGENT_IFADDR_ADD,
@@ -2005,6 +2021,7 @@ static struct dpvs_sockopts agent_ifa_sockopts = {
     .get_opt_max    = DPVSAGENT_IFADDR_GET_VERBOSE,
     .get            = ifa_sockopt_agent_get,
 };
+#endif
 
 static struct dpvs_sockopts ifa_sockopts = {
     .version        = SOCKOPT_VERSION,
@@ -2038,12 +2055,14 @@ int inet_addr_init(void)
         return err;
     }
 
+#ifdef CONFIG_DPVS_AGENT
     if ((err = sockopt_register(&agent_ifa_sockopts)) != EDPVS_OK) {
         RTE_LOG(ERR, IFA, "%s: fail to register agent_ifa_sockopts -- %s\n",
                 __func__, dpvs_strerror(err));
         sockopt_unregister(&ifa_sockopts);
         return err;
     }
+#endif
 
     for (ii = 0; ii < NELEMS(ifa_msg_types); ii++) {
         switch (ifa_msg_types[ii].mode) {
@@ -2070,7 +2089,9 @@ int inet_addr_init(void)
                         break;
                 }
             }
+#ifdef CONFIG_DPVS_AGENT
             sockopt_unregister(&agent_ifa_sockopts);
+#endif
             sockopt_unregister(&ifa_sockopts);
             return err;
         }
@@ -2084,10 +2105,13 @@ int inet_addr_term(void)
     int ii, err = EDPVS_OK;
 
     /* TODO: flush all address */
+
+#ifdef CONFIG_DPVS_AGENT
     if ((err = sockopt_unregister(&agent_ifa_sockopts)) != EDPVS_OK) {
         RTE_LOG(ERR, IFA, "%s: fail to unregister ifa_sockopts -- %s\n",
                 __func__, dpvs_strerror(err));
     }
+#endif
 
     if ((err = sockopt_unregister(&ifa_sockopts)) != EDPVS_OK) {
         RTE_LOG(ERR, IFA, "%s: fail to unregister ifa_sockopts -- %s\n",

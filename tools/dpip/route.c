@@ -35,12 +35,8 @@ static void route_help(void)
         "Parameters:\n"
         "    ROUTE      := PREFIX [ via ADDR ] [ dev IFNAME ] [ OPTIONS ]\n"
         "    PREFIX     := { ADDR/PLEN | ADDR | default }\n"
-        "    OPTIONS    := [ SCOPE | mtu MTU | src ADDR | tos TOS\n"
-        "                    | metric NUM | PROTOCOL | FLAGS ]\n"
+        "    OPTIONS    := [ SCOPE | mtu MTU | src ADDR | metric NUM ]\n"
         "    SCOPE      := [ scope { host | link | global | NUM } ]\n"
-        "    PROTOCOL   := [ proto { auto | boot | static | ra | NUM } ]\n"
-        "    FLAGS      := [ onlink | local ]\n"
-        "    TABLE      := [ table outwall ]\n"
         "Examples:\n"
         "    dpip route show\n"
         "    dpip route add default via 10.0.0.1\n"
@@ -51,9 +47,6 @@ static void route_help(void)
         "    dpip route del 172.0.0.0/16\n"
         "    dpip route set 172.0.0.0/16 via 172.0.0.1\n"
         "    dpip route flush\n"
-        "    dpip route show table outwall\n"
-        "    dpip route add default via 10.0.0.1 dev dpdk1 table outwall\n"
-        "    dpip route del default via 10.0.0.1 dev dpdk1 table outwall\n"
         );
 }
 

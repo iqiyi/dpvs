@@ -90,6 +90,11 @@ typedef struct dp_vs_dest_table {
     dpvs_dest_compat_t entrytable[0];
 } dpvs_dest_table_t;
 
+#define  dp_vs_get_dests  dp_vs_dest_table
+#define  dp_vs_dest_entry dp_vs_dest_compat
+#define  dp_vs_dest_conf  dp_vs_dest_compat
+
+#ifdef CONFIG_DPVS_AGENT
 typedef struct dp_vs_dest_front {
     uint32_t           af;
     uint16_t           proto;
@@ -101,10 +106,7 @@ typedef struct dp_vs_dest_front {
     uint32_t           cid;
     uint32_t           index;
 } dpvs_dest_front_t;
-
-#define  dp_vs_get_dests  dp_vs_dest_table
-#define  dp_vs_dest_entry dp_vs_dest_compat
-#define  dp_vs_dest_conf  dp_vs_dest_compat
 #define  dp_vs_dest_detail dp_vs_dest_compat
+#endif
 
 #endif /* __DPVS_DEST_CONF_H__ */

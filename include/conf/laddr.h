@@ -56,6 +56,7 @@ typedef struct dp_vs_laddr_conf {
     struct dp_vs_laddr_entry laddrs[0];
 } dpvs_laddr_table_t;
 
+#ifdef CONFIG_DPVS_AGENT
 typedef struct dp_vs_laddr_detail {
     uint32_t af;
     uint32_t conns;
@@ -75,5 +76,6 @@ typedef struct dp_vs_laddr_front {
     struct dp_vs_match match;
     struct dp_vs_laddr_detail laddrs[0];
 } dpvs_laddr_front_t;
+#endif /* CONFIG_DPVS_AGENT */
 
 #endif /* __DPVS_LADDR_CONF_H__ */

@@ -86,6 +86,7 @@ struct inet_addr_data_array {
     struct inet_addr_data   addrs[0];
 } __attribute__((__packed__));
 
+#ifdef CONFIG_DPVS_AGENT
 struct inet_addr_stats_detail {
     union inet_addr     addr;
     uint32_t            sa_used;
@@ -97,5 +98,6 @@ struct inet_addr_front {
     int count;
     int data[0];
 };
+#endif /* CONFIG_DPVS_AGENT */
 
 #endif /* __DPVS_INETADDR_CONF_H__ */

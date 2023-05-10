@@ -2219,10 +2219,10 @@ static int list_laddrs(dpvs_service_compat_t* desc)
 static int list_all_laddrs(lcoreid_t index)
 {
     int i;
-    dpvs_agent_services_front_t* table;
+    dpvs_services_front_t* table;
     struct ip_vs_get_laddrs   *d = NULL;
 
-    table = (dpvs_agent_services_front_t*)malloc(sizeof(dpvs_agent_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
@@ -2325,9 +2325,9 @@ static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint1
 static int list_all_blklsts(void)
 {
     int i;
-    dpvs_agent_services_front_t* table;
+    dpvs_services_front_t* table;
 
-    table = (dpvs_agent_services_front_t*)malloc(sizeof(dpvs_agent_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
@@ -2413,10 +2413,10 @@ static int list_whtlst(int af, const union inet_addr *addr, uint16_t port, uint1
 
 static int list_all_whtlsts(void)
 {
-    dpvs_agent_services_front_t* table;
+    dpvs_services_front_t* table;
     int i;
 
-    table = (dpvs_agent_services_front_t*)malloc(sizeof(dpvs_agent_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
@@ -2458,13 +2458,13 @@ static void list_service(dpvs_service_compat_t *svc, unsigned int format)
 static void list_all(unsigned int format)
 {
     int i;
-    dpvs_agent_services_front_t* table;
+    dpvs_services_front_t* table;
 
     if (!(format & FMT_RULE))
         printf("IP Virtual Server version %d.%d.%d (size=%d)\n",
                 NVERSION(g_ipvs_info.version), g_ipvs_info.size);
 
-    table = (dpvs_agent_services_front_t*)malloc(sizeof(dpvs_agent_services_front_t) + sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t) + sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);

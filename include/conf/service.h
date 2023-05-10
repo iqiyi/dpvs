@@ -74,12 +74,12 @@ typedef struct dp_vs_service_compat {
 #define dp_vs_service_entry dp_vs_service_compat
 #define dp_vs_service_user  dp_vs_service_compat
 
-typedef struct dp_vs_agent_services_front {
+typedef struct dp_vs_services_front {
     lcoreid_t cid;
     lcoreid_t index;
     uint16_t count;
     dpvs_service_compat_t entrytable[0];
-} dpvs_agent_services_front_t;
+} dpvs_services_front_t;
 
 struct dp_vs_getinfo {
     unsigned int version;

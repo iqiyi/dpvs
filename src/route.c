@@ -543,14 +543,18 @@ static int route_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         return EDPVS_INVAL;
 
     switch (opt) {
+#ifdef CONFIG_DPVS_AGENT
     case DPVSAGENT_ROUTE_ADD:
         /*fallthrough*/
+#endif
     case SOCKOPT_SET_ROUTE_ADD:
         return route_add(&dst->in, plen, flags,
                      &gw->in, dev, &src->in, mtu, metric);
 
+#ifdef CONFIG_DPVS_AGENT
     case DPVSAGENT_ROUTE_DEL:
         /*fallthrough*/
+#endif
     case SOCKOPT_SET_ROUTE_DEL:
         return route_del(&dst->in, plen, flags,
                      &gw->in, dev, &src->in, mtu, metric);
@@ -593,7 +597,7 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     struct netif_port *port = NULL;
     int off = 0;
     char *ifname = ((struct dp_vs_route_detail*)conf)->ifname;
-    if (conf && strlen(ifname)) {
+    if (ifname[0] != '\0') {
         port = netif_port_get_by_name(ifname);
         if (!port) {
             RTE_LOG(WARNING, ROUTE, "%s: no such device: %s\n",
@@ -603,9 +607,7 @@ static int route_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     }
 
     nroute = rte_atomic32_read(&this_num_routes);
-    
     *outsize = sizeof(struct dp_vs_route_conf_array) + nroute * sizeof(struct dp_vs_route_detail);
-
     *out = rte_calloc(NULL, 1, *outsize, 0);
     if (!(*out))
         return EDPVS_NOMEM;
@@ -687,6 +689,7 @@ static int route_del_msg_cb(struct dpvs_msg *msg)
     return route_msg_process(false, msg);
 }
 
+#ifdef CONFIG_DPVS_AGENT
 static struct dpvs_sockopts agent_route_sockopts = {
     .version        = SOCKOPT_VERSION,
     .set_opt_min    = DPVSAGENT_ROUTE_ADD,
@@ -696,6 +699,7 @@ static struct dpvs_sockopts agent_route_sockopts = {
     .get_opt_max    = DPVSAGENT_ROUTE_GET,
     .get            = route_sockopt_get,
 };
+#endif
 
 static struct dpvs_sockopts route_sockopts = {
     .version        = SOCKOPT_VERSION,
@@ -775,8 +779,10 @@ int route_init(void)
     if ((err = sockopt_register(&route_sockopts)) != EDPVS_OK)
         return err;
 
+#ifdef CONFIG_DPVS_AGENT
     if ((err = sockopt_register(&agent_route_sockopts)) != EDPVS_OK)
         return err;
+#endif
 
     return EDPVS_OK;
 }
@@ -786,8 +792,10 @@ int route_term(void)
     int err;
     lcoreid_t cid;
 
+#ifdef CONFIG_DPVS_AGENT
     if ((err = sockopt_unregister(&agent_route_sockopts)) != EDPVS_OK)
         return err;
+#endif
 
     if ((err = sockopt_unregister(&route_sockopts)) != EDPVS_OK)
         return err;

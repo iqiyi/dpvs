@@ -322,13 +322,14 @@ int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
     return ret;
 }
 
+#ifdef CONFIG_DPVS_AGENT
 static int dp_vs_dest_get_details(const struct dp_vs_service *svc, 
                             struct dp_vs_dest_front *uptr)
 {
     int ret = 0;
     int count = 0;
     struct dp_vs_dest *dest;
-    struct dp_vs_dest_entry entry, *detail;
+    struct dp_vs_dest_entry *detail;
 
     uptr->cid = rte_lcore_id();
     uptr->index = g_lcore_id2index[uptr->cid];
@@ -338,41 +339,26 @@ static int dp_vs_dest_get_details(const struct dp_vs_service *svc,
     list_for_each_entry(dest, &svc->dests, n_list){
         if(count >= svc->num_dests)
             break;
-        memset(&entry, 0, sizeof(entry));
-        entry.af   = dest->af;
-        entry.addr = dest->addr;
-        entry.port = dest->port;
-        entry.conn_flags = dest->fwdmode;
-        entry.weight = rte_atomic16_read(&dest->weight);
-        entry.max_conn = dest->max_conn;
-        entry.min_conn = dest->min_conn;
-        entry.actconns = rte_atomic32_read(&dest->actconns);
-        entry.inactconns = rte_atomic32_read(&dest->inactconns);
-        entry.persistconns = rte_atomic32_read(&dest->persistconns);
-        ret = dp_vs_stats_add(&(entry.stats), &dest->stats);
-        if (ret != EDPVS_OK)
+        memset(detail, 0, sizeof(*detail));
+        detail->af   = dest->af;
+        detail->addr = dest->addr;
+        detail->port = dest->port;
+        detail->conn_flags = dest->fwdmode;
+        detail->weight = rte_atomic16_read(&dest->weight);
+        detail->max_conn = dest->max_conn;
+        detail->min_conn = dest->min_conn;
+        detail->actconns = rte_atomic32_read(&dest->actconns);
+        detail->inactconns = rte_atomic32_read(&dest->inactconns);
+        detail->persistconns = rte_atomic32_read(&dest->persistconns);
+        ret = dp_vs_stats_add(&detail->stats, &dest->stats);
+        if (unlikely(ret != EDPVS_OK))
             break;
-
-        memcpy(detail, &entry, sizeof(entry));
         detail += 1;
         count++;
     }
 
     return ret;
 }
-
-static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len);
-static int dp_vs_dest_get(sockoptid_t opt, const void *user, size_t len, void **out, size_t *outlen);
-
-struct dpvs_sockopts sockopts_dest = {
-    .version        = SOCKOPT_VERSION,
-    .set_opt_min    = DPVSAGENT_VS_ADD_DESTS,
-    .set_opt_max    = DPVSAGENT_VS_DEL_DESTS,
-    .set            = dp_vs_dest_set,
-    .get_opt_min    = DPVSAGENT_VS_GET_DESTS,
-    .get_opt_max    = DPVSAGENT_VS_GET_DESTS,
-    .get            = dp_vs_dest_get,
-};
 
 static int dest_msg_seq(void) {
     static uint32_t seq = 0;
@@ -453,6 +439,8 @@ static int dp_vs_dest_get(sockoptid_t opt, const void *user, size_t len, void **
     struct dpvs_multicast_queue *reply = NULL;
     lcoreid_t cid;
 
+    *out = NULL;
+    *outlen = 0;
     switch (opt) {
         case DPVSAGENT_VS_GET_DESTS:
             insvc = (struct dp_vs_dest_front*)user;
@@ -611,7 +599,7 @@ static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
 static int dest_unregister_msg_cb(void)
 {
     struct dpvs_msg_type msg_type;
-	int err = EDPVS_OK;
+	int err, rterr = EDPVS_OK;
 
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_AGENT_ADD_DESTS;
@@ -622,7 +610,7 @@ static int dest_unregister_msg_cb(void)
     err = msg_type_mc_unregister(&msg_type);
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, SERVICE, "%s: fail to unregister msg.\n", __func__);
-        return err;
+        rterr = err;
     }
 
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
@@ -634,7 +622,8 @@ static int dest_unregister_msg_cb(void)
     err = msg_type_mc_unregister(&msg_type);
     if (err != EDPVS_OK) {
          RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
-         return err;
+         if (rterr == EDPVS_OK)
+             rterr = err;
     }
 
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
@@ -646,16 +635,30 @@ static int dest_unregister_msg_cb(void)
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
          RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
-         return err;
+         if (rterr == EDPVS_OK)
+             rterr = err;
     }
 
-    return EDPVS_OK;
+    return rterr;
 }
+
+struct dpvs_sockopts sockopts_dest = {
+    .version        = SOCKOPT_VERSION,
+    .set_opt_min    = DPVSAGENT_VS_ADD_DESTS,
+    .set_opt_max    = DPVSAGENT_VS_DEL_DESTS,
+    .set            = dp_vs_dest_set,
+    .get_opt_min    = DPVSAGENT_VS_GET_DESTS,
+    .get_opt_max    = DPVSAGENT_VS_GET_DESTS,
+    .get            = dp_vs_dest_get,
+};
+
+#endif /* CONFIG_DPVS_AGENT */
 
 int dp_vs_dest_init(void)
 {
-    struct dpvs_msg_type msg_type;
     int err = EDPVS_OK;
+#ifdef CONFIG_DPVS_AGENT
+    struct dpvs_msg_type msg_type;
 
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_AGENT_ADD_DESTS;
@@ -697,11 +700,16 @@ int dp_vs_dest_init(void)
         dest_unregister_msg_cb();
         return err;
     }
+#endif /* CONFIG_DPVS_AGENT */
     return err;
 }
 
 int dp_vs_dest_term(void)
 {
+#ifdef CONFIG_DPVS_AGENT
     dest_unregister_msg_cb();
     return sockopt_unregister(&sockopts_dest);
+#else
+    return EDPVS_OK;
+#endif
 }
