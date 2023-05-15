@@ -501,6 +501,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     struct dp_vs_laddr_detail *details, *detail;
 #endif
 
+    err = EDPVS_OK;
     lcoreid_t cid = rte_lcore_id();
 
     // send to slave core
