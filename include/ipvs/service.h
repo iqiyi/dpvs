@@ -110,5 +110,6 @@ void dp_vs_service_put(struct dp_vs_service *svc);
 struct dp_vs_service *dp_vs_vip_lookup(int af, uint16_t protocol,
                                        const union inet_addr *vaddr,
                                        lcoreid_t cid);
+void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest, dpvs_dest_compat_t *udest_compat);
 
 #endif /* __DPVS_SVC_H__ */

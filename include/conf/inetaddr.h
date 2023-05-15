@@ -50,15 +50,16 @@ typedef enum ifaddr_ops {
 
 struct inet_addr_entry {
     int                 af;
-    char                ifname[IFNAMSIZ];
-    union inet_addr     addr;
-    union inet_addr     bcast;
-    uint8_t             plen;
-    uint8_t             scope;
-    lcoreid_t           cid;
     uint32_t            valid_lft;
     uint32_t            prefered_lft;
     uint32_t            flags;
+    char                ifname[IFNAMSIZ];
+    union inet_addr     bcast;
+    union inet_addr     addr;
+    uint8_t             plen;
+    uint8_t             scope;
+    lcoreid_t           cid;
+    uint8_t             nop;
 } __attribute__((__packed__));
 
 struct inet_addr_stats {
@@ -84,5 +85,19 @@ struct inet_addr_data_array {
     int                     naddr;
     struct inet_addr_data   addrs[0];
 } __attribute__((__packed__));
+
+#ifdef CONFIG_DPVS_AGENT
+struct inet_addr_stats_detail {
+    union inet_addr     addr;
+    uint32_t            sa_used;
+    uint32_t            sa_free;
+    uint32_t            sa_miss;
+};
+
+struct inet_addr_front {
+    int count;
+    int data[0];
+};
+#endif /* CONFIG_DPVS_AGENT */
 
 #endif /* __DPVS_INETADDR_CONF_H__ */

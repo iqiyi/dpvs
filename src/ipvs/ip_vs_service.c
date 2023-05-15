@@ -669,7 +669,7 @@ dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
 }
 
 static int dp_vs_service_get_entries(int num_services,
-                                     dpvs_service_table_t *uptr,
+                                     dpvs_services_front_t *uptr,
                                      lcoreid_t cid)
 {
     int idx, count = 0;
@@ -678,7 +678,7 @@ static int dp_vs_service_get_entries(int num_services,
 
     uptr->cid = cid;
     uptr->index = g_lcore_id2index[cid];
-    uptr->num_services = num_services;
+    uptr->count = num_services;
     for (idx = 0; idx < DP_VS_SVC_TAB_SIZE; idx++) {
         list_for_each_entry(svc, &dp_vs_svc_table[cid][idx], s_list){
             if (count >= num_services)
@@ -795,7 +795,7 @@ static int dp_vs_copy_usvc_compat(struct dp_vs_service_conf *conf,
     return EDPVS_OK;
 }
 
-static void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
+void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
                                     dpvs_dest_compat_t *udest_compat)
 {
     udest->af         = udest_compat->af;
@@ -823,7 +823,25 @@ static int gratuitous_arp_send_vip(struct in_addr *vip)
 
 static inline int set_opt_so2msg(sockoptid_t opt)
 {
-    return opt - SOCKOPT_SVC_BASE + MSG_TYPE_SVC_SET_BASE;
+    // return opt - SOCKOPT_SVC_BASE + MSG_TYPE_SVC_SET_BASE;
+    switch (opt) {
+    case DPVS_SO_SET_ZERO:
+        return MSG_TYPE_SVC_SET_ZERO;
+    case DPVS_SO_SET_ADD:
+        return MSG_TYPE_SVC_SET_ADD;
+    case DPVS_SO_SET_EDIT:
+        return MSG_TYPE_SVC_SET_EDIT;
+    case DPVS_SO_SET_DEL:
+        return MSG_TYPE_SVC_SET_DEL;
+    case DPVS_SO_SET_ADDDEST:
+        return MSG_TYPE_SVC_SET_ADDDEST;
+    case DPVS_SO_SET_DELDEST:
+        return MSG_TYPE_SVC_SET_DELDEST;
+    case DPVS_SO_SET_EDITDEST:
+        return MSG_TYPE_SVC_SET_EDITDEST;
+    default:
+        return -1;
+    }
 }
 
 static int svc_msg_seq(void)
@@ -946,13 +964,13 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
 }
 
 /* copy service/dest/stats */
-static int dp_vs_services_copy_percore_stats(dpvs_service_table_t *master_svcs,
-                                             dpvs_service_table_t  *slave_svcs)
+static int dp_vs_services_copy_percore_stats(dpvs_services_front_t *master_svcs,
+                                             dpvs_services_front_t *slave_svcs)
 {
     int i;
-    if (master_svcs->num_services != slave_svcs->num_services)
+    if (master_svcs->count!= slave_svcs->count)
         return EDPVS_INVAL;
-    for (i = 0; i < master_svcs->num_services; i++)
+    for (i = 0; i < master_svcs->count; i++)
         dp_vs_stats_add(&master_svcs->entrytable[i].stats, &slave_svcs->entrytable[i].stats);
     return EDPVS_OK;
 }
@@ -980,22 +998,22 @@ static int dp_vs_services_get_uc_cb(struct dpvs_msg *msg)
 {
     lcoreid_t cid = rte_lcore_id();
     size_t size;
-    dpvs_service_table_t *get, *output;
+    dpvs_services_front_t *get, *output;
     int ret;
 
     /* service may be changed */
-    get = (dpvs_service_table_t*)msg->data;
-    if (get->num_services != rte_atomic16_read(&dp_vs_num_services[cid])) {
+    get = (dpvs_services_front_t*)msg->data;
+    if (get->count != rte_atomic16_read(&dp_vs_num_services[cid])) {
         RTE_LOG(ERR, SERVICE, "%s: svc number %d not match %d in cid=%d.\n",
-        __func__, get->num_services, rte_atomic16_read(&dp_vs_num_services[cid]), cid);
+        __func__, get->count, rte_atomic16_read(&dp_vs_num_services[cid]), cid);
         return EDPVS_INVAL;
     }
 
-    size = sizeof(*get) + sizeof(struct dp_vs_service_entry) * get->num_services;
+    size = sizeof(*get) + sizeof(struct dp_vs_service_entry) * get->count;
     output = msg_reply_alloc(size);
     if (output == NULL)
         return EDPVS_NOMEM;
-    ret = dp_vs_service_get_entries(get->num_services, output, cid);
+    ret = dp_vs_service_get_entries(get->count, output, cid);
     if (ret != EDPVS_OK) {
         msg_reply_free(output);
         return ret;
@@ -1133,16 +1151,104 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                 *outlen = sizeof(struct dp_vs_getinfo);
                 return EDPVS_OK;
             }
+#ifdef CONFIG_DPVS_AGENT
+        case DPVSAGENT_SO_GET_SERVICES:
+            {
+                dpvs_services_front_t msg_data, *get, *real_output, *get_msg;
+                struct dpvs_msg *msg, *cur;
+                struct dpvs_multicast_queue *reply = NULL;
+                size_t real_size;
+
+                /* get slave core svc */
+                get = (dpvs_services_front_t*)user;
+                if (len != sizeof(*get)) {
+                    *outlen = 0;
+                    return EDPVS_INVAL;
+                }
+
+                cid = g_lcore_index2id[get->index];
+                if (cid < 0 || cid >= DPVS_MAX_LCORE) {
+                    *outlen = 0;
+                    return EDPVS_INVAL;
+                }
+                get->count = rte_atomic16_read(&dp_vs_num_services[cid]);
+                real_size = sizeof(*get) + sizeof(struct dp_vs_service_entry) * get->count;
+
+                msg_data.count = get->count;
+                msg_data.cid = get->cid;
+                msg_data.index = get->index;
+                msg = msg_make(MSG_TYPE_SVC_GET_SERVICES, 0, DPVS_MSG_MULTICAST, rte_lcore_id(),
+                               sizeof(msg_data), &msg_data);
+                if (unlikely(!msg))
+                    return EDPVS_NOMEM;
+                ret = multicast_msg_send(msg, 0, &reply);
+                if (ret != EDPVS_OK) {
+                    msg_destroy(&msg);
+                    RTE_LOG(ERR, SERVICE, "%s: send message fail\n", __func__);
+                    return EDPVS_MSG_FAIL;
+                }
+
+                if (cid == g_master_lcore_id) {
+                    real_output = rte_zmalloc("agent_get_services", real_size, 0);
+                    if (unlikely(NULL == real_output)) {
+                        msg_destroy(&msg);
+                        return EDPVS_NOMEM;
+                    }
+
+                    ret = dp_vs_service_get_entries(get->count, real_output, cid);
+                    if (ret != EDPVS_OK) {
+                        msg_destroy(&msg);
+                        rte_free(real_output);
+                        return ret;
+                    }
+
+                    list_for_each_entry(cur, &reply->mq, mq_node) {
+                        get_msg = (dpvs_services_front_t*)(cur->data);
+                        ret = dp_vs_services_copy_percore_stats(real_output, get_msg);
+                        if (ret != EDPVS_OK) {
+                            msg_destroy(&msg);
+                            rte_free(real_output);
+                            return ret;
+                        }
+                    }
+
+                    *out = real_output;
+                    *outlen = real_size;
+                    msg_destroy(&msg);
+                    return EDPVS_OK;
+                } else {
+                    list_for_each_entry(cur, &reply->mq, mq_node) {
+                        get_msg = (dpvs_services_front_t*)(cur->data);
+                        if (unlikely(get_msg->cid == cid)) {
+                            real_output = rte_zmalloc("agent_get_services", real_size, 0);
+                            if (unlikely(NULL == real_output)) {
+                                msg_destroy(&msg);
+                                return EDPVS_NOMEM;
+                            }
+                            rte_memcpy(real_output, get, sizeof(*get));
+                            rte_memcpy(((char*)real_output)+sizeof(*get), ((char*)get_msg)+sizeof(msg_data), real_size-sizeof(*get));
+                            *out = real_output;
+                            *outlen = real_size;
+                            msg_destroy(&msg);
+                            return EDPVS_OK;
+                        }
+                    }
+                    RTE_LOG(ERR, SERVICE, "%s: find no services for cid=%d\n", __func__, cid);
+                    msg_destroy(&msg);
+                    return EDPVS_NOTEXIST;
+                }
+            }
+#endif /* CONFIG_DPVS_AGENT */
         case DPVS_SO_GET_SERVICES:
             {
-                dpvs_service_table_t *get, *get_msg, *output;
+                dpvs_services_front_t *get, *get_msg, *output;
                 struct dpvs_msg *msg, *cur;
                 struct dpvs_multicast_queue *reply = NULL;
                 int size;
 
-                get = (dpvs_service_table_t*)user;
+                get = (dpvs_services_front_t*)user;
                 size = sizeof(*get) + \
-                       sizeof(struct dp_vs_service_entry) * (get->num_services);
+                       sizeof(struct dp_vs_service_entry) * (get->count);
                 if (len != sizeof(*get)){
                     *outlen = 0;
                     return EDPVS_INVAL;
@@ -1175,14 +1281,14 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                         return EDPVS_NOMEM;
                     }
                     //rte_memcpy(output, get, sizeof(*get));
-                    ret = dp_vs_service_get_entries(get->num_services, output, cid);
+                    ret = dp_vs_service_get_entries(get->count, output, cid);
                     if (ret != EDPVS_OK) {
                         msg_destroy(&msg);
                         rte_free(output);
                         return ret;
                     }
                     list_for_each_entry(cur, &reply->mq, mq_node) {
-                        get_msg = (dpvs_service_table_t*)(cur->data);
+                        get_msg = (dpvs_services_front_t*)(cur->data);
                         ret = dp_vs_services_copy_percore_stats(output, get_msg);
                         if (ret != EDPVS_OK) {
                             msg_destroy(&msg);
@@ -1196,7 +1302,7 @@ static int dp_vs_service_get(sockoptid_t opt, const void *user, size_t len, void
                     return EDPVS_OK;
                 } else {
                     list_for_each_entry(cur, &reply->mq, mq_node) {
-                        get_msg = (dpvs_service_table_t*)(cur->data);
+                        get_msg = (dpvs_services_front_t*)(cur->data);
                         if (get_msg->cid == cid) {
                             output = rte_zmalloc("get_services", size, 0);
                             if (unlikely(NULL == output)) {

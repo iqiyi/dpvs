@@ -90,17 +90,18 @@ typedef struct netif_nic_list_get
 /* basic nic info specified by port_id */
 typedef struct netif_nic_basic_get
 {
-    portid_t port_id;
-    char name[32];
+    char name[0x20];
+    char addr[0x20];
+    char link_status[0x10];
+    char link_duplex[0x10];
+    char link_autoneg[0x10];
+    uint32_t link_speed; /* ETH_SPEED_NUM_ */
     uint8_t nrxq;
     uint8_t ntxq;
-    char addr[32];
+    uint8_t padding[0x3];
     uint8_t socket_id;
+    portid_t port_id;
     uint16_t mtu;
-    uint32_t link_speed; /* ETH_SPEED_NUM_ */
-    char link_status[16];
-    char link_duplex[16];
-    char link_autoneg[16];
     uint16_t promisc:1; /* promiscuous mode */
     uint16_t fwd2kni:1;
     uint16_t tc_egress:1;
@@ -113,7 +114,6 @@ typedef struct netif_nic_basic_get
 
 /* nic statistics specified by port_id */
 typedef struct netif_nic_stats_get {
-    portid_t port_id;
     uint32_t mbuf_avail;/* Number of available mbuf in pktmempool */
     uint32_t mbuf_inuse;/* Number of used mbuf in pktmempool */
     uint64_t ipackets;  /* Total number of successfully received packets. */
@@ -136,6 +136,8 @@ typedef struct netif_nic_stats_get {
     /* Total number of successfully transmitted queue bytes. */
     uint64_t q_errors[RTE_ETHDEV_QUEUE_STAT_CNTRS];
     /* Total number of queue packets received that are dropped. */
+    uint16_t padding[0x3];
+    portid_t port_id;
 } netif_nic_stats_get_t;
 
 /* dev info specified by port_id */

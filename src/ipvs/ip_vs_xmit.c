@@ -2236,7 +2236,7 @@ static int __dp_vs_xmit_tunnel6(struct dp_vs_proto *proto,
     new_ip6h->ip6_nxt = IPPROTO_IPV6;
     new_ip6h->ip6_hops = old_ip6h->ip6_hops;
 
-    new_ip6h->ip6_src = rt6->rt6_src.addr;
+    new_ip6h->ip6_src = rt6->rt6_src.addr.in6;
     if (unlikely(ipv6_addr_any(&new_ip6h->ip6_src))) {
         RTE_LOG(INFO, IPVS, "%s: route6 without source, slect source"
                 " address from inetaddr.\n", __func__);
