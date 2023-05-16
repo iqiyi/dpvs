@@ -632,7 +632,7 @@ static int dest_unregister_msg_cb(void)
     msg_type.prio   = MSG_PRIO_LOW;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = dp_vs_dests_get_uc_cb;
-    err = msg_type_mc_register(&msg_type);
+    err = msg_type_mc_unregister(&msg_type);
     if (err != EDPVS_OK) {
          RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
          if (rterr == EDPVS_OK)
