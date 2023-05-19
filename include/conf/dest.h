@@ -46,19 +46,20 @@ typedef struct dp_vs_dest_compat {
     int                af;
     uint16_t           port;
     uint16_t           proto;
-    uint32_t           weight;     /* destination weight */
+    uint32_t           weight;       /* destination weight */
     union inet_addr    addr;
 
-    unsigned           conn_flags;    /* connection flags */
+    uint16_t           conn_flags;   /* flags passed on to connections */
+    uint16_t           flags;        /* dest flags */
 
     enum dpvs_fwd_mode fwdmode;
     /* real server options */
 
     /* thresholds for active connections */
-    uint32_t           max_conn;    /* upper threshold */
-    uint32_t           min_conn;    /* lower threshold */
+    uint32_t           max_conn;     /* upper threshold */
+    uint32_t           min_conn;     /* lower threshold */
 
-    uint32_t           actconns;  /* active connections */
+    uint32_t           actconns;     /* active connections */
     uint32_t           inactconns;   /* inactive connections */
     uint32_t           persistconns; /* persistent connections */
 

@@ -51,7 +51,7 @@ struct dp_vs_dest {
     union inet_addr     addr;       /* IP address of the server */
     uint16_t            port;       /* port number of the server */
 
-    volatile unsigned   flags;      /* dest status flags */
+    volatile uint16_t   flags;      /* dest status flags */
     rte_atomic16_t      conn_flags; /* flags to copy to conn */
     rte_atomic16_t      weight;     /* server weight */
 

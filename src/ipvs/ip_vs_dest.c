@@ -75,6 +75,7 @@ static void __dp_vs_dest_update(struct dp_vs_service *svc,
 
     rte_atomic16_set(&dest->weight, udest->weight);
     conn_flags = udest->conn_flags | DPVS_CONN_F_INACTIVE;
+    dest->fwdmode = udest->fwdmode;
     rte_atomic16_set(&dest->conn_flags, conn_flags);
 
     dp_vs_dest_set_avail(dest);
@@ -322,7 +323,9 @@ int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
         entry.af   = dest->af;
         entry.addr = dest->addr;
         entry.port = dest->port;
-        entry.conn_flags = dest->fwdmode;
+        entry.fwdmode = dest->fwdmode;
+        entry.flags = dest->flags;
+        entry.conn_flags = rte_atomic16_read(&dest->conn_flags);
         entry.weight = rte_atomic16_read(&dest->weight);
         entry.max_conn = dest->max_conn;
         entry.min_conn = dest->min_conn;
@@ -664,7 +667,9 @@ static int dp_vs_dest_get_details(const struct dp_vs_service *svc,
         detail->af   = dest->af;
         detail->addr = dest->addr;
         detail->port = dest->port;
-        detail->conn_flags = dest->fwdmode;
+        detail->fwdmode = dest->fwdmode;
+        detail->flags = dest->flags;
+        detail->conn_flags = rte_atomic16_read(&dest->conn_flags);
         detail->weight = rte_atomic16_read(&dest->weight);
         detail->max_conn = dest->max_conn;
         detail->min_conn = dest->min_conn;
@@ -821,7 +826,9 @@ static int dp_vs_dest_get(sockoptid_t opt, const void *user, size_t len, void **
                     outdest->af           = dest->af;
                     outdest->addr         = dest->addr;
                     outdest->port         = dest->port;
-                    outdest->conn_flags   = dest->fwdmode;
+                    outdest->fwdmode      = dest->fwdmode;
+                    outdest->flags        = dest->flags;
+                    outdest->conn_flags   = rte_atomic16_read(&dest->conn_flags);
                     outdest->max_conn     = dest->max_conn;
                     outdest->min_conn     = dest->min_conn;
                     outdest->weight       = rte_atomic16_read(&dest->weight);

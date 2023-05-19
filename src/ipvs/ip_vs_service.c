@@ -806,8 +806,9 @@ void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
     udest->af         = udest_compat->af;
     udest->addr       = udest_compat->addr;
     udest->port       = udest_compat->port;
-    udest->fwdmode    = udest_compat->conn_flags;//make sure fwdmode and conn_flags are the same
+    udest->fwdmode    = udest_compat->fwdmode;
     udest->conn_flags = udest_compat->conn_flags;
+    udest->flags      = udest_compat->flags;
     udest->weight     = udest_compat->weight;
     udest->max_conn   = udest_compat->max_conn;
     udest->min_conn   = udest_compat->min_conn;

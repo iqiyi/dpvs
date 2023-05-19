@@ -744,26 +744,31 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case 'i':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_TUNNEL;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_TUNNEL;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_TUNNEL;
                 break;
             case 'g':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_DROUTE;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_DROUTE;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_DROUTE;
                 break;
             case 'b':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_FULLNAT;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_FULLNAT;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_FULLNAT;
                 break;
             case 'J':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_SNAT;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_SNAT;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_SNAT;
                 break;
             case 'm':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_MASQ;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_MASQ;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_MASQ;
                 break;
             case 'w':
@@ -1040,6 +1045,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
     ce.dpvs_dest.weight = 1;
     /* Set direct routing as default forwarding method */
     ce.dpvs_dest.conn_flags = IP_VS_CONN_F_DROUTE;
+    ce.dpvs_dest.fwdmode = IP_VS_CONN_F_DROUTE;
     /* Set the default persistent granularity to /32 mask */
     ce.dpvs_svc.netmask = ((u_int32_t) 0xffffffff);
     /* Set the default cpu be master */
@@ -1080,8 +1086,8 @@ static int process_options(int argc, char **argv, int reading_stdin)
          * Don't worry about this if fwmark is used.
          */
         if (!ce.dpvs_svc.fwmark &&
-                (ce.dpvs_dest.conn_flags == IP_VS_CONN_F_TUNNEL
-                 || ce.dpvs_dest.conn_flags == IP_VS_CONN_F_DROUTE))
+                (ce.dpvs_dest.fwdmode == IP_VS_CONN_F_TUNNEL
+                 || ce.dpvs_dest.fwdmode == IP_VS_CONN_F_DROUTE))
             ce.dpvs_dest.port = ce.dpvs_svc.port;
     }
 
@@ -1885,6 +1891,10 @@ static inline char *fwd_switch(unsigned flags)
         case IP_VS_CONN_F_LOCALNODE:
         case IP_VS_CONN_F_DROUTE:
             swt = "-g"; break;
+        case IP_VS_CONN_F_FULLNAT:
+            swt = "-b"; break;
+        case IP_VS_CONN_F_SNAT:
+            swt = "-J"; break;
     }
     return swt;
 }
