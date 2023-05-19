@@ -34,9 +34,11 @@
 #define IP_VS_SVC_F_PERSISTENT          0x0001              /* persistent port */
 #define IP_VS_SVC_F_HASHED              0x0002              /* hashed entry */
 #define IP_VS_SVC_F_ONEPACKET           0x0004              /* one-packet scheduling */
-#define IP_VS_SVC_F_SCHED1              0x0008              /* scheduler flag 1 */
-#define IP_VS_SVC_F_SCHED2              0x0010              /* scheduler flag 2 */
-#define IP_VS_SVC_F_SCHED3              0x0020              /* scheduler flag 3 */
+#define IP_VS_SVC_F_SYNPROXY            0x0008              /* tcp syn-proxy */
+#define IP_VS_SVC_F_EXPIRE_QUIESCENT    0x0010              /* expire quiescent sessions quickly */
+#define IP_VS_SVC_F_SCHED1              0x0020              /* scheduler flag 1 */
+#define IP_VS_SVC_F_SCHED2              0x0040              /* scheduler flag 2 */
+#define IP_VS_SVC_F_SCHED3              0x0080              /* scheduler flag 3 */
 #define IP_VS_SVC_F_SIP_HASH            0x0100              /* sip hash target */
 #define IP_VS_SVC_F_QID_HASH            0x0200              /* quic cid hash target */
 #define IP_VS_SVC_F_MATCH               0x0400              /* snat match */

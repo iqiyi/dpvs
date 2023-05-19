@@ -787,11 +787,11 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     }
 
     if (vs->syn_proxy) {
-        srule->flags |= IP_VS_CONN_F_SYNPROXY;
+        srule->flags |= IP_VS_SVC_F_SYNPROXY;
     }
 
     if (vs->expire_quiescent_conn) {
-        srule->flags |= IP_VS_CONN_F_EXPIRE_QUIESCENT;
+        srule->flags |= IP_VS_SVC_F_EXPIRE_QUIESCENT;
     }
 
     if (!strcmp(vs->sched, "conhash")) {

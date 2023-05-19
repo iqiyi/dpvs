@@ -138,18 +138,18 @@ int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int opti
     }
 
     if (options & OPT_SYNPROXY) {
-        if(svc->flags & IP_VS_CONN_F_SYNPROXY) {
-            entry.flags |= IP_VS_CONN_F_SYNPROXY;
+        if(svc->flags & IP_VS_SVC_F_SYNPROXY) {
+            entry.flags |= IP_VS_SVC_F_SYNPROXY;
         } else {
-            entry.flags &= ~IP_VS_CONN_F_SYNPROXY;
+            entry.flags &= ~IP_VS_SVC_F_SYNPROXY;
         }
     }
 
     if (options & OPT_EXPIRE_QUIESCENT_CONN) {
-        if (svc->flags & IP_VS_CONN_F_EXPIRE_QUIESCENT) {
-            entry.flags |= IP_VS_CONN_F_EXPIRE_QUIESCENT;
+        if (svc->flags & IP_VS_SVC_F_EXPIRE_QUIESCENT) {
+            entry.flags |= IP_VS_SVC_F_EXPIRE_QUIESCENT;
         } else {
-            entry.flags &= ~IP_VS_CONN_F_EXPIRE_QUIESCENT;
+            entry.flags &= ~IP_VS_SVC_F_EXPIRE_QUIESCENT;
         }
     }
 

@@ -913,9 +913,9 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     set_option(options, OPT_SYNPROXY);
 
                     if(!memcmp(optarg , "enable" , strlen("enable"))) {
-                        ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_CONN_F_SYNPROXY;
+                        ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_SYNPROXY;
                     } else if(!memcmp(optarg , "disable" , strlen("disable"))) {
-                        ce->dpvs_svc.flags = ce->dpvs_svc.flags & (~IP_VS_CONN_F_SYNPROXY);
+                        ce->dpvs_svc.flags = ce->dpvs_svc.flags & (~IP_VS_SVC_F_SYNPROXY);
                     } else
                         fail(2 , "synproxy switch must be enable or disable\n");
 
@@ -951,7 +951,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case TAG_CONN_EXPIRE_QUIESCENT:
                 {
                     set_option(options, OPT_EXPIRE_QUIESCENT_CONN);
-                    ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_CONN_F_EXPIRE_QUIESCENT;
+                    ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_EXPIRE_QUIESCENT;
                     break;
                 }
             case TAG_DEST_CHECK:
@@ -2139,11 +2139,11 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
         }
         if (se->flags & IP_VS_SVC_F_ONEPACKET)
             printf(" ops");
-        if (se->flags & IP_VS_CONN_F_SYNPROXY)
+        if (se->flags & IP_VS_SVC_F_SYNPROXY)
             printf(" synproxy");
         if (se->conn_timeout != 0)
             printf(" conn-timeout %u", se->conn_timeout);
-        if (se->flags & IP_VS_CONN_F_EXPIRE_QUIESCENT)
+        if (se->flags & IP_VS_SVC_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
         if (se->check_conf.enabled) {
             printf(" dest-check");
