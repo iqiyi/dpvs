@@ -576,7 +576,8 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         details = (struct dp_vs_laddr_detail*)((char*)conf + sizeof(struct dp_vs_laddr_front));
         for (i = 0; i < laddr_front->count; i++) {
             detail = (struct dp_vs_laddr_detail*)((char*)details + sizeof(struct dp_vs_laddr_detail) * i);
-            err = dp_vs_laddr_del(svc, detail->af, &detail->addr); if (err != EDPVS_OK) {
+            err = dp_vs_laddr_del(svc, detail->af, &detail->addr); 
+            if (err != EDPVS_OK) {
                 if (err == EDPVS_NOTEXIST)
                     continue;
                 break;

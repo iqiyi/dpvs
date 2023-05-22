@@ -373,6 +373,7 @@ static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len)
     struct dpvs_msg *msg;
     struct dp_vs_service *getsvc;
     int i, ret = EDPVS_INVAL;
+    msgid_t msg_id = MSG_TYPE_IPVS_RANGE_START;
     lcoreid_t cid;
 
     insvc = (struct dp_vs_dest_front*)user;
@@ -387,13 +388,20 @@ static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len)
     }
 
     if (cid == rte_get_main_lcore()) {
-        if (opt == DPVSAGENT_VS_ADD_DESTS) {
-            msg = msg_make(MSG_TYPE_AGENT_ADD_DESTS, dest_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
-        } else if (opt == DPVSAGENT_VS_DEL_DESTS) {
-            msg = msg_make(MSG_TYPE_AGENT_DEL_DESTS, dest_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
-        } else {
-            return EDPVS_NOTSUPP;
+        switch (opt) {
+            case DPVSAGENT_VS_ADD_DESTS:
+                msg_id = MSG_TYPE_AGENT_ADD_DESTS;
+                break;
+            case DPVSAGENT_VS_DEL_DESTS:
+                msg_id = MSG_TYPE_AGENT_DEL_DESTS;
+                break;
+            case DPVSAGENT_VS_EDIT_DESTS:
+                msg_id = MSG_TYPE_AGENT_EDIT_DESTS;
+                break;
+            default:
+                return EDPVS_NOTSUPP;
         }
+        msg = msg_make(msg_id, dest_msg_seq(), DPVS_MSG_MULTICAST, cid, len, user);
         if (!msg)
             return EDPVS_NOMEM;
 
@@ -417,6 +425,9 @@ static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len)
                 ret = dp_vs_dest_add(getsvc, &udest);
                 if (ret == EDPVS_EXIST)
                     ret = dp_vs_dest_edit(getsvc, &udest);
+                break;
+            case DPVSAGENT_VS_EDIT_DESTS:
+                ret = dp_vs_dest_edit(getsvc, &udest);
                 break;
             case DPVSAGENT_VS_DEL_DESTS:
                 ret = dp_vs_dest_del(getsvc, &udest);
@@ -565,6 +576,11 @@ static int deldest_msg_cb(struct dpvs_msg *msg)
     return dp_vs_dest_set(DPVSAGENT_VS_DEL_DESTS, msg->data, msg->len);
 }
 
+static int editdest_msg_cb(struct dpvs_msg *msg)
+{
+    return dp_vs_dest_set(DPVSAGENT_VS_EDIT_DESTS, msg->data, msg->len);
+}
+
 static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
 {
     lcoreid_t cid = rte_lcore_id();
@@ -627,6 +643,19 @@ static int dest_unregister_msg_cb(void)
     }
 
     memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_EDIT_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = editdest_msg_cb;
+    err = msg_type_mc_unregister(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         if (rterr == EDPVS_OK)
+             rterr = err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
     msg_type.type   = MSG_TYPE_AGENT_GET_DESTS;
     msg_type.mode   = DPVS_MSG_MULTICAST;
     msg_type.prio   = MSG_PRIO_LOW;
@@ -678,6 +707,18 @@ int dp_vs_dest_init(void)
     msg_type.prio   = MSG_PRIO_NORM;
     msg_type.cid    = rte_lcore_id();
     msg_type.unicast_msg_cb = deldest_msg_cb;
+    err = msg_type_mc_register(&msg_type);
+    if (err != EDPVS_OK) {
+         RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
+         return err;
+    }
+
+    memset(&msg_type, 0, sizeof(struct dpvs_msg_type));
+    msg_type.type   = MSG_TYPE_AGENT_EDIT_DESTS;
+    msg_type.mode   = DPVS_MSG_MULTICAST;
+    msg_type.prio   = MSG_PRIO_NORM;
+    msg_type.cid    = rte_lcore_id();
+    msg_type.unicast_msg_cb = editdest_msg_cb;
     err = msg_type_mc_register(&msg_type);
     if (err != EDPVS_OK) {
          RTE_LOG(ERR, SERVICE, "%s: fail to register msg.\n", __func__);
