@@ -80,7 +80,7 @@ The test service uses the default dest-check configs, i.e., no down retry, 1 up 
 IP Virtual Server version 1.9.3 (size=0)
 Prot LocalAddress:Port Scheduler Flags
   -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
-TCP  192.168.88.1:80 wlc dest-check
+TCP  192.168.88.1:80 wlc dest-check internal:default
   -> 192.168.88.30:80             FullNat 1      0          0         
   -> 192.168.88.68:80             FullNat 1      0          0   
 ```
@@ -169,7 +169,7 @@ Now we change the dest-check configs to be 3 down_retry in 3s down delay, 3 up_c
 IP Virtual Server version 1.9.3 (size=0)
 Prot LocalAddress:Port Scheduler Flags
   -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
-TCP  192.168.88.1:80 wlc dest-check 3,3,3s,60-3600s
+TCP  192.168.88.1:80 wlc dest-check internal:3,3,3s,60-3600s
   -> 192.168.88.30:80             FullNat 1      0          9         
   -> 192.168.88.68:80             FullNat 1      0          5    
 ```
@@ -202,3 +202,52 @@ Apr 20 20:44:20 dpvs-devel-28 dpvs[54778]: SERVICE: [cid 00, tcp, svc 192.168.88
 Apr 20 20:44:21 dpvs-devel-28 dpvs[54778]: SERVICE: [cid 00, tcp, svc 192.168.88.1:80, rs 192.168.88.30:80, weight 1, inhibited yes, down_notice_recvd 3, inhibit_duration 480s, origin_weight 0] notify slaves DOWN
 ```
 It shows that at least 3 failure are detected before inhibiting the failed backend, and the inhibition duration starts from 60s.
+
+# External Backend Health Check
+
+DPVS supports external backend health check with an auxiliary program called `healthcheck`. Three checker methods are available up to now.
+
+* TCP Checker
+* UDP Checker
+* Ping Checker
+
+They shall work independently or together with Passive Health Check. Notes that external checkers rely on dpvs-agent to interact with DPVS.
+
+* Enable external TCP Checker.
+
+```
+# ipvsadm -Et 192.168.88.1:80 --dest-check tcp
+# ipvsadm -ln
+IP Virtual Server version 1.9.4 (size=0)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  192.168.88.1:80 wlc dest-check external:tcp
+  -> 192.168.88.30:80             FullNat 1      0          8
+  -> 192.168.88.68:80             FullNat 1      0          7
+```
+
+* Enable external UDP Checker and Ping Checker.
+
+```
+# ipvsadm -Et 192.168.88.1:80 --dest-check udp --dest-check ping
+# ipvsadm -ln
+IP Virtual Server version 1.9.4 (size=0)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  192.168.88.1:80 wlc dest-check external:udp,ping
+  -> 192.168.88.30:80             FullNat 1      0          9
+  -> 192.168.88.68:80             FullNat 1      0          7
+```
+
+* Enable Passive Checker and TCP Checker.
+
+```
+# ipvsadm -Et 192.168.88.1:80 --dest-check 3,5s --dest-check tcp
+# ipvsadm -ln
+IP Virtual Server version 1.9.4 (size=0)
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  192.168.88.1:80 wlc dest-check internal:3,5s external:tcp
+  -> 192.168.88.30:80             FullNat 1      0          8
+  -> 192.168.88.68:80             FullNat 1      0          8
+```

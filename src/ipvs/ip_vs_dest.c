@@ -545,7 +545,7 @@ static int msg_cb_notify_master(struct dpvs_msg *msg)
         dest->dfc.master.origin_weight = rte_atomic16_read(&dest->weight);
         rte_atomic16_clear(&dest->weight);
     } else { // dest_notification_up
-        assert(!dest_check_down_only(configs));
+        //assert(!dest_check_down_only(configs));
         dest->dfc.master.inhibit_duration >>= 1;
         if (dest->dfc.master.inhibit_duration < configs->dest_inhibit_min)
             dest->dfc.master.inhibit_duration = configs->dest_inhibit_min;
@@ -575,7 +575,7 @@ static int msg_cb_notify_slaves(struct dpvs_msg *msg)
         rte_atomic16_clear(&dest->weight);
         dp_vs_dest_set_inhibited(dest);
     } else { // dest_notification_open
-        assert(!dest_check_down_only(configs));
+        //assert(!dest_check_down_only(configs));
         rte_atomic16_set(&dest->weight, dest->dfc.slave.origin_weight);
         dp_vs_dest_clear_inhibited(dest);
         dest->dfc.slave.warm_up_count = configs->dest_up_notice_num;
@@ -590,7 +590,7 @@ int dp_vs_dest_detected_alive(struct dp_vs_dest *dest)
     struct dpvs_msg *msg;
     struct dest_notification *notice;
 
-    if (!dest->svc->check_conf.enabled)
+    if (!dest_check_passive(&dest->svc->check_conf))
         return EDPVS_DISABLED;
 
     if (likely(dest->dfc.slave.warm_up_count == 0))
@@ -622,7 +622,7 @@ int dp_vs_dest_detected_dead(struct dp_vs_dest *dest)
     struct dpvs_msg *msg;
     struct dest_notification *notice;
 
-    if (!dest->svc->check_conf.enabled)
+    if (!dest_check_passive(&dest->svc->check_conf))
         return EDPVS_DISABLED;
 
     if (dp_vs_dest_is_inhibited(dest) || rte_atomic16_read(&dest->weight) == 0)

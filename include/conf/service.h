@@ -47,6 +47,14 @@
 
 #define MAX_ARG_LEN    (sizeof(dpvs_service_compat_t) + sizeof(dpvs_dest_compat_t))
 
+/* dest health check types */
+#define DEST_HC_NONE                    0x00
+#define DEST_HC_PASSIVE                 0x01
+#define DEST_HC_TCP                     0x02
+#define DEST_HC_UDP                     0x04
+#define DEST_HC_PING                    0x08
+#define DEST_HC_MASK_EXTERNAL           0x0e
+
 /* defaults for dest passive health check */
 #define DEST_DOWN_NOTICE_DEFAULT        1
 #define DEST_UP_NOTICE_DEFAULT          1
@@ -55,7 +63,9 @@
 #define DEST_INHIBIT_DURATION_MAX       3600    // 1h
 
 struct dest_check_configs {
-    uint8_t enabled;
+    uint8_t types;                  // DEST_HC_*
+
+    /* params for passive dest check */
     uint8_t dest_down_notice_num;   // how many DOWNs detected in `dest_down_wait` before inhibiting the dest
     uint8_t dest_up_notice_num;     // how many notifications sent when UPs detected after inhibitation
     uint8_t dest_down_wait;
@@ -109,6 +119,16 @@ struct dp_vs_getinfo {
 };
 
 static inline bool
+dest_check_passive(const struct dest_check_configs *conf) {
+    return conf->types & DEST_HC_PASSIVE;
+}
+
+static inline bool
+dest_check_external(const struct dest_check_configs *conf) {
+    return conf->types & DEST_HC_MASK_EXTERNAL;
+}
+
+static inline bool
 dest_check_down_only(const struct dest_check_configs *conf) {
     return !(conf->dest_inhibit_min
             | conf->dest_inhibit_max | conf->dest_up_notice_num);
@@ -117,6 +137,9 @@ dest_check_down_only(const struct dest_check_configs *conf) {
 static inline bool
 dest_check_configs_sanity(struct dest_check_configs *conf) {
     bool res = true;
+    if (!(dest_check_passive(conf))) {
+        return true;
+    }
     if (conf->dest_down_notice_num < 1) {
         conf->dest_down_notice_num = DEST_DOWN_NOTICE_DEFAULT;
         res = false;

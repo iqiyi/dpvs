@@ -425,11 +425,16 @@ static bool is_dest_check_conf_default(const struct dest_check_configs *conf)
 
 static int parse_dest_check(const char *optarg, struct dest_check_configs *conf)
 {
-    memset(conf, 0, sizeof(*conf));
     if (!strcmp(optarg, "disable")) {
-        conf->enabled = 0;
+        conf->types = DEST_HC_NONE;
+    } else if (!strcmp(optarg, "tcp")) {
+        conf->types |= DEST_HC_TCP;
+    } else if (!strcmp(optarg, "udp")) {
+        conf->types |= DEST_HC_UDP;
+    } else if (!strcmp(optarg, "ping")) {
+        conf->types |= DEST_HC_PING;
     } else if (!strcmp(optarg, "default")) {
-        conf->enabled = 1;
+        conf->types |= DEST_HC_PASSIVE;
         conf->dest_down_notice_num = DEST_DOWN_NOTICE_DEFAULT;
         conf->dest_up_notice_num   = DEST_UP_NOTICE_DEFAULT;
         conf->dest_down_wait       = DEST_DOWN_WAIT_DURATION;
@@ -442,7 +447,8 @@ static int parse_dest_check(const char *optarg, struct dest_check_configs *conf)
                     &conf->dest_down_wait,
                     &conf->dest_inhibit_min,
                     &conf->dest_inhibit_max) != 5) {
-            memset(conf, 0, sizeof(*conf));
+            conf->dest_up_notice_num = 0;
+            conf->dest_inhibit_min = conf->dest_inhibit_max = 0;
             if (sscanf(optarg, "%hhu,%hhus",
                         &conf->dest_down_notice_num,
                         &conf->dest_down_wait) != 2) {
@@ -451,7 +457,7 @@ static int parse_dest_check(const char *optarg, struct dest_check_configs *conf)
         }
         if (!dest_check_configs_sanity(conf))
             return -1;
-        conf->enabled = 1;
+        conf->types |= DEST_HC_PASSIVE;
     }
     return 0;
 }
@@ -1712,8 +1718,8 @@ static void usage_exit(const char *program, const int exit_status)
             "  --hash-target  hashtag              choose target for conhash (support sip or qid for quic)\n"
             "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
             "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
-            "  --dest-check   CHECK_CONF           config passive health check, inhibit scheduling to failed backends\n"
-            "                                      CHECK_CONF:=disable|default|DETAIL, DETAIL:=UPDOWN|DOWNONLY\n"
+            "  --dest-check   CHECK_CONF           config health check, inhibit scheduling to failed backends\n"
+            "                                      CHECK_CONF:=disable|default(passive)|DETAIL(passive)|tcp|udp|ping, DETAIL:=UPDOWN|DOWNONLY\n"
             "                                      UPDOWN:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n"
             "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n",
         DEF_SCHED);
@@ -2155,21 +2161,38 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             printf(" conn-timeout %u", se->conn_timeout);
         if (se->flags & IP_VS_SVC_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
-        if (se->check_conf.enabled) {
+        if (se->check_conf.types) {
             printf(" dest-check");
-            if (!is_dest_check_conf_default(&se->check_conf)) {
-                if (dest_check_down_only(&se->check_conf)) {
-                    printf(" %d,%ds",
-                            se->check_conf.dest_down_notice_num,
-                            se->check_conf.dest_down_wait);
+            if (dest_check_passive(&se->check_conf)) {
+                printf(" internal:");
+                if (!is_dest_check_conf_default(&se->check_conf)) {
+                    if (dest_check_down_only(&se->check_conf)) {
+                        printf("%d,%ds",
+                                se->check_conf.dest_down_notice_num,
+                                se->check_conf.dest_down_wait);
+                    } else {
+                        printf( "%d,%d,%ds,%d-%ds",
+                                se->check_conf.dest_down_notice_num,
+                                se->check_conf.dest_up_notice_num,
+                                se->check_conf.dest_down_wait,
+                                se->check_conf.dest_inhibit_min,
+                                se->check_conf.dest_inhibit_max);
+                    }
                 } else {
-                    printf( " %d,%d,%ds,%d-%ds",
-                            se->check_conf.dest_down_notice_num,
-                            se->check_conf.dest_up_notice_num,
-                            se->check_conf.dest_down_wait,
-                            se->check_conf.dest_inhibit_min,
-                            se->check_conf.dest_inhibit_max);
+                    printf("default");
                 }
+            }
+            if (dest_check_external(&se->check_conf)){
+                char buf[16] = {0};
+                printf(" external:");
+                if (se->check_conf.types & DEST_HC_TCP)
+                    strcat(buf, "tcp,");
+                if (se->check_conf.types & DEST_HC_UDP)
+                    strcat(buf, "udp,");
+                if (se->check_conf.types & DEST_HC_PING)
+                    strcat(buf, "ping,");
+                *strrchr(buf, ',') = '\0';
+                printf(buf);
             }
         }
     }
