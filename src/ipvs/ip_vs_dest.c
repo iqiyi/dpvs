@@ -186,13 +186,8 @@ dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
 {
     struct dp_vs_dest *dest;
     union inet_addr daddr;
-    uint16_t dport = udest->port;
+    uint16_t dport;
     uint32_t old_weight;
-
-    if (udest->weight < 0) {
-        RTE_LOG(DEBUG, SERVICE, "%s(): server weight less than zero\n", __func__);
-        return EDPVS_INVAL;
-    }
 
     if (udest->min_conn > udest->max_conn) {
         RTE_LOG(DEBUG, SERVICE, "%s(): lower threshold is higher than upper threshold\n",
@@ -201,6 +196,7 @@ dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     }
 
     daddr = udest->addr;
+    dport = udest->port;
 
     /*
      *  Lookup the destination list
@@ -229,6 +225,43 @@ dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     }
 
     /* call the update_service, because server weight may be changed */
+    if (svc->scheduler->update_service)
+        svc->scheduler->update_service(svc, dest, DPVS_SO_SET_EDITDEST);
+
+    return EDPVS_OK;
+}
+
+/* dp_vs_dest_edit_health only changes dest's weight and DPVS_DEST_F_INHIBITED flag */
+int dp_vs_dest_edit_health(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
+{
+    struct dp_vs_dest *dest;
+    union inet_addr daddr;
+    uint16_t dport;
+    uint32_t old_weight;
+
+    daddr = udest->addr;
+    dport = udest->port;
+
+    dest = dp_vs_dest_lookup(udest->af, svc, &daddr, dport);
+    if (dest == NULL)
+        return EDPVS_NOTEXIST;
+    old_weight = rte_atomic16_read(&dest->weight);
+
+    rte_atomic16_set(&dest->weight, udest->weight);
+    if (udest->flags & DPVS_DEST_F_INHIBITED)
+        dp_vs_dest_set_inhibited(dest);
+    else
+        dp_vs_dest_clear_inhibited(dest);
+
+    svc->weight = svc->weight - old_weight + udest->weight;
+    if (svc->weight < 0) {
+        struct dp_vs_dest *tdest;
+        svc->weight = 0;
+        list_for_each_entry(tdest, &svc->dests, n_list)
+            svc->weight += rte_atomic16_read(&tdest->weight);
+        RTE_LOG(ERR, SERVICE, "%s(): vs weight < 0\n", __func__);
+    }
+
     if (svc->scheduler->update_service)
         svc->scheduler->update_service(svc, dest, DPVS_SO_SET_EDITDEST);
 
@@ -748,7 +781,7 @@ static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len)
                     ret = dp_vs_dest_edit(getsvc, &udest);
                 break;
             case DPVSAGENT_VS_EDIT_DESTS:
-                ret = dp_vs_dest_edit(getsvc, &udest);
+                ret = dp_vs_dest_edit_health(getsvc, &udest);
                 break;
             case DPVSAGENT_VS_DEL_DESTS:
                 ret = dp_vs_dest_del(getsvc, &udest);

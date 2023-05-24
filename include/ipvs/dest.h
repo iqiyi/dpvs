@@ -146,6 +146,8 @@ int dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
 int dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
+int dp_vs_dest_edit_health(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
+
 void dp_vs_dest_unlink(struct dp_vs_service *svc,
                         struct dp_vs_dest *dest, int svcupd);
 
