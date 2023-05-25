@@ -2241,10 +2241,19 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             printf("  -> %-28s %-9u %-11u %-10u %-10u\n", dname,
                     e->weight, e->persistconns,
                     e->actconns, e->inactconns);
-        } else
-            printf("  -> %-28s %-7s %-6d %-10u %-10u\n",
+        } else {
+            char sep = ' ';
+            printf("  -> %-28s %-7s %-6d %-10u %-10u",
                     dname, fwd_name(e->conn_flags),
                     e->weight, e->actconns, e->inactconns);
+            if (e->flags & DPVS_DEST_F_INHIBITED) {
+                printf("%c%s", sep, "inhibited");
+                sep = ',';
+            }
+            if (e->flags & DPVS_DEST_F_OVERLOAD)
+                printf("%c%s",sep, "overload");
+            printf("\n");
+        }
         free(dname);
     }
 
