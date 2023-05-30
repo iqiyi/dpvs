@@ -35,6 +35,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         kni_name                dpdk0.kni
     }
 }

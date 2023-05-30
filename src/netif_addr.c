@@ -311,7 +311,7 @@ int __netif_mc_print(struct netif_port *dev,
     if (err != EDPVS_OK)
         goto errout;
 
-    for (i = 0; i < naddr; i++) {
+    for (i = 0; i < naddr && *len > strlen; i++) {
         err = snprintf(buf + strlen, *len - strlen,
                 "        link %02x:%02x:%02x:%02x:%02x:%02x\n",
                 addrs[i].addr_bytes[0], addrs[i].addr_bytes[1],

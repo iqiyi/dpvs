@@ -37,6 +37,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         ! kni_name              dpdk0.kni
     }
 
@@ -52,6 +53,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         ! kni_name                dpdk1.kni
     }
 
@@ -68,6 +70,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         ! kni_name              dpdk2.kni
     }
 
@@ -83,6 +86,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         ! kni_name              dpdk3.kni
     } 
 

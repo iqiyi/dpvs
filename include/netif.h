@@ -199,6 +199,7 @@ struct netif_ops {
     int (*op_get_queue)(struct netif_port *dev, lcoreid_t cid, queueid_t *qid);
     int (*op_get_link)(struct netif_port *dev, struct rte_eth_link *link);
     int (*op_get_promisc)(struct netif_port *dev, bool *promisc);
+    int (*op_get_allmulticast)(struct netif_port *dev, bool *allmulticast);
     int (*op_get_stats)(struct netif_port *dev, struct rte_eth_stats *stats);
 };
 
@@ -298,6 +299,7 @@ int __netif_set_mc_list(struct netif_port *port);
 int netif_get_queue(struct netif_port *port, lcoreid_t id, queueid_t *qid);
 int netif_get_link(struct netif_port *dev, struct rte_eth_link *link);
 int netif_get_promisc(struct netif_port *dev, bool *promisc);
+int netif_get_allmulticast(struct netif_port *dev, bool *allmulticast);
 int netif_get_stats(struct netif_port *dev, struct rte_eth_stats *stats);
 struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
                                unsigned int nrxq, unsigned int ntxq,
