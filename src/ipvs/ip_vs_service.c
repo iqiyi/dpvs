@@ -831,6 +831,8 @@ static inline int set_opt_so2msg(sockoptid_t opt)
 {
     // return opt - SOCKOPT_SVC_BASE + MSG_TYPE_SVC_SET_BASE;
     switch (opt) {
+    case DPVS_SO_SET_FLUSH:
+        return MSG_TYPE_SVC_SET_FLUSH;
     case DPVS_SO_SET_ZERO:
         return MSG_TYPE_SVC_SET_ZERO;
     case DPVS_SO_SET_ADD:
