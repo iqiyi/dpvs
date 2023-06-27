@@ -51,27 +51,26 @@ enum {
 #define DPVS_CONN_F_NOFASTXMIT              IP_VS_CONN_F_NOFASTXMIT
 
 struct dp_vs_conn_param {
-    int                 af;
-    uint16_t            proto;
-    const union inet_addr *caddr;
-    const union inet_addr *vaddr;
-    uint16_t            cport;
-    uint16_t            vport;
-    uint16_t            ct_dport; /* RS port for template connection */
-    bool                outwall;
+    uint8_t                 af;
+    bool                    outwall;
+    uint16_t                proto;
+    uint16_t                cport;
+    uint16_t                vport;
+    const union inet_addr  *caddr;
+    const union inet_addr  *vaddr;
+    uint16_t                ct_dport; /* RS port for template connection */
 };
 
 struct conn_tuple_hash {
     struct list_head    list;
-    int                 direct; /* inbound/outbound */
-
-    /* tuple info */
-    int                 af;
-    uint16_t            proto;
-    union inet_addr     saddr;  /* pkt's source addr */
-    union inet_addr     daddr;  /* pkt's dest addr */
+    uint8_t             af;
+    uint8_t             proto;
+    uint8_t             direct; /* inbound/outbound */
+    uint8_t             pad;
     uint16_t            sport;
     uint16_t            dport;
+    union inet_addr     saddr;  /* pkt's source addr */
+    union inet_addr     daddr;  /* pkt's dest addr */
 } __rte_cache_aligned;
 
 struct dp_vs_conn_stats {
@@ -83,89 +82,109 @@ struct dp_vs_conn_stats {
 
 struct dp_vs_proto;
 
+/*
+ * All the members of dp_vs_conn are classified into two groups, A and B.
+ * And a new member must be added to either of them.
+ */
 struct dp_vs_conn {
-    int                     af;
+    RTE_MARKER              cacheline0;
+    /*
+     * Group A: the below members are initialized in dp_vs_conn_new().
+     */
+    struct conn_tuple_hash  tuplehash[DPVS_CONN_DIR_MAX];
+
+    RTE_MARKER              cacheline2 __rte_cache_min_aligned;
+    union inet_addr         caddr;          /* Client address */
+    union inet_addr         vaddr;          /* Virtual address */
+    union inet_addr         laddr;          /* director Local address */
+    union inet_addr         daddr;          /* Destination (RS) address */
+
+    RTE_MARKER              cacheline3 __rte_cache_min_aligned;
+    uint8_t                 af;
     uint8_t                 proto;
-    union inet_addr         caddr;  /* Client address */
-    union inet_addr         vaddr;  /* Virtual address */
-    union inet_addr         laddr;  /* director Local address */
-    union inet_addr         daddr;  /* Destination (RS) address */
+    lcoreid_t               lcore;
+    bool                    outwall;        /* flag for gfwip */
+    rte_atomic32_t          refcnt;
+
     uint16_t                cport;
     uint16_t                vport;
     uint16_t                lport;
     uint16_t                dport;
 
-    struct rte_mempool      *connpool;
-    struct conn_tuple_hash  tuplehash[DPVS_CONN_DIR_MAX];
-    rte_atomic32_t          refcnt;
-    struct dpvs_timer       timer;
+    struct rte_mempool     *connpool;
+    struct dp_vs_dest      *dest;           /* real server */
     struct timeval          timeout;
-    lcoreid_t               lcore;
-    struct dp_vs_dest       *dest;  /* real server */
-    void                    *prot_data;  /* protocol specific data */
-
-    /* for FNAT */
-    struct dp_vs_laddr      *local; /* local address */
-    struct dp_vs_seq        fnat_seq;
-
-    /* save last SEQ/ACK from RS for RST when conn expire*/
-    uint32_t                rs_end_seq;
-    uint32_t                rs_end_ack;
-
     int (*packet_xmit)(struct dp_vs_proto *prot,
-                        struct dp_vs_conn *conn,
-                        struct rte_mbuf *mbuf);
+                       struct dp_vs_conn *conn, struct rte_mbuf *mbuf);
     int (*packet_out_xmit)(struct dp_vs_proto *prot,
-                        struct dp_vs_conn *conn,
-                        struct rte_mbuf *mbuf);
+                           struct dp_vs_conn *conn, struct rte_mbuf *mbuf);
 
+    RTE_MARKER              cacheline4 __rte_cache_min_aligned;
+    struct dp_vs_laddr     *local;          /* local address in fnat mode */
+    volatile uint32_t       flags;
+
+    /*
+     * Group B: the below members are initialized in dp_vs_conn_pre_init().
+     */
+    /* state transition */
+    uint16_t                pad1;
+    volatile uint8_t        state;
+    volatile uint8_t        old_state;      /* used for state transition
+                                               triggered synchronization */
+    /* route for neigbour */
+    struct netif_port      *in_dev;         /* inside to rs */
+    struct netif_port      *out_dev;        /* outside to client */
+
+    union inet_addr         in_nexthop;     /* to rs*/
+    union inet_addr         out_nexthop;    /* to client*/
+
+    RTE_MARKER              cacheline5 __rte_cache_min_aligned;
     /* L2 fast xmit */
     struct rte_ether_addr   in_smac;
     struct rte_ether_addr   in_dmac;
     struct rte_ether_addr   out_smac;
     struct rte_ether_addr   out_dmac;
 
-    /* route for neigbour */
-    struct netif_port       *in_dev;    /* inside to rs*/
-    struct netif_port       *out_dev;   /* outside to client*/
-    union inet_addr         in_nexthop;  /* to rs*/
-    union inet_addr         out_nexthop; /* to client*/
+    /* save last SEQ/ACK from RS for RST when conn expire */
+    uint32_t                rs_end_seq;
+    uint32_t                rs_end_ack;
 
-#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
-    /* statistics */
-    struct dp_vs_conn_stats stats;
-#endif
-
-    /* synproxy related members */
-    struct dp_vs_seq syn_proxy_seq;     /* seq used in synproxy */
-    struct list_head ack_mbuf;          /* ack mbuf saved in step2 */
-    uint32_t ack_num;                   /* ack mbuf number stored */
-    struct rte_mbuf *syn_mbuf;          /* saved rs syn packet for retransmition */
-    rte_atomic32_t syn_retry_max;       /* syn retransmition max packets */
+    /* for FNAT */
+    struct dp_vs_seq        fnat_seq;
 
     /* add for stopping ack storm */
-    uint32_t last_seq;                  /* seq of the last ack packet */
-    uint32_t last_ack_seq;              /* ack seq of the last ack packet */
-    rte_atomic32_t dup_ack_cnt;         /* count of repeated ack packets */
+    uint32_t                last_seq;       /* seq of the last ack packet */
+    uint32_t                last_ack_seq;   /* ack seq of the last ack packet */
+    rte_atomic32_t          dup_ack_cnt;    /* count of repeated ack packets */
+    uint32_t                pad2;
 
-    /* flags and state transition */
-    volatile uint16_t       flags;
-    volatile uint16_t       state;
-    volatile uint16_t       old_state;  /* old state, to be used for state transition
-                                           triggered synchronization */
-    /* controll members */
-    struct dp_vs_conn *control;         /* master who controlls me */
-    rte_atomic32_t n_control;           /* number of connections controlled by me*/
+    RTE_MARKER              cacheline6 __rte_cache_min_aligned;
+    /* synproxy related members */
+    struct list_head        ack_mbuf;       /* ack mbuf saved in step2 */
+    struct dp_vs_seq        syn_proxy_seq;  /* seq used in synproxy */
+    struct rte_mbuf        *syn_mbuf;       /* saved rs syn packet for retransmition */
+    uint32_t                ack_num;        /* ack mbuf number stored */
+    rte_atomic32_t          syn_retry_max;  /* syn retransmition max packets */
+
+    /* control members */
+    RTE_MARKER              cacheline7 __rte_cache_min_aligned;
+    struct dpvs_timer       timer;
+    struct dp_vs_conn      *control;        /* master who controlls me */
+    void                   *prot_data;      /* protocol specific data */
+
+    rte_atomic32_t          n_control;      /* number of connections controlled
+                                               by me */
+    uint32_t                pad3;
+
+    RTE_MARKER              cacheline8 __rte_cache_min_aligned;
 #ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
-    uint64_t ctime;                     /* create time */
+    uint64_t                ctime;          /* create time */
+    struct dp_vs_conn_stats stats;          /* statistics */
 #endif
-
-    /* connection redirect in fnat/snat/nat modes */
-    struct dp_vs_redirect  *redirect;
-
-    /* flag for gfwip */
-    bool outwall;
-
+    /*
+     * the below member is initialized in dp_vs_conn_alloc().
+     */
+    struct dp_vs_redirect  *redirect;       /* used in fnat/snat/nat modes */
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
