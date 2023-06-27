@@ -304,6 +304,28 @@ static int dump_nic_stats(char *name, int namelen)
     return EDPVS_OK;
 }
 
+static void dump_nic_xstats(char *name, int namelen)
+{
+    int i, err;
+    size_t len = 0;
+    netif_nic_xstats_get_t *get = NULL;
+
+    printf("    xstats list:\n");
+    err = dpvs_getsockopt(SOCKOPT_NETIF_GET_PORT_XSTATS, name, namelen,
+            (void **)&get, &len);
+    if (err != EDPVS_OK || !get || !len) {
+        printf("        not supported\n");
+        return;
+    }
+
+    for (i = 0; i < get->nentries; i++) {
+        printf("        %-6lu%s: %lu\n", get->entries[i].id, get->entries[i].name,
+                get->entries[i].val);
+    }
+
+    dpvs_sockopt_msg_free(get);
+}
+
 static int dump_nic_verbose(char *name, int namelen)
 {
     int err;
@@ -653,6 +675,9 @@ static int link_nic_show(struct link_param *param)
             if ((err = dump_nic_stats_velocity(param->dev_name, sizeof(param->dev_name),
                         param->stats.interval, param->stats.count)) != EDPVS_OK)
                 return err;
+        }
+        if (param->verbose) {
+            dump_nic_xstats(param->dev_name, sizeof(param->dev_name));
         }
     }
     if (param->verbose)

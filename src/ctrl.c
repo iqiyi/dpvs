@@ -1152,7 +1152,7 @@ static inline int msg_term(void)
 
 /////////////////////////////// sockopt process msg ///////////////////////////////////////////
 
-char ipc_unix_domain[256];
+static char ipc_unix_domain[256];
 
 static struct list_head sockopt_list;
 
@@ -1601,38 +1601,11 @@ static void msg_priority_level_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
-static void ipc_unix_domain_handler(vector_t tokens)
-{
-    char *str, *dup_str;
-    size_t slen;
-
-    str = set_value(tokens);
-    slen = strlen(str);
-
-    dup_str = strdup(str);
-    dirname(dup_str);
-    memset(ipc_unix_domain, 0, sizeof(ipc_unix_domain));
-
-    if (slen > 0 && slen < sizeof(ipc_unix_domain) &&
-            access(dup_str, F_OK) == 0) {
-        RTE_LOG(INFO, MSGMGR, "ipc_unix_domain = %s\n", str);
-        strncpy(ipc_unix_domain, str, sizeof(ipc_unix_domain) - 1);
-    } else {
-        RTE_LOG(WARNING, MSGMGR, "invalid ipc_unix_domain %s, using default %s\n",
-                str, dpvs_ipc_file);
-        strncpy(ipc_unix_domain, dpvs_ipc_file, sizeof(ipc_unix_domain) - 1);
-    }
-
-    free(dup_str);
-    FREE_PTR(str);
-}
-
 void control_keyword_value_init(void)
 {
     if (dpvs_state_get() == DPVS_STATE_INIT) {
         /* KW_TYPE_INIT keyword */
         msg_ring_size = DPVS_MSG_RING_SIZE_DEF;
-        strncpy(ipc_unix_domain, dpvs_ipc_file, sizeof(ipc_unix_domain) - 1);
     }
     /* KW_TYPE_NORMAL keyword */
     g_msg_timeout = MSG_TIMEOUT_US;
@@ -1647,9 +1620,5 @@ void install_control_keywords(void)
     install_keyword("ring_size", msg_ring_size_handler, KW_TYPE_INIT);
     install_keyword("sync_msg_timeout_us", msg_timeout_handler, KW_TYPE_NORMAL);
     install_keyword("priority_level", msg_priority_level_handler, KW_TYPE_NORMAL);
-    install_sublevel_end();
-    install_keyword("ipc_msg", NULL, KW_TYPE_INIT);
-    install_sublevel();
-    install_keyword("unix_domain", ipc_unix_domain_handler, KW_TYPE_INIT);
     install_sublevel_end();
 }
