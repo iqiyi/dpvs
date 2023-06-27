@@ -3,14 +3,14 @@ Backends Failure Detection and Inhibition
 
 # Concepts
 
-DPVS implements a simple backend failure detection and inhibition mechanism by examining the packet flow it forwards. We call it Passive Health Check because it doesn't send any probe data to the backends. It works for TCP by checking if SYN/ACK packet is replied from the backend, and if not, inhibit scheduling of the backend for a period. The inhibiting period is gained or lost exponentially depending on subsequent checking is failure or success. As for UDP, it works only when the UDP flow is bidirectional, that is, the UDP connections that forwarding inbound or outbound only are always detcted as dead. Thus "dest-check" should be never configured for the UDP services with monodirectional flow. In summury, DPVS Passive Health Check can be used in the following scenarios:
+DPVS implements a simple backend failure detection and inhibition mechanism by examining the packet flow it forwards. We call it Passive Health Check because it doesn't send any probe request to the backends. It works for TCP by checking if SYN/ACK packet is replied from the backend, and if not, inhibit scheduling the backend for a period. The inhibiting period is gained or lost exponentially depending on subsequent checking is failure or success. As for UDP, it works only when the UDP flow is bidirectional, that is, the UDP backends with connections that forwarding inbound only or outbound only are always detcted to be failure. Thus "dest-check" should be never configured on the UDP services with monodirectional flow. In summury, DPVS Passive Health Check is applicable to the following scenarios:
 
 * TCP FullNat/Nat64/DR/Tunnel/Nat fowarding mode.
 * UDP FullNat/Nat64/Nat forwarding mode with bidirectional data flow.
 
-It's noted that DPVS Passive Health Check has no way to discover the backend failure unless packet drop has already acctually occurred. A smaller session timeout may be preferred for TCP SYN_SENT/SYN_RECV and UDP ONEWAY states to detect backend fault and remove it from available backend list quickly.
+It's noted that DPVS Passive Health Check has no way to detect the backend failure unless packet drop has already acctually occurred. A smaller session timeout may be preferred for TCP SYN_SENT/SYN_RECV and UDP ONEWAY states to accelerate backend fault discovery and remove it from available backend list quickly.
 
-The state transition diagrams below show the interactions of DPVS master and slave lcores for Passive Health Check.
+The state transition diagrams below explain the workflow in DPVS master and slave lcores for Passive Health Check.
 
 ![master lcore](./pics/health_check-master-lcore.drawio.png)
 
@@ -31,14 +31,14 @@ The backends are detected as UP in the following cases:
 * TCP synproxy step 3 received SYN/ACK from backend
 * UDP session state tranfers from ONEWAY to NORMAL
 
-Backend inhibition is performed by setting the inhibition flag into the backend server and changing its weight to zero so that new sessions would not be scheduled it.
+Backend inhibition is performed by setting the inhibition flag into the backend server and changing its weight to zero so that new sessions would not be scheduled to it.
 
 Four types of lcore msg notice are used:
 
 * **Down Notice**:  unicast msg, from slave to master, notify master a backend DOWN event is detected
 * **Up Notice**:    unicast msg, from slave to master, notify master a backend UP event is detected
 * **Close Notice**: multicast msg, from master to all slaves, inhibit scheduling a failed backend
-* **Open Notice**:  multicast msg, from master to all slaves, restore scheduling a inhibited backend
+* **Open Notice**:  multicast msg, from master to all slaves, restore scheduling an inhibited backend
 
 DPVS allows to specify a per-service Passive Health Check configuration, each configuration including the 5 parameters below:
 
@@ -174,7 +174,7 @@ TCP  192.168.88.1:80 wlc dest-check internal:3,3,3s,60-3600s
   -> 192.168.88.68:80             FullNat 1      0          5    
 ```
 
-Run the above script and we get the outputs below.
+Run the script above and we get the outputs below.
 
 ```
 # while true; do curl -g -s -m 1 192.168.88.1:80 -o /dev/null; [ $? -eq 0 ] && printf . || printf x; sleep 0.5; done
@@ -211,7 +211,7 @@ DPVS supports external backend health check with an auxiliary program called `he
 * UDP Checker
 * Ping Checker
 
-They shall work independently or together with Passive Health Check. Notes that external checkers rely on dpvs-agent to interact with DPVS.
+They shall work independently or together with Passive Health Check. Notes that external checkers rely on dpvs-agent to communicate with DPVS.
 
 * Enable external TCP Checker.
 
