@@ -1326,7 +1326,7 @@ Firstly, DPVS runs with `WARNING` log level by default. You can change it in `/e
 
 Use low level log such as "INFO" or "DEBUG" may help find more clues to your problem.
 
-Secondly, some modules support more detailed debug log only if you enable it when compile DPVS. The supported flags are defined but commented in [src/config.mk](../src/config.mk), some of which are listed below. Uncomment it and recompile DPVS if you need to debug the corresponding module.
+Secondly, some modules support more detailed debug log only if you enable it when compile DPVS. The modular debug options are available in [config.mk](../config.mk), some of which are listed below. Change the value to "y" and recompile DPVS if you want to debug a module.
 
 ```
 - CONFIG_DPVS_IPVS_DEBUG    # for ipvs forwarding debug
