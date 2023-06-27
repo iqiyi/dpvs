@@ -59,6 +59,8 @@ static int g_uoa_mode = UOA_M_OPP; /* by default */
 int g_defence_udp_drop = 0;
 
 static int udp_timeouts[DPVS_UDP_S_LAST + 1] = {
+    [DPVS_UDP_S_NONE]   = 2,
+    [DPVS_UDP_S_ONEWAY] = 300,
     [DPVS_UDP_S_NORMAL] = 300,
     [DPVS_UDP_S_LAST]   = 2,
 };
@@ -253,6 +255,14 @@ udp_conn_lookup(struct dp_vs_proto *proto,
 
 static int udp_conn_expire(struct dp_vs_proto *proto, struct dp_vs_conn *conn)
 {
+    // Note: udp dest-check works only when the udp is bidirectional, that is,
+    //   the udp conns that forwarding inbound only or outbound only are always
+    //   detcted dead. Thus "dest-check" should be never configured for the
+    //   single directional udp flow. Besides, the a smaller conn timeout may be
+    //   specified for the bidirectional flow service to detect dest fault quickly.
+    if (conn->state == DPVS_UDP_S_ONEWAY)
+        dp_vs_dest_detected_dead(conn->dest);
+
     if (conn->prot_data)
         rte_free(conn->prot_data);
 
@@ -269,8 +279,24 @@ static int udp_conn_expire_quiescent(struct dp_vs_conn *conn)
 static int udp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
                            struct rte_mbuf *mbuf, int dir)
 {
-    conn->state = DPVS_UDP_S_NORMAL;
+    int old_state = conn->state;
+
+    if (conn->dest->fwdmode == DPVS_FWD_MODE_SNAT) {
+        if (dir == DPVS_CONN_DIR_INBOUND)
+            conn->state = DPVS_UDP_S_NORMAL;
+        else if (conn->state == DPVS_UDP_S_NONE)
+            conn->state = DPVS_UDP_S_ONEWAY;
+    } else {
+        if (dir == DPVS_CONN_DIR_OUTBOUND)
+            conn->state = DPVS_UDP_S_NORMAL;
+        else if (conn->state == DPVS_UDP_S_NONE)
+            conn->state = DPVS_UDP_S_ONEWAY;
+    }
     dp_vs_conn_set_timeout(conn, proto);
+
+    if (old_state == DPVS_UDP_S_ONEWAY && conn->state == DPVS_UDP_S_NORMAL)
+        dp_vs_dest_detected_alive(conn->dest);
+
     return EDPVS_OK;
 }
 
@@ -860,6 +886,25 @@ static void uoa_mode_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
+static void timeout_oneway_handler(vector_t tokens)
+{
+    int timeout;
+    char *str = set_value(tokens);
+
+    assert(str);
+    timeout = atoi(str);
+    if (timeout > IPVS_TIMEOUT_MIN && timeout < IPVS_TIMEOUT_MAX) {
+        RTE_LOG(INFO, IPVS, "udp_timeout_oneway = %d\n", timeout);
+        udp_timeouts[DPVS_UDP_S_ONEWAY] = timeout;
+    } else {
+        RTE_LOG(INFO, IPVS, "invalid udp_timeout_oneway %s, using default %d\n",
+                str, 300);
+        udp_timeouts[DPVS_UDP_S_ONEWAY] = 300;
+    }
+
+    FREE_PTR(str);
+}
+
 static void timeout_normal_handler(vector_t tokens)
 {
     int timeout;
@@ -908,6 +953,7 @@ void udp_keyword_value_init(void)
     g_defence_udp_drop = 0;
     g_uoa_max_trail = UOA_DEF_MAX_TRAIL;
 
+    udp_timeouts[DPVS_UDP_S_ONEWAY] = 300;
     udp_timeouts[DPVS_UDP_S_NORMAL] = 300;
     udp_timeouts[DPVS_UDP_S_LAST] = 2;
 }
@@ -921,6 +967,7 @@ void install_proto_udp_keywords(void)
     install_keyword("timeout", NULL, KW_TYPE_NORMAL);
     install_sublevel();
     install_keyword("normal", timeout_normal_handler, KW_TYPE_NORMAL);
+    install_keyword("oneway", timeout_oneway_handler, KW_TYPE_NORMAL);
     install_keyword("last", timeout_last_handler, KW_TYPE_NORMAL);
     install_sublevel_end();
 }

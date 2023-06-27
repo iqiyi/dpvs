@@ -331,6 +331,7 @@ ipvs_defs {
         uoa_mode        opp
         uoa_max_trail   3
         timeout {
+            oneway      60
             normal      300
             last        3
         }

@@ -101,7 +101,6 @@ extern int dpvs_update_service(dpvs_service_compat_t *svc);
 /* update a virtual service based on option */
 extern int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int options);
 
-
 /* delete a virtual service */
 extern int dpvs_del_service(dpvs_service_compat_t *svc);
 /* zero the counters of a service or all */
@@ -151,7 +150,6 @@ extern ipvs_timeout_t *dpvs_get_timeout(void);
 
 /* get ipvs daemon information */
 extern ipvs_daemon_t *dpvs_get_daemon(void);
-
 
 extern const char *ipvs_strerror(int err);
 

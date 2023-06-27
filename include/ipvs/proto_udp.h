@@ -21,7 +21,9 @@
 #include <netinet/udp.h>
 
 enum {
-    DPVS_UDP_S_NORMAL   = 0,
+    DPVS_UDP_S_NONE     = 0,
+    DPVS_UDP_S_ONEWAY,
+    DPVS_UDP_S_NORMAL,
     DPVS_UDP_S_LAST
 };
 

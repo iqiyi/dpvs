@@ -787,11 +787,11 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     }
 
     if (vs->syn_proxy) {
-        srule->flags |= IP_VS_CONN_F_SYNPROXY;
+        srule->flags |= IP_VS_SVC_F_SYNPROXY;
     }
 
     if (vs->expire_quiescent_conn) {
-        srule->flags |= IP_VS_CONN_F_EXPIRE_QUIESCENT;
+        srule->flags |= IP_VS_SVC_F_EXPIRE_QUIESCENT;
     }
 
     if (!strcmp(vs->sched, "conhash")) {
@@ -832,6 +832,7 @@ ipvs_set_drule(int cmd, dpvs_dest_compat_t *drule, real_server_t * rs)
 
     drule->port = inet_sockaddrport(&rs->addr);
     drule->conn_flags = rs->forwarding_method;
+    drule->fwdmode = rs->forwarding_method;
     drule->weight = rs->weight;
     drule->max_conn = rs->u_threshold;
     drule->min_conn = rs->l_threshold;

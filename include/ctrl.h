@@ -211,6 +211,8 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_TC_CLS_GET                 29
 #define MSG_TYPE_TC_CLS_SET                 30
 #define MSG_TYPE_IPSET_SET                  40
+#define MSG_TYPE_DEST_CHECK_NOTIFY_MASTER   41
+#define MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES   42
 #define MSG_TYPE_IPVS_RANGE_START           100
 
 /* for svc per_core, refer to service.h*/
@@ -237,6 +239,7 @@ enum {
     MSG_TYPE_AGENT_ADD_LADDR,
     MSG_TYPE_AGENT_DEL_LADDR,
     MSG_TYPE_AGENT_ADD_DESTS,
+    MSG_TYPE_AGENT_EDIT_DESTS,
     MSG_TYPE_AGENT_DEL_DESTS,
 #endif
 };

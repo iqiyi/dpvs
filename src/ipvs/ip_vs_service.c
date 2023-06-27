@@ -498,6 +498,8 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
     svc->laddr_curr = &svc->laddr_list;
 
     INIT_LIST_HEAD(&svc->dests);
+    svc->check_conf= u->check_conf;
+    dest_check_configs_sanity(&svc->check_conf);
 
     ret = dp_vs_bind_scheduler(svc, sched);
     if (ret)
@@ -554,6 +556,8 @@ static int dp_vs_service_edit(struct dp_vs_service *svc, struct dp_vs_service_co
     svc->netmask = u->netmask;
     svc->bps = u->bps;
     svc->limit_proportion = u->limit_proportion;
+    svc->check_conf= u->check_conf;
+    dest_check_configs_sanity(&svc->check_conf);
 
     old_sched = svc->scheduler;
     if (sched != old_sched) {
@@ -658,6 +662,7 @@ dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     dst->num_laddrs = src->num_laddrs;
     dst->cid = rte_lcore_id();
     dst->index = g_lcore_id2index[dst->cid];
+    dst->check_conf = src->check_conf;
 
     err = dp_vs_stats_add(&dst->stats, &src->stats);
 
@@ -801,8 +806,9 @@ void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest,
     udest->af         = udest_compat->af;
     udest->addr       = udest_compat->addr;
     udest->port       = udest_compat->port;
-    udest->fwdmode    = udest_compat->conn_flags;//make sure fwdmode and conn_flags are the same
+    udest->fwdmode    = udest_compat->fwdmode;
     udest->conn_flags = udest_compat->conn_flags;
+    udest->flags      = udest_compat->flags;
     udest->weight     = udest_compat->weight;
     udest->max_conn   = udest_compat->max_conn;
     udest->min_conn   = udest_compat->min_conn;
@@ -825,6 +831,8 @@ static inline int set_opt_so2msg(sockoptid_t opt)
 {
     // return opt - SOCKOPT_SVC_BASE + MSG_TYPE_SVC_SET_BASE;
     switch (opt) {
+    case DPVS_SO_SET_FLUSH:
+        return MSG_TYPE_SVC_SET_FLUSH;
     case DPVS_SO_SET_ZERO:
         return MSG_TYPE_SVC_SET_ZERO;
     case DPVS_SO_SET_ADD:

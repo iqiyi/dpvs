@@ -385,6 +385,7 @@ static int dpvs_agent_laddr_getall(struct dp_vs_service *svc,
             (*addrs)[i].af = laddr->af;
             (*addrs)[i].addr = laddr->addr;
             (*addrs)[i].conns = rte_atomic32_read(&laddr->conn_counts);
+            rte_strlcpy((*addrs)[i].ifname, laddr->iface->name, IFNAMSIZ);
             i++;
         }
     } else {
@@ -500,6 +501,7 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     struct dp_vs_laddr_detail *details, *detail;
 #endif
 
+    err = EDPVS_OK;
     lcoreid_t cid = rte_lcore_id();
 
     // send to slave core
@@ -575,7 +577,8 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
         details = (struct dp_vs_laddr_detail*)((char*)conf + sizeof(struct dp_vs_laddr_front));
         for (i = 0; i < laddr_front->count; i++) {
             detail = (struct dp_vs_laddr_detail*)((char*)details + sizeof(struct dp_vs_laddr_detail) * i);
-            err = dp_vs_laddr_del(svc, detail->af, &detail->addr); if (err != EDPVS_OK) {
+            err = dp_vs_laddr_del(svc, detail->af, &detail->addr); 
+            if (err != EDPVS_OK) {
                 if (err == EDPVS_NOTEXIST)
                     continue;
                 break;
@@ -633,6 +636,7 @@ static int agent_get_msg_cb(struct dpvs_msg *msg)
         laddrs->laddrs[i].af = addrs[i].af;
         laddrs->laddrs[i].addr = addrs[i].addr;
         /* TODO: nport_conflict & nconns */
+        rte_memcpy(laddrs->laddrs[i].ifname, addrs[i].ifname, IFNAMSIZ);
         laddrs->laddrs[i].nport_conflict = 0;
         laddrs->laddrs[i].conns = addrs[i].conns;
     }
@@ -870,6 +874,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             for (i = 0; i < naddr; i++) {
                 out_front->laddrs[i].af = details[i].af;
                 out_front->laddrs[i].addr = details[i].addr;
+                rte_strlcpy(out_front->laddrs[i].ifname, details[i].ifname, IFNAMSIZ);
                 out_front->laddrs[i].nport_conflict = 0;
                 out_front->laddrs[i].conns = details[i].conns;
             }

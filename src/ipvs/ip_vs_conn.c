@@ -505,8 +505,8 @@ static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn);
 
 unsigned dp_vs_conn_get_timeout(struct dp_vs_conn *conn)
 {
-    if (conn && conn->dest)
-        return conn->dest->conn_timeout;
+    if (conn && conn->dest && conn->dest->svc)
+        return conn->dest->svc->conn_timeout;
 
     return 0;
 }
@@ -517,7 +517,7 @@ void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp)
 
     /* set proper timeout */
     if ((conn->proto == IPPROTO_TCP && conn->state == DPVS_TCP_S_ESTABLISHED)
-        || (conn->proto == IPPROTO_UDP && conn->state == DPVS_UDP_S_NORMAL)) {
+            || conn->proto == IPPROTO_UDP) {
         conn_timeout = dp_vs_conn_get_timeout(conn);
 
         if (conn_timeout > 0) {
@@ -1287,6 +1287,12 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
             break;
         case IPPROTO_UDP:
             switch (state) {
+                case DPVS_UDP_S_NONE:
+                    return "UDP_NONE";
+                    break;
+                case DPVS_UDP_S_ONEWAY:
+                    return "UDP_ONEWAY";
+                    break;
                 case DPVS_UDP_S_NORMAL:
                     return "UDP_NORM";
                     break;
@@ -1412,17 +1418,21 @@ static int __lcore_conn_table_dump(const struct list_head *cplist)
             }
             sockopt_fill_conn_entry(conn, &cparr->array[cparr->tail++]);
             if (cparr->tail >= MAX_CTRL_CONN_GET_ENTRIES) {
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
                 RTE_LOG(DEBUG, IPVS, "%s: adding %d elems to conn_to_dump list -- "
                         "%p:%d-%d\n", __func__, cparr->tail - cparr->head, cparr,
                         cparr->head, cparr->tail);
+#endif
                 list_add_tail(&cparr->ca_list, &conn_to_dump);
             }
         }
     }
     if (cparr && cparr->tail < MAX_CTRL_CONN_GET_ENTRIES) {
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
         RTE_LOG(DEBUG, IPVS, "%s: adding %d elems to conn_to_dump list -- "
                 "%p:%d-%d\n", __func__, cparr->tail - cparr->head, cparr,
                 cparr->head, cparr->tail);
+#endif
         list_add_tail(&cparr->ca_list, &conn_to_dump);
     }
     return EDPVS_OK;
@@ -1438,9 +1448,11 @@ static int sockopt_conn_get_all(const struct ip_vs_conn_req *conn_req,
 
 again:
     list_for_each_entry_safe(larr, next_larr, &conn_to_dump, ca_list) {
+#ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
         RTE_LOG(DEBUG, IPVS, "%s: printing conn_to_dump list(len=%d) --"
                 "%p:%d-%d\n", __func__, list_elems(&conn_to_dump), larr,
                 larr->head, larr->tail);
+#endif
         n = larr->tail - larr->head;
         assert(n > 0);
         if (n > MAX_CTRL_CONN_GET_ENTRIES - got) {
