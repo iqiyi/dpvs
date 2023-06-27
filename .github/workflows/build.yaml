@@ -22,13 +22,13 @@ jobs:
     - name: make
       run: make -j
       
-  build-debug:
+  build-all:
     runs-on: self-hosted
     env:
       PKG_CONFIG_PATH: /data/dpdk/dpdklib/lib64/pkgconfig
     steps:
     - uses: actions/checkout@v2
     - name: config
-      run: sed -i 's/#CFLAGS +=/CFLAGS +=/' src/config.mk && sed -i 's/^#DEBUG := 1/DEBUG := 1/' src/Makefile
+      run: sed -i 's/=n$/=y/' config.mk
     - name: make
       run: make -j
