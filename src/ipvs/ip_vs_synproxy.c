@@ -39,7 +39,7 @@
 #define DP_VS_SYNPROXY_SACK_DEFAULT             1
 #define DP_VS_SYNPROXY_WSCALE_DEFAULT           0
 #define DP_VS_SYNPROXY_TIMESTAMP_DEFAULT        0
-#define DP_VS_SYNPROXY_CLWND_DEFAULT            1
+#define DP_VS_SYNPROXY_CLWND_DEFAULT            0
 #define DP_VS_SYNPROXY_DEFER_DEFAULT            0
 #define DP_VS_SYNPROXY_DUP_ACK_DEFAULT          10
 #define DP_VS_SYNPROXY_MAX_ACK_SAVED_DEFAULT    3
@@ -55,7 +55,7 @@ int dp_vs_synproxy_ctrl_sack = DP_VS_SYNPROXY_SACK_DEFAULT;
 int dp_vs_synproxy_ctrl_wscale = DP_VS_SYNPROXY_WSCALE_DEFAULT;
 int dp_vs_synproxy_ctrl_timestamp = DP_VS_SYNPROXY_TIMESTAMP_DEFAULT;
 int dp_vs_synproxy_ctrl_synack_ttl = DP_VS_SYNPROXY_TTL_DEFAULT;
-int dp_synproxy_ctrl_clwnd = DP_VS_SYNPROXY_CLWND_DEFAULT;
+int dp_vs_synproxy_ctrl_clwnd = DP_VS_SYNPROXY_CLWND_DEFAULT;
 int dp_vs_synproxy_ctrl_defer = DP_VS_SYNPROXY_DEFER_DEFAULT;
 int dp_vs_synproxy_ctrl_conn_reuse = DP_VS_SYNPROXY_CONN_REUSE_DEFAULT;
 int dp_vs_synproxy_ctrl_conn_reuse_cl = DP_VS_SYNPROXY_CONN_REUSE_CL_DEFAULT;
@@ -613,7 +613,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
     th->dest = th->source;
     th->source = tmpport;
     /* set window size to zero if enabled */
-    if (dp_synproxy_ctrl_clwnd && !dp_vs_synproxy_ctrl_defer)
+    if (dp_vs_synproxy_ctrl_clwnd && !dp_vs_synproxy_ctrl_defer)
         th->window = 0;
     /* set seq(cookie) and ack_seq */
     th->ack_seq = htonl(ntohl(th->seq) + 1);
@@ -1459,7 +1459,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
          * The probe will be forward to RS and RS will respond a window update.
          * So DPVS has no need to send a window update.
          */
-        if (dp_synproxy_ctrl_clwnd && !dp_vs_synproxy_ctrl_defer && cp->ack_num <= 1)
+        if (dp_vs_synproxy_ctrl_clwnd && !dp_vs_synproxy_ctrl_defer && cp->ack_num <= 1)
             syn_proxy_send_window_update(tuplehash_out(cp).af, mbuf, cp, pp, th);
 
         list_for_each_entry_safe(tmbuf, tmbuf2, &cp->ack_mbuf, list) {
@@ -1793,8 +1793,21 @@ static void synack_sack_handler(vector_t tokens)
 
 static void synack_wscale_handler(vector_t tokens)
 {
-    RTE_LOG(INFO, IPVS, "synproxy_synack_options_wscale ON\n");
-    dp_vs_synproxy_ctrl_wscale = 1;
+    char *str = set_value(tokens);
+    int wscale;
+
+    assert(str);
+    wscale = atoi(str);
+    if (wscale >= 0 && wscale <= DP_VS_SYNPROXY_WSCALE_MAX) {
+        RTE_LOG(INFO, IPVS, "synproxy_synack_options_wscale = %d\n", wscale);
+        dp_vs_synproxy_ctrl_wscale = wscale;
+    } else {
+        RTE_LOG(WARNING, IPVS, "invalid synproxy_synack_options_wscale %s, using default %d\n",
+                str, DP_VS_SYNPROXY_WSCALE_DEFAULT);
+        dp_vs_synproxy_ctrl_init_mss = DP_VS_SYNPROXY_WSCALE_DEFAULT;
+    }
+
+    FREE_PTR(str);
 }
 
 static void synack_timestamp_handler(vector_t tokens)
@@ -1806,7 +1819,7 @@ static void synack_timestamp_handler(vector_t tokens)
 static void close_client_window_handler(vector_t tokens)
 {
     RTE_LOG(INFO, IPVS, "close_client_window ON\n");
-    dp_synproxy_ctrl_clwnd = 1;
+    dp_vs_synproxy_ctrl_clwnd = 1;
 }
 
 static void defer_rs_syn_handler(vector_t tokens)
@@ -1914,18 +1927,18 @@ void synproxy_keyword_value_init(void)
     }
     /* KW_TYPE_NORMAL keyword */
     dp_vs_synproxy_ctrl_init_mss = DP_VS_SYNPROXY_INIT_MSS_DEFAULT;
-    dp_vs_synproxy_ctrl_sack = 0;
-    dp_vs_synproxy_ctrl_wscale = 0;
-    dp_vs_synproxy_ctrl_timestamp = 0;
+    dp_vs_synproxy_ctrl_sack = DP_VS_SYNPROXY_SACK_DEFAULT;
+    dp_vs_synproxy_ctrl_wscale = DP_VS_SYNPROXY_WSCALE_DEFAULT;
+    dp_vs_synproxy_ctrl_timestamp = DP_VS_SYNPROXY_TIMESTAMP_DEFAULT;
     dp_vs_synproxy_ctrl_synack_ttl = DP_VS_SYNPROXY_TTL_DEFAULT;
-    dp_synproxy_ctrl_clwnd = 0;
-    dp_vs_synproxy_ctrl_defer = 0;
-    dp_vs_synproxy_ctrl_conn_reuse = 0;
-    dp_vs_synproxy_ctrl_conn_reuse_cl = 0;
-    dp_vs_synproxy_ctrl_conn_reuse_tw = 0;
-    dp_vs_synproxy_ctrl_conn_reuse_fw = 0;
-    dp_vs_synproxy_ctrl_conn_reuse_cw = 0;
-    dp_vs_synproxy_ctrl_conn_reuse_la = 0;
+    dp_vs_synproxy_ctrl_clwnd = DP_VS_SYNPROXY_CLWND_DEFAULT;
+    dp_vs_synproxy_ctrl_defer = DP_VS_SYNPROXY_DEFER_DEFAULT;
+    dp_vs_synproxy_ctrl_conn_reuse = DP_VS_SYNPROXY_CONN_REUSE_DEFAULT;
+    dp_vs_synproxy_ctrl_conn_reuse_cl = DP_VS_SYNPROXY_CONN_REUSE_CL_DEFAULT;
+    dp_vs_synproxy_ctrl_conn_reuse_tw = DP_VS_SYNPROXY_CONN_REUSE_TW_DEFAULT;
+    dp_vs_synproxy_ctrl_conn_reuse_fw = DP_VS_SYNPROXY_CONN_REUSE_FW_DEFAULT;
+    dp_vs_synproxy_ctrl_conn_reuse_cw = DP_VS_SYNPROXY_CONN_REUSE_CW_DEFAULT;
+    dp_vs_synproxy_ctrl_conn_reuse_la = DP_VS_SYNPROXY_CONN_REUSE_LA_DEFAULT;
     dp_vs_synproxy_ctrl_dup_ack_thresh = DP_VS_SYNPROXY_DUP_ACK_DEFAULT;
     dp_vs_synproxy_ctrl_max_ack_saved = DP_VS_SYNPROXY_MAX_ACK_SAVED_DEFAULT;
     dp_vs_synproxy_ctrl_syn_retry = DP_VS_SYNPROXY_SYN_RETRY_DEFAULT;

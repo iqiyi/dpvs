@@ -258,10 +258,10 @@ ipvs_defs {
                 mss             1452        <1452, 1-65535>
                 ttl             63          <63, 1-255>
                 sack                        <enable>
-            !    wscale                      <disable>
+            !    wscale                      <0, 0-14>
             !    timestamp                   <disable>
             }
-            close_client_window             <enable>
+            !close_client_window             <disable>
             !defer_rs_syn                   <disable>
             rs_syn_max_retry    3           <3, 1-99>
             ack_storm_thresh    10          <10, 1-999>
