@@ -414,12 +414,11 @@ syn_proxy_v4_cookie_check(struct rte_mbuf *mbuf, uint32_t cookie,
             th->source, th->dest, seq, rte_atomic32_read(&g_minute_count),
             DP_VS_SYNPROXY_COUNTER_TRIES);
 
+    memset(opt, 0, sizeof(struct dp_vs_synproxy_opt));
     if ((uint32_t) -1 == res) /* count is invalid, g_minute_count' >> g_minute_count */
         return 0;
 
     mssind = (res & DP_VS_SYNPROXY_MSS_MASK) >> DP_VS_SYNPROXY_MSS_BITS;
-
-    memset(opt, 0, sizeof(struct dp_vs_synproxy_opt));
     if ((mssind < NUM_MSS) && ((res & DP_VS_SYNPROXY_OTHER_MASK) == 0)) {
         opt->mss_clamp = msstab[mssind] + 1;
         opt->sack_ok = (res & DP_VS_SYNPROXY_SACKOK_MASK) >> DP_VS_SYNPROXY_SACKOK_BIT;
@@ -451,12 +450,11 @@ syn_proxy_v6_cookie_check(struct rte_mbuf *mbuf, uint32_t cookie,
                    th->source, th->dest, seq, rte_atomic32_read(&g_minute_count),
                    DP_VS_SYNPROXY_COUNTER_TRIES);
 
+    memset(opt, 0, sizeof(struct dp_vs_synproxy_opt));
     if ((uint32_t) -1 == res) /* count is invalid, g_minute_count' >> g_minute_count */
         return 0;
 
     mssind = (res & DP_VS_SYNPROXY_MSS_MASK) >> DP_VS_SYNPROXY_MSS_BITS;
-
-    memset(opt, 0, sizeof(struct dp_vs_synproxy_opt));
     if ((mssind < NUM_MSS) && ((res & DP_VS_SYNPROXY_OTHER_MASK) == 0)) {
         opt->mss_clamp = msstab[mssind] + 1;
         opt->sack_ok = (res & DP_VS_SYNPROXY_SACKOK_MASK) >> DP_VS_SYNPROXY_SACKOK_BIT;
@@ -478,6 +476,40 @@ syn_proxy_v6_cookie_check(struct rte_mbuf *mbuf, uint32_t cookie,
 /*
  *  Synproxy implementation
  */
+
+static unsigned char syn_proxy_parse_wscale_opt(struct rte_mbuf *mbuf, struct tcphdr *th)
+{
+    int length;
+    unsigned char opcode, opsize;
+    unsigned char *ptr;
+
+    length = (th->doff * 4) - sizeof(struct tcphdr);
+    ptr = (unsigned char *)(th + 1);
+    while (length > 0) {
+        opcode = *ptr++;
+        switch (opcode) {
+            case TCPOPT_EOL:
+                return 0;
+            case TCPOPT_NOP:
+                length--;
+                continue;
+            default:
+                opsize = *ptr++;
+                if (opsize < 2) /* silly options */
+                    return 0;
+                if (opsize > length) /* partial options */
+                    return 0;
+                if (opcode == TCPOPT_WINDOW) {
+                    if (*ptr > DP_VS_SYNPROXY_WSCALE_MAX) /* invalid wscale opt */
+                        return 0;
+                    return *ptr;
+                }
+                ptr += opsize -2;
+                length -= opsize;
+        }
+    }
+    return 0; /* should never reach here */
+}
 
 /* Replace tcp options in tcp header, called by syn_proxy_reuse_mbuf() */
 static void syn_proxy_parse_set_opts(struct rte_mbuf *mbuf, struct tcphdr *th,
@@ -1191,6 +1223,9 @@ int dp_vs_synproxy_ack_rcv(int af, struct rte_mbuf *mbuf,
             return 0;
         }
 
+        if (opt.wscale_ok)
+            (*cpp)->wscale_vs = dp_vs_synproxy_ctrl_wscale;
+
         /* Do nothing but print a error msg when fail, because session will be
          * correctly freed in dp_vs_conn_expire */
         if (EDPVS_OK != (res = syn_proxy_send_rs_syn(af, th, *cpp, mbuf, pp, &opt))) {
@@ -1409,6 +1444,7 @@ int dp_vs_synproxy_synack_rcv(struct rte_mbuf *mbuf, struct dp_vs_conn *cp,
     if ((th->syn) && (th->ack) && (!th->rst) &&
             (cp->flags & DPVS_CONN_F_SYNPROXY) &&
             (cp->state == DPVS_TCP_S_SYN_SENT)) {
+        cp->wscale_rs = syn_proxy_parse_wscale_opt(mbuf, th);
         cp->syn_proxy_seq.delta = ntohl(cp->syn_proxy_seq.isn) - ntohl(th->seq);
         cp->state = DPVS_TCP_S_ESTABLISHED;
         dp_vs_conn_set_timeout(cp, pp);

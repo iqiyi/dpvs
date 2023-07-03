@@ -429,6 +429,16 @@ static void tcp_out_save_seq(struct rte_mbuf *mbuf,
     conn->rs_end_ack = th->ack_seq;
 }
 
+static void tcp_out_adjust_window(struct dp_vs_conn *conn, struct tcphdr *th)
+{
+    uint32_t wnd_client;
+
+    wnd_client = ntohs(th->window) * (1 << conn->wscale_rs) / (1 << conn->wscale_vs);
+    if (unlikely(wnd_client > 0xffff))
+        wnd_client = 0xffff;
+    th->window = htons(wnd_client);
+}
+
 static void tcp_out_adjust_mss(int af, struct tcphdr *tcph)
 {
     unsigned char *ptr;
@@ -762,6 +772,8 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
     /* L4 translation */
     th->source  = conn->vport;
     th->dest    = conn->cport;
+
+    tcp_out_adjust_window(conn, th);
 
     if (th->syn && th->ack)
         tcp_out_adjust_mss(af, th);
