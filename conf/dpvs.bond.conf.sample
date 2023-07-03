@@ -37,6 +37,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         ! kni_name              dpdk0.kni
     }
 
@@ -52,6 +53,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         ! kni_name                dpdk1.kni
     }
 
@@ -68,6 +70,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         ! kni_name              dpdk2.kni
     }
 
@@ -83,6 +86,7 @@ netif_defs {
         }
         ! mtu                   1500
         ! promisc_mode
+        ! allmulticast
         ! kni_name              dpdk3.kni
     } 
 
@@ -309,9 +313,6 @@ ctrl_defs {
         sync_msg_timeout_us             20000
         priority_level                  low
     }
-    ipc_msg {
-        <init> unix_domain /var/run/dpvs_ctrl
-    }
 }
 
 ! ipvs config
@@ -330,6 +331,7 @@ ipvs_defs {
         uoa_mode        opp
         uoa_max_trail   3
         timeout {
+            oneway      60
             normal      300
             last        3
         }

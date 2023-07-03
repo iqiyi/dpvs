@@ -37,6 +37,8 @@
 #define DP_VS_SVC_F_PERSISTENT          IP_VS_SVC_F_PERSISTENT
 #define DP_VS_SVC_F_HASHED              IP_VS_SVC_F_HASHED
 #define DP_VS_SVC_F_ONEPACKET           IP_VS_SVC_F_ONEPACKET
+#define DP_VS_SVC_F_SYNPROXY            IP_VS_SVC_F_SYNPROXY
+#define DP_VS_SVC_F_EXPIRE_QUIESCENT    IP_VS_SVC_F_EXPIRE_QUIESCENT
 #define DP_VS_SVC_F_SCHED1              IP_VS_SVC_F_SCHED1
 #define DP_VS_SVC_F_SCHED2              IP_VS_SVC_F_SCHED2
 #define DP_VS_SVC_F_SCHED3              IP_VS_SVC_F_SCHED3
@@ -75,6 +77,7 @@ struct dp_vs_service {
     struct list_head    dests;      /* real services (dp_vs_dest{}) */
     uint32_t            num_dests;
     long                weight;     /* sum of servers weight */
+    struct dest_check_configs check_conf;
 
     struct dp_vs_scheduler  *scheduler;
     void                *sched_data;
@@ -110,5 +113,6 @@ void dp_vs_service_put(struct dp_vs_service *svc);
 struct dp_vs_service *dp_vs_vip_lookup(int af, uint16_t protocol,
                                        const union inet_addr *vaddr,
                                        lcoreid_t cid);
+void dp_vs_copy_udest_compat(struct dp_vs_dest_conf *udest, dpvs_dest_compat_t *udest_compat);
 
 #endif /* __DPVS_SVC_H__ */

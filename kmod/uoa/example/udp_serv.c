@@ -48,7 +48,9 @@ void handle_reply(int efd, int fd)
 {
     struct sockaddr_storage peer;
     struct sockaddr_in *sin = NULL;
+#ifdef WITH_IPV6_ENABLE
     struct sockaddr_in6 *sin6 = NULL;
+#endif
     char buff[4096], from[64];
     struct uoa_param_map map;
     socklen_t len, mlen;
@@ -89,7 +91,9 @@ void handle_reply(int efd, int fd)
 
         len = sizeof(peer);
         sendto(fd, buff, n, 0, (SA *)&peer, len);
-    } else {  /* AF_INET6 */
+    }
+#ifdef WITH_IPV6_ENABLE
+    else {  /* AF_INET6 */
         sin6 = (struct sockaddr_in6 *)&peer;
         inet_ntop(AF_INET6, &sin6->sin6_addr, from, sizeof(from));
         printf("Receive %d bytes from %s:%d -- %s\n",
@@ -110,17 +114,20 @@ void handle_reply(int efd, int fd)
         len = sizeof(peer);
         sendto(fd, buff, n, 0, (SA *)&peer, len);
     }
+#endif
     fflush(stdout);
 }
 
 int main(int argc, char *argv[])
 {
-    int i, sockfd[MAX_SUPP_AF];
+    int i, sockfd[MAX_SUPP_AF], nsock = 0;
     int epfd, nfds;
     int enable = 1;
     struct epoll_event events[MAX_EPOLL_EVENTS];
     struct sockaddr_in local;
+#ifdef WITH_IPV6_ENABLE
     struct sockaddr_in6 local6;
+#endif
 
     if (argc > 1)
         SERV_PORT = atoi(argv[1]);
@@ -130,18 +137,22 @@ int main(int argc, char *argv[])
         perror("Fail to create INET socket!\n");
         exit(1);
     }
+    nsock++;
 
+#ifdef WITH_IPV6_ENABLE
     if ((sockfd[1] = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
         perror("Fail to create INET6 socket!");
         exit(1);
     }
+    nsock++;
+#endif
 
     if ((epfd = epoll_create1(0)) < 0) {
         perror("Fail to create epoll fd!\n");
         exit(1);
     }
 
-    for (i = 0; i < MAX_SUPP_AF; i++) {
+    for (i = 0; i < nsock; i++) {
         setsockopt(sockfd[i], SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
         setsockopt(sockfd[i], SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable));
     }
@@ -156,6 +167,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+#ifdef WITH_IPV6_ENABLE
     memset(&local6, 0, sizeof(struct sockaddr_in6));
     local6.sin6_family = AF_INET6;
     local6.sin6_port = htons(SERV_PORT);
@@ -165,8 +177,9 @@ int main(int argc, char *argv[])
         perror("Fail to bind INET6 socket!\n");
         exit(1);
     }
+#endif
 
-    for (i = 0; i < MAX_SUPP_AF; i++) {
+    for (i = 0; i < nsock; i++) {
         struct epoll_event ev;
         memset(&ev, 0, sizeof(ev));
         ev.events = EPOLLIN | EPOLLERR;
@@ -189,7 +202,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    for (i = 0; i < MAX_SUPP_AF; i++)
+    for (i = 0; i < nsock; i++)
         close(sockfd[i]);
 
     exit(0);

@@ -912,6 +912,11 @@ tcp_state_out:
 
     dp_vs_conn_set_timeout(conn, proto);
 
+    if (new_state == DPVS_TCP_S_CLOSE && conn->old_state == DPVS_TCP_S_SYN_RECV)
+        dp_vs_dest_detected_dead(conn->dest); // connection reset by dest
+    else if (new_state == DPVS_TCP_S_ESTABLISHED)
+        dp_vs_dest_detected_alive(conn->dest);
+
     if (dest) {
         if (!(conn->flags & DPVS_CONN_F_INACTIVE)
                 && (new_state != DPVS_TCP_S_ESTABLISHED)) {
@@ -1156,6 +1161,10 @@ static int tcp_conn_expire(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             RTE_LOG(WARNING, IPVS, "%s: fail RST Client.\n", __func__);
     }
+
+    /* the backend dest went down silently */
+    if (DPVS_TCP_S_SYN_RECV == conn->state || DPVS_TCP_S_SYN_SENT == conn->state)
+        dp_vs_dest_detected_dead(conn->dest);
 
     return EDPVS_OK;
 }

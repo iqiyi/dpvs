@@ -346,7 +346,7 @@ static void dpvs_fill_rt4conf(ip_route_t *iproute, struct dp_vs_route_conf *rout
 
 static void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6_cfg) 
 {
-	rt6_cfg->dst.addr = ((iproute->dst)->u).sin6_addr;
+	rt6_cfg->dst.addr.in6 = ((iproute->dst)->u).sin6_addr;
 	rt6_cfg->dst.plen = iproute->dst->ifa.ifa_prefixlen;
 	rt6_cfg->src.plen = 128;
 	if (iproute->via) {
@@ -356,7 +356,7 @@ static void dpvs_fill_rt6conf(ip_route_t *iproute, struct dp_vs_route6_conf *rt6
 	}
 
 	if (iproute->pref_src) {
-		rt6_cfg->src.addr = (iproute->pref_src->u).sin6_addr;
+		rt6_cfg->src.addr.in6 = (iproute->pref_src->u).sin6_addr;
 	} else {
 		memset(&rt6_cfg->src, 0, sizeof(rt6_cfg->src));
 	}

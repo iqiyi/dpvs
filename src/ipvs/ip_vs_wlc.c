@@ -63,7 +63,7 @@ nextstage:
         if (unlikely(cur == &svc->dests))
             continue;
         dest = list_entry(cur, struct dp_vs_dest, n_list);
-        if (dest->flags & DPVS_DEST_F_OVERLOAD)
+        if (!dp_vs_dest_is_valid(dest))
             continue;
         doh = dp_vs_wlc_dest_overhead(dest);
         if (loh * rte_atomic16_read(&dest->weight) >

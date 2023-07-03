@@ -98,6 +98,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -329,8 +330,11 @@ enum {
     TAG_NO_SORT,
     TAG_PERSISTENCE_ENGINE,
     TAG_SOCKPAIR,
+    TAG_HASH_TARGET,
     TAG_CPU,
     TAG_CONN_EXPIRE_QUIESCENT,
+    TAG_DEST_CHECK,
+    TAG_CONN_TIMEOUT,
 };
 
 /* various parsing helpers & parsing functions */
@@ -410,14 +414,62 @@ int main(int argc, char **argv)
     return result;
 }
 
+static bool is_dest_check_conf_default(const struct dest_check_configs *conf)
+{
+    return conf->dest_down_notice_num == DEST_DOWN_NOTICE_DEFAULT &&
+        conf->dest_up_notice_num == DEST_UP_NOTICE_DEFAULT &&
+        conf->dest_down_wait == DEST_DOWN_WAIT_DURATION &&
+        conf->dest_inhibit_min == DEST_INHIBIT_DURATION_MIN &&
+        conf->dest_inhibit_max == DEST_INHIBIT_DURATION_MAX;
+}
 
-    static int
+static int parse_dest_check(const char *optarg, struct dest_check_configs *conf)
+{
+    if (!strcmp(optarg, "disable")) {
+        conf->types = DEST_HC_NONE;
+    } else if (!strcmp(optarg, "tcp")) {
+        conf->types |= DEST_HC_TCP;
+    } else if (!strcmp(optarg, "udp")) {
+        conf->types |= DEST_HC_UDP;
+    } else if (!strcmp(optarg, "ping")) {
+        conf->types |= DEST_HC_PING;
+    } else if (!strcmp(optarg, "default")) {
+        conf->types |= DEST_HC_PASSIVE;
+        conf->dest_down_notice_num = DEST_DOWN_NOTICE_DEFAULT;
+        conf->dest_up_notice_num   = DEST_UP_NOTICE_DEFAULT;
+        conf->dest_down_wait       = DEST_DOWN_WAIT_DURATION;
+        conf->dest_inhibit_min     = DEST_INHIBIT_DURATION_MIN;
+        conf->dest_inhibit_max     = DEST_INHIBIT_DURATION_MAX;
+    } else {
+        if (sscanf(optarg, "%hhu,%hhu,%hhus,%hu-%hus",
+                    &conf->dest_down_notice_num,
+                    &conf->dest_up_notice_num,
+                    &conf->dest_down_wait,
+                    &conf->dest_inhibit_min,
+                    &conf->dest_inhibit_max) != 5) {
+            conf->dest_up_notice_num = 0;
+            conf->dest_inhibit_min = conf->dest_inhibit_max = 0;
+            if (sscanf(optarg, "%hhu,%hhus",
+                        &conf->dest_down_notice_num,
+                        &conf->dest_down_wait) != 2) {
+                return -1;
+            }
+        }
+        if (!dest_check_configs_sanity(conf))
+            return -1;
+        conf->types |= DEST_HC_PASSIVE;
+    }
+    return 0;
+}
+
+static int
 parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         unsigned int *options, unsigned int *format)
 {
     int c, parse;
     poptContext context;
-    char *optarg=NULL;
+    char *optarg= NULL;
+    int intarg = NULL;
     struct poptOption options_table[] = {
         { "add-service", 'A', POPT_ARG_NONE, NULL, 'A', NULL, NULL },
         { "edit-service", 'E', POPT_ARG_NONE, NULL, 'E', NULL, NULL },
@@ -503,9 +555,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         { "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
         { "ifname", 'F', POPT_ARG_STRING, &optarg, 'F', NULL, NULL },
         { "match", 'H', POPT_ARG_STRING, &optarg, 'H', NULL, NULL },
-        { "hash-target", 'Y', POPT_ARG_STRING, &optarg, 'Y', NULL, NULL },
+        { "hash-target", '\0', POPT_ARG_STRING, &optarg, TAG_HASH_TARGET, NULL, NULL },
         { "cpu", '\0', POPT_ARG_STRING, &optarg, TAG_CPU, NULL, NULL },
         { "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
+        { "dest-check", '\0', POPT_ARG_STRING, &optarg, TAG_DEST_CHECK, NULL, NULL},
+        { "conn-timeout", '\0', POPT_ARG_INT, &intarg, TAG_CONN_TIMEOUT, NULL, NULL},
         { NULL, 0, 0, NULL, 0, NULL, NULL }
     };
 
@@ -696,26 +750,31 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case 'i':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_TUNNEL;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_TUNNEL;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_TUNNEL;
                 break;
             case 'g':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_DROUTE;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_DROUTE;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_DROUTE;
                 break;
             case 'b':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_FULLNAT;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_FULLNAT;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_FULLNAT;
                 break;
             case 'J':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_SNAT;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_SNAT;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_SNAT;
                 break;
             case 'm':
                 set_option(options, OPT_FORWARD);
                 ce->dpvs_dest.conn_flags = IP_VS_CONN_F_MASQ;
+                ce->dpvs_dest.fwdmode = IP_VS_CONN_F_MASQ;
                 ce->dpvs_svc.flags = IP_VS_CONN_F_MASQ;
                 break;
             case 'w':
@@ -865,15 +924,15 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                     set_option(options, OPT_SYNPROXY);
 
                     if(!memcmp(optarg , "enable" , strlen("enable"))) {
-                        ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_CONN_F_SYNPROXY;
+                        ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_SYNPROXY;
                     } else if(!memcmp(optarg , "disable" , strlen("disable"))) {
-                        ce->dpvs_svc.flags = ce->dpvs_svc.flags & (~IP_VS_CONN_F_SYNPROXY);
+                        ce->dpvs_svc.flags = ce->dpvs_svc.flags & (~IP_VS_SVC_F_SYNPROXY);
                     } else
                         fail(2 , "synproxy switch must be enable or disable\n");
 
                     break;
                 }
-            case 'Y':
+            case TAG_HASH_TARGET:
                 {
                     set_option(options, OPT_HASHTAG);
                     if (strcmp(ce->dpvs_svc.sched_name, "conhash"))
@@ -903,7 +962,19 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case TAG_CONN_EXPIRE_QUIESCENT:
                 {
                     set_option(options, OPT_EXPIRE_QUIESCENT_CONN);
-                    ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_CONN_F_EXPIRE_QUIESCENT;
+                    ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_EXPIRE_QUIESCENT;
+                    break;
+                }
+            case TAG_DEST_CHECK:
+                {
+                    if (parse_dest_check(optarg, &ce->dpvs_svc.check_conf) != 0) {
+                        fail(2, "invalid dest_check config");
+                    }
+                    break;
+                }
+            case TAG_CONN_TIMEOUT:
+                {
+                    ce->dpvs_svc.conn_timeout = intarg;
                     break;
                 }
             default:
@@ -980,6 +1051,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
     ce.dpvs_dest.weight = 1;
     /* Set direct routing as default forwarding method */
     ce.dpvs_dest.conn_flags = IP_VS_CONN_F_DROUTE;
+    ce.dpvs_dest.fwdmode = IP_VS_CONN_F_DROUTE;
     /* Set the default persistent granularity to /32 mask */
     ce.dpvs_svc.netmask = ((u_int32_t) 0xffffffff);
     /* Set the default cpu be master */
@@ -1020,8 +1092,8 @@ static int process_options(int argc, char **argv, int reading_stdin)
          * Don't worry about this if fwmark is used.
          */
         if (!ce.dpvs_svc.fwmark &&
-                (ce.dpvs_dest.conn_flags == IP_VS_CONN_F_TUNNEL
-                 || ce.dpvs_dest.conn_flags == IP_VS_CONN_F_DROUTE))
+                (ce.dpvs_dest.fwdmode == IP_VS_CONN_F_TUNNEL
+                 || ce.dpvs_dest.fwdmode == IP_VS_CONN_F_DROUTE))
             ce.dpvs_dest.port = ce.dpvs_svc.port;
     }
 
@@ -1239,7 +1311,7 @@ static int parse_netmask(char *buf, u_int32_t *addr)
  * SERVICE_ADDR:   addr set
  * SERVICE_PORT:   port set
  */
-    static int
+static int
 parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
 {
     char *portp = NULL;
@@ -1303,7 +1375,7 @@ parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
  * SIP,TIP := dotted-decimal ip address or square-blacketed ip6 address
  * SPORT,TPORT := range(0, 65535)
  */
-    static int
+static int
 parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 {
     char *pos = buf, *end;
@@ -1472,7 +1544,7 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
     return 0;
 }
 
-    static void
+static void
 generic_opt_check(int command, unsigned int options)
 {
     int i, j;
@@ -1506,7 +1578,7 @@ generic_opt_check(int command, unsigned int options)
     }
 }
 
-    static inline const char *
+static inline const char *
 opt2name(int option)
 {
     const char **ptr;
@@ -1515,7 +1587,7 @@ opt2name(int option)
     return *ptr;
 }
 
-    static void
+static void
 set_command(int *cmd, const int newcmd)
 {
     if (*cmd != CMD_NONE)
@@ -1523,7 +1595,7 @@ set_command(int *cmd, const int newcmd)
     *cmd = newcmd;
 }
 
-    static void
+static void
 set_option(unsigned int *options, unsigned int option)
 {
     if (*options & option)
@@ -1531,14 +1603,12 @@ set_option(unsigned int *options, unsigned int option)
     *options |= option;
 }
 
-
 static void tryhelp_exit(const char *program, const int exit_status)
 {
     fprintf(stderr, "Try `%s -h' or '%s --help' for more information.\n",
             program, program);
     exit(exit_status);
 }
-
 
 static void usage_exit(const char *program, const int exit_status)
 {
@@ -1630,6 +1700,7 @@ static void usage_exit(const char *program, const int exit_status)
             "  --syncid sid                        syncid for connection sync (default=255)\n"
             "  --connection   -c                   output of current IPVS connections\n"
             "  --timeout                           output of timeout (tcp tcpfin udp)\n"
+            "  --conn-timeout                      set connection established timeout\n"
             "  --daemon                            output of daemon information\n"
             "  --stats                             output of statistics information\n"
             "  --rate                              output of rate information\n"
@@ -1644,9 +1715,13 @@ static void usage_exit(const char *program, const int exit_status)
             "  --ifname       -F                   nic interface for laddrs\n"
             "  --synproxy     -j                   TCP syn proxy\n"
             "  --match        -H MATCH             select service by MATCH 'af,proto,srange,drange,iif,oif', af should be defined if no range defined\n"
-            "  --hash-target  -Y hashtag           choose target for conhash (support sip or qid for quic)\n"
+            "  --hash-target  hashtag              choose target for conhash (support sip or qid for quic)\n"
             "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
-            "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n",
+            "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
+            "  --dest-check   CHECK_CONF           config health check, inhibit scheduling to failed backends\n"
+            "                                      CHECK_CONF:=disable|default(passive)|DETAIL(passive)|tcp|udp|ping, DETAIL:=UPDOWN|DOWNONLY\n"
+            "                                      UPDOWN:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n"
+            "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n",
         DEF_SCHED);
 
     exit(exit_status);
@@ -1822,6 +1897,10 @@ static inline char *fwd_switch(unsigned flags)
         case IP_VS_CONN_F_LOCALNODE:
         case IP_VS_CONN_F_DROUTE:
             swt = "-g"; break;
+        case IP_VS_CONN_F_FULLNAT:
+            swt = "-b"; break;
+        case IP_VS_CONN_F_SNAT:
+            swt = "-J"; break;
     }
     return swt;
 }
@@ -2076,12 +2155,46 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
         }
         if (se->flags & IP_VS_SVC_F_ONEPACKET)
             printf(" ops");
-        if (se->flags & IP_VS_CONN_F_SYNPROXY)
+        if (se->flags & IP_VS_SVC_F_SYNPROXY)
             printf(" synproxy");
         if (se->conn_timeout != 0)
-            printf(" conn_timeout %u", se->conn_timeout);
-        if (se->flags & IP_VS_CONN_F_EXPIRE_QUIESCENT)
+            printf(" conn-timeout %u", se->conn_timeout);
+        if (se->flags & IP_VS_SVC_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
+        if (se->check_conf.types) {
+            printf(" dest-check");
+            if (dest_check_passive(&se->check_conf)) {
+                printf(" internal:");
+                if (!is_dest_check_conf_default(&se->check_conf)) {
+                    if (dest_check_down_only(&se->check_conf)) {
+                        printf("%d,%ds",
+                                se->check_conf.dest_down_notice_num,
+                                se->check_conf.dest_down_wait);
+                    } else {
+                        printf( "%d,%d,%ds,%d-%ds",
+                                se->check_conf.dest_down_notice_num,
+                                se->check_conf.dest_up_notice_num,
+                                se->check_conf.dest_down_wait,
+                                se->check_conf.dest_inhibit_min,
+                                se->check_conf.dest_inhibit_max);
+                    }
+                } else {
+                    printf("default");
+                }
+            }
+            if (dest_check_external(&se->check_conf)){
+                char buf[16] = {0};
+                printf(" external:");
+                if (se->check_conf.types & DEST_HC_TCP)
+                    strcat(buf, "tcp,");
+                if (se->check_conf.types & DEST_HC_UDP)
+                    strcat(buf, "udp,");
+                if (se->check_conf.types & DEST_HC_PING)
+                    strcat(buf, "ping,");
+                *strrchr(buf, ',') = '\0';
+                printf(buf);
+            }
+        }
     }
     printf("\n");
 
@@ -2128,10 +2241,19 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             printf("  -> %-28s %-9u %-11u %-10u %-10u\n", dname,
                     e->weight, e->persistconns,
                     e->actconns, e->inactconns);
-        } else
-            printf("  -> %-28s %-7s %-6d %-10u %-10u\n",
+        } else {
+            char sep = ' ';
+            printf("  -> %-28s %-7s %-6d %-10u %-10u",
                     dname, fwd_name(e->conn_flags),
                     e->weight, e->actconns, e->inactconns);
+            if (e->flags & DPVS_DEST_F_INHIBITED) {
+                printf("%c%s", sep, "inhibited");
+                sep = ',';
+            }
+            if (e->flags & DPVS_DEST_F_OVERLOAD)
+                printf("%c%s",sep, "overload");
+            printf("\n");
+        }
         free(dname);
     }
 
@@ -2219,24 +2341,24 @@ static int list_laddrs(dpvs_service_compat_t* desc)
 static int list_all_laddrs(lcoreid_t index)
 {
     int i;
-    dpvs_service_table_t* table;
+    dpvs_services_front_t* table;
     struct ip_vs_get_laddrs   *d = NULL;
 
-    table = (dpvs_service_table_t*)malloc(sizeof(dpvs_service_table_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
     table->index = ce.index;
-    table->num_services = g_ipvs_info.num_services;
+    table->count = (uint16_t)g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
-    for (i = 0; i < table->num_services; i++) {
+    for (i = 0; i < table->count; i++) {
         if(!dpvs_get_laddrs(&(table->entrytable[i]), &d)) {
             free(table);
             fprintf(stderr, "%s\n", ipvs_strerror(errno));
@@ -2325,16 +2447,16 @@ static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint1
 static int list_all_blklsts(void)
 {
     int i;
-    dpvs_service_table_t* table;
+    dpvs_services_front_t* table;
 
-    table = (dpvs_service_table_t*)malloc(sizeof(dpvs_service_table_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
     table->index = ce.index;
-    table->num_services = g_ipvs_info.num_services;
+    table->count = (uint16_t)g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
@@ -2342,7 +2464,7 @@ static int list_all_blklsts(void)
     }
 
     list_blklsts_print_title();
-    for (i = 0; i < table->num_services; i++) {
+    for (i = 0; i < table->count; i++) {
         list_blklst(table->entrytable[i].af, &table->entrytable[i].addr,
                 table->entrytable[i].port, table->entrytable[i].proto);
     }
@@ -2413,17 +2535,17 @@ static int list_whtlst(int af, const union inet_addr *addr, uint16_t port, uint1
 
 static int list_all_whtlsts(void)
 {
-    dpvs_service_table_t* table;
+    dpvs_services_front_t* table;
     int i;
 
-    table = (dpvs_service_table_t*)malloc(sizeof(dpvs_service_table_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
     table->index = ce.index;
-    table->num_services = g_ipvs_info.num_services;
+    table->count = g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
@@ -2431,7 +2553,7 @@ static int list_all_whtlsts(void)
     }
 
     list_whtlsts_print_title();
-    for (i = 0; i < table->num_services; i++) {
+    for (i = 0; i < table->count; i++) {
         list_whtlst(table->entrytable[i].af, &table->entrytable[i].addr,
                 table->entrytable[i].port, table->entrytable[i].proto);
     }
@@ -2458,20 +2580,20 @@ static void list_service(dpvs_service_compat_t *svc, unsigned int format)
 static void list_all(unsigned int format)
 {
     int i;
-    dpvs_service_table_t* table;
+    dpvs_services_front_t* table;
 
     if (!(format & FMT_RULE))
         printf("IP Virtual Server version %d.%d.%d (size=%d)\n",
                 NVERSION(g_ipvs_info.version), g_ipvs_info.size);
 
-    table = (dpvs_service_table_t*)malloc(sizeof(dpvs_service_table_t) + sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
+    table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t) + sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
         fprintf(stderr, "%s\n", ipvs_strerror(errno));
         exit(1);
     }
 
     table->index = ce.index;
-    table->num_services = g_ipvs_info.num_services;
+    table->count = (uint16_t)g_ipvs_info.num_services;
 
     if (!dpvs_get_services(table)) {
         free(table);
@@ -2483,7 +2605,7 @@ static void list_all(unsigned int format)
     }
 
     print_title(format);
-    for (i = 0; i < table->num_services; i++) {
+    for (i = 0; i < table->count; i++) {
         print_service_entry(&table->entrytable[i], format);
     }
 
@@ -2616,7 +2738,7 @@ static char * port_to_anyname(unsigned short port, unsigned short proto)
 }
 
 
-    static char *
+static char *
 addrport_to_anyname(int af, const void *addr, unsigned short port,
         unsigned short proto, unsigned int format)
 {

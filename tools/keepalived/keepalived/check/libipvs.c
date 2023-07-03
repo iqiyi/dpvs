@@ -131,24 +131,25 @@ int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int opti
         entry.flags  |= IP_VS_SVC_F_PERSISTENT;
         entry.timeout = svc->timeout;
     }
+    entry.conn_timeout = svc->conn_timeout;
 
     if (options & OPT_NETMASK) {
         entry.netmask = svc->netmask;
     }
 
     if (options & OPT_SYNPROXY) {
-        if(svc->flags & IP_VS_CONN_F_SYNPROXY) {
-            entry.flags |= IP_VS_CONN_F_SYNPROXY;
+        if(svc->flags & IP_VS_SVC_F_SYNPROXY) {
+            entry.flags |= IP_VS_SVC_F_SYNPROXY;
         } else {
-            entry.flags &= ~IP_VS_CONN_F_SYNPROXY;
+            entry.flags &= ~IP_VS_SVC_F_SYNPROXY;
         }
     }
 
     if (options & OPT_EXPIRE_QUIESCENT_CONN) {
-        if (svc->flags & IP_VS_CONN_F_EXPIRE_QUIESCENT) {
-            entry.flags |= IP_VS_CONN_F_EXPIRE_QUIESCENT;
+        if (svc->flags & IP_VS_SVC_F_EXPIRE_QUIESCENT) {
+            entry.flags |= IP_VS_SVC_F_EXPIRE_QUIESCENT;
         } else {
-            entry.flags &= ~IP_VS_CONN_F_EXPIRE_QUIESCENT;
+            entry.flags &= ~IP_VS_SVC_F_EXPIRE_QUIESCENT;
         }
     }
 
@@ -167,6 +168,9 @@ int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int opti
             entry.flags |= IP_VS_SVC_F_SIP_HASH;
         }
     }
+
+    if (dest_check_configs_sanity(&svc->check_conf))
+        entry.check_conf = svc->check_conf;
 
     return dpvs_update_service(&entry);
 }
@@ -420,8 +424,8 @@ int dpvs_stop_daemon(ipvs_daemon_t *dm)
             (char *)&dm, sizeof(dm));
 }
 
-dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
-    dpvs_service_table_t* rcv;
+dpvs_services_front_t* dpvs_get_services(dpvs_services_front_t* svcs) {
+    dpvs_services_front_t* rcv;
     size_t lrcv, len;
 
     dpvs_ctrl_func = dpvs_get_services;
@@ -429,11 +433,11 @@ dpvs_service_table_t* dpvs_get_services(dpvs_service_table_t* svcs) {
     assert(svcs);
 
     if (ESOCKOPT_OK != dpvs_getsockopt(DPVS_SO_GET_SERVICES, svcs,
-                sizeof(dpvs_service_table_t), (void**)&rcv, &lrcv)) {
+                sizeof(dpvs_services_front_t), (void**)&rcv, &lrcv)) {
         return NULL;
     }
 
-    len = svcs->num_services * sizeof(dpvs_service_compat_t) + sizeof(dpvs_service_table_t);
+    len = svcs->count * sizeof(dpvs_service_compat_t) + sizeof(dpvs_services_front_t);
 
     memcpy(svcs, rcv, len < lrcv ? len : lrcv);
 
@@ -531,9 +535,9 @@ dpvs_cmp_dests(dpvs_dest_compat_t *d1, dpvs_dest_compat_t *d2)
     return ntohs(d1->port) - ntohs(d2->port);
 }
 
-void dpvs_sort_services(dpvs_service_table_t *s, dpvs_service_cmp_t f)
+void dpvs_sort_services(dpvs_services_front_t *s, dpvs_service_cmp_t f)
 {
-    qsort(s->entrytable, s->num_services,
+    qsort(s->entrytable, s->count,
             sizeof(dpvs_service_compat_t), (qsort_cmp_t)f);
 }
 

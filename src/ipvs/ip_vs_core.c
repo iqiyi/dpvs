@@ -86,7 +86,8 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
     assert(svc && iph && mbuf);
 
     conn_flags = (is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
-    conn_flags |= (svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT);
+    if (svc->flags | DP_VS_SVC_F_EXPIRE_QUIESCENT)
+        conn_flags |= DPVS_CONN_F_EXPIRE_QUIESCENT;
 
     if (svc->af == AF_INET6) {
         /* FIXME: Is OK to use svc->netmask as IPv6 prefix length ? */
@@ -345,7 +346,8 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
         flags |= DPVS_CONN_F_SYNPROXY;
     if (svc->flags & DP_VS_SVC_F_ONEPACKET && iph->proto == IPPROTO_UDP)
         flags |= DPVS_CONN_F_ONE_PACKET;
-    flags |= (svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT);
+    if (svc->flags & DP_VS_SVC_F_EXPIRE_QUIESCENT)
+        flags |= DPVS_CONN_F_EXPIRE_QUIESCENT;
 
     conn = dp_vs_conn_new(mbuf, iph, &param, dest, flags);
     if (!conn)

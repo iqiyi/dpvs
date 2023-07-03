@@ -584,7 +584,7 @@ static int sa6_fetch(struct netif_port *dev,
         return EDPVS_NOROUTE;
 
     /* select source address. */
-    if (ipv6_addr_any(&rt6->rt6_src.addr)) {
+    if (ipv6_addr_any(&rt6->rt6_src.addr.in6)) {
         inet_addr_select(AF_INET6, rt6->rt6_dev,
                          (union inet_addr *)&rt6->rt6_dst.addr,
                          RT_SCOPE_UNIVERSE,
