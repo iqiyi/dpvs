@@ -47,7 +47,8 @@ vs_iseq(const virtual_server_t *vs_a, const virtual_server_t *vs_b)
 		/* Should we check the vsg entries match? */
 		if (inet_sockaddrport(&vs_a->addr) != inet_sockaddrport(&vs_b->addr))
 			return false;
-
+		if (vs_a->service_type != vs_b->service_type)
+			return false;
 		return !strcmp(vs_a->vsgname, vs_b->vsgname);
 	} else if (vs_a->af != vs_b->af)
 		return false;
