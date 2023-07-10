@@ -1,0 +1,56 @@
+package ipvs
+
+import (
+	"net"
+
+	"github.com/dpvs-agent/pkg/ipc/pool"
+	"github.com/dpvs-agent/pkg/ipc/types"
+
+	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
+
+	"github.com/go-openapi/runtime/middleware"
+	"github.com/hashicorp/go-hclog"
+)
+
+type delVsDeny struct {
+	connPool *pool.ConnPool
+	logger   hclog.Logger
+}
+
+func NewDelVsDeny(cp *pool.ConnPool, parentLogger hclog.Logger) *delVsDeny {
+	logger := hclog.Default()
+	if parentLogger != nil {
+		logger = parentLogger.Named("DelVsVipPortDeny")
+	}
+	return &delVsDeny{connPool: cp, logger: logger}
+}
+
+func (h *delVsDeny) Handle(params apiVs.DeleteVsVipPortDenyParams) middleware.Responder {
+	spec := types.NewCertificateAuthoritySpec()
+	if err := spec.ParseVipPortProto(params.VipPort); err != nil {
+		h.logger.Error("Convert to virtual server failed.", "VipPort", params.VipPort, "Error", err.Error())
+		return apiVs.NewDeleteVsVipPortDenyInvalidFrontend()
+	}
+
+	failed := false
+	for _, deny := range params.ACL.Items {
+		if net.ParseIP(deny.Addr) == nil {
+			h.logger.Error("Invalid ip addr del.", "VipPort", params.VipPort, "Addr", deny.Addr)
+			return apiVs.NewDeleteVsVipPortDenyInvalidFrontend()
+		}
+		spec.SetSrc(deny.Addr)
+
+		if result := spec.Del(h.connPool, true, h.logger); result != types.EDPVS_OK {
+			h.logger.Error("IP Addr delete from black list failed.", "VipPort", params.VipPort, "Addr", deny.Addr, "result", result.String())
+			failed = true
+			continue
+		}
+		h.logger.Info("IP Addr delete from black list success.", "VipPort", params.VipPort, "Addr", deny.Addr)
+	}
+
+	if failed {
+		return apiVs.NewDeleteVsVipPortDenyInvalidBackend()
+	}
+
+	return apiVs.NewDeleteVsVipPortDenyOK()
+}

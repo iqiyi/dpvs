@@ -1,0 +1,71 @@
+package ipvs
+
+import (
+	"github.com/dpvs-agent/models"
+	"github.com/dpvs-agent/pkg/ipc/pool"
+	"github.com/dpvs-agent/pkg/ipc/types"
+
+	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
+
+	"github.com/go-openapi/runtime/middleware"
+	"github.com/hashicorp/go-hclog"
+)
+
+type getVs struct {
+	connPool *pool.ConnPool
+	logger   hclog.Logger
+}
+
+func NewGetVs(cp *pool.ConnPool, parentLogger hclog.Logger) *getVs {
+	logger := hclog.Default()
+	if parentLogger != nil {
+		logger = parentLogger.Named("GetVs")
+	}
+	return &getVs{connPool: cp, logger: logger}
+}
+
+func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
+	front := types.NewVirtualServerFront()
+	vss, err := front.Get(h.connPool, h.logger)
+	if err != nil {
+		h.logger.Error("Get virtual server list failed.", "Error", err.Error())
+		// FIXME: Invalid
+		return apiVs.NewGetVsOK()
+	}
+
+	h.logger.Info("Get all virtual server done.", "vss", vss)
+	vsModels := new(models.VirtualServerList)
+	vsModels.Items = make([]*models.VirtualServerSpecExpand, len(vss))
+	for i, vs := range vss {
+		front := types.NewRealServerFront()
+
+		err := front.ParseVipPortProto(vs.ID())
+		if err != nil {
+			h.logger.Error("Convert to virtual server failed. virtual server", "ID", vs.ID(), "Error", err.Error())
+			continue
+		}
+		front.SetNumDests(vs.GetNumDests())
+
+		rss, err := front.Get(h.connPool, h.logger)
+		if err != nil {
+			h.logger.Error("Get real server list of virtual server failed.", "ID", vs.ID(), "Error", err.Error())
+			continue
+		}
+
+		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", rss)
+
+		vsModels.Items[i] = vs.GetModel()
+		vsStats := (*types.ServerStats)(vsModels.Items[i].Stats)
+		vsModels.Items[i].RSs = new(models.RealServerExpandList)
+		vsModels.Items[i].RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
+
+		for j, rs := range rss {
+			rsModel := rs.GetModel()
+			rsStats := (*types.ServerStats)(rsModel.Stats)
+			vsModels.Items[i].RSs.Items[j] = rsModel
+			vsStats.Increase(rsStats)
+		}
+	}
+
+	return apiVs.NewGetVsOK().WithPayload(vsModels)
+}
