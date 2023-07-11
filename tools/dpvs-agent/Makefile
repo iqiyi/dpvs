@@ -30,3 +30,4 @@ ifeq ($(shell addlicense 2>&1|grep Usage),)
 	$(error "`addlicense` command not found. You can install it with `go install github.com/google/addlicense`")
 endif
 	@addlicense -check -c "IQiYi Inc." -l apache -ignore dpvs/** . || /bin/true
+	-addlicense -f license.txt -v .
