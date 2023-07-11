@@ -22,6 +22,7 @@ SUBDIRS = keepalived ipvsadm dpip
 
 ifeq ($(CONFIG_DPVS_AGENT), y)
 SUBDIRS += healthcheck
+SUBDIRS += dpvs-agent
 endif
 
 all: config
@@ -48,4 +49,5 @@ install:
 	install -m 744 dpip/build/dpip $(INSDIR)/dpip
 ifeq ($(CONFIG_DPVS_AGENT), y)
 	install -m 744 healthcheck/healthcheck $(INSDIR)/healthcheck
+	install -m 744 dpvs-agent/cmd/dpvs-agent-server/dpvs-agent $(INSDIR)/dpvs-agent
 endif
