@@ -196,7 +196,7 @@ static inline bool __service_in_range(int af,
 }
 
 static struct dp_vs_service *
-__dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t cid)
+__dp_vs_service_match_get4(const struct rte_mbuf *mbuf, lcoreid_t cid)
 {
     struct route_entry *rt = MBUF_USERDATA_CONST(mbuf, struct route_entry *, MBUF_FIELD_ROUTE);
     struct rte_ipv4_hdr *iph = ip4_hdr(mbuf); /* ipv4 only */
@@ -217,10 +217,6 @@ __dp_vs_service_match_get4(const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t
         if ((rt->flag & RTF_KNI) || (rt->flag & RTF_LOCALIN))
             return NULL;
         oif = rt->port->id;
-    } else if (outwall != NULL && (rt = route_gfw_net_lookup(&daddr.in))) {
-        oif = rt->port->id;
-        route4_put(rt);
-        *outwall = true;
     } else {
         rt = route4_input(mbuf, &daddr.in, &saddr.in,
                           iph->type_of_service,
@@ -331,10 +327,10 @@ __dp_vs_service_match_get6(const struct rte_mbuf *mbuf, lcoreid_t cid)
 }
 
 static struct dp_vs_service *
-__dp_vs_service_match_get(int af, const struct rte_mbuf *mbuf, bool *outwall, lcoreid_t cid)
+__dp_vs_service_match_get(int af, const struct rte_mbuf *mbuf, lcoreid_t cid)
 {
     if (af == AF_INET)
-        return __dp_vs_service_match_get4(mbuf, outwall, cid);
+        return __dp_vs_service_match_get4(mbuf, cid);
     else if (af == AF_INET6)
         return __dp_vs_service_match_get6(mbuf, cid);
     else
@@ -367,7 +363,7 @@ struct dp_vs_service *dp_vs_service_lookup(int af, uint16_t protocol,
                                         uint16_t vport, uint32_t fwmark,
                                         const struct rte_mbuf *mbuf,
                                         const struct dp_vs_match *match,
-                                        bool *outwall, lcoreid_t cid)
+                                        lcoreid_t cid)
 {
     struct dp_vs_service *svc = NULL;
 
@@ -382,7 +378,7 @@ struct dp_vs_service *dp_vs_service_lookup(int af, uint16_t protocol,
             goto out;
 
     if (mbuf) /* lowest priority */
-        svc = __dp_vs_service_match_get(af, mbuf, outwall, cid);
+        svc = __dp_vs_service_match_get(af, mbuf, cid);
 
 out:
 #ifdef CONFIG_DPVS_MBUF_DEBUG

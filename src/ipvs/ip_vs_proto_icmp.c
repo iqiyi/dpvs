@@ -81,7 +81,6 @@ static int icmp_conn_sched(struct dp_vs_proto *proto,
     void *ich = NULL;
     struct dp_vs_service *svc;
     int af = iph->af;
-    bool outwall = false;
     assert(proto && iph && mbuf && conn && verdict);
 
     if (AF_INET6 == af) {
@@ -100,14 +99,14 @@ static int icmp_conn_sched(struct dp_vs_proto *proto,
     }
 
     svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, 0, 0,
-                               mbuf, NULL, &outwall, rte_lcore_id());
+                               mbuf, NULL, rte_lcore_id());
     if (!svc) {
         *verdict = INET_ACCEPT;
         return EDPVS_NOSERV;
     }
 
     /* schedule RS and create new connection */
-    *conn = dp_vs_schedule(svc, iph, mbuf, false, outwall);
+    *conn = dp_vs_schedule(svc, iph, mbuf, false);
     if (!*conn) {
         *verdict = INET_DROP;
         return EDPVS_RESOURCE;

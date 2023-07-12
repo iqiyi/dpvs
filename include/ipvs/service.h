@@ -102,7 +102,7 @@ dp_vs_service_lookup(int af, uint16_t protocol,
                      uint16_t vport, uint32_t fwmark,
                      const struct rte_mbuf *mbuf,
                      const struct dp_vs_match *match,
-                     bool *outwall, lcoreid_t cid);
+                     lcoreid_t cid);
 
 void dp_vs_service_bind(struct dp_vs_dest *dest, struct dp_vs_service *svc);
 

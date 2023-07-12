@@ -542,10 +542,8 @@ static int laddr_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     }
 #endif
 
-    svc = dp_vs_service_lookup(af, proto,
-                               addr, port,
-                               fwmark, NULL, match, 
-                               NULL, rte_lcore_id());
+    svc = dp_vs_service_lookup(af, proto, addr, port,
+            fwmark, NULL, match, rte_lcore_id());
     if (!svc)
         return EDPVS_NOSERV;
 
@@ -609,8 +607,7 @@ static int agent_get_msg_cb(struct dpvs_msg *msg)
     
     svc = dp_vs_service_lookup(laddr_conf->af, laddr_conf->proto,
                                &laddr_conf->addr, laddr_conf->port,
-                               laddr_conf->fwmark, NULL, &laddr_conf->match, 
-                               NULL, cid);
+                               laddr_conf->fwmark, NULL, &laddr_conf->match, cid);
     if (!svc) {
         return EDPVS_NOSERV;
     } 
@@ -662,8 +659,7 @@ static int get_msg_cb(struct dpvs_msg *msg)
 
     svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                &laddr_conf->vaddr, laddr_conf->vport,
-                               laddr_conf->fwmark, NULL, &laddr_conf->match, 
-                               NULL, cid);
+                               laddr_conf->fwmark, NULL, &laddr_conf->match, cid);
     if (!svc) {
         return EDPVS_NOSERV;
     } 
@@ -755,7 +751,7 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
             if (cid == rte_get_main_lcore()) {
                 svc = dp_vs_service_lookup(laddr_conf->af_s, laddr_conf->proto,
                                            &laddr_conf->vaddr, laddr_conf->vport,
-                                           laddr_conf->fwmark, NULL, &laddr_conf->match, NULL, cid);
+                                           laddr_conf->fwmark, NULL, &laddr_conf->match, cid);
                 if (!svc) {
                     msg_destroy(&msg);
                     return EDPVS_NOSERV;
@@ -845,7 +841,9 @@ static int laddr_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
                 return EDPVS_MSG_FAIL;
             }
 
-            svc = dp_vs_service_lookup(laddr_front->af, laddr_front->proto, &laddr_front->addr, laddr_front->port, laddr_front->fwmark, NULL, &laddr_front->match, NULL, rte_get_main_lcore());
+            svc = dp_vs_service_lookup(laddr_front->af, laddr_front->proto,
+                    &laddr_front->addr, laddr_front->port, laddr_front->fwmark,
+                    NULL, &laddr_front->match, rte_get_main_lcore());
             if (!svc) {
                 msg_destroy(&msg);
                 return EDPVS_NOSERV;
