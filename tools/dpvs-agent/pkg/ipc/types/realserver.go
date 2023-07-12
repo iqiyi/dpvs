@@ -642,6 +642,6 @@ func (front *RealServerFront) Update(rss []*RealServerSpec, cp *pool.ConnPool, p
 
 	errCode := front.Del(unreserved, cp, logger)
 	result := errCode.String()
-	logger.Info("Set", "rss", rss, "Done", "result", result)
+	logger.Info("Set real servers done", "rss", rss, "result", result)
 	return errCode
 }
