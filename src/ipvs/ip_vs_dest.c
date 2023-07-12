@@ -439,7 +439,7 @@ static struct dp_vs_dest *get_dest_from_notification(const struct dest_notificat
     struct dp_vs_service *svc;
 
     svc = dp_vs_service_lookup(notice->svc_af, notice->proto, &notice->vaddr, notice->vport,
-            0, NULL, NULL, NULL, rte_lcore_id());
+            0, NULL, NULL, rte_lcore_id());
     if (!svc)
         return NULL;
     return dp_vs_dest_lookup(notice->af, svc, &notice->daddr, notice->dport);
@@ -770,7 +770,7 @@ static int dp_vs_dest_set(sockoptid_t opt, const void *user, size_t len)
         msg_destroy(&msg);
     }
 
-    getsvc = dp_vs_service_lookup(insvc->af, insvc->proto, &insvc->addr, insvc->port, insvc->fwmark, NULL, &insvc->match, NULL, cid);
+    getsvc = dp_vs_service_lookup(insvc->af, insvc->proto, &insvc->addr, insvc->port, insvc->fwmark, NULL, &insvc->match, cid);
     if (!getsvc || getsvc->proto != insvc->proto) {
         return EDPVS_INVAL;
     }
@@ -839,7 +839,7 @@ static int dp_vs_dest_get(sockoptid_t opt, const void *user, size_t len, void **
             }
 
             if (cid == rte_get_main_lcore()) {
-                getsvc = dp_vs_service_lookup(insvc->af, insvc->proto, &insvc->addr, insvc->port, insvc->fwmark, NULL, &insvc->match, NULL, cid);
+                getsvc = dp_vs_service_lookup(insvc->af, insvc->proto, &insvc->addr, insvc->port, insvc->fwmark, NULL, &insvc->match, cid);
                 if (!getsvc) {
                     msg_destroy(&msg);
                     return EDPVS_NOTEXIST;
@@ -950,7 +950,7 @@ static int dp_vs_dests_get_uc_cb(struct dpvs_msg *msg)
     struct dp_vs_service *svc;
 
     get = (struct dp_vs_dest_front*)msg->data;
-    svc = dp_vs_service_lookup(get->af, get->proto, &get->addr, get->port, get->fwmark, NULL, &get->match, NULL, cid);
+    svc = dp_vs_service_lookup(get->af, get->proto, &get->addr, get->port, get->fwmark, NULL, &get->match, cid);
     if (!svc)
         return EDPVS_NOTEXIST;
 

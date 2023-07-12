@@ -879,7 +879,6 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
     else
         new->daddr  = dest->addr;
     new->dport  = rport;
-    new->outwall = param->outwall;
 
     /* neighbour confirm cache */
     if (AF_INET == tuplehash_in(new).af) {

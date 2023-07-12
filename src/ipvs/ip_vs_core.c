@@ -182,8 +182,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
 static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
                                        const struct dp_vs_iphdr *iph,
                                        uint16_t *ports,
-                                       struct rte_mbuf *mbuf,
-                                       bool outwall)
+                                       struct rte_mbuf *mbuf)
 {
     int err;
     struct dp_vs_conn *conn;
@@ -263,7 +262,6 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
                     ports[1], saddr6->sin6_port, 0, &param);
         }
     }
-    param.outwall = outwall;
     conn = dp_vs_conn_new(mbuf, iph, &param, dest, 0);
     if (!conn) {
         sa_release(NULL, &daddr, &saddr);
@@ -278,8 +276,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
 struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                                   const struct dp_vs_iphdr *iph,
                                   struct rte_mbuf *mbuf,
-                                  bool is_synproxy_on,
-                                  bool outwall)
+                                  bool is_synproxy_on)
 {
     uint16_t _ports[2], *ports; /* sport, dport */
     struct dp_vs_dest *dest;
@@ -307,7 +304,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     }
 
     if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
-        return dp_vs_snat_schedule(dest, iph, ports, mbuf, outwall);
+        return dp_vs_snat_schedule(dest, iph, ports, mbuf);
 
     if (unlikely(iph->proto == IPPROTO_ICMP)) {
         struct icmphdr *ich, _icmph;

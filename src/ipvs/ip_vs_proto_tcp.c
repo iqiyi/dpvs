@@ -570,7 +570,6 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 {
     struct tcphdr *th, _tcph;
     struct dp_vs_service *svc;
-    bool outwall = false;
 
     assert(proto && iph && mbuf && conn && verdict);
 
@@ -619,7 +618,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
     }
 
     svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, th->dest,
-                               0, mbuf, NULL, &outwall, rte_lcore_id());
+                               0, mbuf, NULL, rte_lcore_id());
     if (!svc) {
         /* Drop tcp packet which is send to vip and !vport */
         if (g_defence_tcp_drop &&
@@ -633,7 +632,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_NOSERV;
     }
 
-    *conn = dp_vs_schedule(svc, iph, mbuf, false, outwall);
+    *conn = dp_vs_schedule(svc, iph, mbuf, false);
     if (!*conn) {
         *verdict = INET_DROP;
         return EDPVS_RESOURCE;
