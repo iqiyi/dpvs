@@ -778,7 +778,7 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     }
 
     if (vs->persistence_timeout &&
-            (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_DEL)) {
+            (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_EDIT)) {
         srule->timeout = vs->persistence_timeout;
         srule->flags |= IP_VS_SVC_F_PERSISTENT;
 
@@ -832,8 +832,12 @@ ipvs_set_drule(int cmd, dpvs_dest_compat_t *drule, real_server_t * rs)
 
     drule->port = inet_sockaddrport(&rs->addr);
     drule->conn_flags = rs->forwarding_method;
+    /*Do not change dead rs weight in dpvs at reload*/
+    if (cmd == IP_VS_SO_SET_EDITDEST && rs->reloaded && rs->set && !ISALIVE(rs))
+        drule->weight = 0;
+    else
+        drule->weight = rs->weight;
     drule->fwdmode = rs->forwarding_method;
-    drule->weight = rs->weight;
     drule->max_conn = rs->u_threshold;
     drule->min_conn = rs->l_threshold;
 #ifdef _HAVE_IPVS_TUN_TYPE_
