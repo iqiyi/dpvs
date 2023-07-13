@@ -12,6 +12,7 @@ RM = rm
 all: $(TARGET)
 
 $(TARGET):
+	-$(GO) mod tidy
 	$(GO_BUILD) -o $@
 
 clean:

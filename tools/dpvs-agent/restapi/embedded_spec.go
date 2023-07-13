@@ -237,7 +237,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "display special linux net device addr detail",
+        "summary": "ip addr show lo: Display special linux net device addr detail",
         "parameters": [
           {
             "$ref": "#/parameters/device-name"
@@ -265,7 +265,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "set ip cird to linux net device",
+        "summary": "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device",
         "parameters": [
           {
             "$ref": "#/parameters/device-name"
@@ -293,7 +293,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "delete ip cird fron linux net device",
+        "summary": "ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device",
         "parameters": [
           {
             "$ref": "#/parameters/device-name"
@@ -2369,7 +2369,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "display special linux net device addr detail",
+        "summary": "ip addr show lo: Display special linux net device addr detail",
         "parameters": [
           {
             "type": "string",
@@ -2403,7 +2403,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "set ip cird to linux net device",
+        "summary": "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device",
         "parameters": [
           {
             "type": "string",
@@ -2438,7 +2438,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "delete ip cird fron linux net device",
+        "summary": "ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device",
         "parameters": [
           {
             "type": "string",

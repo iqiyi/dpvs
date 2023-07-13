@@ -32,7 +32,7 @@ func NewGetDeviceNameNetlinkAddr(ctx *middleware.Context, handler GetDeviceNameN
 /*
 	GetDeviceNameNetlinkAddr swagger:route GET /device/{name}/netlink/addr device getDeviceNameNetlinkAddr
 
-display special linux net device addr detail
+ip addr show lo: Display special linux net device addr detail
 */
 type GetDeviceNameNetlinkAddr struct {
 	Context *middleware.Context

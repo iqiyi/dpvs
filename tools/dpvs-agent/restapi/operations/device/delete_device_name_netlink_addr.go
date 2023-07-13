@@ -32,7 +32,7 @@ func NewDeleteDeviceNameNetlinkAddr(ctx *middleware.Context, handler DeleteDevic
 /*
 	DeleteDeviceNameNetlinkAddr swagger:route DELETE /device/{name}/netlink/addr device deleteDeviceNameNetlinkAddr
 
-delete ip cird fron linux net device
+ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device
 */
 type DeleteDeviceNameNetlinkAddr struct {
 	Context *middleware.Context

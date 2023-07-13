@@ -1,28 +1,17 @@
 #!/bin/sh
 # program: dpvs
-# Apr 20, 2023
+# Jul 13, 2023
 #
 # Features
-# - Dpvs: Multiple instance deployment support.
-# - Dpvs: IPC improvements between keepalived/ipvsadm and dpvs by combining data structs.
+# - Add new tools: dpvs-agent and healthcheck.
 #
 # Bugfixes
-# - Dpvs: Fix memory problem when setting MATCH service.
-# - Ipvsadm: Fix service list problem when dpvs lcore ids are not continuous.
-# - Ipvsadm: Fix the problem that service/dest/laddr cannot be listed per-lcore.
-# - Ipvsadm: Support version info.
-# - Fix several spelling mistakes.
-# - Fix compiling errors on RHEL 9, Ubuntu 22.04 and microsoft standard WSL2.
-# - Keepalived: Fix service deletion by mistake problem caused by uninitialized local variable.
-# - Dpvs: Do not increase service num unless it's hashed sucessfully.
-# - Dpvs: Fix sa_entry leak when flushing snat connections.
-# - Keepalived: Fix ipvs allow/deny list config problem caused by incorrect parameters.
-# - Dpvs: Fix dead lock problem of eal-mem show and rte_free.
-# - Dpvs: Fix crash problem caused by msg_destroy when msg->refcnt==0.
-# - Dpvs: Fix eal-mem module uninitialized problem.
-# - Dpvs: Fix memory leak problem in ipvs allow list.
+# - Dpvs: Improve config of adding/removing multicast ether addresses.
+# - Dpvs: Fix synproxy config problems.
+# - Keepalived: Fix session disturbance problem when vs/rs updated and reloaded.
+#
 
 export VERSION=1.9
-export RELEASE=4
+export RELEASE=5
 
 echo $VERSION-$RELEASE
