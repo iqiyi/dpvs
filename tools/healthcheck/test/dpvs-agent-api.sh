@@ -17,12 +17,12 @@ import json
 
 def UpdateService():
     payload="{\"Items\":[{\"inhibited\":false,\"ip\":\"192.168.88.68\",\"port\":80,\"weight\":100}]}"
-    url = "http://127.0.0.1:6600/v2/vs/192.168.88.1-80-TCP/rs?healthcheck=true"
+    url = "http://127.0.0.1:53225/v2/vs/192.168.88.1-80-TCP/rs?healthcheck=true"
     headers = {'content-type': 'application/json'}
     r = requests.put(url, headers=headers, data=payload)
     print(r, r.json())
 
-    url = "http://127.0.0.1:6600/v2/vs/192.168.88.1-80-TCP"
+    url = "http://127.0.0.1:53225/v2/vs/192.168.88.1-80-TCP"
     headers = {'content-type': 'application/json'}
     r = requests.get(url, headers=headers, data=payload)
     print(r, r.json())

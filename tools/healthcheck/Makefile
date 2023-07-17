@@ -1,7 +1,8 @@
 TARGET := healthcheck
 
 GO ?= go
-GO_BUILD = CGO_ENABLED=0 $(GO) build
+LD_FLAGS = -ldflags="-s -w"
+GO_BUILD = CGO_ENABLED=0 $(GO) build $(LD_FLAGS)
 GO_CLEAN = $(GO) clean
 
 .PHONY: all $(TARGET) clean
