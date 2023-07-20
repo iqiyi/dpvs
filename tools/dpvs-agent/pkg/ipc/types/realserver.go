@@ -244,7 +244,11 @@ func (rs *RealServerSpec) GetFwdModeString() string {
 }
 
 func (rs *RealServerSpec) ID() string {
-	return fmt.Sprintf("%s:%d", rs.GetAddr(), rs.port)
+	// proto := "tcp"
+	// if rs.proto == unix.IPPROTO_UDP {
+	//	proto = "udp"
+	// }
+	return fmt.Sprintf("%s:%d", rs.GetAddr(), rs.GetPort())
 }
 
 func (rs *RealServerSpec) Format(kind string) string {
@@ -303,7 +307,10 @@ func (rs *RealServerFront) GetAf() uint32 {
 }
 
 func (rs *RealServerFront) GetPort() uint16 {
-	return rs.port
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, uint16(rs.port))
+	return binary.BigEndian.Uint16(buf.Bytes())
+	//return rs.port
 }
 
 func (rs *RealServerFront) GetProto() uint16 {
