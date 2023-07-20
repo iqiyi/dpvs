@@ -39,12 +39,12 @@ func (vs *VirtualServerSpec) GetModel() *models.VirtualServerSpecExpand {
 	}
 
 	flags := ""
-	if (vs.GetFlags() & DPVS_CONN_F_SYNPROXY) != 0 {
+	if (vs.GetFlags() & DPVS_SVC_F_SYNPROXY) != 0 {
 		modelVs.SyncProxy = "true"
 		flags += "SynProxy|"
 	}
 
-	if (vs.GetFlags() & DPVS_CONN_F_EXPIRE_QUIESCENT) != 0 {
+	if (vs.GetFlags() & DPVS_SVC_F_EXPIRE_QUIESCENT) != 0 {
 		modelVs.ExpireQuiescent = "true"
 		flags += "ExpireQuiescent|"
 	}
