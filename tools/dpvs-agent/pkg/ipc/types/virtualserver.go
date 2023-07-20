@@ -266,11 +266,11 @@ func (vs *VirtualServerSpec) GetFwmark() uint32 {
 }
 
 func (vs *VirtualServerSpec) SetFlagsSyncProxy() {
-	vs.setFlags(DPVS_CONN_F_SYNPROXY)
+	vs.setFlags(DPVS_SVC_F_SYNPROXY)
 }
 
 func (vs *VirtualServerSpec) SetFlagsExpireQuiescent() {
-	vs.setFlags(DPVS_CONN_F_EXPIRE_QUIESCENT)
+	vs.setFlags(DPVS_SVC_F_EXPIRE_QUIESCENT)
 }
 
 func (vs *VirtualServerSpec) SetFlagsPersistent() {
@@ -278,15 +278,15 @@ func (vs *VirtualServerSpec) SetFlagsPersistent() {
 }
 
 func (vs *VirtualServerSpec) SetFlagsHashSrcIP() {
-	vs.flags &= (uint32)(^DPVS_SVC_F_QID_HASH)
-	vs.flags &= (uint32)(^DPVS_SVC_F_SIP_HASH)
+	vs.flags &= ^DPVS_SVC_F_QID_HASH
+	vs.flags &= ^DPVS_SVC_F_SIP_HASH
 
 	vs.setFlags(DPVS_SVC_F_SIP_HASH)
 }
 
 func (vs *VirtualServerSpec) SetFlagsHashQuicID() {
-	vs.flags &= (uint32)(^DPVS_SVC_F_QID_HASH)
-	vs.flags &= (uint32)(^DPVS_SVC_F_SIP_HASH)
+	vs.flags &= ^DPVS_SVC_F_QID_HASH
+	vs.flags &= ^DPVS_SVC_F_SIP_HASH
 
 	vs.setFlags(DPVS_SVC_F_QID_HASH)
 }
