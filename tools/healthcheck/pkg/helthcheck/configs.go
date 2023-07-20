@@ -48,7 +48,7 @@ var defaultServerConfig = ServerConfig{
 	NotifyInterval:    15 * time.Second,
 	FetchInterval:     15 * time.Second,
 	LbIfaceType:       "dpvs-agent", // only type supported now
-	LbIfaceAddr:       "localhost:6600",
+	LbIfaceAddr:       "localhost:53225",
 	LbAutoMethod:      true,
 	DryRun:            false,
 	Debug:             false,

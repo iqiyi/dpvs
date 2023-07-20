@@ -263,7 +263,7 @@ ipvs_defs {
                 mss             1452
                 ttl             63
                 sack
-                ! wscale
+                ! wscale        0
                 ! timestamp
             }
             close_client_window

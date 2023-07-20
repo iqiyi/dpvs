@@ -32,7 +32,7 @@ func NewPutDeviceNameNetlinkAddr(ctx *middleware.Context, handler PutDeviceNameN
 /*
 	PutDeviceNameNetlinkAddr swagger:route PUT /device/{name}/netlink/addr device putDeviceNameNetlinkAddr
 
-set ip cird to linux net device
+ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device
 */
 type PutDeviceNameNetlinkAddr struct {
 	Context *middleware.Context

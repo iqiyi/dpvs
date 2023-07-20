@@ -139,7 +139,9 @@ struct dp_vs_conn {
     /* synproxy related members */
     struct dp_vs_seq syn_proxy_seq;     /* seq used in synproxy */
     struct list_head ack_mbuf;          /* ack mbuf saved in step2 */
-    uint32_t ack_num;                   /* ack mbuf number stored */
+    uint16_t ack_num;                   /* ack mbuf number stored */
+    uint8_t wscale_vs;                  /* outbound wscale factor to client */
+    uint8_t wscale_rs;                  /* outbound wscale factor from rs */
     struct rte_mbuf *syn_mbuf;          /* saved rs syn packet for retransmition */
     rte_atomic32_t syn_retry_max;       /* syn retransmition max packets */
 

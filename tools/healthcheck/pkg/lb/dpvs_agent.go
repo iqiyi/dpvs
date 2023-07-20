@@ -30,7 +30,7 @@ import (
 var _ Comm = (*DpvsAgentComm)(nil)
 
 var (
-	serverDefault = "localhost:6600"
+	serverDefault = "localhost:53225"
 	listUri       = LbApi{"/v2/vs", http.MethodGet}
 	noticeUri     = LbApi{"/v2/vs/%s/rs?healthcheck=true", http.MethodPut}
 
