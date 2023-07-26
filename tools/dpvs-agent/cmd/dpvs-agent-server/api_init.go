@@ -45,7 +45,7 @@ type DpvsAgentServer struct {
 func unixDialer(ctx context.Context) (net.Conn, error) {
 	retry := 0
 	d := net.Dialer{Timeout: 10 * time.Second}
-	raddr := net.UnixAddr{Name: "/var/run/dpvs.ipc", Net: "unix"}
+	raddr := net.UnixAddr{Name: IpcSocket, Net: "unix"}
 	for {
 		conn, err := d.DialContext(ctx, "unix", raddr.String())
 		if err == nil {
