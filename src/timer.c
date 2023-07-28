@@ -187,16 +187,19 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
         timer->delay = 1;
     }
 
-    /* add to corresponding wheel, from higher level to lower. */
-    for (level = LEVEL_DEPTH - 1; level >= 0; level--) {
+    /* MUST add lower level passed time to delay */
+    /* add to corresponding wheel, from lower level to higher. */
+    for (level = 0; level < LEVEL_DEPTH; level++) {
         off = timer->delay / get_level_ticks(level);
-        if (off > 0) {
+        if (off < LEVEL_SIZE) {
             hash = (sched->cursors[level] + off) % LEVEL_SIZE;
             list_add_tail(&timer->list, &sched->hashs[level][hash]);
 #ifdef CONFIG_TIMER_DEBUG
             assert(timer->handler == handler);
 #endif
             return EDPVS_OK;
+        } else {
+            timer->delay += sched->cursors[level];
         }
     }
 
