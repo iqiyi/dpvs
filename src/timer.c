@@ -199,7 +199,7 @@ static int __dpvs_timer_sched(struct timer_scheduler *sched,
 #endif
             return EDPVS_OK;
         } else {
-            timer->delay += sched->cursors[level];
+            timer->delay += sched->cursors[level] * get_level_ticks(level);
         }
     }
 
