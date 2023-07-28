@@ -151,7 +151,7 @@ int dp_vs_dest_edit_health(struct dp_vs_service *svc, struct dp_vs_dest_conf *ud
 void dp_vs_dest_unlink(struct dp_vs_service *svc,
                         struct dp_vs_dest *dest, int svcupd);
 
-void dp_vs_dest_put(struct dp_vs_dest *dest);
+void dp_vs_dest_put(struct dp_vs_dest *dest, bool timerlock);
 
 int dp_vs_dest_del(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 

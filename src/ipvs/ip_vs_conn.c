@@ -388,7 +388,7 @@ static int dp_vs_conn_bind_dest(struct dp_vs_conn *conn,
     return EDPVS_OK;
 }
 
-static int dp_vs_conn_unbind_dest(struct dp_vs_conn *conn)
+static int dp_vs_conn_unbind_dest(struct dp_vs_conn *conn, bool timerlock)
 {
     struct dp_vs_dest *dest = conn->dest;
 
@@ -407,7 +407,7 @@ static int dp_vs_conn_unbind_dest(struct dp_vs_conn *conn)
         dest->flags &= ~DPVS_DEST_F_OVERLOAD;
     }
 
-    dp_vs_dest_put(dest);
+    dp_vs_dest_put(dest, timerlock);
 
     conn->dest = NULL;
     return EDPVS_OK;
@@ -680,7 +680,7 @@ static int dp_vs_conn_expire(void *priv)
             pp->conn_expire(pp, conn);
 
         dp_vs_conn_sa_release(conn);
-        dp_vs_conn_unbind_dest(conn);
+        dp_vs_conn_unbind_dest(conn, false);
         dp_vs_laddr_unbind(conn);
         dp_vs_conn_free_packets(conn);
 
@@ -784,7 +784,7 @@ static void conn_flush(void)
                               (struct sockaddr_storage *)&saddr);
                 }
 
-                dp_vs_conn_unbind_dest(conn);
+                dp_vs_conn_unbind_dest(conn, true);
                 dp_vs_laddr_unbind(conn);
                 rte_atomic32_dec(&conn->refcnt);
 
@@ -987,7 +987,7 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
 unbind_laddr:
     dp_vs_laddr_unbind(new);
 unbind_dest:
-    dp_vs_conn_unbind_dest(new);
+    dp_vs_conn_unbind_dest(new, true);
 errout:
     dp_vs_conn_free(new);
     return NULL;
