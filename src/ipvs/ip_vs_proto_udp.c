@@ -454,9 +454,9 @@ static int insert_ipopt_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     struct ipopt_uoa *optuoa;
 
     assert(AF_INET == tuplehash_in(conn).af && AF_INET == tuplehash_out(conn).af);
-    if ((ip4_hdrlen(mbuf) + sizeof(struct ipopt_uoa) >
+    if ((ip4_hdrlen(mbuf) + IPOLEN_UOA_IPV4 >
                 sizeof(struct iphdr) + MAX_IPOPTLEN)
-            || (mbuf->pkt_len + sizeof(struct ipopt_uoa) > mtu))
+            || (mbuf->pkt_len + IPOLEN_UOA_IPV4 > mtu))
         goto standalone_uoa;
 
     /*
