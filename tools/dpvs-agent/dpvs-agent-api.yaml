@@ -530,7 +530,7 @@ definitions:
           - rr
           - wrr
           - wlc
-          - connhash
+          - conhash
       DestCheck:
         type: array
         items:
@@ -585,7 +585,7 @@ definitions:
           - rr
           - wrr
           - wlc
-          - connhash
+          - conhash
       Match:
         "$ref": "#/definitions/MatchSpec"
 paths:

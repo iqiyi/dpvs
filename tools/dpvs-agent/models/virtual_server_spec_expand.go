@@ -65,7 +65,7 @@ type VirtualServerSpecExpand struct {
 	RSs *RealServerExpandList `json:"RSs,omitempty"`
 
 	// sched name
-	// Enum: [rr wrr wlc connhash]
+	// Enum: [rr wrr wlc conhash]
 	SchedName string `json:"SchedName,omitempty"`
 
 	// stats
@@ -222,7 +222,7 @@ var virtualServerSpecExpandTypeSchedNamePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["rr","wrr","wlc","connhash"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["rr","wrr","wlc","conhash"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -241,8 +241,8 @@ const (
 	// VirtualServerSpecExpandSchedNameWlc captures enum value "wlc"
 	VirtualServerSpecExpandSchedNameWlc string = "wlc"
 
-	// VirtualServerSpecExpandSchedNameConnhash captures enum value "connhash"
-	VirtualServerSpecExpandSchedNameConnhash string = "connhash"
+	// VirtualServerSpecExpandSchedNameConhash captures enum value "conhash"
+	VirtualServerSpecExpandSchedNameConhash string = "conhash"
 )
 
 // prop value enum

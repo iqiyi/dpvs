@@ -311,7 +311,7 @@ static int dp_vs_conhash_edit_dest(struct dp_vs_service *svc,
 }
 
 /*
- *      Assign dest to connhash.
+ *      Assign dest to conhash.
  */
 static int
 dp_vs_conhash_assign(struct dp_vs_service *svc)

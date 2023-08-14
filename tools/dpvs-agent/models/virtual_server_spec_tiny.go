@@ -39,7 +39,7 @@ type VirtualServerSpecTiny struct {
 	Match *MatchSpec `json:"Match,omitempty"`
 
 	// sched name
-	// Enum: [rr wrr wlc connhash]
+	// Enum: [rr wrr wlc conhash]
 	SchedName string `json:"SchedName,omitempty"`
 
 	// sync proxy
@@ -90,7 +90,7 @@ var virtualServerSpecTinyTypeSchedNamePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["rr","wrr","wlc","connhash"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["rr","wrr","wlc","conhash"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -109,8 +109,8 @@ const (
 	// VirtualServerSpecTinySchedNameWlc captures enum value "wlc"
 	VirtualServerSpecTinySchedNameWlc string = "wlc"
 
-	// VirtualServerSpecTinySchedNameConnhash captures enum value "connhash"
-	VirtualServerSpecTinySchedNameConnhash string = "connhash"
+	// VirtualServerSpecTinySchedNameConhash captures enum value "conhash"
+	VirtualServerSpecTinySchedNameConhash string = "conhash"
 )
 
 // prop value enum

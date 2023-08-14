@@ -1859,7 +1859,7 @@ func init() {
             "rr",
             "wrr",
             "wlc",
-            "connhash"
+            "conhash"
           ]
         },
         "Stats": {
@@ -1910,7 +1910,7 @@ func init() {
             "rr",
             "wrr",
             "wlc",
-            "connhash"
+            "conhash"
           ]
         },
         "SyncProxy": {
@@ -4200,7 +4200,7 @@ func init() {
             "rr",
             "wrr",
             "wlc",
-            "connhash"
+            "conhash"
           ]
         },
         "Stats": {
@@ -4251,7 +4251,7 @@ func init() {
             "rr",
             "wrr",
             "wlc",
-            "connhash"
+            "conhash"
           ]
         },
         "SyncProxy": {
