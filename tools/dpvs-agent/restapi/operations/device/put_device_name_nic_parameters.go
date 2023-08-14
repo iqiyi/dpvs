@@ -130,7 +130,7 @@ func (o *PutDeviceNameNicParams) bindForward2Kni(rawData []string, hasKey bool, 
 // validateForward2Kni carries on validations for parameter Forward2Kni
 func (o *PutDeviceNameNicParams) validateForward2Kni(formats strfmt.Registry) error {
 
-	if err := validate.EnumCase("forward2Kni", "query", *o.Forward2Kni, []interface{}{"unset", "on", "off"}, true); err != nil {
+	if err := validate.EnumCase("forward2Kni", "query", *o.Forward2Kni, []interface{}{"unset", true, false}, true); err != nil {
 		return err
 	}
 
@@ -210,7 +210,7 @@ func (o *PutDeviceNameNicParams) bindPromisc(rawData []string, hasKey bool, form
 // validatePromisc carries on validations for parameter Promisc
 func (o *PutDeviceNameNicParams) validatePromisc(formats strfmt.Registry) error {
 
-	if err := validate.EnumCase("promisc", "query", *o.Promisc, []interface{}{"unset", "on", "off"}, true); err != nil {
+	if err := validate.EnumCase("promisc", "query", *o.Promisc, []interface{}{"unset", true, false}, true); err != nil {
 		return err
 	}
 

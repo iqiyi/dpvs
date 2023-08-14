@@ -85,6 +85,7 @@ func (o *LocalAddrFront) GetAf() uint32 {
 func (o *LocalAddrFront) SetAf(af uint32) {
 	o.af = af
 }
+
 func (o *LocalAddrFront) SetAfByAddr(addr string) {
 	i := strings.Index(addr, "/")
 	if i != -1 {

@@ -65,15 +65,15 @@ type VirtualServerSpecExpand struct {
 	RSs *RealServerExpandList `json:"RSs,omitempty"`
 
 	// sched name
-	// Enum: [rr wrr wlc connhash]
+	// Enum: [rr wrr wlc conhash]
 	SchedName string `json:"SchedName,omitempty"`
 
 	// stats
 	Stats *ServerStats `json:"Stats,omitempty"`
 
-	// sync proxy
+	// syn proxy
 	// Enum: [true false]
-	SyncProxy string `json:"SyncProxy,omitempty"`
+	SynProxy string `json:"SynProxy,omitempty"`
 
 	// timeout
 	Timeout uint32 `json:"Timeout,omitempty"`
@@ -107,7 +107,7 @@ func (m *VirtualServerSpecExpand) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
-	if err := m.validateSyncProxy(formats); err != nil {
+	if err := m.validateSynProxy(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -222,7 +222,7 @@ var virtualServerSpecExpandTypeSchedNamePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["rr","wrr","wlc","connhash"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["rr","wrr","wlc","conhash"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -241,8 +241,8 @@ const (
 	// VirtualServerSpecExpandSchedNameWlc captures enum value "wlc"
 	VirtualServerSpecExpandSchedNameWlc string = "wlc"
 
-	// VirtualServerSpecExpandSchedNameConnhash captures enum value "connhash"
-	VirtualServerSpecExpandSchedNameConnhash string = "connhash"
+	// VirtualServerSpecExpandSchedNameConhash captures enum value "conhash"
+	VirtualServerSpecExpandSchedNameConhash string = "conhash"
 )
 
 // prop value enum
@@ -285,7 +285,7 @@ func (m *VirtualServerSpecExpand) validateStats(formats strfmt.Registry) error {
 	return nil
 }
 
-var virtualServerSpecExpandTypeSyncProxyPropEnum []interface{}
+var virtualServerSpecExpandTypeSynProxyPropEnum []interface{}
 
 func init() {
 	var res []string
@@ -293,34 +293,34 @@ func init() {
 		panic(err)
 	}
 	for _, v := range res {
-		virtualServerSpecExpandTypeSyncProxyPropEnum = append(virtualServerSpecExpandTypeSyncProxyPropEnum, v)
+		virtualServerSpecExpandTypeSynProxyPropEnum = append(virtualServerSpecExpandTypeSynProxyPropEnum, v)
 	}
 }
 
 const (
 
-	// VirtualServerSpecExpandSyncProxyTrue captures enum value "true"
-	VirtualServerSpecExpandSyncProxyTrue string = "true"
+	// VirtualServerSpecExpandSynProxyTrue captures enum value "true"
+	VirtualServerSpecExpandSynProxyTrue string = "true"
 
-	// VirtualServerSpecExpandSyncProxyFalse captures enum value "false"
-	VirtualServerSpecExpandSyncProxyFalse string = "false"
+	// VirtualServerSpecExpandSynProxyFalse captures enum value "false"
+	VirtualServerSpecExpandSynProxyFalse string = "false"
 )
 
 // prop value enum
-func (m *VirtualServerSpecExpand) validateSyncProxyEnum(path, location string, value string) error {
-	if err := validate.EnumCase(path, location, value, virtualServerSpecExpandTypeSyncProxyPropEnum, true); err != nil {
+func (m *VirtualServerSpecExpand) validateSynProxyEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, virtualServerSpecExpandTypeSynProxyPropEnum, true); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *VirtualServerSpecExpand) validateSyncProxy(formats strfmt.Registry) error {
-	if swag.IsZero(m.SyncProxy) { // not required
+func (m *VirtualServerSpecExpand) validateSynProxy(formats strfmt.Registry) error {
+	if swag.IsZero(m.SynProxy) { // not required
 		return nil
 	}
 
 	// value enum
-	if err := m.validateSyncProxyEnum("SyncProxy", "body", m.SyncProxy); err != nil {
+	if err := m.validateSynProxyEnum("SynProxy", "body", m.SynProxy); err != nil {
 		return err
 	}
 

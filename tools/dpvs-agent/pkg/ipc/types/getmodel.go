@@ -29,7 +29,7 @@ func (vs *VirtualServerSpec) GetModel() *models.VirtualServerSpecExpand {
 		Port:            vs.GetPort(),
 		Proto:           vs.GetProto(),
 		Fwmark:          vs.GetFwmark(),
-		SyncProxy:       "false",
+		SynProxy:        "false",
 		ExpireQuiescent: "false",
 		SchedName:       vs.GetSchedName(),
 		Timeout:         vs.GetTimeout(),
@@ -40,7 +40,7 @@ func (vs *VirtualServerSpec) GetModel() *models.VirtualServerSpecExpand {
 
 	flags := ""
 	if (vs.GetFlags() & DPVS_SVC_F_SYNPROXY) != 0 {
-		modelVs.SyncProxy = "true"
+		modelVs.SynProxy = "true"
 		flags += "SynProxy|"
 	}
 
