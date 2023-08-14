@@ -614,7 +614,7 @@ static void __dp_vs_service_del(struct dp_vs_service *svc)
      */
     list_for_each_entry_safe(dest, nxt, &svc->dests, n_list) {
         dp_vs_dest_unlink(svc, dest, 0);
-        dp_vs_dest_put(dest);
+        dp_vs_dest_put(dest, true);
     }
 
     /*

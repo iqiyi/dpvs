@@ -1910,7 +1910,7 @@ func init() {
             "rr",
             "wrr",
             "wlc",
-            "connhash"
+            "conhash"
           ]
         },
         "SynProxy": {
@@ -4251,7 +4251,7 @@ func init() {
             "rr",
             "wrr",
             "wlc",
-            "connhash"
+            "conhash"
           ]
         },
         "SynProxy": {

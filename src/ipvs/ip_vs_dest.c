@@ -268,14 +268,18 @@ int dp_vs_dest_edit_health(struct dp_vs_service *svc, struct dp_vs_dest_conf *ud
     return EDPVS_OK;
 }
 
-void dp_vs_dest_put(struct dp_vs_dest *dest)
+void dp_vs_dest_put(struct dp_vs_dest *dest, bool timerlock)
 {
     if (!dest)
         return;
 
     if (rte_atomic32_dec_and_test(&dest->refcnt)) {
-        if (rte_lcore_id() == g_master_lcore_id)
-            dpvs_timer_cancel(&dest->dfc.master.timer, true);
+        if (rte_lcore_id() == g_master_lcore_id) {
+            if (timerlock)
+                dpvs_timer_cancel(&dest->dfc.master.timer, true);
+            else
+                dpvs_timer_cancel_nolock(&dest->dfc.master.timer, true);
+        }
         dp_vs_service_unbind(dest);
         rte_free(dest);
     }
@@ -333,7 +337,7 @@ dp_vs_dest_del(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest)
     /*
      *      Delete the destination
      */
-    dp_vs_dest_put(dest);
+    dp_vs_dest_put(dest, true);
 
     return EDPVS_OK;
 }

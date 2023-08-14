@@ -42,7 +42,7 @@ static void route_help(void)
         "    dpip route add default via 10.0.0.1\n"
         "    dpip route add 172.0.0.0/16 via 172.0.0.3 dev dpdk0\n"
         "    dpip route add 192.168.0.0/24 dev dpdk0\n"
-        "    dpip -6 route add ffe1::/128 dev dpdk0"
+        "    dpip -6 route add ffe1::/128 dev dpdk0\n"
         "    dpip -6 route add 2001:db8:1::/64 via 2001:db8:1::1 dev dpdk0\n"
         "    dpip route del 172.0.0.0/16\n"
         "    dpip route set 172.0.0.0/16 via 172.0.0.1\n"
