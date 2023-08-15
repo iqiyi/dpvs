@@ -1961,8 +1961,8 @@ func init() {
     "forward2kni": {
       "enum": [
         "unset",
-        true,
-        false
+        "on",
+        "off"
       ],
       "type": "string",
       "default": "unset",
@@ -1996,8 +1996,8 @@ func init() {
     "promisc": {
       "enum": [
         "unset",
-        true,
-        false
+        "on",
+        "off"
       ],
       "type": "string",
       "default": "unset",
@@ -2526,8 +2526,8 @@ func init() {
           {
             "enum": [
               "unset",
-              true,
-              false
+              "on",
+              "off"
             ],
             "type": "string",
             "default": "unset",
@@ -2548,8 +2548,8 @@ func init() {
           {
             "enum": [
               "unset",
-              true,
-              false
+              "on",
+              "off"
             ],
             "type": "string",
             "default": "unset",
@@ -4302,8 +4302,8 @@ func init() {
     "forward2kni": {
       "enum": [
         "unset",
-        true,
-        false
+        "on",
+        "off"
       ],
       "type": "string",
       "default": "unset",
@@ -4337,8 +4337,8 @@ func init() {
     "promisc": {
       "enum": [
         "unset",
-        true,
-        false
+        "on",
+        "off"
       ],
       "type": "string",
       "default": "unset",
