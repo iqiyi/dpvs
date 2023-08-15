@@ -265,7 +265,7 @@ func (vs *VirtualServerSpec) GetFwmark() uint32 {
 	return vs.fwmark
 }
 
-func (vs *VirtualServerSpec) SetFlagsSyncProxy() {
+func (vs *VirtualServerSpec) SetFlagsSynProxy() {
 	vs.setFlags(DPVS_SVC_F_SYNPROXY)
 }
 

@@ -49,7 +49,6 @@ func (h *putVsLaddr) Handle(params apiVs.PutVsVipPortLaddrParams) middleware.Res
 	lds := make([]*types.LocalAddrDetail, 1)
 
 	lds[0] = types.NewLocalAddrDetail()
-	lds[0].SetAf(laddr.GetAf())
 	lds[0].SetAddr(params.Spec.Addr)
 	lds[0].SetIfName(params.Spec.Device)
 

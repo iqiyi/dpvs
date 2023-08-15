@@ -497,7 +497,7 @@ definitions:
         format: "uint32"
       Flags:
         type: "string"
-      SyncProxy:
+      SynProxy:
         type: "string"
         enum:
           - "true"
@@ -556,7 +556,7 @@ definitions:
       #Flags:
       #  type: "integer"
       #  format: "uint32"
-      SyncProxy:
+      SynProxy:
         type: "boolean"
         default: false
       ExpireQuiescent:

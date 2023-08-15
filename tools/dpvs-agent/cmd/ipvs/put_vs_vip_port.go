@@ -69,8 +69,8 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 			vs.SetFlagsExpireQuiescent()
 		}
 
-		if params.Spec.SyncProxy != nil && *params.Spec.SyncProxy {
-			vs.SetFlagsSyncProxy()
+		if params.Spec.SynProxy != nil && *params.Spec.SynProxy {
+			vs.SetFlagsSynProxy()
 		}
 	}
 

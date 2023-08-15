@@ -42,8 +42,8 @@ type VirtualServerSpecTiny struct {
 	// Enum: [rr wrr wlc conhash]
 	SchedName string `json:"SchedName,omitempty"`
 
-	// sync proxy
-	SyncProxy *bool `json:"SyncProxy,omitempty"`
+	// syn proxy
+	SynProxy *bool `json:"SynProxy,omitempty"`
 
 	// timeout
 	Timeout uint32 `json:"Timeout,omitempty"`

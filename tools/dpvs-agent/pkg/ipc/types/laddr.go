@@ -85,6 +85,7 @@ func (o *LocalAddrFront) GetAf() uint32 {
 func (o *LocalAddrFront) SetAf(af uint32) {
 	o.af = af
 }
+
 func (o *LocalAddrFront) SetAfByAddr(addr string) {
 	i := strings.Index(addr, "/")
 	if i != -1 {
@@ -243,7 +244,7 @@ func (o *LocalAddrDetail) Dump(buf []byte) bool {
 	return o.Copy(tmp)
 }
 
-func (o *LocalAddrDetail) SetAf(af uint32) {
+func (o *LocalAddrDetail) setAf(af uint32) {
 	o.af = af
 }
 
@@ -292,10 +293,14 @@ func (o *LocalAddrDetail) GetAddr() string {
 func (o *LocalAddrDetail) SetAddr(addr string) {
 	if strings.Contains(addr, ":") {
 		copy(o.addr[:], net.ParseIP(addr))
+		// o.af = unix.AF_INET6
+		o.setAf(unix.AF_INET6)
 	} else {
 		buf := new(bytes.Buffer)
 		binary.Write(buf, binary.LittleEndian, net.ParseIP(addr))
 		copy(o.addr[:], buf.Bytes()[12:])
+		// o.af = unix.AF_INET
+		o.setAf(unix.AF_INET)
 	}
 }
 

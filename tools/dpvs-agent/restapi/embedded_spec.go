@@ -1865,7 +1865,7 @@ func init() {
         "Stats": {
           "$ref": "#/definitions/ServerStats"
         },
-        "SyncProxy": {
+        "SynProxy": {
           "type": "string",
           "enum": [
             "true",
@@ -1913,7 +1913,7 @@ func init() {
             "conhash"
           ]
         },
-        "SyncProxy": {
+        "SynProxy": {
           "type": "boolean",
           "default": false
         },
@@ -1961,8 +1961,8 @@ func init() {
     "forward2kni": {
       "enum": [
         "unset",
-        "on",
-        "off"
+        true,
+        false
       ],
       "type": "string",
       "default": "unset",
@@ -1996,8 +1996,8 @@ func init() {
     "promisc": {
       "enum": [
         "unset",
-        "on",
-        "off"
+        true,
+        false
       ],
       "type": "string",
       "default": "unset",
@@ -2526,8 +2526,8 @@ func init() {
           {
             "enum": [
               "unset",
-              "on",
-              "off"
+              true,
+              false
             ],
             "type": "string",
             "default": "unset",
@@ -2548,8 +2548,8 @@ func init() {
           {
             "enum": [
               "unset",
-              "on",
-              "off"
+              true,
+              false
             ],
             "type": "string",
             "default": "unset",
@@ -4206,7 +4206,7 @@ func init() {
         "Stats": {
           "$ref": "#/definitions/ServerStats"
         },
-        "SyncProxy": {
+        "SynProxy": {
           "type": "string",
           "enum": [
             "true",
@@ -4254,7 +4254,7 @@ func init() {
             "conhash"
           ]
         },
-        "SyncProxy": {
+        "SynProxy": {
           "type": "boolean",
           "default": false
         },
@@ -4302,8 +4302,8 @@ func init() {
     "forward2kni": {
       "enum": [
         "unset",
-        "on",
-        "off"
+        true,
+        false
       ],
       "type": "string",
       "default": "unset",
@@ -4337,8 +4337,8 @@ func init() {
     "promisc": {
       "enum": [
         "unset",
-        "on",
-        "off"
+        true,
+        false
       ],
       "type": "string",
       "default": "unset",
