@@ -30,7 +30,7 @@ In case of the following situations, you should consider this performance tuning
 
 * There exists big  worker loops.
 
-  > To observe worker loop time, you should uncomment the macro "CONFIG_RECORD_BIG_LOOP" in src/config.mk，recompile DPVS program and run it.
+  > To observe worker loop time, you should set "CONFIG_RECORD_BIG_LOOP=y" in `config.mk`，recompile DPVS program and run it.
   >
   >  Besides, macros "BIG_LOOP_THRESH_SLAVE" and "BIG_LOOP_THRESH_MASTER" define the threshold time of worker loop. Modify them if needed.
 
