@@ -8,13 +8,13 @@
 #   restriction of the website.
 # - RPM_PKGCONFIG: The `pkg-config` tool of v0.29.2 is required to build DPVS.
 #   However, the default installation version on centos7 is v0.27.1. You need to
-#   download or build the v0.29.2 RPM for pkgconfig and put it to the the local
+#   download it or build the v0.29.2 RPM from source and put it to the the local
 #   fileserver indicated by the ARG `RPM_PKGCONFIG`. Alternatively, building a
 #   binary `pkg-config` and installing it in the local binary path is also ok.
 #
 #   No kernel dependencies of dpdk/dpvs or network driver are built and installed.
-#   You should ensure the host the server has installed the drivers before running
-#   a dpvs container on it.
+#   You should ensure the host has installed the drivers before running a dpvs
+#   container on it.
 #
 
 ARG BASE_IMAGE=centos:centos7.9.2009
@@ -36,7 +36,7 @@ ARG MLNX_OFED=http://$FILE_SERVER/deploy/MLNX_OFED/MLNX_OFED_LINUX-5.6-2.0.9.0-r
 
 # the pkgconfig default installed version is 0.27.1 on centos7, update it to 0.29.2
 # the 0.29.2 rpm is built from source based on the rpm spec file of 0.27.1.
-# FIXME: remove thefile server dependency
+# FIXME: remove the file server dependency
 ARG RPM_PKGCONFIG=http://$FILE_SERVER/deploy/rpms/centos7/pkgconfig-0.29.2-1.el7.x86_64.rpm
 
 # golang install files
@@ -55,7 +55,7 @@ RUN set -x \
         && yum install -y epel-release \
         && yum install -y tcl tk iproute wget vim patch meson python36 emacs-filesystem \
                 gcc make lsof libnl3 ethtool libpcap pciutils numactl-libs numactl-devel \
-                openssl-devel automake popt-devel ninja-build meson \
+                openssl-devel automake popt-devel ninja-build meson libnl3-devel cgdb git \
         && mkdir deps \
         && rpm -Uvh $RPM_PKGCONFIG \
         && wget $GO_PACKAGE -P deps \
@@ -87,7 +87,7 @@ ENTRYPOINT ["/bin/bash"]
 ###### `runner` stage builds the docker image for DPVS product environments ######
 #
 # docker run --name dpvs \
-#       -d --rm --privileged --network host \
+#       -d --privileged --network host \
 #       -v /dev:/dev \
 #       -v /sys:/sys \
 #       -v /lib/modules:/lib/modules \
@@ -113,7 +113,7 @@ ENTRYPOINT ["/bin/bash"]
 #       ...
 #
 # docker run --name keepalived \
-#       -d --rm --privileged --network host  \
+#       -d --privileged --network host  \
 #       --cap-add=NET_ADMIN --cap-add=NET_BROADCAST --cap-add=NET_RAW \
 #       -v {dpvs-directory}:/dpvs \
 #       -e DPVS_IPC_FILE=/dpvs/dpvs.ipc \
@@ -125,7 +125,7 @@ ENTRYPOINT ["/bin/bash"]
 #       --checkers_pid=/dpvs/checkers.pid
 #
 # docker run --name dpvs-agent \
-#       -d --rm --network host \
+#       -d --network host \
 #       -v {dpvs-directory}:/dpvs \
 #       --entrypoint=/usr/bin/dpvs-agent \
 #       github.com/iqiyi/dpvs:{version} \
@@ -134,7 +134,7 @@ ENTRYPOINT ["/bin/bash"]
 #       --host=0.0.0.0 --port=6601
 #
 # docker run --name healthcheck \
-#       -d --rm --network host \
+#       -d --network host \
 #       -v {dpvs-directory}:/dpvs \
 #       --entrypoint=/usr/bin/healthcheck \
 #       github.com/iqiyi/dpvs:{version} \
@@ -143,6 +143,9 @@ ENTRYPOINT ["/bin/bash"]
 #
 FROM $BASE_IMAGE as runner
 
+LABEL maintainer="IQiYi/QLB team"
+LABEL email="iig_cloud_qlb@qiyi.com"
+LABEL project="https://github.com/iqiyi/dpvs"
 LABEL image_maker="docker build --target runner -t github.com/iqiyi/dpvs:{version} ."
 
 RUN set -x \
