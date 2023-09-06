@@ -404,8 +404,8 @@ void *set_value(vector_t tokens)
                 strncat(alloc, str, strlen(str));
         }
     } else {
-        alloc = MALLOC(sizeof(char *) * (size + 1));
-        memcpy(alloc, str, size);
+        alloc = MALLOC(sizeof(char) * (size + 1));
+        memcpy(alloc, str, size + 1);
     }
 
     return alloc;

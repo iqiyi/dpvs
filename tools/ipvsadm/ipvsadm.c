@@ -665,6 +665,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case 't':
             case 'u':
             case 'q':
+            case '1':
                 set_option(options, OPT_SERVICE);
                 if (c == 't') {
                     ce->dpvs_svc.proto = IPPROTO_TCP;
@@ -1721,7 +1722,10 @@ static void usage_exit(const char *program, const int exit_status)
             "  --dest-check   CHECK_CONF           config health check, inhibit scheduling to failed backends\n"
             "                                      CHECK_CONF:=disable|default(passive)|DETAIL(passive)|tcp|udp|ping, DETAIL:=UPDOWN|DOWNONLY\n"
             "                                      UPDOWN:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n"
-            "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n",
+            "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n"
+            "  --laddr        -z local-ip          local IP\n"
+            "  --blklst       -k blacklist-ip      blacklist IP for specific service\n"
+            "  --whtlst       -2 whitelist-ip      whitelist IP for specific service\n",
         DEF_SCHED);
 
     exit(exit_status);
