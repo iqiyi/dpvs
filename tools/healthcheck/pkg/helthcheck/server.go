@@ -111,9 +111,9 @@ func (s *Server) getHealthchecks() (*Checkers, error) {
 			}
 			weight := rs.Weight
 			state := StateUnknown
-			if weight > 0 {
+			if weight > 0 && rs.Inhibited == false {
 				state = StateHealthy
-			} else if rs.Inhibited {
+			} else if weight == 0 && rs.Inhibited == true {
 				state = StateUnhealthy
 			}
 			// TODO: allow users to specify check interval, timeout and retry
