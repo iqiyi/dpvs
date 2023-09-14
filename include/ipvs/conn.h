@@ -166,6 +166,11 @@ struct dp_vs_conn {
     /* flag for gfwip */
     bool outwall;
 
+    /* dcdn toa found or not */
+    bool dcdn_found;
+    /* dcdn toa address */
+    struct in_addr    dcdn_addr;
+
 } __rte_cache_aligned;
 
 /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */

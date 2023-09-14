@@ -28,6 +28,7 @@ enum {
     TCP_OPT_SACK_PERM   = 4,
     TCP_OPT_SACK        = 5,
     TCP_OPT_TIMESTAMP   = 8,
+    TCP_OPT_DCDN_ADDR   = 28,
     TCP_OPT_ADDR        = 254, /* non-standard */
 };
 
@@ -35,6 +36,7 @@ enum {
 #define TCP_OLEN_TIMESTAMP          10
 #define TCP_OLEN_IP4_ADDR           8
 #define TCP_OLEN_IP6_ADDR           20
+#define TOA_DCDN_IPV4               1
 
 #define TCP_OLEN_TSTAMP_ALIGNED     12
 #define TCP_OLEN_SACK_BASE          2
