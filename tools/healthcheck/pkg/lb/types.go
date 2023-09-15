@@ -27,6 +27,7 @@ const (
 	CheckerTCP
 	CheckerUDP
 	CheckerPING
+	CheckerUDPPing
 )
 
 type RealServer struct {

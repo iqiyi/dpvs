@@ -47,7 +47,7 @@ func (hc *UDPChecker) String() string {
 	return fmt.Sprintf("UDP checker for %v", hc.Config.Id)
 }
 
-// Check executes a UDP healthcheck.
+// Check executes an UDP healthcheck.
 func (hc *UDPChecker) Check(target Target, timeout time.Duration) *Result {
 	msg := fmt.Sprintf("UDP check to %s", target.Addr())
 	start := time.Now()
@@ -81,7 +81,7 @@ func (hc *UDPChecker) Check(target Target, timeout time.Duration) *Result {
 		return NewResult(start, msg, false, err)
 	}
 
-	buf := make([]byte, len(hc.Receive)+1)
+	buf := make([]byte, len(hc.Receive))
 	n, _, err := udpConn.ReadFrom(buf)
 	if err != nil {
 		if hc.Send == "" && hc.Receive == "" {

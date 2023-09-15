@@ -56,7 +56,7 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 		rss[i].SetProto(front.GetProto())
 		rss[i].SetAddr(rs.IP)
 		rss[i].SetInhibited(rs.Inhibited)
-		rss[i].SetOverloaded(rs.Inhibited)
+		rss[i].SetOverloaded(rs.Overloaded)
 		rss[i].SetFwdMode(fwdmode)
 	}
 
