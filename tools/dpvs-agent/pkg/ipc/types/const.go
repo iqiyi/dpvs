@@ -96,7 +96,7 @@ func (e *DpvsFwdMode) String() string {
 	case DPVS_FWD_MODE_DR:
 		return "DR"
 	case DPVS_FWD_MODE_TUNNEL:
-		return "TUNNLE"
+		return "TUNNEL"
 	case DPVS_FWD_MODE_BYPASS:
 		return "BYPASS"
 	case DPVS_FWD_MODE_SNAT:
@@ -115,7 +115,7 @@ func (e *DpvsFwdMode) FromString(name string) {
 		*e = DPVS_FWD_LOCALNODE
 	case "DR":
 		*e = DPVS_FWD_MODE_DR
-	case "TUNNLE":
+	case "TUNNEL":
 		*e = DPVS_FWD_MODE_TUNNEL
 	case "BYPASS":
 		*e = DPVS_FWD_MODE_BYPASS
