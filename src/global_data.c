@@ -20,6 +20,10 @@
 #include <rte_cycles.h>
 #include "global_data.h"
 
+char *dpvs_pid_file;
+char *dpvs_ipc_file;
+char *dpvs_conf_file;
+
 RTE_DEFINE_PER_LCORE(uint32_t, g_dpvs_poll_tick);
 
 unsigned int g_version;

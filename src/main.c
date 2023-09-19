@@ -55,10 +55,6 @@
 
 #define LCORE_CONF_BUFFER_LEN 4096
 
-char *dpvs_pid_file;
-char *dpvs_ipc_file;
-char *dpvs_conf_file;
-
 static void inline dpdk_version_check(void)
 {
 #if RTE_VERSION < RTE_VERSION_NUM(20, 11, 1, 0)
