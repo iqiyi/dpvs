@@ -65,13 +65,6 @@ typedef struct dp_vs_dest_compat {
 
     /* statistics */
     struct dp_vs_stats stats;
-#ifdef _HAVE_IPVS_TUN_TYPE_
-    int                     tun_type;
-    int                     tun_port;
-#ifdef _HAVE_IPVS_TUN_CSUM_
-    int                     tun_flags;
-#endif
-#endif
 } dpvs_dest_compat_t;
 
 typedef struct dp_vs_dest_table {
