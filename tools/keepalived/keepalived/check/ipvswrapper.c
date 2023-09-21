@@ -840,13 +840,6 @@ ipvs_set_drule(int cmd, dpvs_dest_compat_t *drule, real_server_t * rs)
     drule->fwdmode = rs->forwarding_method;
     drule->max_conn = rs->u_threshold;
     drule->min_conn = rs->l_threshold;
-#ifdef _HAVE_IPVS_TUN_TYPE_
-    drule->tun_type = rs->tun_type;
-    drule->tun_port = rs->tun_port;
-#ifdef _HAVE_IPVS_TUN_CSUM_
-    drule->tun_flags = rs->tun_flags;
-#endif
-#endif
 }
 
 /*check whitelist addr*/
