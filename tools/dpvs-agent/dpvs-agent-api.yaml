@@ -264,6 +264,10 @@ definitions:
         type: "integer"
         format: "uint16"
         x-omitempty: false
+      consistentWeight:
+        type: "integer"
+        format: "uint16"
+        x-omitempty: false
       mode:
         type: "string"
         enum:
@@ -1053,6 +1057,41 @@ paths:
             "$ref": "#/definitions/Error"
         '500':
           description: "Error while creating virtual server"
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+  /vs/{VipPort}/rs/health:
+    put:
+      summary: "dpvs healthcheck update rs wight"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/rss-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            #"$ref": "#/definitions/RealServerSpecTiny"
+            "$ref": "#/definitions/RealServerExpandList"
+        '270':
+          description: Unexpected 
+          x-go-name: Unexpected
+          schema:
+            #"$ref": "#/definitions/RealServerSpecTiny"
+            "$ref": "#/definitions/RealServerExpandList"
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
           x-go-name: Failure
           schema:
             "$ref": "#/definitions/Error"

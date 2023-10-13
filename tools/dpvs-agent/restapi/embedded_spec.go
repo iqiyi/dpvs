@@ -1326,6 +1326,58 @@ func init() {
           }
         }
       }
+    },
+    "/vs/{VipPort}/rs/health": {
+      "put": {
+        "tags": [
+          "virtualserver"
+        ],
+        "summary": "dpvs healthcheck update rs wight",
+        "parameters": [
+          {
+            "$ref": "#/parameters/service-id"
+          },
+          {
+            "$ref": "#/parameters/rss-config"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RealServerExpandList"
+            }
+          },
+          "270": {
+            "description": "Unexpected",
+            "schema": {
+              "$ref": "#/definitions/RealServerExpandList"
+            },
+            "x-go-name": "Unexpected"
+          },
+          "460": {
+            "description": "Invalid frontend in service configuration",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "InvalidFrontend"
+          },
+          "461": {
+            "description": "Invalid backend in service configuration",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "InvalidBackend"
+          },
+          "500": {
+            "description": "Service deletion failed",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -1643,6 +1695,11 @@ func init() {
     "RealServerSpecTiny": {
       "type": "object",
       "properties": {
+        "consistentWeight": {
+          "type": "integer",
+          "format": "uint16",
+          "x-omitempty": false
+        },
         "inhibited": {
           "type": "boolean",
           "default": false
@@ -3667,6 +3724,65 @@ func init() {
           }
         }
       }
+    },
+    "/vs/{VipPort}/rs/health": {
+      "put": {
+        "tags": [
+          "virtualserver"
+        ],
+        "summary": "dpvs healthcheck update rs wight",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "VipPort",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "rss",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RealServerTinyList"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RealServerExpandList"
+            }
+          },
+          "270": {
+            "description": "Unexpected",
+            "schema": {
+              "$ref": "#/definitions/RealServerExpandList"
+            },
+            "x-go-name": "Unexpected"
+          },
+          "460": {
+            "description": "Invalid frontend in service configuration",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "InvalidFrontend"
+          },
+          "461": {
+            "description": "Invalid backend in service configuration",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "InvalidBackend"
+          },
+          "500": {
+            "description": "Service deletion failed",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -3984,6 +4100,11 @@ func init() {
     "RealServerSpecTiny": {
       "type": "object",
       "properties": {
+        "consistentWeight": {
+          "type": "integer",
+          "format": "uint16",
+          "x-omitempty": false
+        },
         "inhibited": {
           "type": "boolean",
           "default": false

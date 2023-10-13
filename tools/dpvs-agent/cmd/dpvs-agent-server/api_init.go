@@ -136,6 +136,7 @@ func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
 	restAPI.VirtualserverPutVsVipPortHandler = ipvs.NewPutVsItem(cp, logger)
 	restAPI.VirtualserverPutVsVipPortLaddrHandler = ipvs.NewPutVsLaddr(cp, logger)
 	restAPI.VirtualserverPutVsVipPortRsHandler = ipvs.NewPutVsRs(cp, logger)
+	restAPI.VirtualserverPutVsVipPortRsHealthHandler = ipvs.NewPutVsRsHealth(cp, logger)
 	restAPI.VirtualserverPutVsVipPortDenyHandler = ipvs.NewPutVsDeny(cp, logger)
 	restAPI.VirtualserverPutVsVipPortAllowHandler = ipvs.NewPutVsAllow(cp, logger)
 
