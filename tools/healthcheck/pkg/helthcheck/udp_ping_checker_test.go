@@ -22,25 +22,27 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/iqiyi/dpvs/tools/healthcheck/pkg/utils"
 )
 
-var ping_targets = []Target{
-	{net.ParseIP("127.0.0.1"), 0, 0},
-	{net.ParseIP("192.168.88.30"), 0, 0},
-	{net.ParseIP("11.22.33.44"), 0, 0},
-	{net.ParseIP("::1"), 0, 0},
-	{net.ParseIP("2001::1"), 0, 0},
-	{net.ParseIP("2001::68"), 0, 0},
+var udpping_targets = []Target{
+	{net.ParseIP("192.168.88.30"), 6601, utils.IPProtoUDP},
+	{net.ParseIP("11.22.33.44"), 6601, utils.IPProtoUDP},
+	{net.ParseIP("192.168.88.30"), 6602, utils.IPProtoUDP},
+	{net.ParseIP("2001::30"), 6601, utils.IPProtoUDP},
+	{net.ParseIP("1234:5678::9"), 6601, utils.IPProtoUDP},
+	{net.ParseIP("2001::30"), 6602, utils.IPProtoUDP},
 }
 
-func TestPingChecker(t *testing.T) {
-	for _, target := range ping_targets {
-		checker := NewPingChecker()
-		id := Id(target.IP.String())
+func TestUDPPingChecker(t *testing.T) {
+	for _, target := range udpping_targets {
+		checker := NewUDPPingChecker("", "")
+		id := Id(target.String())
 		config := NewCheckerConfig(&id, checker,
 			&target, StateUnknown, 0,
-			3*time.Second, 1*time.Second, 3)
+			3*time.Second, 2*time.Second, 3)
 		result := checker.Check(target, config.Timeout)
-		fmt.Printf("[ Ping ]%s ==>%v\n", target, result)
+		fmt.Printf("[ UDPPing ] %s ==> %v\n", target, result)
 	}
 }
