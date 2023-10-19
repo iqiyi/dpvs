@@ -62,6 +62,12 @@
 #define DEST_INHIBIT_DURATION_MIN       5       // 5s
 #define DEST_INHIBIT_DURATION_MAX       3600    // 1h
 
+enum {
+    PROXY_PROTOCOL_DISABLE = 0,
+    PROXY_PROTOCOL_V1,
+    PROXY_PROTOCOL_V2,
+};
+
 struct dest_check_configs {
     uint8_t types;                  // DEST_HC_*
 
@@ -76,16 +82,17 @@ struct dest_check_configs {
 typedef struct dp_vs_service_compat {
     /*base*/
     int                 af;
-    uint16_t            proto;
+    uint8_t             proto;
+    uint8_t             proxy_protocol; /* proxy protocol version: DISABLE | V1 | V2 */
     uint16_t            port;
-    uint32_t            fwmark;    /* firwall mark of service */
-    unsigned            flags;     /* virtual service flags */
-    unsigned            timeout;   /* persistent timeout in sec */
+    uint32_t            fwmark;         /* firwall mark of service */
+    unsigned            flags;          /* virtual service flags */
+    unsigned            timeout;        /* persistent timeout in sec */
     unsigned            conn_timeout;
-    uint32_t            netmask;   /* persistent netmask */
+    uint32_t            netmask;        /* persistent netmask */
     unsigned            bps;
     unsigned            limit_proportion;
-    union inet_addr     addr;      /* virtual ip address */
+    union inet_addr     addr;           /* virtual ip address */
     char                sched_name[DP_VS_SCHEDNAME_MAXLEN];
     
     /*dp_vs_service_user & dp_vs_service_entry*/
@@ -170,5 +177,24 @@ dest_check_configs_sanity(struct dest_check_configs *conf) {
     return res;
 };
 
+static inline uint8_t proxy_protocol_type(const char *str) {
+    if (!strcasecmp(str, "v1"))
+        return PROXY_PROTOCOL_V1;
+    if (!strcasecmp(str, "v2"))
+        return PROXY_PROTOCOL_V2;
+    return PROXY_PROTOCOL_DISABLE;
+}
+
+static inline const char *proxy_protocol_str(uint8_t type) {
+    switch (type) {
+        case PROXY_PROTOCOL_DISABLE:
+            return "disable";
+        case PROXY_PROTOCOL_V1:
+            return "v1";
+        case PROXY_PROTOCOL_V2:
+            return "v2";
+    }
+    return "unknown";
+}
 
 #endif /* __DPVS_SVC_CONF_H__ */

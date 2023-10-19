@@ -62,9 +62,10 @@ struct dp_vs_service {
      */
     int                 af;
     uint8_t             proto;      /* TCP/UDP/... */
-    union inet_addr     addr;       /* virtual IP address */
+    uint8_t             proxy_protocol;
     uint16_t            port;
     uint32_t            fwmark;
+    union inet_addr     addr;       /* virtual IP address */
     struct dp_vs_match  *match;
 
     unsigned            flags;

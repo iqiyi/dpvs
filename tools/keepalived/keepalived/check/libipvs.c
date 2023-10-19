@@ -132,6 +132,7 @@ int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int opti
         entry.timeout = svc->timeout;
     }
     entry.conn_timeout = svc->conn_timeout;
+    entry.proxy_protocol = svc->proxy_protocol;
 
     if (options & OPT_NETMASK) {
         entry.netmask = svc->netmask;

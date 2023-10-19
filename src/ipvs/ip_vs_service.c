@@ -468,9 +468,10 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
 
     svc->af = u->af;
     svc->proto = u->proto;
-    svc->addr = u->addr;
+    svc->proxy_protocol = u->proxy_protocol;
     svc->port = u->port;
     svc->fwmark = u->fwmark;
+    svc->addr = u->addr;
     svc->flags = u->flags;
     svc->timeout = u->timeout;
     svc->conn_timeout = u->conn_timeout;
@@ -549,6 +550,7 @@ static int dp_vs_service_edit(struct dp_vs_service *svc, struct dp_vs_service_co
     svc->flags = u->flags | DP_VS_SVC_F_HASHED;
     svc->timeout = u->timeout;
     svc->conn_timeout = u->conn_timeout;
+    svc->proxy_protocol = u->proxy_protocol;
     svc->netmask = u->netmask;
     svc->bps = u->bps;
     svc->limit_proportion = u->limit_proportion;
@@ -645,9 +647,10 @@ dp_vs_service_copy(struct dp_vs_service_entry *dst, struct dp_vs_service *src)
     memset(dst, 0, sizeof(*dst));
     dst->af = src->af;
     dst->proto = src->proto;
-    dst->addr = src->addr;
+    dst->proxy_protocol = src->proxy_protocol;
     dst->port = src->port;
     dst->fwmark = src->fwmark;
+    dst->addr = src->addr;
     snprintf(dst->sched_name, sizeof(dst->sched_name),
              "%s", src->scheduler->name);
     dst->flags = src->flags;
