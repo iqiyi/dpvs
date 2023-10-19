@@ -191,7 +191,8 @@ typedef struct _virtual_server {
 	uint32_t			vfwmark;
 	real_server_t			*s_svr;
 	uint16_t			af;
-	uint16_t			service_type;
+	uint8_t				service_type;
+	uint8_t				proxy_protocol;
 	bool				ha_suspend;
 	int				ha_suspend_addr_count;
 #ifdef _WITH_LVS_
@@ -298,6 +299,7 @@ static inline bool quorum_equal(const notify_script_t *quorum1,
 #define VS_ISEQ(X,Y)    (sockstorage_equal(&(X)->addr,&(Y)->addr)                       &&\
                          (X)->vfwmark                 == (Y)->vfwmark                   &&\
                          (X)->service_type            == (Y)->service_type              &&\
+                         (X)->proxy_protocol          == (Y)->proxy_protocol            &&\
                          (X)->forwarding_method       == (Y)->forwarding_method         &&\
                          (X)->hash_target             == (Y)->hash_target               &&\
                          (X)->syn_proxy               == (Y)->syn_proxy                 &&\

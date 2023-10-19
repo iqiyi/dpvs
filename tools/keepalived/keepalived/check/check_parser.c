@@ -1056,8 +1056,8 @@ static void
 limit_proportion_handler(const vector_t *strvec)
 {
 	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
-    char *str = vector_slot(strvec, 1); 
-    vs->limit_proportion = atoi(str);
+	char *str = vector_slot(strvec, 1);
+	vs->limit_proportion = atoi(str);
 }
 
 static void
@@ -1071,6 +1071,13 @@ establish_timeout_handler(const vector_t *strvec)
 	if (conn_timeout < ESTABLISH_TIMEOUT_MIN)
 		conn_timeout = ESTABLISH_TIMEOUT_MIN;
 	vs->conn_timeout = conn_timeout;
+}
+
+static void
+proxy_protocol_handler(const vector_t *strvec)
+{
+	virtual_server_t *vs = LIST_TAIL_DATA(check_data->vs);
+	vs->proxy_protocol = proxy_protocol_type((const char *)vector_slot(strvec, 1));
 }
 
 static void
@@ -1173,6 +1180,7 @@ init_check_keywords(bool active)
 #endif
 	install_keyword("lb_kind", &forwarding_handler);
 	install_keyword("establish_timeout", &establish_timeout_handler);
+	install_keyword("proxy_protocol", &proxy_protocol_handler);
 	install_keyword("lvs_method", &forwarding_handler);
 #ifdef _HAVE_PE_NAME_
 	install_keyword("persistence_engine", &pengine_handler);

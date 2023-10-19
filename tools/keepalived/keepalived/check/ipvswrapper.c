@@ -762,6 +762,7 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     srule->flags = vs->flags;
     srule->netmask = (vs->af == AF_INET6) ? 128 : ((uint32_t) 0xffffffff);
     srule->proto = vs->service_type;
+    srule->proxy_protocol = vs->proxy_protocol;
     srule->bps = vs->bps;
     srule->limit_proportion = vs->limit_proportion;
     srule->conn_timeout = vs->conn_timeout;

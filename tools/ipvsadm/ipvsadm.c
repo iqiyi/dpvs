@@ -335,6 +335,7 @@ enum {
     TAG_CONN_EXPIRE_QUIESCENT,
     TAG_DEST_CHECK,
     TAG_CONN_TIMEOUT,
+    TAG_PROXY_PROTOCOL,
 };
 
 /* various parsing helpers & parsing functions */
@@ -560,6 +561,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         { "expire-quiescent", '\0', POPT_ARG_NONE, NULL, TAG_CONN_EXPIRE_QUIESCENT, NULL, NULL },
         { "dest-check", '\0', POPT_ARG_STRING, &optarg, TAG_DEST_CHECK, NULL, NULL},
         { "conn-timeout", '\0', POPT_ARG_INT, &intarg, TAG_CONN_TIMEOUT, NULL, NULL},
+        { "proxy-protocol", '\0', POPT_ARG_STRING, &optarg, TAG_PROXY_PROTOCOL, NULL, NULL},
         { NULL, 0, 0, NULL, 0, NULL, NULL }
     };
 
@@ -976,6 +978,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case TAG_CONN_TIMEOUT:
                 {
                     ce->dpvs_svc.conn_timeout = intarg;
+                    break;
+                }
+            case TAG_PROXY_PROTOCOL:
+                {
+                    ce->dpvs_svc.proxy_protocol = proxy_protocol_type(optarg);
                     break;
                 }
             default:
@@ -1702,6 +1709,7 @@ static void usage_exit(const char *program, const int exit_status)
             "  --connection   -c                   output of current IPVS connections\n"
             "  --timeout                           output of timeout (tcp tcpfin udp)\n"
             "  --conn-timeout                      set connection established timeout\n"
+            "  --proxy-protocol                    proxy protocol config (disable|v1|v2)\n"
             "  --daemon                            output of daemon information\n"
             "  --stats                             output of statistics information\n"
             "  --rate                              output of rate information\n"
@@ -2163,6 +2171,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             printf(" synproxy");
         if (se->conn_timeout != 0)
             printf(" conn-timeout %u", se->conn_timeout);
+        if (se->proxy_protocol != PROXY_PROTOCOL_DISABLE)
+            printf(" pp%s", proxy_protocol_str(se->proxy_protocol));
         if (se->flags & IP_VS_SVC_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
         if (se->check_conf.types) {

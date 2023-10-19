@@ -1378,6 +1378,7 @@ clear_diff_services(list old_checkers_queue)
 			   because the VS still exists in new configuration */
 			if (strcmp(vs->sched, new_vs->sched) ||
 			    vs->flags != new_vs->flags ||
+			    vs->proxy_protocol != new_vs->proxy_protocol ||
 			    vs->persistence_granularity != new_vs->persistence_granularity ||
 			    vs->persistence_timeout != new_vs->persistence_timeout ||
 				vs->conn_timeout != new_vs->conn_timeout || 
