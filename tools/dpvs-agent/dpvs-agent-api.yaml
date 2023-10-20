@@ -1122,7 +1122,6 @@ paths:
       parameters:
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/rss-config"
-        - "$ref": "#/parameters/healthcheck"
       responses:
         '200':
           description: Success

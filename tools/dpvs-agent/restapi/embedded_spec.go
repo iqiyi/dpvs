@@ -1190,9 +1190,6 @@ func init() {
           },
           {
             "$ref": "#/parameters/rss-config"
-          },
-          {
-            "$ref": "#/parameters/healthcheck"
           }
         ],
         "responses": {
@@ -3571,12 +3568,6 @@ func init() {
             "schema": {
               "$ref": "#/definitions/RealServerTinyList"
             }
-          },
-          {
-            "type": "boolean",
-            "default": false,
-            "name": "healthcheck",
-            "in": "query"
           }
         ],
         "responses": {
