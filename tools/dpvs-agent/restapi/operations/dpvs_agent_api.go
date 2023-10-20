@@ -156,6 +156,9 @@ func NewDpvsAgentAPI(spec *loads.Document) *DpvsAgentAPI {
 		VirtualserverPutVsVipPortRsHandler: virtualserver.PutVsVipPortRsHandlerFunc(func(params virtualserver.PutVsVipPortRsParams) middleware.Responder {
 			return middleware.NotImplemented("operation virtualserver.PutVsVipPortRs has not yet been implemented")
 		}),
+		VirtualserverPutVsVipPortRsHealthHandler: virtualserver.PutVsVipPortRsHealthHandlerFunc(func(params virtualserver.PutVsVipPortRsHealthParams) middleware.Responder {
+			return middleware.NotImplemented("operation virtualserver.PutVsVipPortRsHealth has not yet been implemented")
+		}),
 	}
 }
 
@@ -266,6 +269,8 @@ type DpvsAgentAPI struct {
 	VirtualserverPutVsVipPortLaddrHandler virtualserver.PutVsVipPortLaddrHandler
 	// VirtualserverPutVsVipPortRsHandler sets the operation handler for the put vs vip port rs operation
 	VirtualserverPutVsVipPortRsHandler virtualserver.PutVsVipPortRsHandler
+	// VirtualserverPutVsVipPortRsHealthHandler sets the operation handler for the put vs vip port rs health operation
+	VirtualserverPutVsVipPortRsHealthHandler virtualserver.PutVsVipPortRsHealthHandler
 
 	// ServeError is called when an error is received, there is a default handler
 	// but you can set your own with this
@@ -453,6 +458,9 @@ func (o *DpvsAgentAPI) Validate() error {
 	}
 	if o.VirtualserverPutVsVipPortRsHandler == nil {
 		unregistered = append(unregistered, "virtualserver.PutVsVipPortRsHandler")
+	}
+	if o.VirtualserverPutVsVipPortRsHealthHandler == nil {
+		unregistered = append(unregistered, "virtualserver.PutVsVipPortRsHealthHandler")
 	}
 
 	if len(unregistered) > 0 {
@@ -690,6 +698,10 @@ func (o *DpvsAgentAPI) initHandlerCache() {
 		o.handlers["PUT"] = make(map[string]http.Handler)
 	}
 	o.handlers["PUT"]["/vs/{VipPort}/rs"] = virtualserver.NewPutVsVipPortRs(o.context, o.VirtualserverPutVsVipPortRsHandler)
+	if o.handlers["PUT"] == nil {
+		o.handlers["PUT"] = make(map[string]http.Handler)
+	}
+	o.handlers["PUT"]["/vs/{VipPort}/rs/health"] = virtualserver.NewPutVsVipPortRsHealth(o.context, o.VirtualserverPutVsVipPortRsHealthHandler)
 }
 
 // Serve creates a http handler to serve the API over HTTP
