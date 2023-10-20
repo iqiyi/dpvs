@@ -296,6 +296,10 @@ definitions:
         type: "integer"
         format: "uint16"
         x-omitempty: false
+      consistentWeight:
+        type: "integer"
+        format: "uint16"
+        x-omitempty: false
       mode:
         type: "string"
         enum:
@@ -613,8 +617,6 @@ definitions:
       LimitProportion:
         type: "integer"
         format: "uint32"
-      #Addr:
-      #  type: "string"
       ProxyProtocol:
         type: "string"
         enum:

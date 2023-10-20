@@ -20,6 +20,9 @@ import (
 // swagger:model RealServerSpecTiny
 type RealServerSpecTiny struct {
 
+	// consistent weight
+	ConsistentWeight uint16 `json:"consistentWeight"`
+
 	// inhibited
 	Inhibited *bool `json:"inhibited,omitempty"`
 
