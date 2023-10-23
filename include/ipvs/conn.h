@@ -52,7 +52,7 @@ enum {
 
 struct dp_vs_conn_param {
     int                 af;
-    uint16_t            proto;
+    uint8_t             proto;
     const union inet_addr *caddr;
     const union inet_addr *vaddr;
     uint16_t            cport;
@@ -66,7 +66,7 @@ struct conn_tuple_hash {
 
     /* tuple info */
     int                 af;
-    uint16_t            proto;
+    uint8_t             proto;
     union inet_addr     saddr;  /* pkt's source addr */
     union inet_addr     daddr;  /* pkt's dest addr */
     uint16_t            sport;

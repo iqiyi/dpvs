@@ -880,6 +880,11 @@ struct dp_vs_conn *dp_vs_conn_new(struct rte_mbuf *mbuf,
         new->daddr  = dest->addr;
     new->dport  = rport;
 
+    if (dest->fwdmode == DPVS_FWD_MODE_FNAT) {
+        new->pp_version = dest->svc->proxy_protocol;
+        new->pp_sent = 0;
+    }
+
     /* neighbour confirm cache */
     if (AF_INET == tuplehash_in(new).af) {
         new->in_nexthop.in.s_addr = htonl(INADDR_ANY);
