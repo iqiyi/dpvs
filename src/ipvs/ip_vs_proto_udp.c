@@ -31,6 +31,7 @@
 #include "ipvs/blklst.h"
 #include "ipvs/whtlst.h"
 #include "ipvs/redirect.h"
+#include "ipvs/proxy_proto.h"
 #include "parser/parser.h"
 #include "uoa.h"
 #include "neigh.h"
@@ -78,9 +79,9 @@ inline void udp6_send_csum(struct rte_ipv6_hdr *iph, struct rte_udp_hdr *uh)
             (void *)uh - (void *)iph, IPPROTO_UDP);
 }
 
-static inline int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
-                                const struct dp_vs_conn *conn,
-                                struct rte_mbuf *mbuf, const struct opphdr *opp, struct netif_port *dev)
+int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
+        const struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+        const struct opphdr *opp, struct netif_port *dev)
 {
     /* leverage HW TX UDP csum offload if possible */
     struct netif_port *select_dev = NULL;
@@ -165,7 +166,7 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
     }
 
     /* lookup service <vip:vport> */
-    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, 
+    svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr,
                      uh->dst_port, 0, mbuf, NULL, rte_lcore_id());
     if (!svc) {
         *verdict = INET_ACCEPT;
@@ -217,7 +218,7 @@ udp_conn_lookup(struct dp_vs_proto *proto,
         return NULL;
     }
 
-    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, 
+    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr,
 							uh->dst_port, &iph->saddr)) {
         *drop = true;
         return NULL;
@@ -708,6 +709,42 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     return err;
 }
 
+static int udp_in_add_proxy_proto(struct dp_vs_conn *conn,
+        struct rte_mbuf *mbuf, struct rte_udp_hdr *udph, int iphdrlen)
+{
+    int offset;
+    struct proxy_info ppinfo = { 0 };
+
+    offset = iphdrlen + sizeof(struct rte_udp_hdr);
+    if (unlikely(EDPVS_OK != proxy_proto_parse(mbuf, offset, &ppinfo)))
+        return EDPVS_INVPKT;
+
+    if (ppinfo.datalen > 0 && ppinfo.version == conn->pp_version)
+        return EDPVS_OK;    // keep intact the original proxy protocol data
+
+    if (!ppinfo.datalen) {
+        ppinfo.af = tuplehash_in(conn).af;
+        ppinfo.proto = IPPROTO_UDP;
+        ppinfo.version = conn->pp_version;
+        ppinfo.cmd = 1;
+        if (AF_INET == ppinfo.af) {
+            ppinfo.addr.ip4.src_addr = conn->caddr.in.s_addr;
+            ppinfo.addr.ip4.dst_addr = conn->vaddr.in.s_addr;
+            ppinfo.addr.ip4.src_port = conn->cport;
+            ppinfo.addr.ip4.dst_port = conn->vport;
+        } else if (AF_INET6 == ppinfo.af) {
+            rte_memcpy(ppinfo.addr.ip6.src_addr, conn->caddr.in6.s6_addr, 16);
+            rte_memcpy(ppinfo.addr.ip6.dst_addr, conn->vaddr.in6.s6_addr, 16);
+            ppinfo.addr.ip6.src_port = conn->cport;
+            ppinfo.addr.ip6.dst_port = conn->vport;
+        } else {
+            return EDPVS_NOTSUPP;
+        }
+    }
+
+    return proxy_proto_insert(&ppinfo, conn, mbuf, udph, NULL);
+}
+
 static int udp_fnat_in_handler(struct dp_vs_proto *proto,
                     struct dp_vs_conn *conn,
                     struct rte_mbuf *mbuf)
@@ -717,7 +754,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
     void *iph = NULL;
     /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
     int af = tuplehash_out(conn).af;
-    int iphdrlen = 0;
+    int err, iphdrlen = 0;
     uint8_t nxt_proto;
 
     if (AF_INET6 == af) {
@@ -746,6 +783,18 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
 
     if (unlikely(!uh))
         return EDPVS_INVPKT;
+
+    if (!conn->pp_sent && (PROXY_PROTOCOL_V2 == conn->pp_version ||
+                PROXY_PROTOCOL_V2 == conn->pp_version)) {
+        err = udp_in_add_proxy_proto(conn, mbuf, uh, iphdrlen);
+        if (unlikely(EDPVS_OK != err))
+            RTE_LOG(INFO, IPVS, "%s: insert proxy protocol fail -- %s\n",
+                    __func__, dpvs_strerror(err));
+        // Notes: Is there any approach to deal with the exceptional cases where
+        //   - proxy protocol insertion failed
+        //   - the first udp packet with proxy protocol data got lost in network
+        conn->pp_sent = 1;
+    }
 
     uh->src_port = conn->lport;
     uh->dst_port = conn->dport;
@@ -781,10 +830,14 @@ static int udp_fnat_in_pre_handler(struct dp_vs_proto *proto,
 {
     struct conn_uoa *uoa = (struct conn_uoa *)conn->prot_data;
 
+    if (PROXY_PROTOCOL_V2 == conn->pp_version ||
+            PROXY_PROTOCOL_V1 == conn->pp_version)
+        return EDPVS_OK;
+
     if (uoa && g_uoa_max_trail > 0)
         return udp_insert_uoa(conn, mbuf, uoa);
-    else
-        return EDPVS_OK;
+
+    return EDPVS_OK;
 }
 
 static int udp_snat_in_handler(struct dp_vs_proto *proto,
