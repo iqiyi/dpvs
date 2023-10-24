@@ -32,7 +32,7 @@ var _ Comm = (*DpvsAgentComm)(nil)
 var (
 	serverDefault = "localhost:53225"
 	listUri       = LbApi{"/v2/vs", http.MethodGet}
-	noticeUri     = LbApi{"/v2/vs/%s/rs?healthcheck=true", http.MethodPut}
+	noticeUri     = LbApi{"/v2/vs/%s/rs/health", http.MethodPut}
 
 	client *http.Client = &http.Client{Timeout: httpClientTimeout}
 )
@@ -50,10 +50,11 @@ type LbApi struct {
 }
 
 type DpvsAgentRs struct {
-	IP        string `json:"ip"`
-	Port      uint16 `json:"port"`
-	Weight    uint16 `json:"weight"`
-	Inhibited bool   `json:"inhibited,omitempty"`
+	IP               string `json:"ip"`
+	Port             uint16 `json:"port"`
+	Weight           uint16 `json:"weight"`
+	ConsistentWeight uint16 `json:"consistentWeight,omitempty"`
+	Inhibited        bool   `json:"inhibited,omitempty"`
 }
 
 type DpvsAgentRsItem struct {
@@ -105,6 +106,10 @@ func (avs *DpvsAgentVs) toVs() (*VirtualService, error) {
 			checker = CheckerUDP
 		case "ping":
 			checker = CheckerPING
+		case "udpping":
+			checker = CheckerUDPPING
+		case "http":
+			checker = CheckerHTTP
 		}
 	}
 	vs := &VirtualService{
@@ -115,19 +120,10 @@ func (avs *DpvsAgentVs) toVs() (*VirtualService, error) {
 		RSs:      make([]RealServer, len(avs.Rss.Items)),
 	}
 	vs.Id = avs.serviceId()
-
-	for i, ars := range avs.Rss.Items {
-		rip := net.ParseIP(ars.Spec.IP)
-		if rip == nil {
-			return nil, fmt.Errorf("%s: invalid Rs IP %q", vs.Id, ars.Spec.IP)
-		}
-		rs := &RealServer{
-			IP:        rip,
-			Port:      ars.Spec.Port,
-			Weight:    ars.Spec.Weight,
-			Inhibited: ars.Spec.Inhibited,
-		}
-		vs.RSs[i] = *rs
+	if rss, err := avs.Rss.toRsList(); err != nil {
+		return nil, fmt.Errorf("%s: %v", vs.Id, err)
+	} else {
+		vs.RSs = rss
 	}
 	return vs, nil
 }
@@ -145,6 +141,25 @@ func (avslist *DpvsAgentVsList) toVsList() ([]VirtualService, error) {
 		vslist[i] = *vs
 	}
 	return vslist, nil
+}
+
+func (arsl *DpvsAgentRsList) toRsList() ([]RealServer, error) {
+	rss := make([]RealServer, len(arsl.Items))
+	for i, ars := range arsl.Items {
+		rip := net.ParseIP(ars.Spec.IP)
+		if rip == nil {
+			return nil, fmt.Errorf("invalid RS IP %q", ars.Spec.IP)
+		}
+		rs := &RealServer{
+			IP:         rip,
+			Port:       ars.Spec.Port,
+			Weight:     ars.Spec.Weight,
+			PrevWeight: ars.Spec.ConsistentWeight,
+			Inhibited:  ars.Spec.Inhibited,
+		}
+		rss[i] = *rs
+	}
+	return rss, nil
 }
 
 func NewDpvsAgentComm(server string) *DpvsAgentComm {
@@ -189,40 +204,50 @@ func (comm *DpvsAgentComm) ListVirtualServices() ([]VirtualService, error) {
 	return vslist, nil
 }
 
-func (comm *DpvsAgentComm) UpdateByChecker(targets []VirtualService) error {
-	// TODO: support batch operation
-	for _, vs := range targets {
-		for _, rs := range vs.RSs {
-			ars := &DpvsAgentRsListPut{
-				Items: []DpvsAgentRs{
-					{
-						IP:        rs.IP.String(),
-						Port:      rs.Port,
-						Weight:    rs.Weight,
-						Inhibited: rs.Inhibited,
-					},
+func (comm *DpvsAgentComm) UpdateByChecker(vs VirtualService) ([]RealServer, error) {
+	for _, rs := range vs.RSs {
+		ars := &DpvsAgentRsListPut{
+			Items: []DpvsAgentRs{
+				{
+					IP:               rs.IP.String(),
+					Port:             rs.Port,
+					Weight:           rs.Weight,
+					ConsistentWeight: rs.PrevWeight,
+					Inhibited:        rs.Inhibited,
 				},
-			}
-			data, err := json.Marshal(ars)
+			},
+		}
+		data, err := json.Marshal(ars)
+		if err != nil {
+			return nil, err
+		}
+		for _, notice := range comm.noticeApis {
+			url := fmt.Sprintf(notice.Url, vs.Id)
+			req, err := http.NewRequest(notice.HttpMethod, url, bytes.NewBuffer(data))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := client.Do(req)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			for _, notice := range comm.noticeApis {
-				url := fmt.Sprintf(notice.Url, vs.Id)
-				req, err := http.NewRequest(notice.HttpMethod, url, bytes.NewBuffer(data))
-				req.Header.Set("Content-Type", "application/json")
-				resp, err := client.Do(req)
+			//fmt.Printf("Request: %v, Code: %v\n", req, resp.Status)
+			if resp.StatusCode != 200 {
+				if data, err = io.ReadAll(resp.Body); err != nil {
+					return nil, fmt.Errorf("CODE: %v", resp.StatusCode)
+				}
+				var rss DpvsAgentRsList
+				if err = json.Unmarshal(data, &rss); err != nil {
+					return nil, fmt.Errorf("CODE: %v, ERROR: %s", resp.StatusCode,
+						strings.TrimSpace(string(data)))
+				}
+				ret, err := rss.toRsList()
 				if err != nil {
-					return err
+					//fmt.Println("Data:", data, "len(RSs): ", len(rss.Items), "RSs:", rss)
+					return nil, fmt.Errorf("CODE: %v, Error: %v", resp.StatusCode, err)
 				}
-				//fmt.Println("Code:", resp.Status)
-				if resp.StatusCode != 200 {
-					data, _ = io.ReadAll(resp.Body)
-					return fmt.Errorf("CODE: %v, ERROR: %s", resp.StatusCode, strings.TrimSpace(string(data)))
-				}
-				resp.Body.Close()
+				return ret, nil
 			}
+			resp.Body.Close()
 		}
 	}
-	return nil
+	return nil, nil
 }

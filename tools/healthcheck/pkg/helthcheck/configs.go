@@ -89,6 +89,8 @@ func NewCheckerConfig(id *Id, checker CheckMethod,
 		Timeout:     timeout,
 		Retry:       retry,
 	}
-	config.BindConfig(&config)
+	if config.CheckMethod != nil {
+		config.BindConfig(&config)
+	}
 	return &config
 }

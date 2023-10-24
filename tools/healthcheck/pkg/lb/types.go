@@ -27,14 +27,16 @@ const (
 	CheckerTCP
 	CheckerUDP
 	CheckerPING
-	CheckerUDPPing
+	CheckerUDPPING
+	CheckerHTTP
 )
 
 type RealServer struct {
-	IP        net.IP
-	Port      uint16
-	Weight    uint16
-	Inhibited bool
+	IP         net.IP
+	Port       uint16
+	Weight     uint16 // current weight in dpvs for ListVirtualServices, target weight for UpdateByChecker
+	PrevWeight uint16 // current weight in healthcheck for UpdateByChecker
+	Inhibited  bool
 }
 
 type VirtualService struct {
@@ -47,8 +49,11 @@ type VirtualService struct {
 }
 
 type Comm interface {
+	// Get the list of VS/RS prepared for healthcheck.
 	ListVirtualServices() ([]VirtualService, error)
-	UpdateByChecker(targets []VirtualService) error
+	// Update RSs health state, return nil error and the lastest info of RSs whose
+	// weight have been changed administively on success, or error on failure.
+	UpdateByChecker(targets VirtualService) ([]RealServer, error)
 }
 
 func (checker Checker) String() string {
@@ -61,6 +66,10 @@ func (checker Checker) String() string {
 		return "checker_udp"
 	case CheckerPING:
 		return "checker_ping"
+	case CheckerUDPPING:
+		return "checker_udpping"
+	case CheckerHTTP:
+		return "checker_http"
 	}
 	return "checker_unknown"
 }

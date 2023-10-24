@@ -86,6 +86,8 @@ func (hc *Checker) Status() Status {
 	}
 	if hc.state == StateHealthy {
 		status.Weight = hc.uweight
+	} else {
+		status.PrevWeight = hc.uweight
 	}
 	if hc.result != nil {
 		status.Duration = hc.result.Duration
@@ -95,15 +97,46 @@ func (hc *Checker) Status() Status {
 }
 
 func (hc *Checker) updateConfig(conf *CheckerConfig) {
-	hc.CheckerConfig = *conf
+	var state State
+	if len(hc.Id) == 0 {
+		hc.CheckerConfig = *conf
+	} else {
+		if conf.State != StateUnknown {
+			hc.State = conf.State
+		}
+		if conf.State == StateHealthy {
+			hc.Weight = conf.Weight
+		}
+		if conf.Interval > 0 {
+			hc.Interval = conf.Interval
+		}
+		if conf.Timeout > 0 {
+			hc.Timeout = conf.Timeout
+		}
+		if conf.Retry > 0 {
+			hc.Retry = conf.Retry
+		}
+	}
+
 	if conf.State != StateUnhealthy {
 		hc.lock.Lock()
 		weight := hc.uweight
+		state = hc.State
 		hc.uweight = conf.Weight
+		hc.state = conf.State
 		hc.lock.Unlock()
 		if weight != conf.Weight {
 			log.Infof("%v: user weight changed %d -> %d", hc.Id, weight, conf.Weight)
 		}
+	} else {
+		hc.lock.Lock()
+		state = hc.State
+		hc.state = conf.State
+		hc.lock.Unlock()
+	}
+
+	if state != conf.State {
+		log.Warningf("%v: healthcheck state changed externally %v -> %v", hc.Id, state, conf.State)
 	}
 }
 
@@ -222,7 +255,7 @@ func (hc *Checker) Run(start <-chan time.Time) {
 			return
 
 		case config := <-hc.update:
-			if hc.Interval != config.Interval {
+			if config.Interval > 0 && hc.Interval != config.Interval {
 				ticker.Stop()
 				if start != nil {
 					<-start

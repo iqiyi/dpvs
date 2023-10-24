@@ -1440,7 +1440,9 @@ func init() {
         "passive",
         "tcp",
         "udp",
-        "ping"
+        "ping",
+        "udpping",
+        "http"
       ]
     },
     "DpvsNodeSpec": {
@@ -3966,7 +3968,9 @@ func init() {
         "passive",
         "tcp",
         "udp",
-        "ping"
+        "ping",
+        "udpping",
+        "http"
       ]
     },
     "DpvsNodeSpec": {

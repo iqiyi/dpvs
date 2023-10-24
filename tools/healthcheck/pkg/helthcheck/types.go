@@ -206,8 +206,9 @@ type Status struct {
 	Failures  uint64
 	Successes uint64
 	State
-	Weight  uint16
-	Message string
+	Weight     uint16
+	PrevWeight uint16
+	Message    string
 }
 
 // Notification stores a status notification for a healthcheck.
@@ -219,7 +220,7 @@ type Notification struct {
 
 // String returns the string representation for the given notification.
 func (n *Notification) String() string {
-	return fmt.Sprintf("ID %v, %v, Weight %d, Fail %v, Success %v, Last check %s in %v", n.Id,
-		stateNames[n.Status.State], n.Status.Weight, n.Status.Failures, n.Status.Successes,
-		n.Status.LastCheck.Format("2006-01-02 15:04:05.000"), n.Status.Duration)
+	return fmt.Sprintf("ID %v, %v, Weight %d, PrevWeight %d Fail %v, Success %v, Last check %s in %v",
+		n.Id, stateNames[n.Status.State], n.Status.Weight, n.Status.PrevWeight, n.Status.Failures,
+		n.Status.Successes, n.Status.LastCheck.Format("2006-01-02 15:04:05.000"), n.Status.Duration)
 }

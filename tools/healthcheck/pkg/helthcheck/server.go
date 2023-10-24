@@ -27,6 +27,8 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck/pkg/utils"
 )
 
+const ResyncChanSize = 64
+
 // Server contains the data needed to run a healthcheck server.
 type Server struct {
 	config *ServerConfig
@@ -35,6 +37,7 @@ type Server struct {
 	healthchecks map[Id]*Checker
 	configs      chan map[Id]*CheckerConfig
 	notify       chan *Notification
+	resync       chan *CheckerConfig
 
 	quit chan bool
 }
@@ -63,6 +66,7 @@ func NewServer(cfg *ServerConfig) *Server {
 		healthchecks: make(map[Id]*Checker),
 		notify:       make(chan *Notification, cfg.NotifyChannelSize),
 		configs:      make(chan map[Id]*CheckerConfig),
+		resync:       make(chan *CheckerConfig, ResyncChanSize),
 
 		quit: make(chan bool, 1),
 	}
@@ -78,8 +82,10 @@ func (s *Server) NewChecker(typ lb.Checker, proto utils.IPProto) CheckMethod {
 		checker = NewUDPChecker("", "", 0)
 	case lb.CheckerPING:
 		checker = NewPingChecker()
-	case lb.CheckerUDPPing:
+	case lb.CheckerUDPPING:
 		checker = NewUDPPingChecker("", "", 0)
+	case lb.CheckerHTTP:
+		checker = NewHttpChecker("", "", "", 0)
 	case lb.CheckerNone:
 		if s.config.LbAutoMethod {
 			switch proto {
@@ -111,10 +117,11 @@ func (s *Server) getHealthchecks() (*Checkers, error) {
 			}
 			weight := rs.Weight
 			state := StateUnknown
-			if weight > 0 && rs.Inhibited == false {
-				state = StateHealthy
-			} else if weight == 0 && rs.Inhibited == true {
+			// Notes: rs can be down adminstratively, don't consider its weight for health state
+			if rs.Inhibited {
 				state = StateUnhealthy
+			} else {
+				state = StateHealthy
 			}
 			// TODO: allow users to specify check interval, timeout and retry
 			config := NewCheckerConfig(id, checker,
@@ -165,16 +172,34 @@ func (s *Server) notifier() {
 				Id:       notification.Id.Vs(),
 				Protocol: notification.Target.Proto,
 				RSs: []lb.RealServer{{
-					IP:        notification.Target.IP,
-					Port:      notification.Target.Port,
-					Weight:    notification.Status.Weight,
-					Inhibited: inhibited,
+					IP:         notification.Target.IP,
+					Port:       notification.Target.Port,
+					Weight:     notification.Status.Weight,
+					PrevWeight: notification.Status.PrevWeight,
+					Inhibited:  inhibited,
 				}},
 			}
 
-			if err := s.comm.UpdateByChecker([]lb.VirtualService{*vs}); err != nil {
+			if changed, err := s.comm.UpdateByChecker(*vs); err != nil {
 				log.Warningf("Failed to Update %v healthy status to %v(weight: %d): %v",
 					notification.Id, notification.State, notification.Status.Weight, err)
+			} else if len(changed) > 0 {
+				log.Warningf("%v:%s has changed, resync config %v ...",
+					notification.Id, notification.Target, changed)
+				// resync updated targets
+				for _, rs := range changed {
+					id := notification.Id
+					target := &Target{rs.IP, rs.Port, vs.Protocol}
+					weight := rs.Weight
+					state := StateUnknown
+					if rs.Inhibited {
+						state = StateUnhealthy
+					} else {
+						state = StateHealthy
+					}
+					config := NewCheckerConfig(&id, nil, target, state, weight, 0, 0, 0)
+					s.resync <- config
+				}
 			}
 		}
 	}
@@ -205,8 +230,8 @@ func (s *Server) manager() {
 					hc := NewChecker(s.notify, conf.State, conf.Weight)
 					hc.SetDryrun(s.config.DryRun)
 					s.healthchecks[id] = hc
-					checkTicker := time.NewTicker(time.Duration((1 + rand.Intn(
-						int(DefaultCheckConfig.Interval.Milliseconds())))) * time.Millisecond)
+					checkTicker := time.NewTicker(time.Duration(1+rand.Intn(int(
+						DefaultCheckConfig.Interval.Milliseconds()))) * time.Millisecond)
 					go hc.Run(checkTicker.C)
 				}
 			}
@@ -215,7 +240,11 @@ func (s *Server) manager() {
 			for id, hc := range s.healthchecks {
 				hc.Update(configs[id])
 			}
-
+		case conf := <-s.resync:
+			hc := s.healthchecks[conf.Id]
+			if hc != nil {
+				hc.Update(conf)
+			}
 		case <-notifyTicker.C:
 			log.Infof("Total checkers: %d", len(s.healthchecks))
 			// Send notifications when status changed.
