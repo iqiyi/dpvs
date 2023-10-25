@@ -518,8 +518,8 @@ uint32_t ip4_select_id(struct rte_ipv4_hdr *iph)
             iph->next_proto_id, ip4_id_hashrnd);
 
     p_id = ip4_idents + hash % IP4_IDENTS_SZ;
-    id = htons(rte_atomic32_read(p_id));
-    rte_atomic32_add(p_id, 1);
+    id = rte_atomic32_add_return(p_id, 1) - 1;
+    id = htons(id);
 
     return id;
 }
