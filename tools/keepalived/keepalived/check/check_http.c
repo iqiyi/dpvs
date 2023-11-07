@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #ifdef _WITH_REGEX_CHECK_
 #define PCRE2_CODE_UNIT_WIDTH 8
@@ -923,6 +924,8 @@ install_ssl_check_keyword(void)
  *
  *     http_connect_thread (handle layer4 connect)
  *            v
+ *     http_send_proxy_protocol (handle proxy protocol)
+ *            v
  *     http_check_thread (handle SSL connect)
  *            v
  *     http_request_thread (send SSL GET request)
@@ -1541,6 +1544,45 @@ http_request_thread(thread_ref_t thread)
 	return 1;
 }
 
+static int http_send_proxy_protocol(thread_ref_t thread)
+{
+	checker_t *checker = THREAD_ARG(thread);
+	virtual_server_t *vs = checker->vs;
+
+	unsigned int len;
+	char *ppbuf;
+	const char ppv2_local_cmd[] = {
+		0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51,
+		0x55, 0x49, 0x54, 0x0A, 0x20, 0x00, 0x00, 0x00,
+	};
+
+	assert(vs->proxy_protocol >= PROXY_PROTOCOL_DISABLE
+			&& vs->proxy_protocol < PROXY_PROTOCOL_MAX);
+
+	ppbuf = (char *) MALLOC(16);
+	if (!ppbuf) {
+		return -1;
+	}
+	memset(ppbuf, 0, 16);
+
+	if (PROXY_PROTOCOL_V1 == vs->proxy_protocol) {
+		len = 15;
+		sprintf(ppbuf, "%s", "PROXY UNKNOWN\r\n");
+	} else if (PROXY_PROTOCOL_V2 == vs->proxy_protocol) {
+		len = 16;
+		memcpy(ppbuf, ppv2_local_cmd, 16);
+	}
+
+	if (send(thread->u.f.fd, ppbuf, len, 0) != len) {
+		log_message(LOG_WARNING, "Send proxy protocol data failed!");
+		FREE(ppbuf);
+		return -1;
+	}
+
+	FREE(ppbuf);
+	return 0;
+}
+
 /* WEB checkers threads */
 static int
 http_check_thread(thread_ref_t thread)
@@ -1551,12 +1593,84 @@ http_check_thread(thread_ref_t thread)
 	request_t *req = http_get_check->req;
 #endif
 	int ret = 1;
-	int status;
 	unsigned long timeout = 0;
 	int ssl_err = 0;
 	bool new_req = false;
 
-	status = tcp_socket_state(thread, http_check_thread);
+	if (!http_get_check->req) {
+		http_get_check->req = (request_t *) MALLOC(sizeof (request_t));
+		new_req = true;
+	} else
+		new_req = false;
+
+	if (http_get_check->proto == PROTO_SSL) {
+		timeout = timer_long(thread->sands) - timer_long(time_now);
+		if (thread->type != THREAD_WRITE_TIMEOUT &&
+		    thread->type != THREAD_READ_TIMEOUT)
+			ret = ssl_connect(thread, new_req);
+		else
+			return timeout_epilog(thread, "Timeout connecting");
+
+		if (ret == -1) {
+			switch ((ssl_err = SSL_get_error(http_get_check->req->ssl,
+							 ret))) {
+			case SSL_ERROR_WANT_READ:
+				thread_add_read(thread->master,
+						http_check_thread,
+						THREAD_ARG(thread),
+						thread->u.f.fd, timeout, true);
+				thread_del_write(thread);
+				break;
+			case SSL_ERROR_WANT_WRITE:
+				thread_add_write(thread->master,
+						 http_check_thread,
+						 THREAD_ARG(thread),
+						 thread->u.f.fd, timeout, true);
+				thread_del_read(thread);
+				break;
+			default:
+				ret = 0;
+				break;
+			}
+			if (ret == -1)
+				return 0;
+		} else if (ret != 1)
+			ret = 0;
+	}
+
+	if (ret) {
+		/* Remote WEB server is connected.
+		 * Register the next step thread ssl_request_thread.
+		 */
+		DBG("Remote Web server %s connected.", FMT_CHK(checker));
+		thread_add_write(thread->master,
+				 http_request_thread, checker,
+				 thread->u.f.fd,
+				 checker->co->connection_to, true);
+		thread_del_read(thread);
+	} else {
+		DBG("Connection trouble to: %s."
+				 , FMT_CHK(checker));
+#ifdef _DEBUG_
+		if (http_get_check->proto == PROTO_SSL)
+			ssl_printerr(SSL_get_error
+				     (req->ssl, ret));
+#endif
+		return timeout_epilog(thread, "SSL handshake/communication error"
+					 " connecting to");
+	}
+
+	return 0;
+}
+
+static int
+http_proxy_protocol_thread(thread_ref_t thread)
+{
+	int status;
+	unsigned long timeout;
+	checker_t *checker = THREAD_ARG(thread);
+
+	status = tcp_socket_state(thread, http_proxy_protocol_thread);
 	switch (status) {
 	case connect_error:
 		return timeout_epilog(thread, "Error connecting");
@@ -1571,68 +1685,9 @@ http_check_thread(thread_ref_t thread)
 		break;
 
 	case connect_success:
-		if (!http_get_check->req) {
-			http_get_check->req = (request_t *) MALLOC(sizeof (request_t));
-			new_req = true;
-		} else
-			new_req = false;
-
-		if (http_get_check->proto == PROTO_SSL) {
-			timeout = timer_long(thread->sands) - timer_long(time_now);
-			if (thread->type != THREAD_WRITE_TIMEOUT &&
-			    thread->type != THREAD_READ_TIMEOUT)
-				ret = ssl_connect(thread, new_req);
-			else
-				return timeout_epilog(thread, "Timeout connecting");
-
-			if (ret == -1) {
-				switch ((ssl_err = SSL_get_error(http_get_check->req->ssl,
-								 ret))) {
-				case SSL_ERROR_WANT_READ:
-					thread_add_read(thread->master,
-							http_check_thread,
-							THREAD_ARG(thread),
-							thread->u.f.fd, timeout, true);
-					thread_del_write(thread);
-					break;
-				case SSL_ERROR_WANT_WRITE:
-					thread_add_write(thread->master,
-							 http_check_thread,
-							 THREAD_ARG(thread),
-							 thread->u.f.fd, timeout, true);
-					thread_del_read(thread);
-					break;
-				default:
-					ret = 0;
-					break;
-				}
-				if (ret == -1)
-					break;
-			} else if (ret != 1)
-				ret = 0;
-		}
-
-		if (ret) {
-			/* Remote WEB server is connected.
-			 * Register the next step thread ssl_request_thread.
-			 */
-			DBG("Remote Web server %s connected.", FMT_CHK(checker));
-			thread_add_write(thread->master,
-					 http_request_thread, checker,
-					 thread->u.f.fd,
-					 checker->co->connection_to, true);
-			thread_del_read(thread);
-		} else {
-			DBG("Connection trouble to: %s."
-					 , FMT_CHK(checker));
-#ifdef _DEBUG_
-			if (http_get_check->proto == PROTO_SSL)
-				ssl_printerr(SSL_get_error
-					     (req->ssl, ret));
-#endif
-			return timeout_epilog(thread, "SSL handshake/communication error"
-						 " connecting to");
-		}
+		http_send_proxy_protocol(thread);
+		timeout = timer_long(thread->sands) - timer_long(time_now);
+		thread_add_write(thread->master, http_check_thread, checker, thread->u.f.fd, timeout, true);
 		break;
 	}
 
@@ -1686,7 +1741,7 @@ http_connect_thread(thread_ref_t thread)
 	status = tcp_bind_connect(fd, co);
 
 	/* handle tcp connection status & register check worker thread */
-	if(tcp_connection_state(fd, status, thread, http_check_thread,
+	if(tcp_connection_state(fd, status, thread, http_proxy_protocol_thread,
 			co->connection_to)) {
 		close(fd);
 		if (status == connect_fail) {
@@ -1707,6 +1762,7 @@ register_check_http_addresses(void)
 {
 	register_thread_address("http_check_thread", http_check_thread);
 	register_thread_address("http_connect_thread", http_connect_thread);
+	register_thread_address("http_proxy_protocol_thread", http_proxy_protocol_thread);
 	register_thread_address("http_read_thread", http_read_thread);
 	register_thread_address("http_request_thread", http_request_thread);
 	register_thread_address("http_response_thread", http_response_thread);

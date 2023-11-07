@@ -18,10 +18,13 @@
 package hc
 
 import (
+	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,6 +32,14 @@ import (
 )
 
 var _ CheckMethod = (*HttpChecker)(nil)
+
+var (
+	proxyProtoV1LocalCmd        = "PROXY UNKNOWN\r\n"
+	proxyProtoV2LocalCmd []byte = []byte{
+		0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51,
+		0x55, 0x49, 0x54, 0x0A, 0x20, 0x00, 0x00, 0x00,
+	}
+)
 
 type HttpCodeRange struct {
 	start int // inclusive
@@ -45,13 +56,14 @@ type HttpChecker struct {
 	ResponseCodes []HttpCodeRange
 	Response      string
 
-	Secure    bool
-	TLSVerify bool
-	Proxy     bool
+	Secure     bool
+	TLSVerify  bool
+	Proxy      bool
+	ProxyProto int // proxy protocol: 0 - close, 1 - version 1, 2 - version 2
 }
 
 // NewHttpChecker returns an initialised HttpChecker.
-func NewHttpChecker(method, host, uri string) *HttpChecker {
+func NewHttpChecker(method, host, uri string, proxyProto int) *HttpChecker {
 	if len(method) == 0 {
 		method = "GET"
 	}
@@ -66,6 +78,7 @@ func NewHttpChecker(method, host, uri string) *HttpChecker {
 		Secure:        false,
 		TLSVerify:     true,
 		Proxy:         false,
+		ProxyProto:    proxyProto,
 	}
 }
 
@@ -127,12 +140,37 @@ func (hc *HttpChecker) Check(target Target, timeout time.Duration) *Result {
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: !hc.TLSVerify,
 	}
+
+	tr := &http.Transport{
+		Proxy:           proxy,
+		TLSClientConfig: tlsConfig,
+	}
+	if hc.ProxyProto != 0 {
+		tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := (&net.Dialer{}).DialContext(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			// Alternatively, use the go-proxyproto package:
+			//   https://pkg.go.dev/github.com/pires/go-proxyproto
+			if hc.ProxyProto == 2 {
+				n, err := bytes.NewReader(proxyProtoV2LocalCmd).WriteTo(conn)
+				if err != nil || n < 16 {
+					return nil, err
+				}
+			} else if hc.ProxyProto == 1 {
+				n, err := strings.NewReader(proxyProtoV1LocalCmd).WriteTo(conn)
+				if err != nil || n < int64(len(proxyProtoV1LocalCmd)) {
+					return nil, err
+				}
+			}
+			return conn, nil
+		}
+	}
+
 	client := &http.Client{
-		Transport: &http.Transport{
-			Proxy:           proxy,
-			TLSClientConfig: tlsConfig,
-		},
-		Timeout: timeout,
+		Transport: tr,
+		Timeout:   timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return errors.New("redirect not permitted")
 		},

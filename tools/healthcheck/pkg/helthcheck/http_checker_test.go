@@ -32,6 +32,11 @@ var http_targets = []Target{
 	{net.ParseIP("192.168.88.30"), 443, utils.IPProtoTCP},
 	{net.ParseIP("2001::30"), 80, utils.IPProtoTCP},
 	{net.ParseIP("2001::30"), 443, utils.IPProtoTCP},
+	{net.ParseIP("192.168.88.30"), 8002, utils.IPProtoTCP}, // control group for proxy protocol
+}
+
+var http_proxy_proto_targets = []Target{
+	{net.ParseIP("192.168.88.30"), 8002, utils.IPProtoTCP},
 }
 
 var http_url_targets = []string{
@@ -43,7 +48,7 @@ var http_url_targets = []string{
 
 func TestHttpChecker(t *testing.T) {
 	for _, target := range http_targets {
-		checker := NewHttpChecker("", "", "")
+		checker := NewHttpChecker("", "", "", 0)
 		checker.Host = target.Addr()
 		/*
 			if target.Port == 443 {
@@ -57,9 +62,26 @@ func TestHttpChecker(t *testing.T) {
 		fmt.Printf("[ HTTP ] %s ==> %v\n", target, result)
 	}
 
+	for _, target := range http_proxy_proto_targets {
+		checker := NewHttpChecker("", "", "", 1)
+		checker.Host = target.Addr()
+		id := Id(target.String())
+		config := NewCheckerConfig(&id, checker, &target, StateUnknown,
+			0, 3*time.Second, 2*time.Second, 3)
+		result := checker.Check(target, config.Timeout)
+		fmt.Printf("[ HTTP(PPv1) ] %s ==> %v\n", target, result)
+		checker2 := NewHttpChecker("", "", "", 2)
+		checker2.Host = target.Addr()
+		id2 := Id(target.String())
+		config2 := NewCheckerConfig(&id2, checker2, &target, StateUnknown,
+			0, 3*time.Second, 2*time.Second, 3)
+		result2 := checker2.Check(target, config2.Timeout)
+		fmt.Printf("[ HTTP(PPv2) ] %s ==> %v\n", target, result2)
+	}
+
 	for _, target := range http_url_targets {
 		host := target[strings.Index(target, "://")+3:]
-		checker := NewHttpChecker("GET", target, "")
+		checker := NewHttpChecker("GET", target, "", 0)
 		checker.Host = host
 		checker.ResponseCodes = []HttpCodeRange{{200, 200}}
 		if strings.HasPrefix(target, "https") {
