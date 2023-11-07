@@ -66,6 +66,7 @@ enum {
     PROXY_PROTOCOL_DISABLE = 0,
     PROXY_PROTOCOL_V1,
     PROXY_PROTOCOL_V2,
+    PROXY_PROTOCOL_MAX,
 };
 
 struct dest_check_configs {
