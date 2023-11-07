@@ -1212,8 +1212,8 @@ clear_all_blklst_entry(list l, virtual_server_t * vs)
 static int
 clear_diff_blklst(virtual_server_t * old_vs, virtual_server_t * new_vs)
 {
-	blklst_addr_group *old;
-	blklst_addr_group *new;
+	blklst_addr_group *old = NULL;
+	blklst_addr_group *new = NULL;
 
 	/*
 	 *  If old vs  didn't own blacklist address group, 
@@ -1225,6 +1225,8 @@ clear_diff_blklst(virtual_server_t * old_vs, virtual_server_t * new_vs)
 	    /* Fetch old_vs blacklist address group */
 		old = ipvs_get_blklst_group_by_name(old_vs->blklst_addr_gname,
 								old_check_data->blklst_group);
+	if (!old)
+		return 1;
 
 	/* if new_vs has no blacklist group, delete all blklst address from old_vs */ 
 	if (!new_vs->blklst_addr_gname) {
@@ -1238,6 +1240,8 @@ clear_diff_blklst(virtual_server_t * old_vs, virtual_server_t * new_vs)
 		/* Fetch new_vs blacklist address group */
 	    new = ipvs_get_blklst_group_by_name(new_vs->blklst_addr_gname,
 								check_data->blklst_group);
+	if (!new)
+		return 1;
 
 	if (!clear_diff_blklst_entry(old->addr_ip, new->addr_ip, old_vs))
 		return 0;
@@ -1305,8 +1309,8 @@ clear_all_whtlst_entry(list l, virtual_server_t * vs)
 static int
 clear_diff_whtlst(virtual_server_t * old_vs, virtual_server_t * new_vs)
 {
-    whtlst_addr_group *old;
-    whtlst_addr_group *new;
+    whtlst_addr_group *old = NULL;
+    whtlst_addr_group *new = NULL;
     /*
      *  If old vs  didn't own whitelist address group,
      * then do nothing and return
@@ -1317,6 +1321,9 @@ clear_diff_whtlst(virtual_server_t * old_vs, virtual_server_t * new_vs)
     	/* Fetch whitelist address group */
     	old = ipvs_get_whtlst_group_by_name(old_vs->whtlst_addr_gname,
                                 old_check_data->whtlst_group);
+
+	if (!old)
+		return 1;
 	/* if new_vs has no whitelist group, delete all whtlst address from old_vs */ 
 	if (!new_vs->whtlst_addr_gname) {
 		if (!clear_all_whtlst_entry(old->addr_ip, old_vs))
@@ -1330,6 +1337,8 @@ clear_diff_whtlst(virtual_server_t * old_vs, virtual_server_t * new_vs)
 	    new = ipvs_get_whtlst_group_by_name(new_vs->whtlst_addr_gname,
 								check_data->whtlst_group);
 
+	if (!new)
+		return 1;
     if (!clear_diff_whtlst_entry(old->addr_ip, new->addr_ip, old_vs))
         return 0;
     if (!clear_diff_whtlst_entry(old->range, new->range, old_vs))
