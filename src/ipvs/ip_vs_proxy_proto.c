@@ -259,7 +259,7 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
         }
         uh->src_port    = conn->lport;
         uh->dst_port    = conn->dport;
-        uh->dgram_len   = htons(sizeof(struct rte_udp_hdr));
+        uh->dgram_len   = htons(sizeof(struct rte_udp_hdr) + ppdlen);
         uh->dgram_cksum = 0;
         l4hdr = uh;
     }
@@ -273,10 +273,10 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
     if (PROXY_PROTOCOL_V2 == conn->pp_version) {
         pphv2 = (struct proxy_hdr_v2 *)pph;
         rte_memcpy(pphv2->sig, PROXY_PROTO_V2_SIGNATURE, sizeof(pphv2->sig));
-        pphv2->cmd = ppinfo->cmd & 0xF;
-        pphv2->ver = ppinfo->version & 0xF;
-        pphv2->proto = ppinfo->proto & 0xF;
-        pphv2->af = ppinfo->af & 0xF;
+        pphv2->cmd     = ppinfo->cmd & 0xF;
+        pphv2->ver     = ppinfo->version & 0xF;
+        pphv2->proto   = ppv2_proto_host2pp(ppinfo->proto);
+        pphv2->af      = ppv2_af_host2pp(ppinfo->af);
         pphv2->addrlen = ntohs(ppdlen - sizeof(struct proxy_hdr_v2));
         rte_memcpy(pphv2 + 1, &ppinfo->addr, ppdlen - sizeof(struct proxy_hdr_v2));
     } else if (PROXY_PROTOCOL_V1 == conn->pp_version) {
@@ -486,19 +486,30 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
         rte_memcpy(pphv2->sig, PROXY_PROTO_V2_SIGNATURE, sizeof(pphv2->sig));
         pphv2->cmd = ppinfo->cmd & 0xF;
         pphv2->ver = ppinfo->version & 0xF;
-        pphv2->proto = ppinfo->proto & 0xF;
-        pphv2->af = ppinfo->af & 0xF;
+        pphv2->af = ppv2_af_host2pp(ppinfo->af);
+        pphv2->proto = ppv2_proto_host2pp(ppinfo->proto);
         pphv2->addrlen = ntohs(ppdatalen - sizeof(struct proxy_hdr_v2));
         rte_memcpy(pphv2 + 1, &ppinfo->addr, ppdatalen - sizeof(struct proxy_hdr_v2));
     } else { // PROXY_PROTOCOL_V1
         rte_memcpy(pph, ppv1buf, ppdatalen);
     }
 
+    // updata length members in ppinfo and mbuf
     ppinfo->datalen = ppdatalen;
+    l4hdr += *hdr_shift;
     if (IPPROTO_TCP == conn->proto) {
         // ajust inbound tcp sequence number except for the first segment
         ((struct tcphdr *)l4hdr)->seq = htonl(((struct tcphdr *)l4hdr)->seq - ppdatalen);
         conn->fnat_seq.delta += ppdatalen;
+    } else if (IPPROTO_UDP == conn->proto) {
+        ((struct rte_udp_hdr *)l4hdr)->dgram_len = htons(ntohs(
+                ((struct rte_udp_hdr *)l4hdr)->dgram_len) + ppdatalen);
     }
+    if (AF_INET == tuplehash_out(conn).af)
+        ((struct iphdr *)iph)->tot_len = htons(ntohs(((struct iphdr *)iph)->tot_len) + ppdatalen);
+    else
+        ((struct rte_ipv6_hdr *)iph)->payload_len = htons(ntohs(
+            ((struct rte_ipv6_hdr *)iph)->payload_len) + ppdatalen);
+
     return EDPVS_OK;
 }

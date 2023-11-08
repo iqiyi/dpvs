@@ -70,6 +70,7 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
         err = proto->fnat_in_handler(proto, conn, mbuf);
         if(err != EDPVS_OK)
             return err;
+        ip4h = ip4_hdr(mbuf);
     }
 
     if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
@@ -476,6 +477,7 @@ static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
         err = proto->fnat_in_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
+        iph = ip4_hdr(mbuf);
     }
 
     if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
@@ -674,6 +676,7 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
         err = proto->fnat_in_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
+        ip4h = ip4_hdr(mbuf);
     }
 
     if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {

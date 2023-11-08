@@ -710,7 +710,8 @@ static int udp_insert_uoa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
 }
 
 static int udp_in_add_proxy_proto(struct dp_vs_conn *conn,
-        struct rte_mbuf *mbuf, struct rte_udp_hdr *udph, int iphdrlen)
+        struct rte_mbuf *mbuf, struct rte_udp_hdr *udph,
+        int iphdrlen, int *hdr_shift)
 {
     int offset;
     struct proxy_info ppinfo = { 0 };
@@ -742,7 +743,7 @@ static int udp_in_add_proxy_proto(struct dp_vs_conn *conn,
         }
     }
 
-    return proxy_proto_insert(&ppinfo, conn, mbuf, udph, NULL);
+    return proxy_proto_insert(&ppinfo, conn, mbuf, udph, hdr_shift);
 }
 
 static int udp_fnat_in_handler(struct dp_vs_proto *proto,
@@ -755,6 +756,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
     /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
     int af = tuplehash_out(conn).af;
     int err, iphdrlen = 0;
+    int hdr_shift = 0;
     uint8_t nxt_proto;
 
     if (AF_INET6 == af) {
@@ -786,7 +788,7 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
 
     if (!conn->pp_sent && (PROXY_PROTOCOL_V2 == conn->pp_version ||
                 PROXY_PROTOCOL_V2 == conn->pp_version)) {
-        err = udp_in_add_proxy_proto(conn, mbuf, uh, iphdrlen);
+        err = udp_in_add_proxy_proto(conn, mbuf, uh, iphdrlen, &hdr_shift);
         if (unlikely(EDPVS_OK != err))
             RTE_LOG(INFO, IPVS, "%s: insert proxy protocol fail -- %s\n",
                     __func__, dpvs_strerror(err));
@@ -794,8 +796,8 @@ static int udp_fnat_in_handler(struct dp_vs_proto *proto,
         //   - proxy protocol insertion failed
         //   - the first udp packet with proxy protocol data got lost in network
         conn->pp_sent = 1;
+        uh = ((void *)uh) + hdr_shift;
     }
-
     uh->src_port = conn->lport;
     uh->dst_port = conn->dport;
 
