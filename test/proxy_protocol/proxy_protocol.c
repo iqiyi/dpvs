@@ -29,10 +29,10 @@ int parse_proxy_protocol(char *buf, int len) {
                     case 0x12: // UDPv4
                         ((struct sockaddr_in *)&from)->sin_family      = AF_INET;
                         ((struct sockaddr_in *)&from)->sin_addr.s_addr = phdr->v2.addr.ip4.src_addr;
-                        ((struct sockaddr_in *)&from)->sin_port        = phdr->v2.addr.ip4.src_addr;
+                        ((struct sockaddr_in *)&from)->sin_port        = phdr->v2.addr.ip4.src_port;
                         ((struct sockaddr_in *)&to)->sin_family        = AF_INET;
                         ((struct sockaddr_in *)&to)->sin_addr.s_addr   = phdr->v2.addr.ip4.dst_addr;
-                        ((struct sockaddr_in *)&to)->sin_port          = phdr->v2.addr.ip4.dst_addr;
+                        ((struct sockaddr_in *)&to)->sin_port          = phdr->v2.addr.ip4.dst_port;
                         goto done;
                     case 0x21: // TCPv6
                     case 0x22: // UDPv6
@@ -145,6 +145,7 @@ done:
     // strip the proxy protocol data
     if (pplen < len) {
         memmove(buf, buf + pplen, len - pplen);
+        memset(buf + len - pplen, 0, len - pplen);
     } else {
         memset(buf, 0, len);
     }
