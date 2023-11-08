@@ -1551,26 +1551,22 @@ static int http_send_proxy_protocol(thread_ref_t thread)
 
 	unsigned int len;
 	char *ppbuf;
-	const char ppv2_local_cmd[] = {
-		0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51,
-		0x55, 0x49, 0x54, 0x0A, 0x20, 0x00, 0x00, 0x00,
-	};
 
 	assert(vs->proxy_protocol >= PROXY_PROTOCOL_DISABLE
 			&& vs->proxy_protocol < PROXY_PROTOCOL_MAX);
 
-	ppbuf = (char *) MALLOC(16);
+	ppbuf = (char *) MALLOC(PROXY_PROTOCOL_CHECK_MAX_LEN);
 	if (!ppbuf) {
 		return -1;
 	}
-	memset(ppbuf, 0, 16);
+	memset(ppbuf, 0, PROXY_PROTOCOL_CHECK_MAX_LEN);
 
 	if (PROXY_PROTOCOL_V1 == vs->proxy_protocol) {
-		len = 15;
-		sprintf(ppbuf, "%s", "PROXY UNKNOWN\r\n");
+		len = PROXY_PROTOCOL_CHECK_V1_LEN;
+		sprintf(ppbuf, "%s", PROXY_PROTOCOL_CHECK_V1);
 	} else if (PROXY_PROTOCOL_V2 == vs->proxy_protocol) {
-		len = 16;
-		memcpy(ppbuf, ppv2_local_cmd, 16);
+		len = PROXY_PROTOCOL_CHECK_V2_LEN;
+		memcpy(ppbuf, PROXY_PROTOCOL_CHECK_V2, PROXY_PROTOCOL_CHECK_V2_LEN);
 	}
 
 	if (send(thread->u.f.fd, ppbuf, len, 0) != len) {

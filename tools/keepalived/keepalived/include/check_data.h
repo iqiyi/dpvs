@@ -46,6 +46,16 @@
 /* Daemon dynamic data structure definition */
 #define KEEPALIVED_DEFAULT_DELAY	(60 * TIMER_HZ)
 #define TNLKINDSIZ 			16
+
+#define PROXY_PROTOCOL_CHECK_V1	"PROXY UNKNOWN\r\n"
+static const char PROXY_PROTOCOL_CHECK_V2[] = {
+	0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51,
+	0x55, 0x49, 0x54, 0x0A, 0x20, 0x00, 0x00, 0x00,
+};
+#define PROXY_PROTOCOL_CHECK_V1_LEN		15
+#define PROXY_PROTOCOL_CHECK_V2_LEN		16
+#define PROXY_PROTOCOL_CHECK_MAX_LEN		16
+
 /* SSL specific data */
 typedef struct _ssl_data {
 	int				enable;
