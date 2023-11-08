@@ -49,7 +49,7 @@ static int handle_reply(int epfd, int fd) {
             port = ntohs(((struct sockaddr_in6 *)&peer)->sin6_port);
         }
 #ifdef LOG_VERBOSE
-        printf("%d bytes received from %s:%d: %s\n", len, addrbuf, port, buf);
+        printf("%d bytes received from %s:%d\n", len, addrbuf, port);
 #endif
         len = parse_proxy_protocol(buf, len);
         if (len > 0 && sendto(fd, buf, len, 0,
