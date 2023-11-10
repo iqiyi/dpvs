@@ -258,7 +258,7 @@ static inline void tcp_in_init_seq(struct dp_vs_conn *conn,
     return;
 }
 
-static inline void tcp_in_adjust_seq(struct dp_vs_conn *conn, struct tcphdr *th)
+void tcp_in_adjust_seq(struct dp_vs_conn *conn, struct tcphdr *th)
 {
     th->seq = htonl(ntohl(th->seq) + conn->fnat_seq.delta);
     /* recalc checksum later */

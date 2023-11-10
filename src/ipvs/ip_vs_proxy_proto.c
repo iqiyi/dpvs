@@ -178,27 +178,79 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
     int err;
     int ppdoff;
     int iaf, oaf;
-    void *rt;
     void *iph, *oiph, *pph, *l4hdr;
+    void *rt;
+    struct netif_port *dev = NULL;
     struct tcphdr *th;
     struct rte_udp_hdr *uh;
     struct rte_mbuf *mbuf = NULL;
     struct proxy_hdr_v2 *pphv2;
+    struct flow4 fl4;
+    struct flow6 fl6;
+    uint8_t pp_sent = 1;
 
-    rt = MBUF_USERDATA_CONST(ombuf, void *, MBUF_FIELD_ROUTE);
-    if (unlikely(!rt))
-        return EDPVS_NOROUTE;
+    oiph = rte_pktmbuf_mtod(ombuf, void *);
+    if (IPPROTO_TCP == conn->proto) {
+        ppdoff = ol4hdr + (((struct tcphdr *)ol4hdr)->doff << 2) - oiph;
+
+        // Note#1: There's a extremly rare case where the standalone proxy protocol packet
+        // is triggered by a pure ack tcp packet that contains no application data. The seq
+        // number of the next packet in this direction would stay the same as this ack packet,
+        // so proxy protocol data is also inserted to it by mistake, causing problem for the
+        // tcp connection. The problem is fixed by using a special value 2 for the conn->pp_sent
+        // flag, at the cost of the loss of  tcp retransmission functionality for this standalone
+        // proxy protocol packet.(Can we not consider this abnormal rare case?)
+        if (unlikely(ombuf->pkt_len == ppdoff)) {
+            RTE_LOG(WARNING, IPVS, "%s triggered by a pure ack tcp mbuf of length %d\n",
+                    __func__, ombuf->pkt_len);
+            pp_sent = 2;
+        }
+    } else {
+        ppdoff = ol4hdr + sizeof(struct rte_udp_hdr) - oiph;
+    }
+    assert(ppdoff > 0);
 
     iaf = tuplehash_in(conn).af;
     oaf = tuplehash_out(conn).af;
-    oiph = rte_pktmbuf_mtod(ombuf, void *);
-    if (IPPROTO_TCP == conn->proto)
-        ppdoff = ol4hdr + (((struct tcphdr *)ol4hdr)->doff << 2) - oiph;
-    else
-        ppdoff = ol4hdr + sizeof(struct rte_udp_hdr) - oiph;
-    assert(ppdoff > 0);
+    rt = MBUF_USERDATA_CONST(ombuf, void *, MBUF_FIELD_ROUTE);
+    if (!rt) {
+        // fast-xmit only cached dev, not route,
+        // so we have to look up route from route table
+        if (AF_INET6 == oaf) {
+            memset(&fl6, 0, sizeof(fl6));
+            fl6.fl6_saddr = conn->laddr.in6;
+            fl6.fl6_daddr = conn->daddr.in6;
+            fl6.fl6_sport = conn->lport;
+            fl6.fl6_dport = conn->dport;
+            fl6.fl6_proto = conn->proto;
+            rt = route6_output(NULL, &fl6);
+            if (unlikely(!rt))
+                return EDPVS_NOROUTE;
+            dev = ((struct route6 *)rt)->rt6_dev;
+            route6_put(rt);
+        } else {
+            memset(&fl4, 0, sizeof(fl4));
+            fl4.fl4_saddr = conn->laddr.in;
+            fl4.fl4_daddr = conn->daddr.in;
+            fl4.fl4_sport = conn->lport;
+            fl4.fl4_dport = conn->dport;
+            fl4.fl4_proto = conn->proto;
+            rt = route4_output(&fl4);
+            if (unlikely(!rt))
+                return EDPVS_NOROUTE;
+            dev = ((struct route_entry *)rt)->port;
+            route4_put(rt);
+        }
+    } else {
+        if (AF_INET6 == oaf)
+            dev =((struct route6 *)rt)->rt6_dev;
+        else
+            dev = ((struct route_entry *)rt)->port;
+    }
+    if (unlikely(!dev))
+        return EDPVS_NOROUTE;
 
-    mbuf = rte_pktmbuf_alloc(ombuf->pool);
+    mbuf = rte_pktmbuf_alloc(dev->mbuf_pool);
     if (unlikely(!mbuf))
         return EDPVS_NOMEM;
     mbuf_userdata_reset(mbuf);
@@ -250,6 +302,7 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
         th->ack         = 1;
         th->window      = ((struct tcphdr *)ol4hdr)->window;
         th->check       = 0;
+        tcp_in_adjust_seq(conn, th);
         l4hdr = th;
     } else { // IPPROTO_UDP
         uh = (struct rte_udp_hdr *)rte_pktmbuf_append(mbuf, sizeof(struct rte_udp_hdr));
@@ -350,7 +403,8 @@ finish:
         ppinfo->datalen = 0;
     }
 
-    if (IPPROTO_TCP == conn->proto) {
+    if (!conn->pp_sent && IPPROTO_TCP == conn->proto) {
+        conn->pp_sent = pp_sent;
         conn->fnat_seq.delta += ppdlen;
     }
 
@@ -368,15 +422,30 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
 
     assert(ppinfo && conn && mbuf && l4hdr);
 
-    rt = MBUF_USERDATA_CONST(mbuf, void *, MBUF_FIELD_ROUTE);
-    if (unlikely(!rt))
-        return EDPVS_NOROUTE;
-
     if (unlikely(conn->dest->fwdmode != DPVS_FWD_MODE_FNAT))
         return EDPVS_NOTSUPP;
 
     if (ppinfo->datalen > 0 && ppinfo->version == conn->pp_version)
         return EDPVS_OK; // proxy the existing proxy protocol data directly to rs
+
+    if (unlikely(2 == conn->pp_sent) && IPPROTO_TCP == conn->proto)
+        return EDPVS_OK;  // refer to comment [Notes#1] in `proxy_proto_send_standalone`
+
+    rt = MBUF_USERDATA_CONST(mbuf, void *, MBUF_FIELD_ROUTE);
+    if (rt) {
+        if (AF_INET6 == tuplehash_out(conn).af)
+            mtu = ((struct route6 *)rt)->rt6_mtu;
+        else
+            mtu = ((struct route_entry *)rt)->mtu;
+    } else if (conn->in_dev) {
+        // fast-xmit
+        mtu = conn->in_dev->mtu;
+    } else {
+        return EDPVS_NOROUTE;
+    }
+
+    // just a test
+    // mtu = 0;
 
     // calculate required space size in mbuf
     ppdatalen = 0;
@@ -452,10 +521,6 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
     room = ppdatalen - ppinfo->datalen;
     if (room > 0) {
         // allocate space from mbuf headroom
-        if (AF_INET6 == tuplehash_out(conn).af)
-            mtu = ((struct route6 *)rt)->rt6_mtu;
-        else
-            mtu = ((struct route_entry *)rt)->mtu;
         if (mbuf->pkt_len + room > mtu)
             return proxy_proto_send_standalone(ppinfo, conn, mbuf, l4hdr, hdr_shift, ppdatalen, ppv1buf);
         niph = rte_pktmbuf_prepend(mbuf, room);
@@ -494,13 +559,16 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
         rte_memcpy(pph, ppv1buf, ppdatalen);
     }
 
-    // updata length members in ppinfo and mbuf
+    // updata ppinfo and mbuf headers
     ppinfo->datalen = ppdatalen;
     l4hdr += *hdr_shift;
     if (IPPROTO_TCP == conn->proto) {
         // ajust inbound tcp sequence number except for the first segment
-        ((struct tcphdr *)l4hdr)->seq = htonl(((struct tcphdr *)l4hdr)->seq - ppdatalen);
-        conn->fnat_seq.delta += ppdatalen;
+        ((struct tcphdr *)l4hdr)->seq = htonl(ntohl(((struct tcphdr *)l4hdr)->seq) - ppdatalen);
+        if (!conn->pp_sent) {
+            conn->pp_sent = 1;
+            conn->fnat_seq.delta += ppdatalen;
+        }
     } else if (IPPROTO_UDP == conn->proto) {
         ((struct rte_udp_hdr *)l4hdr)->dgram_len = htons(ntohs(
                 ((struct rte_udp_hdr *)l4hdr)->dgram_len) + ppdatalen);

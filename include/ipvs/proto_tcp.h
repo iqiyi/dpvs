@@ -108,5 +108,6 @@ int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir);
 void install_proto_tcp_keywords(void);
 void tcp_keyword_value_init(void);
+void tcp_in_adjust_seq(struct dp_vs_conn *conn, struct tcphdr *th);
 
 #endif

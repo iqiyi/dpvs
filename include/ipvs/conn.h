@@ -150,7 +150,7 @@ struct dp_vs_conn {
     rte_atomic32_t dup_ack_cnt;         /* count of repeated ack packets */
 
     uint8_t pp_version;                 /* proxy protocol version */
-    uint8_t pp_sent;                    /* proxy protocol data has sent, for udp only */
+    uint8_t pp_sent;                    /* proxy protocol data has sent */
 
     /* flags and state transition */
     volatile uint16_t       flags;
