@@ -190,24 +190,10 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
     uint8_t pp_sent = 1;
 
     oiph = rte_pktmbuf_mtod(ombuf, void *);
-    if (IPPROTO_TCP == conn->proto) {
+    if (IPPROTO_TCP == conn->proto)
         ppdoff = ol4hdr + (((struct tcphdr *)ol4hdr)->doff << 2) - oiph;
-
-        // Note#1: There's a extremly rare case where the standalone proxy protocol packet
-        // is triggered by a pure ack tcp packet that contains no application data. The seq
-        // number of the next packet in this direction would stay the same as this ack packet,
-        // so proxy protocol data is also inserted to it by mistake, causing problem for the
-        // tcp connection. The problem is fixed by using a special value 2 for the conn->pp_sent
-        // flag, at the cost of the loss of  tcp retransmission functionality for this standalone
-        // proxy protocol packet.(Can we not consider this abnormal rare case?)
-        if (unlikely(ombuf->pkt_len == ppdoff)) {
-            RTE_LOG(WARNING, IPVS, "%s triggered by a pure ack tcp mbuf of length %d\n",
-                    __func__, ombuf->pkt_len);
-            pp_sent = 2;
-        }
-    } else {
+    else
         ppdoff = ol4hdr + sizeof(struct rte_udp_hdr) - oiph;
-    }
     assert(ppdoff > 0);
 
     iaf = tuplehash_in(conn).af;
@@ -428,9 +414,6 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
     if (ppinfo->datalen > 0 && ppinfo->version == conn->pp_version)
         return EDPVS_OK; // proxy the existing proxy protocol data directly to rs
 
-    if (unlikely(2 == conn->pp_sent) && IPPROTO_TCP == conn->proto)
-        return EDPVS_OK;  // refer to comment [Notes#1] in `proxy_proto_send_standalone`
-
     rt = MBUF_USERDATA_CONST(mbuf, void *, MBUF_FIELD_ROUTE);
     if (rt) {
         if (AF_INET6 == tuplehash_out(conn).af)
@@ -444,7 +427,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
         return EDPVS_NOROUTE;
     }
 
-    // just a test
+    // just a test for standalone sending
     // mtu = 0;
 
     // calculate required space size in mbuf
