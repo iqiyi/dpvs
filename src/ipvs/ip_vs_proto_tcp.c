@@ -355,6 +355,19 @@ static int tcp_in_add_proxy_proto(struct dp_vs_conn *conn, struct rte_mbuf *mbuf
     struct proxy_info ppinfo = { 0 };
 
     offset = iphdrlen + (tcph->doff << 2);
+    if (offset == mbuf->pkt_len) {
+        // Don't send proxy protocol data in pure ack packets that contains no
+        // application data. Otherwise, the proxy protocol data is sent twice,
+        // one in this ack packet, and another in the first tcp packet with payload
+        // and same beginning seq number. Worse still, if the proxy protocol data
+        // is sent in a standalone packet (despite of the rareness of the case), the
+        // second proxy protocol data would be taken as application payload, causing
+        // problem for the tcp connection (refer to a fix for the problem in #7561d1087).
+        // Ths problem would get more complicated when taking into considertation of
+        // tcp retransmission.
+        return EDPVS_OK;
+    }
+
     if (unlikely(EDPVS_OK != proxy_proto_parse(mbuf, offset, &ppinfo)))
         return EDPVS_INVPKT;
 
