@@ -198,6 +198,8 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
 
     iaf = tuplehash_in(conn).af;
     oaf = tuplehash_out(conn).af;
+    assert(iaf == ppinfo->af);
+
     rt = MBUF_USERDATA_CONST(ombuf, void *, MBUF_FIELD_ROUTE);
     if (!rt) {
         // fast-xmit only cached dev, not route,
@@ -242,7 +244,7 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
     mbuf_userdata_reset(mbuf);
 
     // L3 header
-    if (AF_INET6 == iaf) {
+    if (AF_INET6 == oaf) {
         iph = rte_pktmbuf_append(mbuf, sizeof(struct rte_ipv6_hdr));
         if (unlikely(!iph)) {
             err = EDPVS_NOMEM;
@@ -360,7 +362,7 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
             }
         } else {
             ((struct iphdr *)iph)->tot_len  = htons(mbuf->pkt_len);
-            // notes: ipv4 udp checksum is not a mandatory
+            // notes: ipv4 udp checksum is not mandatory
             err = udp_send_csum(AF_INET, sizeof(struct rte_ipv4_hdr), l4hdr,
                     conn, mbuf, NULL, ((struct route_entry *)rt)->port);
             if (unlikely(EDPVS_OK != err)) {
@@ -463,7 +465,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
                                 tbuf2, sizeof(tbuf2))))
                     return EDPVS_INVAL;
                 sprintf(ppv1buf, "PROXY TCP4 %s %s %d %d\r\n", tbuf1, tbuf2,
-                        ppinfo->addr.ip4.src_port, ppinfo->addr.ip4.dst_port);
+                        htons(ppinfo->addr.ip4.src_port), htons(ppinfo->addr.ip4.dst_port));
                 break;
             case AF_INET6:
                 if (unlikely(NULL == inet_ntop(AF_INET6, ppinfo->addr.ip6.src_addr,
@@ -473,7 +475,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
                                 tbuf2, sizeof(tbuf2))))
                     return EDPVS_INVAL;
                 sprintf(ppv1buf, "PROXY TCP6 %s %s %d %d\r\n", tbuf1, tbuf2,
-                        ppinfo->addr.ip4.src_port, ppinfo->addr.ip4.dst_port);
+                        htons(ppinfo->addr.ip6.src_port), htons(ppinfo->addr.ip6.dst_port));
                 break;
             default:
                 return EDPVS_NOTSUPP;
