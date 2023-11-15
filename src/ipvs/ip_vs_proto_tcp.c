@@ -841,11 +841,14 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
             && !th->syn && !th->rst /*&& !th->fin*/) {
         if (PROXY_PROTOCOL_V2 == conn->pp_version ||
                 PROXY_PROTOCOL_V1 == conn->pp_version) {
-            err = tcp_in_add_proxy_proto(conn, mbuf, th, iphdrlen, &pp_hdr_shift);
-            if (unlikely(EDPVS_OK != err))
-                RTE_LOG(INFO, IPVS, "%s: insert proxy protocol fail -- %s\n",
-                        __func__, dpvs_strerror(err));
-            th = ((void *)th) + pp_hdr_shift;
+            if (conn->fnat_seq.isn - conn->fnat_seq.delta + 1 == ntohl(th->seq)) {
+                /* avoid inserting repetitive ppdata when the first rs ack delayed */
+                err = tcp_in_add_proxy_proto(conn, mbuf, th, iphdrlen, &pp_hdr_shift);
+                if (unlikely(EDPVS_OK != err))
+                    RTE_LOG(INFO, IPVS, "%s: insert proxy protocol fail -- %s\n",
+                            __func__, dpvs_strerror(err));
+                th = ((void *)th) + pp_hdr_shift;
+            }
         } else {
             if (unlikely(tcp_in_add_toa(conn, mbuf, th) != EDPVS_OK)) {
                 tcp_in_remove_toa(th, iaf);
