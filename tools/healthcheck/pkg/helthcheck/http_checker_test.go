@@ -33,10 +33,12 @@ var http_targets = []Target{
 	{net.ParseIP("2001::30"), 80, utils.IPProtoTCP},
 	{net.ParseIP("2001::30"), 443, utils.IPProtoTCP},
 	{net.ParseIP("192.168.88.30"), 8002, utils.IPProtoTCP}, // control group for proxy protocol
+	{net.ParseIP("2001::30"), 8002, utils.IPProtoTCP},
 }
 
 var http_proxy_proto_targets = []Target{
 	{net.ParseIP("192.168.88.30"), 8002, utils.IPProtoTCP},
+	{net.ParseIP("2001::30"), 8002, utils.IPProtoTCP},
 }
 
 var http_url_targets = []string{
