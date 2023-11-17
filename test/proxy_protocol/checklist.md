@@ -54,37 +54,39 @@ Checklist
 * [x] tools/keepalived "proxy-protocol" config keyword (v1|v2|disable)
 * [ ] tools/dpvs-agent proxy-protocol service config api: NOT SUPPORT
 
-* [ ] client with PPv2 data + FNAT44 + TCP + PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT44 + TCP + PPv2 backends (lb cascading)
 * [x] client with PPv1 data + FNAT44 + TCP + PPv1 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT44 + UDP + PPv2 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT44 + TCP + PPv1 backends (lb cascading)
+* [x] client with PPv2 data + FNAT44 + UDP + PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT44 + TCP + PPv1 backends (lb cascading)
 * [x] client with PPv1 data + FNAT44 + TCP + PPv2 backends (lb cascading)
 
-* [ ] client with PPv2 data + FNAT66 + TCP + PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT66 + TCP + PPv2 backends (lb cascading)
 * [x] client with PPv1 data + FNAT66 + TCP + PPv1 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT66 + UDP + PPv2 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT66 + TCP + PPv1 backends (lb cascading)
+* [x] client with PPv2 data + FNAT66 + UDP + PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT66 + TCP + PPv1 backends (lb cascading)
 * [x] client with PPv1 data + FNAT66 + TCP + PPv2 backends (lb cascading)
 
-* [ ] client with PPv2 data + FNAT64 + TCP + PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT64 + TCP + PPv2 backends (lb cascading)
 * [x] client with PPv1 data + FNAT64 + TCP + PPv1 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT64 + TCP + PPv1 backends (lb cascading)
+* [x] client with PPv2 data + FNAT64 + UDP + PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT64 + TCP + PPv1 backends (lb cascading)
 * [x] client with PPv1 data + FNAT64 + TCP + PPv2 backends (lb cascading)
 
-* [ ] client with PPv2 data + FNAT44 + TCP + standalone PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT44 + TCP + standalone PPv2 backends (lb cascading)
 * [x] client with PPv1 data + FNAT44 + TCP + standalone PPv1 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT44 + UDP + standalone PPv2 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT44 + TCP + standalone PPv1 backends (lb cascading)
+* [x] client with PPv2 data + FNAT44 + UDP + standalone PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT44 + TCP + standalone PPv1 backends (lb cascading)
 * [x] client with PPv1 data + FNAT44 + TCP + standalone PPv2 backends (lb cascading): zero-length duplicated ack may appear
 
-* [ ] client with PPv2 data + FNAT66 + TCP + standalone PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT66 + TCP + standalone PPv2 backends (lb cascading)
 * [x] client with PPv1 data + FNAT66 + TCP + standalone PPv1 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT66 + UDP + standalone PPv2 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT66 + TCP + standalone PPv1 backends (lb cascading)
+* [x] client with PPv2 data + FNAT66 + UDP + standalone PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT66 + TCP + standalone PPv1 backends (lb cascading)
 * [x] client with PPv1 data + FNAT66 + TCP + standalone PPv2 backends (lb cascading): zero-length duplicated ack may appear
 
-* [ ] client with PPv2 data + FNAT64 + TCP + standalone PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT64 + TCP + standalone PPv2 backends (lb cascading)
 * [x] client with PPv1 data + FNAT64 + TCP + standalone PPv1 backends (lb cascading)
-* [ ] client with PPv2 data + FNAT64 + TCP + standalone PPv1 backends (lb cascading)
+* [x] client with PPv2 data + FNAT64 + UDP + standalone PPv2 backends (lb cascading)
+* [x] client with PPv2 data + FNAT64 + TCP + standalone PPv1 backends (lb cascading)
 * [x] client with PPv1 data + FNAT64 + TCP + standalone PPv2 backends (lb cascading): zero-length duplicated ack may appear
 
