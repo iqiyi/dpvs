@@ -18,6 +18,7 @@
 package hc
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"time"
@@ -29,13 +30,18 @@ var _ CheckMethod = (*UDPChecker)(nil)
 type UDPChecker struct {
 	Config *CheckerConfig
 
-	Receive string
-	Send    string
+	Receive    string
+	Send       string
+	ProxyProto int // proxy protocol: 0 - close, 2 - version 2
 }
 
 // NewUDPChecker returns an initialised UDPChecker.
-func NewUDPChecker(recv, send string) *UDPChecker {
-	return &UDPChecker{Receive: recv, Send: send}
+func NewUDPChecker(recv, send string, proxyProto int) *UDPChecker {
+	return &UDPChecker{
+		Receive:    recv,
+		Send:       send,
+		ProxyProto: proxyProto,
+	}
 }
 
 func (hc *UDPChecker) BindConfig(conf *CheckerConfig) {
@@ -74,6 +80,14 @@ func (hc *UDPChecker) Check(target Target, timeout time.Duration) *Result {
 	if err != nil {
 		msg = fmt.Sprintf("%s: failed to set deadline", msg)
 		return NewResult(start, msg, false, err)
+	}
+
+	if 2 == hc.ProxyProto {
+		n, err := bytes.NewReader(proxyProtoV2LocalCmd).WriteTo(udpConn)
+		if err != nil || n < int64(len(proxyProtoV2LocalCmd)) {
+			msg = fmt.Sprintf("%s: failed to send proxy protocol v2 data", msg)
+			return NewResult(start, msg, false, err)
+		}
 	}
 
 	if _, err = udpConn.Write([]byte(hc.Send)); err != nil {

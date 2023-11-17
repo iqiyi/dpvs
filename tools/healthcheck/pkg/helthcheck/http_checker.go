@@ -33,14 +33,6 @@ import (
 
 var _ CheckMethod = (*HttpChecker)(nil)
 
-var (
-	proxyProtoV1LocalCmd        = "PROXY UNKNOWN\r\n"
-	proxyProtoV2LocalCmd []byte = []byte{
-		0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51,
-		0x55, 0x49, 0x54, 0x0A, 0x20, 0x00, 0x00, 0x00,
-	}
-)
-
 type HttpCodeRange struct {
 	start int // inclusive
 	end   int // inclusive
@@ -155,7 +147,7 @@ func (hc *HttpChecker) Check(target Target, timeout time.Duration) *Result {
 			//   https://pkg.go.dev/github.com/pires/go-proxyproto
 			if hc.ProxyProto == 2 {
 				n, err := bytes.NewReader(proxyProtoV2LocalCmd).WriteTo(conn)
-				if err != nil || n < 16 {
+				if err != nil || n < int64(len(proxyProtoV2LocalCmd)) {
 					return nil, err
 				}
 			} else if hc.ProxyProto == 1 {

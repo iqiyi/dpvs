@@ -67,7 +67,7 @@ int parse_proxy_protocol(char *buf, int len) {
 
         if (NULL == (token = strtok_r((char *)ppv1data, " ", &tmp))) // "PROXY"
             return len;
-        if (NULL == (token = strtok_r(NULL, " ", &tmp))) // "TCP4|TCP6"
+        if (NULL == (token = strtok_r(NULL, " ", &tmp))) // "TCP4|TCP6|UNKNOWN"
             return len;
         if (memcmp(token, "TCP4", 4) == 0) {
             ((struct sockaddr_in *)&from)->sin_family = AF_INET;
@@ -119,8 +119,8 @@ int parse_proxy_protocol(char *buf, int len) {
             goto done;
         } else if (memcmp(token, "UNKNOWN", 7) == 0) { // LOCAL command
             if (NULL != strtok_r(NULL, " ", &tmp))
-                goto done;
-            return len;
+                return len;
+            goto done;
         } else { // unsupported protocol
                  // UDP4, UDP6 are not supported in v1
             return len;

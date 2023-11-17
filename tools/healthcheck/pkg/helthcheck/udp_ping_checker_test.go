@@ -37,7 +37,7 @@ var udpping_targets = []Target{
 
 func TestUDPPingChecker(t *testing.T) {
 	for _, target := range udpping_targets {
-		checker := NewUDPPingChecker("", "")
+		checker := NewUDPPingChecker("", "", 0)
 		id := Id(target.String())
 		config := NewCheckerConfig(&id, checker,
 			&target, StateUnknown, 0,

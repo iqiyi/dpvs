@@ -73,20 +73,20 @@ func (s *Server) NewChecker(typ lb.Checker, proto utils.IPProto) CheckMethod {
 	var checker CheckMethod
 	switch typ {
 	case lb.CheckerTCP:
-		checker = NewTCPChecker("", "")
+		checker = NewTCPChecker("", "", 0)
 	case lb.CheckerUDP:
-		checker = NewUDPChecker("", "")
+		checker = NewUDPChecker("", "", 0)
 	case lb.CheckerPING:
 		checker = NewPingChecker()
 	case lb.CheckerUDPPing:
-		checker = NewUDPPingChecker("", "")
+		checker = NewUDPPingChecker("", "", 0)
 	case lb.CheckerNone:
 		if s.config.LbAutoMethod {
 			switch proto {
 			case utils.IPProtoTCP:
-				checker = NewTCPChecker("", "")
+				checker = NewTCPChecker("", "", 0)
 			case utils.IPProtoUDP:
-				checker = NewUDPPingChecker("", "")
+				checker = NewUDPPingChecker("", "", 0)
 			}
 		}
 	}

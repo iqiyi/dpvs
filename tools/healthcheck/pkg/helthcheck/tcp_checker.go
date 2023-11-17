@@ -18,9 +18,11 @@
 package hc
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -30,13 +32,18 @@ var _ CheckMethod = (*TCPChecker)(nil)
 type TCPChecker struct {
 	Config *CheckerConfig
 
-	Receive string
-	Send    string
+	Receive    string
+	Send       string
+	ProxyProto int // proxy protocol: 0 - close, 1 - version 1, 2 - version 2
 }
 
 // NewTCPChecker returns an initialised TCPChecker.
-func NewTCPChecker(recv, send string) *TCPChecker {
-	return &TCPChecker{Receive: recv, Send: send}
+func NewTCPChecker(recv, send string, proxyProto int) *TCPChecker {
+	return &TCPChecker{
+		Receive:    recv,
+		Send:       send,
+		ProxyProto: proxyProto,
+	}
 }
 
 func (hc *TCPChecker) BindConfig(conf *CheckerConfig) {
@@ -82,6 +89,20 @@ func (hc *TCPChecker) Check(target Target, timeout time.Duration) *Result {
 	if err != nil {
 		msg = fmt.Sprintf("%s: failed to set deadline", msg)
 		return NewResult(start, msg, false, err)
+	}
+
+	if 2 == hc.ProxyProto {
+		n, err := bytes.NewReader(proxyProtoV2LocalCmd).WriteTo(tcpConn)
+		if err != nil || n < int64(len(proxyProtoV2LocalCmd)) {
+			msg = fmt.Sprintf("%s: failed to send proxy protocol v2 data", msg)
+			return NewResult(start, msg, false, err)
+		}
+	} else if 1 == hc.ProxyProto {
+		n, err := strings.NewReader(proxyProtoV1LocalCmd).WriteTo(tcpConn)
+		if err != nil || n < int64(len(proxyProtoV1LocalCmd)) {
+			msg = fmt.Sprintf("%s: failed to send proxy protocol v1 data", msg)
+			return NewResult(start, msg, false, err)
+		}
 	}
 
 	if hc.Send != "" {

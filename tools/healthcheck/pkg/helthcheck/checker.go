@@ -26,6 +26,14 @@ import (
 
 const uweightDefault uint16 = 1
 
+var (
+	proxyProtoV1LocalCmd        = "PROXY UNKNOWN\r\n"
+	proxyProtoV2LocalCmd []byte = []byte{
+		0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51,
+		0x55, 0x49, 0x54, 0x0A, 0x20, 0x00, 0x00, 0x00,
+	}
+)
+
 // Checks provides a map of healthcheck configurations.
 type Checkers struct {
 	Configs map[Id]*CheckerConfig
