@@ -43,13 +43,13 @@ Checklist
 * [x] tools/keepalived HTTP_CHECKER + IPv6 backends
 * [x] tools/eepalived UDP_CHECKER with payload + IPv6 backends
 * [x] tools/healthcheck http_checker + IPv4 backends
-* [ ] tools/healthcheck tcp_checker with payload + IPv4 backends: NOT SUPPORT
-* [ ] tools/healthcheck udp_checker with payload + IPv4 backends: NOT SUPPORT
-* [ ] tools/healthcheck udpping_checker with payload + IPv4 backends: NOT SUPPORT
+* [x] tools/healthcheck tcp_checker with payload + IPv4 backends
+* [x] tools/healthcheck udp_checker with payload + IPv4 backends
+* [x] tools/healthcheck udpping_checker with payload + IPv4 backends
 * [x] tools/healthcheck http_checker + IPv6 backends
-* [ ] tools/healthcheck tcp_checker with payload + IPv6 backends: NOT SUPPORT
-* [ ] tools/healthcheck udp_checker with payload + IPv6 backends: NOT SUPPORT
-* [ ] tools/healthcheck udpping_checker with payload + IPv6 backends: NOT SUPPORT
+* [x] tools/healthcheck tcp_checker with payload + IPv6 backends
+* [x] tools/healthcheck udp_checker with payload + IPv6 backends
+* [x] tools/healthcheck udpping_checker with payload + IPv6 backends
 * [x] tools/ipvsadm "--proxy-protocol" config option
 * [x] tools/keepalived "proxy-protocol" config keyword (v1|v2|disable)
 * [ ] tools/dpvs-agent proxy-protocol service config api: NOT SUPPORT

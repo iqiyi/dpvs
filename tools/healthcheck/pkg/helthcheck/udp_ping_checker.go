@@ -33,9 +33,11 @@ type UDPPingChecker struct {
 }
 
 // NewUDPPingChecker returns an initialised UDPPingChecker.
-func NewUDPPingChecker(recv, send string) *UDPPingChecker {
-	return &UDPPingChecker{UDPChecker: NewUDPChecker(recv, send),
-		PingChecker: NewPingChecker()}
+func NewUDPPingChecker(recv, send string, proxyProto int) *UDPPingChecker {
+	return &UDPPingChecker{
+		UDPChecker:  NewUDPChecker(recv, send, proxyProto),
+		PingChecker: NewPingChecker(),
+	}
 }
 
 func (hc *UDPPingChecker) BindConfig(conf *CheckerConfig) {
