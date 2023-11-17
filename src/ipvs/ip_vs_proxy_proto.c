@@ -55,35 +55,37 @@ int proxy_proto_parse(struct rte_mbuf *mbuf, int ppdoff, struct proxy_info *ppin
         ppinfo->version = pphdrv2->ver;
         if (unlikely(ppinfo->version != PROXY_PROTOCOL_V2 || ppinfo->cmd > 1))
             return EDPVS_INVAL;
-        ppinfo->datalen = offset;
         ppinfo->cmd = pphdrv2->cmd;
         if (!ppinfo->cmd)
             return EDPVS_OK; /* LOCAL command */
-        ppinfo->af = ppv2_proto_pp2host(pphdrv2->af);
+        ppinfo->af = ppv2_af_pp2host(pphdrv2->af);
         if (unlikely(AF_UNSPEC == ppinfo->af))
             return EDPVS_NOTSUPP;
         ppinfo->proto = ppv2_proto_pp2host(pphdrv2->proto);
-        if (unlikely(0 != ppinfo->proto))
+        if (unlikely(!ppinfo->proto))
             return EDPVS_NOTSUPP;
         switch (ppinfo->af) {
             case AF_INET:
                 addr4 = (struct proxy_addr_ipv4 *)(pphdrv2 + 1);
-                ppinfo->addr.ip4.src_addr = ntohl(addr4->src_addr);
-                ppinfo->addr.ip4.dst_addr = ntohl(addr4->dst_addr);
-                ppinfo->addr.ip4.src_port = ntohs(addr4->src_port);
-                ppinfo->addr.ip4.dst_port = ntohs(addr4->dst_port);
+                ppinfo->addr.ip4.src_addr = addr4->src_addr;
+                ppinfo->addr.ip4.dst_addr = addr4->dst_addr;
+                ppinfo->addr.ip4.src_port = addr4->src_port;
+                ppinfo->addr.ip4.dst_port = addr4->dst_port;
+                ppinfo->datalen = PROXY_PROTO_HDR_LEN_V4;
                 break;
             case AF_INET6:
                 addr6 = (struct proxy_addr_ipv6 *)(pphdrv2 + 1);
                 memcpy(ppinfo->addr.ip6.src_addr, addr6->src_addr, 16);
                 memcpy(ppinfo->addr.ip6.dst_addr, addr6->dst_addr, 16);
-                ppinfo->addr.ip6.src_port = ntohs(addr6->src_port);
-                ppinfo->addr.ip6.dst_port = ntohs(addr6->dst_port);
+                ppinfo->addr.ip6.src_port = addr6->src_port;
+                ppinfo->addr.ip6.dst_port = addr6->dst_port;
+                ppinfo->datalen = PROXY_PROTO_HDR_LEN_V6;
                 break;
             case AF_UNIX:
                 addrunx = (struct proxy_addr_unix *)(pphdrv2 + 1);
                 memcpy(ppinfo->addr.unx.src_addr, addrunx->src_addr, 108);
                 memcpy(ppinfo->addr.unx.dst_addr, addrunx->dst_addr, 108);
+                ppinfo->datalen = PROXY_PROTO_HDR_LEN_UX;
                 break;
             default:
                 return EDPVS_NOTSUPP;
@@ -121,12 +123,12 @@ int proxy_proto_parse(struct rte_mbuf *mbuf, int ppdoff, struct proxy_info *ppin
                 return EDPVS_INVAL;
             if (NULL == (token = strtok_r(NULL, " ", &tmp))) /* source port */
                 return EDPVS_INVAL;
-            ppinfo->addr.ip4.src_port = ntohs(strtol(token, &end, 10));
+            ppinfo->addr.ip4.src_port = htons(strtol(token, &end, 10));
             if (*end != '\0')
                 return EDPVS_INVAL;
             if (NULL == (token = strtok_r(NULL, " ", &tmp))) /* dest port */
                 return EDPVS_INVAL;
-            ppinfo->addr.ip4.dst_port = ntohs(strtol(token, &end, 10));
+            ppinfo->addr.ip4.dst_port = htons(strtol(token, &end, 10));
             if (*end != '\0')
                 return EDPVS_INVAL;
             if (NULL != strtok_r(NULL, " ", &tmp))
@@ -147,12 +149,12 @@ int proxy_proto_parse(struct rte_mbuf *mbuf, int ppdoff, struct proxy_info *ppin
                 return EDPVS_INVAL;
             if (NULL == (token = strtok_r(NULL, " ", &tmp))) /* source port */
                 return EDPVS_INVAL;
-            ppinfo->addr.ip6.src_port = ntohs(strtol(token, &end, 10));
+            ppinfo->addr.ip6.src_port = htons(strtol(token, &end, 10));
             if (*end != '\0')
                 return EDPVS_INVAL;
             if (NULL == (token = strtok_r(NULL, " ", &tmp))) /* dest port */
                 return EDPVS_INVAL;
-            ppinfo->addr.ip6.dst_port = ntohs(strtol(token, &end, 10));
+            ppinfo->addr.ip6.dst_port = htons(strtol(token, &end, 10));
             if (*end != '\0')
                 return EDPVS_INVAL;
             if (NULL != strtok_r(NULL, " ", &tmp))
@@ -404,7 +406,7 @@ finish:
         else
             ((struct rte_ipv6_hdr *)oiph)->payload_len = htons(ntohs(((struct rte_ipv6_hdr *)
                         oiph)->payload_len) - ppinfo->datalen);
-        memmove(oiph + ppinfo->datalen, oiph, ppinfo->datalen);
+        memmove(oiph + ppinfo->datalen, oiph, ppdoff);
         if (hdr_shift)
             *hdr_shift = ppinfo->datalen;
         rte_pktmbuf_adj(ombuf, ppinfo->datalen);
@@ -482,7 +484,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
                                 tbuf2, sizeof(tbuf2))))
                     return EDPVS_INVAL;
                 sprintf(ppv1buf, "PROXY TCP4 %s %s %d %d\r\n", tbuf1, tbuf2,
-                        htons(ppinfo->addr.ip4.src_port), htons(ppinfo->addr.ip4.dst_port));
+                        ntohs(ppinfo->addr.ip4.src_port), ntohs(ppinfo->addr.ip4.dst_port));
                 break;
             case AF_INET6:
                 if (unlikely(NULL == inet_ntop(AF_INET6, ppinfo->addr.ip6.src_addr,
@@ -492,7 +494,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
                                 tbuf2, sizeof(tbuf2))))
                     return EDPVS_INVAL;
                 sprintf(ppv1buf, "PROXY TCP6 %s %s %d %d\r\n", tbuf1, tbuf2,
-                        htons(ppinfo->addr.ip6.src_port), htons(ppinfo->addr.ip6.dst_port));
+                        ntohs(ppinfo->addr.ip6.src_port), ntohs(ppinfo->addr.ip6.dst_port));
                 break;
             default:
                 return EDPVS_NOTSUPP;
