@@ -118,7 +118,8 @@ type dpvsDestCheck struct {
 
 type VirtualServerSpec struct {
 	af              uint32
-	proto           uint16
+	proto           uint8
+	proxyProto      uint8
 	port            uint16
 	fwmark          uint32
 	flags           uint32
@@ -146,7 +147,7 @@ func (vs *VirtualServerSpec) Convert2NewRsFront() *RealServerFront {
 
 	front.af = vs.af
 	front.port = vs.port
-	front.proto = vs.proto
+	front.proto = uint16(vs.proto)
 	front.fwmark = vs.fwmark
 	front.numDests = vs.numDests
 	front.cid = uint32(vs.cid)
@@ -238,8 +239,18 @@ func (vs *VirtualServerSpec) GetAf() uint32 {
 	return vs.af
 }
 
-func (vs *VirtualServerSpec) SetProto(proto uint16) {
+func (vs *VirtualServerSpec) SetProto(proto uint8) {
 	vs.proto = proto
+}
+
+func (vs *VirtualServerSpec) SetProxyProto(version string) {
+	if version == models.VirtualServerSpecTinyProxyProtocolV2 {
+		vs.proxyProto = 2
+	} else if version == models.VirtualServerSpecTinyProxyProtocolV1 {
+		vs.proxyProto = 1
+	} else {
+		vs.proxyProto = 0
+	}
 }
 
 func (vs *VirtualServerSpec) SetPort(port uint16) {
@@ -254,7 +265,7 @@ func (vs *VirtualServerSpec) GetPort() uint16 {
 	return binary.BigEndian.Uint16(buf.Bytes())
 }
 
-func (vs *VirtualServerSpec) GetProto() uint16 {
+func (vs *VirtualServerSpec) GetProto() uint8 {
 	return vs.proto
 }
 

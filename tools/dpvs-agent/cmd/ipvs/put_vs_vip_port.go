@@ -72,6 +72,8 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 		if params.Spec.SynProxy != nil && *params.Spec.SynProxy {
 			vs.SetFlagsSynProxy()
 		}
+
+		vs.SetProxyProto(params.Spec.ProxyProtocol)
 	}
 
 	vs.SetSchedName(schedName)
