@@ -1848,7 +1848,11 @@ func init() {
         },
         "Proto": {
           "type": "integer",
-          "format": "uint16"
+          "format": "uint8"
+        },
+        "ProxyProto": {
+          "type": "integer",
+          "format": "uint8"
         },
         "RSs": {
           "$ref": "#/definitions/RealServerExpandList"
@@ -1903,6 +1907,14 @@ func init() {
         },
         "Match": {
           "$ref": "#/definitions/MatchSpec"
+        },
+        "ProxyProtocol": {
+          "type": "string",
+          "enum": [
+            "v2",
+            "v1",
+            "disable"
+          ]
         },
         "SchedName": {
           "type": "string",
@@ -4189,7 +4201,11 @@ func init() {
         },
         "Proto": {
           "type": "integer",
-          "format": "uint16"
+          "format": "uint8"
+        },
+        "ProxyProto": {
+          "type": "integer",
+          "format": "uint8"
         },
         "RSs": {
           "$ref": "#/definitions/RealServerExpandList"
@@ -4244,6 +4260,14 @@ func init() {
         },
         "Match": {
           "$ref": "#/definitions/MatchSpec"
+        },
+        "ProxyProtocol": {
+          "type": "string",
+          "enum": [
+            "v2",
+            "v1",
+            "disable"
+          ]
         },
         "SchedName": {
           "type": "string",

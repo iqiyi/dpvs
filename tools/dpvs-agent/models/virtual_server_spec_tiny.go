@@ -38,6 +38,10 @@ type VirtualServerSpecTiny struct {
 	// match
 	Match *MatchSpec `json:"Match,omitempty"`
 
+	// proxy protocol
+	// Enum: [v2 v1 disable]
+	ProxyProtocol string `json:"ProxyProtocol,omitempty"`
+
 	// sched name
 	// Enum: [rr wrr wlc conhash]
 	SchedName string `json:"SchedName,omitempty"`
@@ -54,6 +58,10 @@ func (m *VirtualServerSpecTiny) Validate(formats strfmt.Registry) error {
 	var res []error
 
 	if err := m.validateMatch(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateProxyProtocol(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -81,6 +89,51 @@ func (m *VirtualServerSpecTiny) validateMatch(formats strfmt.Registry) error {
 			}
 			return err
 		}
+	}
+
+	return nil
+}
+
+var virtualServerSpecTinyTypeProxyProtocolPropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["v2","v1","disable"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		virtualServerSpecTinyTypeProxyProtocolPropEnum = append(virtualServerSpecTinyTypeProxyProtocolPropEnum, v)
+	}
+}
+
+const (
+
+	// VirtualServerSpecTinyProxyProtocolV2 captures enum value "v2"
+	VirtualServerSpecTinyProxyProtocolV2 string = "v2"
+
+	// VirtualServerSpecTinyProxyProtocolV1 captures enum value "v1"
+	VirtualServerSpecTinyProxyProtocolV1 string = "v1"
+
+	// VirtualServerSpecTinyProxyProtocolDisable captures enum value "disable"
+	VirtualServerSpecTinyProxyProtocolDisable string = "disable"
+)
+
+// prop value enum
+func (m *VirtualServerSpecTiny) validateProxyProtocolEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, virtualServerSpecTinyTypeProxyProtocolPropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *VirtualServerSpecTiny) validateProxyProtocol(formats strfmt.Registry) error {
+	if swag.IsZero(m.ProxyProtocol) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateProxyProtocolEnum("ProxyProtocol", "body", m.ProxyProtocol); err != nil {
+		return err
 	}
 
 	return nil

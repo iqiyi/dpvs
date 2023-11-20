@@ -59,7 +59,10 @@ type VirtualServerSpecExpand struct {
 	Port uint16 `json:"Port,omitempty"`
 
 	// proto
-	Proto uint16 `json:"Proto,omitempty"`
+	Proto uint8 `json:"Proto,omitempty"`
+
+	// proxy proto
+	ProxyProto uint8 `json:"ProxyProto,omitempty"`
 
 	// r ss
 	RSs *RealServerExpandList `json:"RSs,omitempty"`
