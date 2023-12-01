@@ -62,11 +62,24 @@
 #define DEST_INHIBIT_DURATION_MIN       5       // 5s
 #define DEST_INHIBIT_DURATION_MAX       3600    // 1h
 
+#define PROXY_PROTOCOL_VERSION_MASK     0x0F
+#define PROXY_PROTOCOL_FLAGS_MASK       0xF0
+
+#define PROXY_PROTOCOL_VERSION(verflag)     ((verflag) & PROXY_PROTOCOL_VERSION_MASK)
+#define PROXY_PROTOCOL_FLAGS(verflag)       ((verflag) & PROXY_PROTOCOL_FLAGS_MASK)
+#define PROXY_PROTOCOL_IS_INSECURE(verflag) (!!((verflag) & PROXY_PROTOCOL_F_INSECURE))
+
 enum {
-    PROXY_PROTOCOL_DISABLE = 0,
-    PROXY_PROTOCOL_V1,
-    PROXY_PROTOCOL_V2,
-    PROXY_PROTOCOL_MAX,
+    PROXY_PROTOCOL_DISABLE      = 0x00,
+    PROXY_PROTOCOL_V1           = 0x01,
+    PROXY_PROTOCOL_V2           = 0x02,
+    PROXY_PROTOCOL_MAX          = PROXY_PROTOCOL_VERSION_MASK,
+
+    /* The proxy protocol addresses existing in the received mbuf are passed to backends
+     * in insecure mode, making the service subject to Source Address Spoofing Attack,
+     * but it's useful when multiple proxies exist before the backend. */
+    PROXY_PROTOCOL_F_INSECURE   = 0x10,
+    PROXY_PROTOCOL_F_MAX        = PROXY_PROTOCOL_FLAGS_MASK,
 };
 
 struct dest_check_configs {
@@ -183,17 +196,21 @@ static inline uint8_t proxy_protocol_type(const char *str) {
         return PROXY_PROTOCOL_V1;
     if (!strcasecmp(str, "v2"))
         return PROXY_PROTOCOL_V2;
+    if (!strcasecmp(str, "v1-insecure"))
+        return PROXY_PROTOCOL_V1 | PROXY_PROTOCOL_F_INSECURE;
+    if (!strcasecmp(str, "v2-insecure"))
+        return PROXY_PROTOCOL_V2 | PROXY_PROTOCOL_F_INSECURE;
     return PROXY_PROTOCOL_DISABLE;
 }
 
 static inline const char *proxy_protocol_str(uint8_t type) {
-    switch (type) {
+    switch (PROXY_PROTOCOL_VERSION(type)) {
         case PROXY_PROTOCOL_DISABLE:
             return "disable";
         case PROXY_PROTOCOL_V1:
-            return "v1";
+            return PROXY_PROTOCOL_IS_INSECURE(type) ? "v1-insecure" : "v1";
         case PROXY_PROTOCOL_V2:
-            return "v2";
+            return PROXY_PROTOCOL_IS_INSECURE(type) ? "v2-insecure" : "v2";
     }
     return "unknown";
 }

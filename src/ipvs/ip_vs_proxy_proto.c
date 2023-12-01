@@ -312,7 +312,7 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
         err = EDPVS_NOMEM;
         goto errout;
     }
-    if (PROXY_PROTOCOL_V2 == conn->pp_version) {
+    if (PROXY_PROTOCOL_V2 == PROXY_PROTOCOL_VERSION(conn->pp_version)) {
         pphv2 = (struct proxy_hdr_v2 *)pph;
         rte_memcpy(pphv2->sig, PROXY_PROTO_V2_SIGNATURE, sizeof(pphv2->sig));
         pphv2->cmd     = 1;
@@ -321,7 +321,7 @@ static int proxy_proto_send_standalone(struct proxy_info *ppinfo,
         pphv2->af      = ppv2_af_host2pp(ppinfo->af);
         pphv2->addrlen = ntohs(ppdlen - sizeof(struct proxy_hdr_v2));
         rte_memcpy(pphv2 + 1, &ppinfo->addr, ppdlen - sizeof(struct proxy_hdr_v2));
-    } else if (PROXY_PROTOCOL_V1 == conn->pp_version) {
+    } else if (PROXY_PROTOCOL_V1 == PROXY_PROTOCOL_VERSION(conn->pp_version)) {
         rte_memcpy(pph, ppv1data, ppdlen);
     } else {
         err = EDPVS_NOTSUPP;
@@ -434,7 +434,8 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
     if (unlikely(conn->dest->fwdmode != DPVS_FWD_MODE_FNAT))
         return EDPVS_NOTSUPP;
 
-    if (ppinfo->datalen > 0 && ppinfo->version == conn->pp_version)
+    if (ppinfo->datalen > 0 && PROXY_PROTOCOL_IS_INSECURE(conn->pp_version)
+            && ppinfo->version == PROXY_PROTOCOL_VERSION(conn->pp_version))
         return EDPVS_OK; // proxy the existing proxy protocol data directly to rs
 
     oaf = tuplehash_out(conn).af;
@@ -453,7 +454,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
 
     // calculate required space size in mbuf
     ppdatalen = 0;
-    if (PROXY_PROTOCOL_V2 == conn->pp_version) {
+    if (PROXY_PROTOCOL_V2 == PROXY_PROTOCOL_VERSION(conn->pp_version)) {
         ppdatalen = sizeof(struct proxy_hdr_v2);
         if (ppinfo->cmd == 1) {
             switch (ppinfo->af) {
@@ -471,7 +472,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
                 return EDPVS_NOTSUPP;
             }
         }
-    } else if (PROXY_PROTOCOL_V1 == conn->pp_version) {
+    } else if (PROXY_PROTOCOL_V1 == PROXY_PROTOCOL_VERSION(conn->pp_version)) {
         if (ppinfo->cmd == 1) {
             if (IPPROTO_TCP != ppinfo->proto)
                 return EDPVS_NOTSUPP; // v1 only supports tcp
@@ -554,7 +555,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
     }
 
     // fill in proxy protocol data
-    if (PROXY_PROTOCOL_V2 == conn->pp_version) {
+    if (PROXY_PROTOCOL_V2 == PROXY_PROTOCOL_VERSION(conn->pp_version)) {
         pphv2 = (struct proxy_hdr_v2 *)pph;
         rte_memcpy(pphv2->sig, PROXY_PROTO_V2_SIGNATURE, sizeof(pphv2->sig));
         pphv2->cmd = 1;

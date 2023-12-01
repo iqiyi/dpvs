@@ -244,11 +244,16 @@ func (vs *VirtualServerSpec) SetProto(proto uint8) {
 }
 
 func (vs *VirtualServerSpec) SetProxyProto(version string) {
-	if version == models.VirtualServerSpecTinyProxyProtocolV2 {
+	switch version {
+	case models.VirtualServerSpecTinyProxyProtocolV2:
 		vs.proxyProto = 2
-	} else if version == models.VirtualServerSpecTinyProxyProtocolV1 {
+	case models.VirtualServerSpecTinyProxyProtocolV1:
 		vs.proxyProto = 1
-	} else {
+	case models.VirtualServerSpecTinyProxyProtocolV2DashInsecure:
+		vs.proxyProto = 18
+	case models.VirtualServerSpecTinyProxyProtocolV1DashInsecure:
+		vs.proxyProto = 17
+	default:
 		vs.proxyProto = 0
 	}
 }

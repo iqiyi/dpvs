@@ -39,7 +39,7 @@ type VirtualServerSpecTiny struct {
 	Match *MatchSpec `json:"Match,omitempty"`
 
 	// proxy protocol
-	// Enum: [v2 v1 disable]
+	// Enum: [v2 v2-insecure v1 v1-insecure disable]
 	ProxyProtocol string `json:"ProxyProtocol,omitempty"`
 
 	// sched name
@@ -98,7 +98,7 @@ var virtualServerSpecTinyTypeProxyProtocolPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["v2","v1","disable"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["v2","v2-insecure","v1","v1-insecure","disable"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -111,8 +111,14 @@ const (
 	// VirtualServerSpecTinyProxyProtocolV2 captures enum value "v2"
 	VirtualServerSpecTinyProxyProtocolV2 string = "v2"
 
+	// VirtualServerSpecTinyProxyProtocolV2DashInsecure captures enum value "v2-insecure"
+	VirtualServerSpecTinyProxyProtocolV2DashInsecure string = "v2-insecure"
+
 	// VirtualServerSpecTinyProxyProtocolV1 captures enum value "v1"
 	VirtualServerSpecTinyProxyProtocolV1 string = "v1"
+
+	// VirtualServerSpecTinyProxyProtocolV1DashInsecure captures enum value "v1-insecure"
+	VirtualServerSpecTinyProxyProtocolV1DashInsecure string = "v1-insecure"
 
 	// VirtualServerSpecTinyProxyProtocolDisable captures enum value "disable"
 	VirtualServerSpecTinyProxyProtocolDisable string = "disable"

@@ -1851,8 +1851,16 @@ func init() {
           "format": "uint8"
         },
         "ProxyProto": {
+          "description": "0  (0x00): disable\n1  (0x01): v1\n2  (0x02): v2\n17 (0x11): v1-insecure\n18 (0x12): v2-insecure\n",
           "type": "integer",
-          "format": "uint8"
+          "format": "uint8",
+          "enum": [
+            0,
+            1,
+            2,
+            17,
+            18
+          ]
         },
         "RSs": {
           "$ref": "#/definitions/RealServerExpandList"
@@ -1912,7 +1920,9 @@ func init() {
           "type": "string",
           "enum": [
             "v2",
+            "v2-insecure",
             "v1",
+            "v1-insecure",
             "disable"
           ]
         },
@@ -4204,8 +4214,16 @@ func init() {
           "format": "uint8"
         },
         "ProxyProto": {
+          "description": "0  (0x00): disable\n1  (0x01): v1\n2  (0x02): v2\n17 (0x11): v1-insecure\n18 (0x12): v2-insecure\n",
           "type": "integer",
-          "format": "uint8"
+          "format": "uint8",
+          "enum": [
+            0,
+            1,
+            2,
+            17,
+            18
+          ]
         },
         "RSs": {
           "$ref": "#/definitions/RealServerExpandList"
@@ -4265,7 +4283,9 @@ func init() {
           "type": "string",
           "enum": [
             "v2",
+            "v2-insecure",
             "v1",
+            "v1-insecure",
             "disable"
           ]
         },
