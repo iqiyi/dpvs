@@ -490,8 +490,20 @@ definitions:
         type: "integer"
         format: "uint8"
       ProxyProto:
+        description: |
+          0  (0x00): disable
+          1  (0x01): v1
+          2  (0x02): v2
+          17 (0x11): v1-insecure
+          18 (0x12): v2-insecure
         type: "integer"
         format: "uint8"
+        enum:
+          - 0
+          - 1
+          - 2
+          - 17
+          - 18
       Port:
         type: "integer"
         format: "uint16"
@@ -586,7 +598,9 @@ definitions:
         type: "string"
         enum:
           - v2
+          - v2-insecure
           - v1
+          - v1-insecure
           - disable
       SchedName:
         type: "string"

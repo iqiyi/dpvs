@@ -371,13 +371,15 @@ static int tcp_in_add_proxy_proto(struct dp_vs_conn *conn, struct rte_mbuf *mbuf
     if (unlikely(EDPVS_OK != proxy_proto_parse(mbuf, offset, &ppinfo)))
         return EDPVS_INVPKT;
 
-    if (ppinfo.datalen > 0 && ppinfo.version == conn->pp_version)
+    if (ppinfo.datalen > 0
+            && ppinfo.version == PROXY_PROTOCOL_VERSION(conn->pp_version)
+            && PROXY_PROTOCOL_IS_INSECURE(conn->pp_version))
         return EDPVS_OK;    // keep intact the orginal proxy protocol data
 
-    if (!ppinfo.datalen) {
+    if (!ppinfo.datalen || !PROXY_PROTOCOL_IS_INSECURE(conn->pp_version)) {
         ppinfo.af = tuplehash_in(conn).af;
         ppinfo.proto = IPPROTO_TCP;
-        ppinfo.version = conn->pp_version;
+        ppinfo.version = PROXY_PROTOCOL_VERSION(conn->pp_version);
         ppinfo.cmd = 1;
         if (AF_INET == ppinfo.af) {
             ppinfo.addr.ip4.src_addr = conn->caddr.in.s_addr;
@@ -828,8 +830,8 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
         tcp_in_remove_ts(th);
 
         tcp_in_init_seq(conn, mbuf, th);
-        if (PROXY_PROTOCOL_V1 != conn->pp_version &&
-                PROXY_PROTOCOL_V2 != conn->pp_version) {
+        if (PROXY_PROTOCOL_V1 != PROXY_PROTOCOL_VERSION(conn->pp_version)
+                && PROXY_PROTOCOL_V2 != PROXY_PROTOCOL_VERSION(conn->pp_version)) {
             if (unlikely(tcp_in_add_toa(conn, mbuf, th) != EDPVS_OK)) {
                 tcp_in_remove_toa(th, iaf);
             }
@@ -839,8 +841,8 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
     /* add toa/proxy_proto to first data packet */
     if (ntohl(th->ack_seq) == conn->fnat_seq.fdata_seq
             && !th->syn && !th->rst /*&& !th->fin*/) {
-        if (PROXY_PROTOCOL_V2 == conn->pp_version ||
-                PROXY_PROTOCOL_V1 == conn->pp_version) {
+        if (PROXY_PROTOCOL_V2 == PROXY_PROTOCOL_VERSION(conn->pp_version)
+                || PROXY_PROTOCOL_V1 == PROXY_PROTOCOL_VERSION(conn->pp_version)) {
             if (conn->fnat_seq.isn - conn->fnat_seq.delta + 1 == ntohl(th->seq)) {
                 /* avoid inserting repetitive ppdata when the first rs ack delayed */
                 err = tcp_in_add_proxy_proto(conn, mbuf, th, iphdrlen, &pp_hdr_shift);

@@ -1709,7 +1709,7 @@ static void usage_exit(const char *program, const int exit_status)
             "  --connection   -c                   output of current IPVS connections\n"
             "  --timeout                           output of timeout (tcp tcpfin udp)\n"
             "  --conn-timeout                      set connection established timeout\n"
-            "  --proxy-protocol                    proxy protocol config (disable|v1|v2)\n"
+            "  --proxy-protocol                    proxy protocol config (disable|v1|v2|v1-insecure|v2-insecure)\n"
             "  --daemon                            output of daemon information\n"
             "  --stats                             output of statistics information\n"
             "  --rate                              output of rate information\n"

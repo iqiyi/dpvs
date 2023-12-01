@@ -61,7 +61,13 @@ type VirtualServerSpecExpand struct {
 	// proto
 	Proto uint8 `json:"Proto,omitempty"`
 
-	// proxy proto
+	// 0  (0x00): disable
+	// 1  (0x01): v1
+	// 2  (0x02): v2
+	// 17 (0x11): v1-insecure
+	// 18 (0x12): v2-insecure
+	//
+	// Enum: [0 1 2 17 18]
 	ProxyProto uint8 `json:"ProxyProto,omitempty"`
 
 	// r ss
@@ -95,6 +101,10 @@ func (m *VirtualServerSpecExpand) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateMatch(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateProxyProto(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -197,6 +207,39 @@ func (m *VirtualServerSpecExpand) validateMatch(formats strfmt.Registry) error {
 			}
 			return err
 		}
+	}
+
+	return nil
+}
+
+var virtualServerSpecExpandTypeProxyProtoPropEnum []interface{}
+
+func init() {
+	var res []uint8
+	if err := json.Unmarshal([]byte(`[0,1,2,17,18]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		virtualServerSpecExpandTypeProxyProtoPropEnum = append(virtualServerSpecExpandTypeProxyProtoPropEnum, v)
+	}
+}
+
+// prop value enum
+func (m *VirtualServerSpecExpand) validateProxyProtoEnum(path, location string, value uint8) error {
+	if err := validate.EnumCase(path, location, value, virtualServerSpecExpandTypeProxyProtoPropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *VirtualServerSpecExpand) validateProxyProto(formats strfmt.Registry) error {
+	if swag.IsZero(m.ProxyProto) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateProxyProtoEnum("ProxyProto", "body", m.ProxyProto); err != nil {
+		return err
 	}
 
 	return nil
