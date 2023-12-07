@@ -305,6 +305,48 @@ static void tcp_in_remove_ts(struct tcphdr *tcph)
     }
 }
 
+/* use NOP option to replace TCP_OLEN_IP4_ADDR and TCP_OLEN_IP6_ADDR opt */
+static void tcp_in_remove_toa(struct tcphdr *tcph, int af)
+{
+    unsigned char *ptr;
+    int len, i;
+    uint32_t tcp_opt_len = af == AF_INET ? TCP_OLEN_IP4_ADDR : TCP_OLEN_IP6_ADDR;
+
+    ptr = (unsigned char *)(tcph + 1);
+    len = (tcph->doff << 2) - sizeof(struct tcphdr);
+
+    while (len > 0) {
+        int opcode = *ptr++;
+        int opsize;
+
+        switch (opcode) {
+        case TCP_OPT_EOL:
+            return;
+        case TCP_OPT_NOP:
+            len--;
+            continue;
+        default:
+            opsize = *ptr++;
+            if (opsize < 2)    /* silly options */
+                return;
+            if (opsize > len)
+                return;    /* partial options */
+            if ((opcode == TCP_OPT_ADDR) && (opsize == tcp_opt_len)) {
+                for (i = 0; i < tcp_opt_len; i++) {
+                    *(ptr - 2 + i) = TCP_OPT_NOP;
+                }
+                /* DON'T RETURN
+                 * keep search other TCP_OPT_ADDR ,and clear them.
+                 * See https://github.com/iqiyi/dpvs/pull/925 for more detail. */
+            }
+
+            ptr += opsize - 2;
+            len -= opsize;
+            break;
+        }
+    }
+}
+
 static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
                           struct tcphdr *tcph)
 {
@@ -705,8 +747,13 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
 {
     struct tcphdr *th;
     /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
-    int af = tuplehash_out(conn).af;
-    int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
+    int iaf, oaf;
+    int iphdrlen;
+
+    iaf = tuplehash_in(conn).af;
+    oaf = tuplehash_out(conn).af;
+
+    iphdrlen = ((AF_INET6 == oaf) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
     if (mbuf_may_pull(mbuf, iphdrlen + sizeof(*th)) != 0)
         return EDPVS_INVPKT;
@@ -729,14 +776,25 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
      */
     if (th->syn && !th->ack) {
         tcp_in_remove_ts(th);
+
         tcp_in_init_seq(conn, mbuf, th);
-        tcp_in_add_toa(conn, mbuf, th);
+
+        /* Only clear when adding TOA fails to reduce invocation frequency and improve performance.
+         * See https://github.com/iqiyi/dpvs/pull/925 for more detail. */
+        if (unlikely(tcp_in_add_toa(conn, mbuf, th) != EDPVS_OK)) {
+            tcp_in_remove_toa(th, iaf);
+        }
     }
 
     /* add toa to first data packet */
     if (ntohl(th->ack_seq) == conn->fnat_seq.fdata_seq
-            && !th->syn && !th->rst /*&& !th->fin*/)
-        tcp_in_add_toa(conn, mbuf, th);
+            && !th->syn && !th->rst /*&& !th->fin*/) {
+        /* Only clear when adding TOA fails to reduce invocation frequency and improve performance.
+         * See https://github.com/iqiyi/dpvs/pull/925 for more detail. */
+        if (unlikely(tcp_in_add_toa(conn, mbuf, th) != EDPVS_OK)) {
+            tcp_in_remove_toa(th, iaf);
+        }
+    }
 
     tcp_in_adjust_seq(conn, th);
 
@@ -745,7 +803,7 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
     th->dest    = conn->dport;
 
 
-    return tcp_send_csum(af, iphdrlen, th, conn, mbuf, conn->in_dev);
+    return tcp_send_csum(oaf, iphdrlen, th, conn, mbuf, conn->in_dev);
 }
 
 static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
