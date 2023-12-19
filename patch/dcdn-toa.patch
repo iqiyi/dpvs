@@ -1,32 +1,31 @@
-From 55e8e5da2b4b0893d36cb3f621bedf9833c4ea50 Mon Sep 17 00:00:00 2001
+From cee6889685240558ebea795615539b7289070842 Mon Sep 17 00:00:00 2001
 From: wangyetong <wangyetong@qiyi.com>
 Date: Thu, 14 Sep 2023 15:33:42 +0800
 Subject: [PATCH] added dcdn toa
 
 ---
- include/ipvs/conn.h        |  5 +++++
+ include/ipvs/conn.h        |  4 ++++
  include/ipvs/proto_tcp.h   |  2 ++
- src/ipvs/ip_vs_proto_tcp.c | 54 +++++++++++++++++++++++++++++++++++++++++++++-
+ src/ipvs/ip_vs_proto_tcp.c | 55 +++++++++++++++++++++++++++++++++++++++++++++-
  3 files changed, 60 insertions(+), 1 deletion(-)
 
 diff --git a/include/ipvs/conn.h b/include/ipvs/conn.h
-index fa0bdeb..88dcb44 100644
+index 843721e..78fb0ba 100644
 --- a/include/ipvs/conn.h
 +++ b/include/ipvs/conn.h
-@@ -166,6 +166,11 @@ struct dp_vs_conn {
-     /* flag for gfwip */
-     bool outwall;
+@@ -167,6 +167,10 @@ struct dp_vs_conn {
+     /* connection redirect in fnat/snat/nat modes */
+     struct dp_vs_redirect  *redirect;
  
 +    /* dcdn toa found or not */
 +    bool dcdn_found;
 +    /* dcdn toa address */
 +    struct in_addr    dcdn_addr;
-+
  } __rte_cache_aligned;
  
  /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
 diff --git a/include/ipvs/proto_tcp.h b/include/ipvs/proto_tcp.h
-index 9f5162a..41d5646 100644
+index 3d1515a..f0cf50c 100644
 --- a/include/ipvs/proto_tcp.h
 +++ b/include/ipvs/proto_tcp.h
 @@ -28,6 +28,7 @@ enum {
@@ -46,11 +45,11 @@ index 9f5162a..41d5646 100644
  #define TCP_OLEN_TSTAMP_ALIGNED     12
  #define TCP_OLEN_SACK_BASE          2
 diff --git a/src/ipvs/ip_vs_proto_tcp.c b/src/ipvs/ip_vs_proto_tcp.c
-index cbb7cb2..2cd889a 100644
+index 6acbbca..5b185fa 100644
 --- a/src/ipvs/ip_vs_proto_tcp.c
 +++ b/src/ipvs/ip_vs_proto_tcp.c
-@@ -305,6 +305,43 @@ static void tcp_in_remove_ts(struct tcphdr *tcph)
-     }
+@@ -441,6 +441,43 @@ static int tcp_in_add_proxy_proto(struct dp_vs_conn *conn, struct rte_mbuf *mbuf
+     return proxy_proto_insert(&ppinfo, conn, mbuf, tcph, hdr_shift);
  }
  
 +/* check dcdn toa option */
@@ -90,10 +89,10 @@ index cbb7cb2..2cd889a 100644
 +    return EDPVS_NOTEXIST;
 +}
 +
- static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+ static int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
                            struct tcphdr *tcph)
  {
-@@ -382,7 +419,10 @@ static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+@@ -518,7 +555,10 @@ static int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
  
      if (conn->af == AF_INET) {
          struct tcpopt_ip4_addr *toa_ip4 = (struct tcpopt_ip4_addr *)(tcph + 1);
@@ -105,21 +104,18 @@ index cbb7cb2..2cd889a 100644
      }
      else {
          struct tcpopt_ip6_addr *toa_ip6 = (struct tcpopt_ip6_addr *)(tcph + 1);
-@@ -694,9 +734,13 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
-                         struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
- {
-     struct tcphdr *th;
+@@ -842,6 +882,10 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
+     int af;             /* outbound af */
+     int iphdrlen;
+     int err, pp_hdr_shift = 0;
 +    struct in_addr dcdn_addr;
-     /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
-     int af = tuplehash_out(conn).af;
-     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 +#ifdef CONFIG_DPVS_IPVS_DEBUG
 +    char dcdn_buf[64];
 +#endif
  
-     if (mbuf_may_pull(mbuf, iphdrlen + sizeof(*th)) != 0)
-         return EDPVS_INVPKT;
-@@ -720,6 +764,14 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
+     af = tuplehash_out(conn).af;
+     iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
+@@ -866,6 +910,15 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
      if (th->syn && !th->ack) {
          tcp_in_remove_ts(th);
          tcp_in_init_seq(conn, mbuf, th);
@@ -131,9 +127,10 @@ index cbb7cb2..2cd889a 100644
 +            RTE_LOG(DEBUG, IPVS, "get dcdn toa addr %s\n", dcdn_buf);
 +#endif
 +        }
-         tcp_in_add_toa(conn, mbuf, th);
++        tcp_in_add_toa(conn, mbuf, th);
      }
  
+     /* Add toa/proxy_protocol to the first data packet */
 -- 
 1.8.3.1
 
