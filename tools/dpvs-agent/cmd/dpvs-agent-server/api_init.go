@@ -17,8 +17,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/dpvs-agent/cmd/device"
 	"github.com/dpvs-agent/cmd/ipvs"
 	"github.com/dpvs-agent/pkg/ipc/pool"
+	"github.com/dpvs-agent/pkg/settings"
 	"github.com/dpvs-agent/restapi"
 	"github.com/dpvs-agent/restapi/operations"
 )
@@ -37,7 +40,9 @@ var (
 )
 
 type DpvsAgentServer struct {
+	InitMode      string `long:"init-mode" description:"load service from network or local config file. the options is [network|local]" default:"network"`
 	LogDir        string `long:"log-dir" description:"default log dir is /var/log/ And log name dpvs-agent.log" default:"/var/log/"`
+	CacheFile     string `long:"cache-file" description:"a file path which used to dump the running dpvs active virtual service. we can load it while init by *local* mode and resume dpvs enviroment. if the file path is not specified, there is named with 'dpvs.cache' and store in 'conf.d' which is a subdir of 'LogDir' point to." default:""`
 	IpcSocketPath string `long:"ipc-sockopt-path" description:"default ipc socket path /var/run/dpvs.ipc" default:"/var/run/dpvs.ipc"`
 	restapi.Server
 }
@@ -63,6 +68,64 @@ func unixDialer(ctx context.Context) (net.Conn, error) {
 		}
 	}
 	return nil, errors.New("unknown error")
+}
+
+func validFile(fileName string) error {
+	filePath := fileName[:strings.LastIndex(fileName, "/")]
+	pathInfo, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = os.MkdirAll(filePath, os.ModePerm)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+		return err
+	}
+
+	if !pathInfo.IsDir() {
+		return errors.New(fmt.Sprintf("%s is file", pathInfo.Name()))
+	}
+
+	fileInfo, err := os.Stat(fileName)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	if fileInfo.IsDir() {
+		return errors.New(fmt.Sprintf("%s is dir", fileInfo.Name()))
+	}
+
+	return nil
+}
+
+func getFilePath(baseDir, defaultSubdir, targetFile, defaultName string) string {
+	if len(targetFile) == 0 || strings.EqualFold(targetFile, "/") {
+		return filepath.Join(baseDir, defaultSubdir, defaultName)
+	} else {
+		if strings.HasPrefix(targetFile, "/") {
+			if strings.HasSuffix(targetFile, "/") {
+				return filepath.Join(targetFile, defaultName)
+			} else {
+				return targetFile
+			}
+		} else {
+			if strings.Count(targetFile, "/") == 0 {
+				return filepath.Join(baseDir, defaultSubdir, targetFile)
+			} else {
+				if strings.HasSuffix(targetFile, "/") {
+					return filepath.Join(baseDir, targetFile, defaultName)
+				} else {
+					return filepath.Join(baseDir, targetFile)
+				}
+			}
+		}
+	}
+	return targetFile
 }
 
 func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
@@ -93,12 +156,17 @@ func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
 		}
 	}
 
-	sep := "/"
-	if strings.HasSuffix(logDir, "/") {
-		sep = ""
+	cacheFile := getFilePath(logDir, "conf.d", agent.CacheFile, "dpvs.cache")
+	if err := validFile(cacheFile); err != nil {
+		panic(err)
 	}
+	appConf := settings.ShareAppConfig()
+	appConf.CacheFile = cacheFile
 
-	logFile := strings.Join([]string{logDir, "dpvs-agent.log"}, sep)
+	logFile := getFilePath(logDir, ".", "", "dpvs-agent.log")
+	if err := validFile(logFile); err != nil {
+		panic(err)
+	}
 	// logOpt := &hclog.LoggerOptions{Name: logFile}
 	var logOpt *hclog.LoggerOptions
 	logFileNamePattern := strings.Join([]string{logFile, "%Y%m%d%H%M"}, "-")
@@ -109,7 +177,6 @@ func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
 		rotatelogs.WithLinkName(logFile),
 		rotatelogs.WithRotationTime(logRotationInterval),
 	)
-	// f, err := os.Create(logFile)
 	if err == nil {
 		logOpt = &hclog.LoggerOptions{Name: logFile, Output: logF}
 	} else {
@@ -136,6 +203,7 @@ func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
 	restAPI.VirtualserverPutVsVipPortHandler = ipvs.NewPutVsItem(cp, logger)
 	restAPI.VirtualserverPutVsVipPortLaddrHandler = ipvs.NewPutVsLaddr(cp, logger)
 	restAPI.VirtualserverPutVsVipPortRsHandler = ipvs.NewPutVsRs(cp, logger)
+	restAPI.VirtualserverPutVsVipPortRsHealthHandler = ipvs.NewPutVsRsHealth(cp, logger)
 	restAPI.VirtualserverPutVsVipPortDenyHandler = ipvs.NewPutVsDeny(cp, logger)
 	restAPI.VirtualserverPutVsVipPortAllowHandler = ipvs.NewPutVsAllow(cp, logger)
 
@@ -161,6 +229,13 @@ func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
 	restAPI.DeviceDeleteDeviceNameRouteHandler = device.NewDelDeviceRoute(cp, logger)
 	restAPI.DeviceDeleteDeviceNameVlanHandler = device.NewDelDeviceVlan(cp, logger)
 	restAPI.DeviceDeleteDeviceNameNetlinkAddrHandler = device.NewDelDeviceNetlinkAddr(cp, logger)
+
+	switch strings.ToLower(agent.InitMode) {
+	case "network":
+	case "local":
+		agent.Host = "127.0.0.1"
+		agent.LocalLoad(cp, logger)
+	}
 }
 
 func (agent *DpvsAgentServer) InstantiateServer(api *operations.DpvsAgentAPI) *restapi.Server {

@@ -15,6 +15,7 @@
 package device
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"github.com/dpvs-agent/pkg/ipc/pool"
+	"github.com/dpvs-agent/pkg/settings"
 	apiDevice "github.com/dpvs-agent/restapi/operations/device"
 
 	"github.com/go-openapi/runtime/middleware"
@@ -44,43 +46,54 @@ func NewPutDeviceNetlinkAddr(cp *pool.ConnPool, parentLogger hclog.Logger) *putD
 // ip addr add 10.0.0.1/32 dev eth0
 func (h *putDeviceNetlinkAddr) Handle(params apiDevice.PutDeviceNameNetlinkAddrParams) middleware.Responder {
 	// h.logger.Info("/v2/device/", params.Name, "/netlink/addr ", params.Spec.Addr)
+	if err := NetlinkAddrAdd(params.Spec.Addr, params.Name, h.logger); err != nil {
+		return apiDevice.NewPutDeviceNameNetlinkAddrInternalServerError()
+	}
+	if params.Snapshot != nil && *params.Snapshot {
+		AnnouncePort := settings.ShareSnapshot().NodeSpec.AnnouncePort
+		AnnouncePort.Switch = params.Name
+	}
+	return apiDevice.NewPutDeviceNameNetlinkAddrOK()
+}
+
+func NetlinkAddrAdd(addr, device string, logger hclog.Logger) error {
 	var cidr string
-	if strings.Count(params.Spec.Addr, "/") == 0 {
-		ip := net.ParseIP(params.Spec.Addr)
+	if strings.Count(addr, "/") == 0 {
+		ip := net.ParseIP(addr)
 		if ip == nil {
-			h.logger.Info("Parse IP failed.", "Addr", params.Spec.Addr)
-			return apiDevice.NewPutDeviceNameNetlinkAddrInternalServerError()
+			logger.Info("Parse IP failed.", "Addr", addr)
+			return errors.New("Parse IP Failed.")
 		}
 		if ip.To4() != nil {
-			cidr = params.Spec.Addr + "/32"
+			cidr = addr + "/32"
 		} else {
-			cidr = params.Spec.Addr + "/128"
+			cidr = addr + "/128"
 		}
 	} else {
-		cidr = params.Spec.Addr
+		cidr = addr
 	}
 
 	ip, ipnet, err := net.ParseCIDR(cidr)
 	if err != nil {
-		h.logger.Error("Parse CIDR failed.", "cidr", cidr, "Error", err.Error())
-		return apiDevice.NewPutDeviceNameNetlinkAddrInternalServerError()
+		logger.Error("Parse CIDR failed.", "cidr", cidr, "Error", err.Error())
+		return err
 	}
 
 	ipnet.IP = ip
-	addr := &netlink.Addr{IPNet: ipnet}
+	netlinkAddr := &netlink.Addr{IPNet: ipnet}
 
-	link, err := netlink.LinkByName(params.Name)
+	link, err := netlink.LinkByName(device)
 	if err != nil {
-		h.logger.Error("netlink.LinkByName() failed.", "Device Name", params.Name, "Error", err.Error())
-		return apiDevice.NewPutDeviceNameNetlinkAddrInternalServerError()
+		logger.Error("netlink.LinkByName() failed.", "device", device, "Error", err.Error())
+		return err
 	}
 
-	if err := netlink.AddrAdd(link, addr); err != nil {
-		h.logger.Error("netlink.AddrAdd() failed.", "Error", err.Error())
-		return apiDevice.NewPutDeviceNameNetlinkAddrInternalServerError()
+	if err := netlink.AddrAdd(link, netlinkAddr); err != nil {
+		logger.Error("netlink.AddrAdd() failed.", "Error", err.Error())
+		return err
 	}
 
-	cmd := fmt.Sprintf("ip addr add %s dev %s", cidr, params.Name)
-	h.logger.Info("Device add Addr success.", "cmd", cmd)
-	return apiDevice.NewPutDeviceNameNetlinkAddrOK()
+	cmd := fmt.Sprintf("ip addr add %s dev %s", cidr, device)
+	logger.Info("Device add Addr success.", "cmd", cmd)
+	return nil
 }

@@ -17,9 +17,9 @@ package ipvs
 import (
 	"strings"
 
-	// "github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 	"golang.org/x/sys/unix"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
@@ -90,6 +90,7 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 	switch result {
 	case types.EDPVS_OK:
 		// return 201
+		settings.ShareSnapshot().ServiceAdd(vs)
 		h.logger.Info("Created new virtual server success.", "VipPort", params.VipPort)
 		return apiVs.NewPutVsVipPortCreated()
 	case types.EDPVS_EXIST:

@@ -12,17 +12,25 @@ import (
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/swag"
 	"github.com/go-openapi/validate"
 
 	"github.com/dpvs-agent/models"
 )
 
 // NewPutVsVipPortLaddrParams creates a new PutVsVipPortLaddrParams object
-//
-// There are no default values defined in the spec.
+// with the default values initialized.
 func NewPutVsVipPortLaddrParams() PutVsVipPortLaddrParams {
 
-	return PutVsVipPortLaddrParams{}
+	var (
+		// initialize parameters with default values
+
+		snapshotDefault = bool(true)
+	)
+
+	return PutVsVipPortLaddrParams{
+		Snapshot: &snapshotDefault,
+	}
 }
 
 // PutVsVipPortLaddrParams contains all the bound params for the put vs vip port laddr operation
@@ -40,6 +48,11 @@ type PutVsVipPortLaddrParams struct {
 	*/
 	VipPort string
 	/*
+	  In: query
+	  Default: true
+	*/
+	Snapshot *bool
+	/*
 	  In: body
 	*/
 	Spec *models.LocalAddressSpecTiny
@@ -54,8 +67,15 @@ func (o *PutVsVipPortLaddrParams) BindRequest(r *http.Request, route *middleware
 
 	o.HTTPRequest = r
 
+	qs := runtime.Values(r.URL.Query())
+
 	rVipPort, rhkVipPort, _ := route.Params.GetOK("VipPort")
 	if err := o.bindVipPort(rVipPort, rhkVipPort, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
+	qSnapshot, qhkSnapshot, _ := qs.GetOK("snapshot")
+	if err := o.bindSnapshot(qSnapshot, qhkSnapshot, route.Formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -96,6 +116,30 @@ func (o *PutVsVipPortLaddrParams) bindVipPort(rawData []string, hasKey bool, for
 	// Required: true
 	// Parameter is provided by construction from the route
 	o.VipPort = raw
+
+	return nil
+}
+
+// bindSnapshot binds and validates parameter Snapshot from query.
+func (o *PutVsVipPortLaddrParams) bindSnapshot(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+	// AllowEmptyValue: false
+
+	if raw == "" { // empty values pass all other validations
+		// Default values have been previously initialized by NewPutVsVipPortLaddrParams()
+		return nil
+	}
+
+	value, err := swag.ConvertBool(raw)
+	if err != nil {
+		return errors.InvalidType("snapshot", "query", "bool", raw)
+	}
+	o.Snapshot = &value
 
 	return nil
 }

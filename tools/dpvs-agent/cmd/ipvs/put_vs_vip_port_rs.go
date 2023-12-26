@@ -62,12 +62,8 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 		}
 	}
 
-	healthCheck := false
-	if params.Healthcheck != nil {
-		healthCheck = *params.Healthcheck
-	}
-
-	result := front.Edit(healthCheck, rss, h.connPool, h.logger)
+	existOnly := false
+	result := front.Edit(existOnly, rss, h.connPool, h.logger)
 
 	// h.logger.Info("Set real server sets done.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
 	switch result {
@@ -75,10 +71,6 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 		h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
 		return apiVs.NewPutVsVipPortRsOK()
 	case types.EDPVS_NOTEXIST:
-		if healthCheck {
-			h.logger.Error("Edit not exist real server.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
-			return apiVs.NewPutVsVipPortRsInvalidFrontend()
-		}
 		h.logger.Error("Unreachable branch")
 	default:
 		h.logger.Error("Set real server sets failed.", "VipPort", params.VipPort, "rss", rss, "result", result.String())

@@ -100,6 +100,12 @@ parameters:
     type: boolean
     default: false
     required: false
+  snapshot:
+    name: snapshot
+    in: query
+    type: boolean
+    default: true
+    required: false
   stats:
     name: stats
     in: query
@@ -148,7 +154,33 @@ parameters:
     - off
     default: unset
     required: false
+  version:
+    name: version
+    in: query
+    type: string
+    required: true
 definitions:
+  NodeServiceSnapshot:
+    type: object
+    properties:
+      NodeSpec:
+        "$ref": "#/definitions/DpvsNodeSpec"
+      Services:
+        "$ref": "#/definitions/VirtualServerList"
+  DpvsNodeSpec:
+    type: object
+    properties:
+      AnnouncePort:
+        "$ref": "#/definitions/VsAnnouncePort"
+      Laddrs:
+        "$ref": "#/definitions/LocalAddressExpandList"
+  VsAnnouncePort:
+    type: object
+    properties:
+      switch:
+        type: string
+      dpvs:
+        type: string
   CertAuthSpec:
     properties:
       addr:
@@ -472,7 +504,6 @@ definitions:
       - tcp
       - udp
       - ping
-
   VirtualServerList:
     type: object
     properties:
@@ -539,6 +570,8 @@ definitions:
         format: "uint32"
       Addr:
         type: "string"
+      Version:
+        type: "string"
       SchedName:
         type: "string"
         enum:
@@ -559,18 +592,9 @@ definitions:
   VirtualServerSpecTiny:
     type: "object"
     properties:
-      #Af:
-      #  type: "integer"
-      #  format: "uint16"
-      #Port:
-      #  type: "integer"
-      #  format: "uint16"
       Fwmark:
         type: "integer"
         format: "uint32"
-      #Flags:
-      #  type: "integer"
-      #  format: "uint32"
       SynProxy:
         type: "boolean"
         default: false
@@ -583,9 +607,6 @@ definitions:
       ConnTimeout:
         type: "integer"
         format: "uint32"
-      #Netmask:
-      #  type: "integer"
-      #  format: "uint32"
       Bps:
         type: "integer"
         format: "uint32"
@@ -647,6 +668,7 @@ paths:
       tags:
       - "device"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/sapool"
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/device-addr"
@@ -803,6 +825,7 @@ paths:
       tags:
       - "device"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/device-addr"
       summary: "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device"
@@ -846,7 +869,6 @@ paths:
         '200':
           description: Success
           schema:
-            #type: string
             "$ref":  "#/definitions/NicDeviceSpecList"
         '500':
           description: Failure
@@ -925,19 +947,19 @@ paths:
       - "virtualserver"
       parameters:
         - "$ref": "#/parameters/stats"
+        - "$ref": "#/parameters/snapshot"
       summary: "display all vip:port:proto and rsip:port list"
       responses:
         '200':
           description: Success
           schema:
             "$ref": "#/definitions/VirtualServerList"
-          #  items:
-          #    "$ref": "#/definitions/VirtualServer"
   /vs/{VipPort}:
     get:
       tags:
       - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/stats"
       summary: "get a specific virtual server"
@@ -945,8 +967,6 @@ paths:
         '200':
           description: Success
           schema:
-          #  type: string
-          #  items:
             "$ref": "#/definitions/VirtualServerList"
         '404':
           description: Service not found  
@@ -977,6 +997,7 @@ paths:
       tags:
         - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/vs-config"
       responses:
@@ -1008,7 +1029,7 @@ paths:
       tags:
       - "virtualserver"
       parameters:
-        #- "$ref": "#/parameters/realserver-id"
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/stats"
       responses:
@@ -1016,9 +1037,6 @@ paths:
           description: Success
           schema:
             "$ref": "#/definitions/LocalAddressExpandList"
-            #type: string
-            #items:
-            #  "$ref": "#/definitions/VirtualServer"
         '404':
           description: Service not found
           schema:
@@ -1027,6 +1045,7 @@ paths:
       tags:
       - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/laddr-config"
       responses:
@@ -1079,12 +1098,46 @@ paths:
           x-go-name: Failure
           schema:
             "$ref": "#/definitions/Error"
+  /vs/{VipPort}/rs/health:
+    put:
+      summary: "dpvs healthcheck update rs weight"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/version"
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/rss-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            "$ref": "#/definitions/RealServerExpandList"
+        '270':
+          description: "the rss-config parameter is outdated, update nothing and return the latest rs info"
+          x-go-name: Unexpected
+          schema:
+            "$ref": "#/definitions/RealServerExpandList"
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
   /vs/{VipPort}/rs:
     get:
       tags:
       - "virtualserver"
       parameters:
-        #- "$ref": "#/parameters/realserver-id"
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/stats"
       responses:
@@ -1092,8 +1145,6 @@ paths:
           description: Success
           schema:
             type: string
-            #items:
-            #  "$ref": "#/definitions/VirtualServer"
         '404':
           description: Service not found  
           schema:
@@ -1134,7 +1185,6 @@ paths:
       parameters:
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/rss-config"
-        - "$ref": "#/parameters/healthcheck"
       responses:
         '200':
           description: Success
@@ -1164,6 +1214,7 @@ paths:
       tags:
         - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/rss-config"
       responses:
@@ -1195,15 +1246,12 @@ paths:
       tags:
       - "virtualserver"
       parameters:
-        #- "$ref": "#/parameters/realserver-id"
         - "$ref": "#/parameters/service-id"
       responses:
         '200':
           description: Success
           schema:
             type: string
-            #items:
-            #  "$ref": "#/definitions/VirtualServer"
         '404':
           description: Service not found  
           schema:
@@ -1304,15 +1352,12 @@ paths:
       tags:
       - "virtualserver"
       parameters:
-        #- "$ref": "#/parameters/realserver-id"
         - "$ref": "#/parameters/service-id"
       responses:
         '200':
           description: Success
           schema:
             type: string
-            #items:
-            #  "$ref": "#/definitions/VirtualServer"
         '404':
           description: Service not found  
           schema:

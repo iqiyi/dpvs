@@ -90,6 +90,9 @@ func init() {
         "summary": "add/update special net device ip addr",
         "parameters": [
           {
+            "$ref": "#/parameters/snapshot"
+          },
+          {
             "$ref": "#/parameters/sapool"
           },
           {
@@ -267,6 +270,9 @@ func init() {
         ],
         "summary": "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device",
         "parameters": [
+          {
+            "$ref": "#/parameters/snapshot"
+          },
           {
             "$ref": "#/parameters/device-name"
           },
@@ -569,6 +575,9 @@ func init() {
         "parameters": [
           {
             "$ref": "#/parameters/stats"
+          },
+          {
+            "$ref": "#/parameters/snapshot"
           }
         ],
         "responses": {
@@ -588,6 +597,9 @@ func init() {
         ],
         "summary": "get a specific virtual server",
         "parameters": [
+          {
+            "$ref": "#/parameters/snapshot"
+          },
           {
             "$ref": "#/parameters/service-id"
           },
@@ -616,6 +628,9 @@ func init() {
         ],
         "summary": "create or update virtual server",
         "parameters": [
+          {
+            "$ref": "#/parameters/snapshot"
+          },
           {
             "$ref": "#/parameters/service-id"
           },
@@ -1039,6 +1054,9 @@ func init() {
         ],
         "parameters": [
           {
+            "$ref": "#/parameters/snapshot"
+          },
+          {
             "$ref": "#/parameters/service-id"
           },
           {
@@ -1065,6 +1083,9 @@ func init() {
           "virtualserver"
         ],
         "parameters": [
+          {
+            "$ref": "#/parameters/snapshot"
+          },
           {
             "$ref": "#/parameters/service-id"
           },
@@ -1158,6 +1179,9 @@ func init() {
         ],
         "parameters": [
           {
+            "$ref": "#/parameters/snapshot"
+          },
+          {
             "$ref": "#/parameters/service-id"
           },
           {
@@ -1190,9 +1214,6 @@ func init() {
           },
           {
             "$ref": "#/parameters/rss-config"
-          },
-          {
-            "$ref": "#/parameters/healthcheck"
           }
         ],
         "responses": {
@@ -1237,6 +1258,9 @@ func init() {
         ],
         "summary": "Update fully real server list to vip:port:proto",
         "parameters": [
+          {
+            "$ref": "#/parameters/snapshot"
+          },
           {
             "$ref": "#/parameters/service-id"
           },
@@ -1326,6 +1350,61 @@ func init() {
           }
         }
       }
+    },
+    "/vs/{VipPort}/rs/health": {
+      "put": {
+        "tags": [
+          "virtualserver"
+        ],
+        "summary": "dpvs healthcheck update rs weight",
+        "parameters": [
+          {
+            "$ref": "#/parameters/version"
+          },
+          {
+            "$ref": "#/parameters/service-id"
+          },
+          {
+            "$ref": "#/parameters/rss-config"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RealServerExpandList"
+            }
+          },
+          "270": {
+            "description": "the rss-config parameter is outdated, update nothing and return the latest rs info",
+            "schema": {
+              "$ref": "#/definitions/RealServerExpandList"
+            },
+            "x-go-name": "Unexpected"
+          },
+          "460": {
+            "description": "Invalid frontend in service configuration",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "InvalidFrontend"
+          },
+          "461": {
+            "description": "Invalid backend in service configuration",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "InvalidBackend"
+          },
+          "500": {
+            "description": "Service deletion failed",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -1366,6 +1445,17 @@ func init() {
         "udp",
         "ping"
       ]
+    },
+    "DpvsNodeSpec": {
+      "type": "object",
+      "properties": {
+        "AnnouncePort": {
+          "$ref": "#/definitions/VsAnnouncePort"
+        },
+        "Laddrs": {
+          "$ref": "#/definitions/LocalAddressExpandList"
+        }
+      }
     },
     "Error": {
       "type": "string"
@@ -1615,6 +1705,17 @@ func init() {
         "rxNoMbuf": {
           "type": "integer",
           "format": "uint64"
+        }
+      }
+    },
+    "NodeServiceSnapshot": {
+      "type": "object",
+      "properties": {
+        "NodeSpec": {
+          "$ref": "#/definitions/DpvsNodeSpec"
+        },
+        "Services": {
+          "$ref": "#/definitions/VirtualServerList"
         }
       }
     },
@@ -1887,6 +1988,9 @@ func init() {
         "Timeout": {
           "type": "integer",
           "format": "uint32"
+        },
+        "Version": {
+          "type": "string"
         }
       }
     },
@@ -1954,6 +2058,17 @@ func init() {
           "type": "string"
         },
         "name": {
+          "type": "string"
+        }
+      }
+    },
+    "VsAnnouncePort": {
+      "type": "object",
+      "properties": {
+        "dpvs": {
+          "type": "string"
+        },
+        "switch": {
           "type": "string"
         }
       }
@@ -2065,6 +2180,12 @@ func init() {
       "in": "path",
       "required": true
     },
+    "snapshot": {
+      "type": "boolean",
+      "default": true,
+      "name": "snapshot",
+      "in": "query"
+    },
     "stats": {
       "type": "boolean",
       "default": false,
@@ -2076,6 +2197,12 @@ func init() {
       "default": false,
       "name": "verbose",
       "in": "query"
+    },
+    "version": {
+      "type": "string",
+      "name": "version",
+      "in": "query",
+      "required": true
     },
     "vlan-config": {
       "name": "spec",
@@ -2211,6 +2338,12 @@ func init() {
         ],
         "summary": "add/update special net device ip addr",
         "parameters": [
+          {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
+          },
           {
             "type": "boolean",
             "default": false,
@@ -2427,6 +2560,12 @@ func init() {
         ],
         "summary": "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device",
         "parameters": [
+          {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
+          },
           {
             "type": "string",
             "name": "name",
@@ -2818,6 +2957,12 @@ func init() {
             "default": false,
             "name": "stats",
             "in": "query"
+          },
+          {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
           }
         ],
         "responses": {
@@ -2837,6 +2982,12 @@ func init() {
         ],
         "summary": "get a specific virtual server",
         "parameters": [
+          {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
+          },
           {
             "type": "string",
             "name": "VipPort",
@@ -2871,6 +3022,12 @@ func init() {
         ],
         "summary": "create or update virtual server",
         "parameters": [
+          {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
+          },
           {
             "type": "string",
             "name": "VipPort",
@@ -3352,6 +3509,12 @@ func init() {
         ],
         "parameters": [
           {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
+          },
+          {
             "type": "string",
             "name": "VipPort",
             "in": "path",
@@ -3384,6 +3547,12 @@ func init() {
           "virtualserver"
         ],
         "parameters": [
+          {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
+          },
           {
             "type": "string",
             "name": "VipPort",
@@ -3491,6 +3660,12 @@ func init() {
         ],
         "parameters": [
           {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
+          },
+          {
             "type": "string",
             "name": "VipPort",
             "in": "path",
@@ -3536,12 +3711,6 @@ func init() {
             "schema": {
               "$ref": "#/definitions/RealServerTinyList"
             }
-          },
-          {
-            "type": "boolean",
-            "default": false,
-            "name": "healthcheck",
-            "in": "query"
           }
         ],
         "responses": {
@@ -3586,6 +3755,12 @@ func init() {
         ],
         "summary": "Update fully real server list to vip:port:proto",
         "parameters": [
+          {
+            "type": "boolean",
+            "default": true,
+            "name": "snapshot",
+            "in": "query"
+          },
           {
             "type": "string",
             "name": "VipPort",
@@ -3689,6 +3864,71 @@ func init() {
           }
         }
       }
+    },
+    "/vs/{VipPort}/rs/health": {
+      "put": {
+        "tags": [
+          "virtualserver"
+        ],
+        "summary": "dpvs healthcheck update rs weight",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "version",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "name": "VipPort",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "rss",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/RealServerTinyList"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/RealServerExpandList"
+            }
+          },
+          "270": {
+            "description": "the rss-config parameter is outdated, update nothing and return the latest rs info",
+            "schema": {
+              "$ref": "#/definitions/RealServerExpandList"
+            },
+            "x-go-name": "Unexpected"
+          },
+          "460": {
+            "description": "Invalid frontend in service configuration",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "InvalidFrontend"
+          },
+          "461": {
+            "description": "Invalid backend in service configuration",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "InvalidBackend"
+          },
+          "500": {
+            "description": "Service deletion failed",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -3729,6 +3969,17 @@ func init() {
         "udp",
         "ping"
       ]
+    },
+    "DpvsNodeSpec": {
+      "type": "object",
+      "properties": {
+        "AnnouncePort": {
+          "$ref": "#/definitions/VsAnnouncePort"
+        },
+        "Laddrs": {
+          "$ref": "#/definitions/LocalAddressExpandList"
+        }
+      }
     },
     "Error": {
       "type": "string"
@@ -3978,6 +4229,17 @@ func init() {
         "rxNoMbuf": {
           "type": "integer",
           "format": "uint64"
+        }
+      }
+    },
+    "NodeServiceSnapshot": {
+      "type": "object",
+      "properties": {
+        "NodeSpec": {
+          "$ref": "#/definitions/DpvsNodeSpec"
+        },
+        "Services": {
+          "$ref": "#/definitions/VirtualServerList"
         }
       }
     },
@@ -4250,6 +4512,9 @@ func init() {
         "Timeout": {
           "type": "integer",
           "format": "uint32"
+        },
+        "Version": {
+          "type": "string"
         }
       }
     },
@@ -4317,6 +4582,17 @@ func init() {
           "type": "string"
         },
         "name": {
+          "type": "string"
+        }
+      }
+    },
+    "VsAnnouncePort": {
+      "type": "object",
+      "properties": {
+        "dpvs": {
+          "type": "string"
+        },
+        "switch": {
           "type": "string"
         }
       }
@@ -4428,6 +4704,12 @@ func init() {
       "in": "path",
       "required": true
     },
+    "snapshot": {
+      "type": "boolean",
+      "default": true,
+      "name": "snapshot",
+      "in": "query"
+    },
     "stats": {
       "type": "boolean",
       "default": false,
@@ -4439,6 +4721,12 @@ func init() {
       "default": false,
       "name": "verbose",
       "in": "query"
+    },
+    "version": {
+      "type": "string",
+      "name": "version",
+      "in": "query",
+      "required": true
     },
     "vlan-config": {
       "name": "spec",
