@@ -18,7 +18,6 @@
 #ifndef __DPVS_DEST_CONF_H__
 #define __DPVS_DEST_CONF_H__
 
-#include "conf/service.h"
 #include "conf/match.h"
 #include "conf/conn.h"
 
@@ -37,8 +36,9 @@ enum dpvs_fwd_mode {
 };
 
 enum {
-    DPVS_DEST_F_AVAILABLE       = 0x1<<0,
-    DPVS_DEST_F_OVERLOAD        = 0x1<<1,
+    DPVS_DEST_F_AVAILABLE   = 0x1<<0, // dest removed
+    DPVS_DEST_F_OVERLOAD    = 0x1<<1, // too many conns
+    DPVS_DEST_F_INHIBITED   = 0x1<<2, // dest forwarding failure
 };
 
 typedef struct dp_vs_dest_compat {
@@ -46,31 +46,25 @@ typedef struct dp_vs_dest_compat {
     int                af;
     uint16_t           port;
     uint16_t           proto;
-    uint32_t           weight;     /* destination weight */
+    uint32_t           weight;       /* destination weight */
     union inet_addr    addr;
 
-    unsigned           conn_flags;    /* connection flags */
+    uint16_t           conn_flags;   /* flags passed on to connections */
+    uint16_t           flags;        /* dest flags */
 
     enum dpvs_fwd_mode fwdmode;
     /* real server options */
 
     /* thresholds for active connections */
-    uint32_t           max_conn;    /* upper threshold */
-    uint32_t           min_conn;    /* lower threshold */
+    uint32_t           max_conn;     /* upper threshold */
+    uint32_t           min_conn;     /* lower threshold */
 
-    uint32_t           actconns;  /* active connections */
+    uint32_t           actconns;     /* active connections */
     uint32_t           inactconns;   /* inactive connections */
     uint32_t           persistconns; /* persistent connections */
 
     /* statistics */
     struct dp_vs_stats stats;
-#ifdef _HAVE_IPVS_TUN_TYPE_
-    int                     tun_type;
-    int                     tun_port;
-#ifdef _HAVE_IPVS_TUN_CSUM_
-    int                     tun_flags;
-#endif
-#endif
 } dpvs_dest_compat_t;
 
 typedef struct dp_vs_dest_table {
@@ -93,5 +87,20 @@ typedef struct dp_vs_dest_table {
 #define  dp_vs_get_dests  dp_vs_dest_table
 #define  dp_vs_dest_entry dp_vs_dest_compat
 #define  dp_vs_dest_conf  dp_vs_dest_compat
+
+#ifdef CONFIG_DPVS_AGENT
+typedef struct dp_vs_dest_front {
+    uint32_t           af;
+    uint16_t           proto;
+    uint16_t           port;
+    uint32_t           fwmark;
+    union inet_addr    addr;
+    unsigned int       num_dests;
+    struct dp_vs_match match;
+    uint32_t           cid;
+    uint32_t           index;
+} dpvs_dest_front_t;
+#define  dp_vs_dest_detail dp_vs_dest_compat
+#endif
 
 #endif /* __DPVS_DEST_CONF_H__ */

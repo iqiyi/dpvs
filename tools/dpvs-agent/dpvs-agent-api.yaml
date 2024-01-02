@@ -1,0 +1,1410 @@
+# Copyright 2023 IQiYi Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+swagger: "2.0"
+info: 
+  description: "dpvs agent api"
+  version: "1.0.0"
+  title: "dpvs agent"
+host: "petstore.swagger.io"
+basePath: "/v2"
+tags:
+- name: "virtualserver"
+  description: "virtualserver"
+- name: "route"
+  description: "route"
+- name: "laddr"
+  description: "laddr"
+- name: "tunnel"
+  description: "tunnel"
+- name: "inetaddr"
+  description: "inet addr"
+- name: "white_list"
+  description: "white list"
+- name: "black_list"
+  description: "black list"
+- name: "arp"
+  description: "arp"
+schemes:
+- "http"
+parameters:
+  service-id:
+    name: VipPort
+    in: path
+    type: string
+    required: true
+  realserver-id:
+    name: RipPort
+    in: path
+    type: string
+    required: true
+  device-name:
+    name: name
+    in: path
+    type: string
+    required: true
+  vs-config:
+    name: spec
+    in: body
+    schema:
+      "$ref": "#/definitions/VirtualServerSpecTiny"
+  rs-config:
+    name: spec
+    in: body
+    schema:
+      "$ref": "#/definitions/RealServerSpecTiny"
+  rss-config:
+    name: rss
+    in: body
+    schema:
+      "$ref": "#/definitions/RealServerTinyList"
+  acl-config:
+    name: acl
+    in: body
+    schema:
+      "$ref": "#/definitions/AclAddrList"
+  laddr-config:
+    name: spec
+    in: body
+    schema:
+      "$ref": "#/definitions/LocalAddressSpecTiny"
+  route-config:
+    name: spec
+    in: body
+    schema:
+      "$ref": "#/definitions/RouteSpec"
+  vlan-config:
+    name: spec
+    in: body
+    schema:
+      "$ref": "#/definitions/VlanSpec"
+  device-addr:
+    name: spec
+    in: body
+    schema:
+      "$ref": "#/definitions/InetAddrSpec"
+  healthcheck:
+    name: healthcheck
+    in: query
+    type: boolean
+    default: false
+    required: false
+  stats:
+    name: stats
+    in: query
+    type: boolean
+    default: false
+    required: false
+  verbose:
+    name: verbose
+    in: query
+    type: boolean
+    default: false
+    required: false
+  sapool:
+    name: sapool
+    in: query
+    type: boolean
+    default: false
+    required: false
+  promisc:
+    name: promisc
+    in: query
+    type: string
+    enum:
+    - unset
+    - on
+    - off
+    default: unset
+    required: false
+  link:
+    name: link
+    in: query
+    type: string
+    enum:
+    - unset
+    - up
+    - down
+    default: unset
+    required: false
+  forward2kni:
+    name: forward2Kni
+    in: query
+    type: string
+    enum:
+    - unset
+    - on
+    - off
+    default: unset
+    required: false
+definitions:
+  CertAuthSpec:
+    properties:
+      addr:
+        type: string
+  InetAddrSpec:
+    properties:
+      addr:
+        type: string
+      broadcast:
+        type: string
+      scope:
+        type: string
+  VlanSpec:
+    properties:
+      name:
+        type: string
+      device:
+        type: string
+      id:
+        type: string
+  RouteSpec:
+    properties:
+      src:
+        type: string
+      dst:
+        type: string
+      gateway:
+        type: string
+      prefixSrc:
+        type: string
+      device:
+        type: string
+      scope:
+        type: string
+      mtu:
+        type: integer
+        format: uint32
+      metric:
+        type: integer
+        format: uint32
+  LocalAddressSpecExpand:
+    type: object
+    properties:
+      af:
+        type: integer
+        format: uint32
+      conns:
+        type: integer
+        format: uint32
+      portConflict:
+        type: integer
+        format: uint64
+      addr:
+        type: string
+      device:
+        type: string
+  LocalAddressSpecTiny:
+    properties:
+      addr:
+        type: string
+      device:
+        type: string
+  AclAddrList:
+    type: object
+    properties:
+      Items:
+        type: array
+        items:
+          "$ref": "#/definitions/CertAuthSpec"
+  LocalAddressExpandList:
+    properties:
+      Items:
+        type: array
+        items:
+          "$ref": "#/definitions/LocalAddressSpecExpand"
+  LocalAddressTinyList:
+    properties:
+      Items:
+        type: array
+        items:
+          "$ref": "#/definitions/LocalAddressSpecTiny"
+  RealServerTinyList:
+    type: object
+    properties:
+      Items:
+        type: array
+        items:
+          "$ref": "#/definitions/RealServerSpecTiny"
+  RealServerExpandList:
+    type: "object"
+    properties:
+      Items:
+        type: array
+        items:
+          "$ref": "#/definitions/RealServerSpecExpand"
+  RealServerSpecExpand:
+    type: object
+    properties:
+      Spec:
+        "$ref": "#/definitions/RealServerSpecTiny"
+      Stats:  
+        "$ref": "#/definitions/ServerStats"
+  RealServerSpecTiny:
+    type: object
+    properties:
+      ip:
+        type: "string"
+      port:
+        type: "integer"
+        format: "uint16"
+        x-omitempty: false
+      weight:
+        type: "integer"
+        format: "uint16"
+        x-omitempty: false
+      mode:
+        type: "string"
+        enum:
+          - "FNAT"
+          - "SNAT"
+          - "DR"
+          - "TUNNEL"
+          - "NAT"
+      inhibited:
+        type: "boolean"
+        default: false
+      overloaded:
+        type: "boolean"
+        default: false
+  NicDeviceSpecList:
+    type: object
+    properties:
+      Items:
+        type: array
+        items:
+          "$ref": "#/definitions/NicDeviceSpec"
+  NicDeviceSpec:
+    type: object
+    properties:
+      detail:
+        "$ref": "#/definitions/NicDeviceDetail"
+      stats:
+        "$ref": "#/definitions/NicDeviceStats"
+      #extra:
+      #  "$ref": "#/definitions/NicDeviceStats"
+  #NicDeviceExtra: padding
+  NicDeviceDetail:
+    type: object
+    properties:
+      name:
+        type: string
+      addr:
+        type: string
+      status:
+        type: string
+        enum:
+          - "UP"
+          - "DOWN"
+      duplex:
+        type: string
+        enum:
+          - "half-duplex"
+          - "full-duplex"
+      autoneg:
+        type: string
+        enum:
+          - "fixed-nego"
+          - "auto-nego"
+      speed:
+        type: integer
+        format: uint32
+      nRxQ:
+        type: integer
+        format: uint8
+      nTxQ:
+        type: integer
+        format: uint8
+      socketID:
+        type: integer
+        format: uint8
+      ID:
+        type: integer
+        format: uint16
+      MTU:
+        type: integer
+        format: uint16
+      Flags:
+        type: integer
+        format: uint16
+  NicDeviceStats:
+    type: object
+    properties:
+      id:
+        type: integer
+        format: "uint16"
+      bufAvail:
+        type: integer
+        format: "uint32"
+      bufInuse:
+        type: integer
+        format: "uint32"
+      inPkts:
+        type: integer
+        format: "uint64"
+      outPkts:
+        type: integer
+        format: "uint64"
+      inBytes:
+        type: integer
+        format: "uint64"
+      outBytes:
+        type: integer
+        format: "uint64"
+      inMissed:
+        type: integer
+        format: "uint64"
+      inErrors:
+        type: integer
+        format: "uint64"
+      outErrors:
+        type: integer
+        format: "uint64"
+      rxNoMbuf:
+        type: integer
+        format: "uint64"
+      inPktsQ:
+        type: array
+        items:
+          "$ref": "#/definitions/NicDeviceQueueData"
+      outPktsQ:
+        type: array
+        items:
+          "$ref": "#/definitions/NicDeviceQueueData"
+      inBytesQ:
+        type: array
+        items:
+          "$ref": "#/definitions/NicDeviceQueueData"
+      outBytesQ:
+        type: array
+        items:
+          "$ref": "#/definitions/NicDeviceQueueData"
+      errorBytesQ:
+        type: array
+        items:
+          "$ref": "#/definitions/NicDeviceQueueData"
+  NicDeviceQueueData:
+    type: integer
+    format: "uint64"
+  Error:
+    type: "string"
+  Status:
+    description: Status of an individual component
+    type: object
+    properties:
+      state:
+        type: string
+        description: State the component is in
+        enum:
+        - Ok
+        - Warning
+        - Failure
+        - Disabled
+      msg:
+        type: string
+        description: Human readable status/error/warning message
+  ServerStats:
+    type: "object"
+    properties:
+      Conns:
+        type: "integer"
+        format: "uint64"
+      InPkts:
+        type: "integer"
+        format: "uint64"
+      InBytes:
+        type: "integer"
+        format: "uint64"
+      OutPkts:
+        type: "integer"
+        format: "uint64"
+      OutBytes:
+        type: "integer"
+        format: "uint64"
+      Cps:
+        type: "integer"
+        format: "uint32"
+      InPps:
+        type: "integer"
+        format: "uint32"
+      InBps:
+        type: "integer"
+        format: "uint32"
+      OutPps:
+        type: "integer"
+        format: "uint32"
+      OutBps:
+        type: "integer"
+        format: "uint32"
+  AddrRange:
+    type: "object"
+    properties:
+      Start: 
+        type: "string"
+      End:
+        type: "string"
+  MatchSpec:
+    type: "object"
+    properties:
+      Src:
+        "$ref": "#/definitions/AddrRange"
+      Dest:
+        "$ref": "#/definitions/AddrRange"
+      InIfName:
+        type: string
+      OutIfName:
+        type: string
+  DestCheckSpec:
+    type: "string"
+    enum:
+      - passive
+      - tcp
+      - udp
+      - ping
+
+  VirtualServerList:
+    type: object
+    properties:
+      Items:
+        type: array
+        items:
+          "$ref": "#/definitions/VirtualServerSpecExpand"
+  VirtualServerSpecExpand:
+    type: "object"
+    properties:
+      Af:
+        type: "integer"
+        format: "uint32"
+      Proto:
+        type: "integer"
+        format: "uint8"
+      ProxyProto:
+        description: |
+          0  (0x00): disable
+          1  (0x01): v1
+          2  (0x02): v2
+          17 (0x11): v1-insecure
+          18 (0x12): v2-insecure
+        type: "integer"
+        format: "uint8"
+        enum:
+          - 0
+          - 1
+          - 2
+          - 17
+          - 18
+      Port:
+        type: "integer"
+        format: "uint16"
+      Fwmark:
+        type: "integer"
+        format: "uint32"
+      Flags:
+        type: "string"
+      SynProxy:
+        type: "string"
+        enum:
+          - "true"
+          - "false"
+      ExpireQuiescent:
+        type: "string"
+        enum:
+          - "true"
+          - "false"
+      Timeout:
+        type: "integer"
+        format: "uint32"
+      ConnTimeout:
+        type: "integer"
+        format: "uint32"
+      Netmask:
+        type: "integer"
+        format: "uint32"
+      Bps:
+        type: "integer"
+        format: "uint32"
+      LimitProportion:
+        type: "integer"
+        format: "uint32"
+      Addr:
+        type: "string"
+      SchedName:
+        type: "string"
+        enum:
+          - rr
+          - wrr
+          - wlc
+          - conhash
+      DestCheck:
+        type: array
+        items:
+          "$ref": "#/definitions/DestCheckSpec"
+      Stats:
+        "$ref": "#/definitions/ServerStats"
+      RSs:
+        "$ref": "#/definitions/RealServerExpandList"
+      Match:
+        "$ref": "#/definitions/MatchSpec"
+  VirtualServerSpecTiny:
+    type: "object"
+    properties:
+      #Af:
+      #  type: "integer"
+      #  format: "uint16"
+      #Port:
+      #  type: "integer"
+      #  format: "uint16"
+      Fwmark:
+        type: "integer"
+        format: "uint32"
+      #Flags:
+      #  type: "integer"
+      #  format: "uint32"
+      SynProxy:
+        type: "boolean"
+        default: false
+      ExpireQuiescent:
+        type: "boolean"
+        default: false
+      Timeout:
+        type: "integer"
+        format: "uint32"
+      ConnTimeout:
+        type: "integer"
+        format: "uint32"
+      #Netmask:
+      #  type: "integer"
+      #  format: "uint32"
+      Bps:
+        type: "integer"
+        format: "uint32"
+      LimitProportion:
+        type: "integer"
+        format: "uint32"
+      #Addr:
+      #  type: "string"
+      ProxyProtocol:
+        type: "string"
+        enum:
+          - v2
+          - v2-insecure
+          - v1
+          - v1-insecure
+          - disable
+      SchedName:
+        type: "string"
+        enum:
+          - rr
+          - wrr
+          - wlc
+          - conhash
+      Match:
+        "$ref": "#/definitions/MatchSpec"
+paths:
+  /device:
+    get:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/stats"
+      summary: "display all net device list"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+  /device/{name}/addr:
+    #description: dpip addr add 192.168.88.16/32 dev dpdk0.102
+    get:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/stats"
+        - "$ref": "#/parameters/verbose"
+        - "$ref": "#/parameters/device-name"
+      summary: "display special net device ip addr"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '404':
+          description: Not Found
+          schema:
+            type: string
+    put:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/sapool"
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/device-addr"
+      summary: "add/update special net device ip addr"
+      responses:
+        '200':
+          description: Update exist ip addr Success
+          schema:
+            type: string
+        '201':
+          description: Add new ip addr Success
+          schema:
+            type: string
+        '500':
+          description: Failed
+          schema:
+            type: string
+    delete:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/sapool"
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/device-addr"
+      summary: "delete special net device ip addr"
+      responses:
+        '200':
+          description: delete ip addr from device Success
+          schema:
+            type: string
+        '500':
+          description: Failed
+          schema:
+            type: string
+  /device/{name}/route:
+    #description: dpip route add 192.168.88.16/32 dev dpdk0.102 scope kni_host
+    get:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/stats"
+        - "$ref": "#/parameters/device-name"
+      summary: "display special net device route"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '404':
+          description: Not Found
+          schema:
+            type: string
+    put:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/route-config"
+      summary: "add/update special net device route"
+      responses:
+        '200':
+          description: Update exist route Success
+          schema:
+            type: string
+        '201':
+          description: Add new route Success
+          schema:
+            type: string
+        '500':
+          description: Failed
+          schema:
+            type: string
+    delete:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/route-config"
+      summary: "delete special net device route"
+      responses:
+        '200':
+          description: delete route Success
+          schema:
+            type: string
+        '500':
+          description: Failed
+          schema:
+            type: string
+  /device/{name}/netlink:
+    get:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/stats"
+      summary: "ip link show dev ${name}"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '404':
+          description: Not Found
+          schema:
+            type: string
+    put:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+      summary: "ip link set ${name} up"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '500':
+          description: Not Found
+          schema:
+            type: string
+    delete:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+      summary: "ip link set ${name} down"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '500':
+          description: Not Found
+          schema:
+            type: string
+  /device/{name}/netlink/addr:
+    get:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/stats"
+      summary: "ip addr show lo: Display special linux net device addr detail"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '404':
+          description: Not Found
+          schema:
+            type: string
+    put:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/device-addr"
+      summary: "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '500':
+          description: Not Found
+          schema:
+            type: string
+    delete:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/device-addr"
+      summary: "ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '500':
+          description: Not Found
+          schema:
+            type: string
+  #/device/{name}/cpu
+  /device/{name}/nic:
+    #description: dpip link show 
+    get:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/verbose"
+        - "$ref": "#/parameters/stats"
+      summary: "dpip link show ${nic-name} -s -v"
+      responses:
+        '200':
+          description: Success
+          schema:
+            #type: string
+            "$ref":  "#/definitions/NicDeviceSpecList"
+        '500':
+          description: Failure
+          schema:
+            type: string
+    put:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/forward2kni"
+        - "$ref": "#/parameters/link"
+        - "$ref": "#/parameters/promisc"
+      summary: "dpip link set ${nic-name} [forward2kni,link,promisc,tc-ingress,tc-egress] [on/up,off/down]"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '500':
+          description: Failure
+          schema:
+            type: string
+  /device/{name}/vlan:
+    #description: dpip vlan add dpdk0.102 link dpdk0 id 102
+    get:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/stats"
+      summary: "display all net device list"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '404':
+          description: Not Found
+          schema:
+            type: string
+    put:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+        - "$ref": "#/parameters/vlan-config"
+      summary: "add/update special net device "
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '500':
+          description: Failed
+          schema:
+            type: string
+    delete:
+      tags:
+      - "device"
+      parameters:
+        - "$ref": "#/parameters/device-name"
+      summary: "delete special net device"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '500':
+          description: Failed
+          schema:
+            type: string
+  /vs:
+    get:
+      tags:
+      - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/stats"
+      summary: "display all vip:port:proto and rsip:port list"
+      responses:
+        '200':
+          description: Success
+          schema:
+            "$ref": "#/definitions/VirtualServerList"
+          #  items:
+          #    "$ref": "#/definitions/VirtualServer"
+  /vs/{VipPort}:
+    get:
+      tags:
+      - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/stats"
+      summary: "get a specific virtual server"
+      responses:
+        '200':
+          description: Success
+          schema:
+          #  type: string
+          #  items:
+            "$ref": "#/definitions/VirtualServerList"
+        '404':
+          description: Service not found  
+          schema:
+            type: string
+    delete:
+      summary: "Delete a vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '404':
+          description: Service not found
+          schema:
+            type: string
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+    put:
+      summary: "create or update virtual server"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/vs-config"
+      responses:
+        '200':
+          description: Updated
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: "Error while creating virtual server"
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+  /vs/{VipPort}/laddr:
+    get:
+      tags:
+      - "virtualserver"
+      parameters:
+        #- "$ref": "#/parameters/realserver-id"
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/stats"
+      responses:
+        '200':
+          description: Success
+          schema:
+            "$ref": "#/definitions/LocalAddressExpandList"
+            #type: string
+            #items:
+            #  "$ref": "#/definitions/VirtualServer"
+        '404':
+          description: Service not found
+          schema:
+            type: string
+    put:
+      tags:
+      - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/laddr-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: "Error while creating virtual server"
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+    delete:
+      tags:
+      - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/laddr-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: "Error while creating virtual server"
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+  /vs/{VipPort}/rs:
+    get:
+      tags:
+      - "virtualserver"
+      parameters:
+        #- "$ref": "#/parameters/realserver-id"
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/stats"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+            #items:
+            #  "$ref": "#/definitions/VirtualServer"
+        '404':
+          description: Service not found  
+          schema:
+            type: string
+    delete:
+      summary: "Delete a set of real server from vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/rss-config"
+      responses:
+        '200':
+          description: Success
+        '404':
+          description: Service not found
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+    put:
+      summary: "Add a set of real server to vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/rss-config"
+        - "$ref": "#/parameters/healthcheck"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+    post:
+      summary: "Update fully real server list to vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/rss-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+  /vs/{VipPort}/deny:
+    get:
+      tags:
+      - "virtualserver"
+      parameters:
+        #- "$ref": "#/parameters/realserver-id"
+        - "$ref": "#/parameters/service-id"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+            #items:
+            #  "$ref": "#/definitions/VirtualServer"
+        '404':
+          description: Service not found  
+          schema:
+            type: string
+    delete:
+      summary: "Delete a set of ip form black list to vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/acl-config"
+      responses:
+        '200':
+          description: Success
+        '404':
+          description: Service not found
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+    put:
+      summary: "Add a set of ip from black list to vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/acl-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+    post:
+      summary: "Update a fully black ip list to vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/acl-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+  /vs/{VipPort}/allow:
+    get:
+      tags:
+      - "virtualserver"
+      parameters:
+        #- "$ref": "#/parameters/realserver-id"
+        - "$ref": "#/parameters/service-id"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+            #items:
+            #  "$ref": "#/definitions/VirtualServer"
+        '404':
+          description: Service not found  
+          schema:
+            type: string
+    delete:
+      summary: "Delete a set of ip form white list to vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/acl-config"
+      responses:
+        '200':
+          description: Success
+        '404':
+          description: Service not found
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+    put:
+      summary: "Add a set of ip from white list to vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/acl-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
+    post:
+      summary: "Update a fully white ip list to vip:port:proto"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/acl-config"
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error" 
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"

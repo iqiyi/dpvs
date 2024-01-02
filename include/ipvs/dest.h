@@ -24,6 +24,20 @@
 #include "conf/common.h"
 #include "list.h"
 #include "dpdk.h"
+#include "timer.h"
+
+union dest_check {
+    struct {
+        uint16_t origin_weight;
+        uint16_t down_notice_recvd; // how many DOWN notifications has received
+        uint32_t inhibit_duration;  // inhibited duration on failure, gains/loses exponentially, in seconds
+        struct dpvs_timer timer;    // down-wait-timer in UP state, rs-inhibit-timer in DOWN state
+    } master;
+    struct {
+        uint16_t origin_weight;
+        uint16_t warm_up_count;     // how many UP notifications has sent after state going Up
+    } slave;
+};
 
 struct dp_vs_dest {
     struct list_head    n_list;     /* for the dests in the service */
@@ -37,7 +51,7 @@ struct dp_vs_dest {
     union inet_addr     addr;       /* IP address of the server */
     uint16_t            port;       /* port number of the server */
 
-    volatile unsigned   flags;      /* dest status flags */
+    volatile uint16_t   flags;      /* dest status flags */
     rte_atomic16_t      conn_flags; /* flags to copy to conn */
     rte_atomic16_t      weight;     /* server weight */
 
@@ -59,12 +73,13 @@ struct dp_vs_dest {
     uint32_t            vfwmark;    /* firewall mark of service */
     struct dp_vs_service *svc;      /* service it belongs to */
     union inet_addr     vaddr;      /* virtual IP address */
-    unsigned            conn_timeout; /* conn timeout copied from svc*/
     unsigned            limit_proportion; /* limit copied from svc*/
+
+    union dest_check    dfc;        /* failure detection and inhibition */
 } __rte_cache_aligned;
 
 static inline bool
-dp_vs_dest_is_avail(struct dp_vs_dest *dest)
+dp_vs_dest_is_avail(const struct dp_vs_dest *dest)
 {
     return (dest->flags & DPVS_DEST_F_AVAILABLE) ? true : false;
 }
@@ -82,9 +97,27 @@ dp_vs_dest_clear_avail(struct dp_vs_dest *dest)
 }
 
 static inline bool
-dp_vs_dest_is_overload(struct dp_vs_dest *dest)
+dp_vs_dest_is_overload(const struct dp_vs_dest *dest)
 {
     return (dest->flags & DPVS_DEST_F_OVERLOAD) ? true : false;
+}
+
+static inline bool
+dp_vs_dest_is_inhibited(const struct dp_vs_dest *dest)
+{
+    return (dest->flags & DPVS_DEST_F_INHIBITED) ? true : false;
+}
+
+static inline void
+dp_vs_dest_set_inhibited(struct dp_vs_dest *dest)
+{
+    dest->flags |= DPVS_DEST_F_INHIBITED;
+}
+
+static inline void
+dp_vs_dest_clear_inhibited(struct dp_vs_dest *dest)
+{
+    dest->flags &= ~DPVS_DEST_F_INHIBITED;
 }
 
 static inline int16_t
@@ -99,6 +132,7 @@ dp_vs_dest_is_valid(struct dp_vs_dest *dest)
     return (dest
             && dp_vs_dest_is_avail(dest)
             && !dp_vs_dest_is_overload(dest)
+            && !dp_vs_dest_is_inhibited(dest)
             && dp_vs_dest_get_weight(dest) > 0) ? true : false;
 }
 
@@ -112,15 +146,20 @@ int dp_vs_dest_add(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
 int dp_vs_dest_edit(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
+int dp_vs_dest_edit_health(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
+
 void dp_vs_dest_unlink(struct dp_vs_service *svc,
                         struct dp_vs_dest *dest, int svcupd);
 
-void dp_vs_dest_put(struct dp_vs_dest *dest);
+void dp_vs_dest_put(struct dp_vs_dest *dest, bool timerlock);
 
 int dp_vs_dest_del(struct dp_vs_service *svc, struct dp_vs_dest_conf *udest);
 
 int dp_vs_dest_get_entries(const struct dp_vs_service *svc,
                            struct dp_vs_get_dests *uptr);
+
+int dp_vs_dest_detected_alive(struct dp_vs_dest *dest);
+int dp_vs_dest_detected_dead(struct dp_vs_dest *dest);
 
 int dp_vs_dest_init(void);
 

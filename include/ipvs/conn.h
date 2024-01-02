@@ -52,13 +52,12 @@ enum {
 
 struct dp_vs_conn_param {
     int                 af;
-    uint16_t            proto;
+    uint8_t             proto;
     const union inet_addr *caddr;
     const union inet_addr *vaddr;
     uint16_t            cport;
     uint16_t            vport;
     uint16_t            ct_dport; /* RS port for template connection */
-    bool                outwall;
 };
 
 struct conn_tuple_hash {
@@ -67,7 +66,7 @@ struct conn_tuple_hash {
 
     /* tuple info */
     int                 af;
-    uint16_t            proto;
+    uint8_t             proto;
     union inet_addr     saddr;  /* pkt's source addr */
     union inet_addr     daddr;  /* pkt's dest addr */
     uint16_t            sport;
@@ -139,7 +138,9 @@ struct dp_vs_conn {
     /* synproxy related members */
     struct dp_vs_seq syn_proxy_seq;     /* seq used in synproxy */
     struct list_head ack_mbuf;          /* ack mbuf saved in step2 */
-    uint32_t ack_num;                   /* ack mbuf number stored */
+    uint16_t ack_num;                   /* ack mbuf number stored */
+    uint8_t wscale_vs;                  /* outbound wscale factor to client */
+    uint8_t wscale_rs;                  /* outbound wscale factor from rs */
     struct rte_mbuf *syn_mbuf;          /* saved rs syn packet for retransmition */
     rte_atomic32_t syn_retry_max;       /* syn retransmition max packets */
 
@@ -147,6 +148,9 @@ struct dp_vs_conn {
     uint32_t last_seq;                  /* seq of the last ack packet */
     uint32_t last_ack_seq;              /* ack seq of the last ack packet */
     rte_atomic32_t dup_ack_cnt;         /* count of repeated ack packets */
+
+    uint8_t pp_version;                 /* proxy protocol version */
+    uint8_t pp_sent;                    /* proxy protocol data has sent */
 
     /* flags and state transition */
     volatile uint16_t       flags;
@@ -162,9 +166,6 @@ struct dp_vs_conn {
 
     /* connection redirect in fnat/snat/nat modes */
     struct dp_vs_redirect  *redirect;
-
-    /* flag for gfwip */
-    bool outwall;
 
 } __rte_cache_aligned;
 

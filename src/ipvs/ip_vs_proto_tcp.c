@@ -38,6 +38,7 @@
 #include <netinet/tcp.h>
 #include <openssl/sha.h>
 #include "ipvs/redirect.h"
+#include "ipvs/proxy_proto.h"
 
 static int g_defence_tcp_drop = 0;
 
@@ -157,7 +158,7 @@ inline void tcp6_send_csum(struct rte_ipv6_hdr *iph, struct tcphdr *th) {
             (void *)th - (void *)iph, IPPROTO_TCP);
 }
 
-static inline int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
+int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         const struct dp_vs_conn *conn, struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     /* leverage HW TX TCP csum offload if possible */
@@ -257,7 +258,7 @@ static inline void tcp_in_init_seq(struct dp_vs_conn *conn,
     return;
 }
 
-static inline void tcp_in_adjust_seq(struct dp_vs_conn *conn, struct tcphdr *th)
+void tcp_in_adjust_seq(struct dp_vs_conn *conn, struct tcphdr *th)
 {
     th->seq = htonl(ntohl(th->seq) + conn->fnat_seq.delta);
     /* recalc checksum later */
@@ -305,7 +306,183 @@ static void tcp_in_remove_ts(struct tcphdr *tcph)
     }
 }
 
-static inline int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+/*
+ * Remove NOP and TOA options preset in the mbuf and compact option space.
+ * If still no enough space, trim more options except for the protected ones.
+ *
+ * Return the trimmed length on success, otherwise dpvs error num on failure.
+ * */
+static int tcp_in_prune_options(int af, int reqlen, struct rte_mbuf *mbuf, struct tcphdr *tcph)
+{
+    unsigned char *ptr, *fast, *slow;
+    const unsigned char *l3hdr, *payload;
+    int i, optlen;
+    unsigned int pruned;
+    uint8_t opcode, opsize;
+    uint64_t opts_protected;
+    const uint8_t opts_maxlen[64] = {
+        [2] = 4,  [3] = 3,   [4] = 2,
+        [8] = 10, [30] = 40, [34] = 18
+    };
+
+    ptr = (unsigned char *)(tcph + 1);
+    fast = slow = ptr;
+    optlen = (tcph->doff << 2) - sizeof(struct tcphdr);
+    payload = ptr + optlen;
+
+    if (optlen < reqlen)    /* make no sense to do anything */
+        return 0;
+
+    while (optlen > 0) {
+        opcode = *ptr++;
+        switch (opcode) {
+        case TCP_OPT_EOL:
+            goto fini;
+        case TCP_OPT_NOP:
+            fast++;
+            optlen--;
+            continue;
+        default:
+            opsize = *ptr++;
+            if (opsize < 2)             /* silly options */
+                goto fini;
+            if (opsize > optlen)        /* partial options */
+                goto fini;
+            if (opcode == TCP_OPT_ADDR) {
+                fast += opsize;
+            } else {
+                for (i = 0; i < opsize; i++) {
+                    if (slow != fast)
+                        *slow = *fast;
+                    slow++;
+                    fast++;
+                }
+            }
+
+            ptr += opsize - 2;
+            optlen -= opsize;
+            break;
+        }
+    }
+
+fini:
+    pruned = payload - slow;
+    if (pruned < reqlen) {
+        /* further trim the options, the tcp functionality relies on unprotected
+         * options may get hurt, refer to:
+         *   https://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml
+         *   #tcp-parameters-1
+         * */
+        ptr = slow;
+        slow = fast = (unsigned char *)(tcph + 1);
+        if (tcph->syn)
+            opts_protected = (1ULL << 2) | (1ULL << 3) | (1ULL << 4)    /* MSS, WS, SACKP */
+                | (1ULL << 8) | (1ULL << 30) | (1ULL << 34);            /* TS, MPTCP, TFO */
+        else
+            opts_protected = (1ULL << 8);    /* TS, drop SACK, MPTCP DSS/REMOVE_ADDR */
+        while (fast < ptr) {
+            opcode = *fast;
+            opsize = *(fast + 1);
+            if (opcode < 64 && ((1ULL << opcode) & opts_protected)
+                    && (opsize <= opts_maxlen[opcode])) {
+                for (i = 0; i < opsize; i++)
+                    *slow++ = *fast++;
+                opts_protected ^= (1ULL << opcode);
+            } else {
+                fast += opsize;
+                pruned += opsize;
+                if (pruned >= reqlen) {
+                    while (fast < ptr)
+                        *slow++ = *fast++;
+                    break;
+                }
+            }
+        }
+        pruned = payload - slow;
+    }
+    if (pruned > 0) {
+        while (pruned & 0x3) {  /* 4-bytes alignment for tcp options */
+            *slow++ = 0;
+            pruned--;
+        }
+        if (!pruned)
+            return 0;
+        /* trim the packet */
+        l3hdr = rte_pktmbuf_mtod(mbuf, void *);
+        if (unlikely(mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)) {
+            memset(slow, 0, pruned);
+            return EDPVS_INVPKT;
+        }
+        if (unlikely(payload - l3hdr > mbuf->pkt_len)) {
+            memset(slow, 0, pruned);
+            return EDPVS_INVPKT;
+        }
+        memmove(slow, payload, mbuf->pkt_len - (payload - l3hdr));
+        rte_pktmbuf_trim(mbuf, pruned);
+        tcph->doff -= (pruned >> 2);
+        if (af == AF_INET)
+            ((struct rte_ipv4_hdr *)l3hdr)->total_length =
+                htons(ntohs(((struct rte_ipv4_hdr *)l3hdr)->total_length) - pruned);
+        else
+            ((struct rte_ipv6_hdr *)l3hdr)->payload_len =
+                htons(ntohs(((struct rte_ipv6_hdr *)l3hdr)->payload_len) - pruned);
+        return pruned;
+    }
+    return 0;
+}
+
+static int tcp_in_add_proxy_proto(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+        struct tcphdr *tcph, int iphdrlen, int *hdr_shift)
+{
+    int offset;
+    struct proxy_info ppinfo = { 0 };
+
+    offset = iphdrlen + (tcph->doff << 2);
+    if (offset == mbuf->pkt_len) {
+        // Don't send proxy protocol data in pure ack packets that contains no
+        // application data. Otherwise, the proxy protocol data is sent twice,
+        // one in this ack packet, and another in the first tcp packet with payload
+        // and same beginning seq number. Worse still, if the proxy protocol data
+        // is sent in a standalone packet (despite of the rareness of the case), the
+        // second proxy protocol data would be taken as application payload, causing
+        // problem for the tcp connection (refer to a fix for the problem in #7561d1087).
+        // Ths problem would get more complicated when taking into considertation of
+        // tcp retransmission.
+        return EDPVS_OK;
+    }
+
+    if (unlikely(EDPVS_OK != proxy_proto_parse(mbuf, offset, &ppinfo)))
+        return EDPVS_INVPKT;
+
+    if (ppinfo.datalen > 0
+            && ppinfo.version == PROXY_PROTOCOL_VERSION(conn->pp_version)
+            && PROXY_PROTOCOL_IS_INSECURE(conn->pp_version))
+        return EDPVS_OK;    // keep intact the orginal proxy protocol data
+
+    if (!ppinfo.datalen || !PROXY_PROTOCOL_IS_INSECURE(conn->pp_version)) {
+        ppinfo.af = tuplehash_in(conn).af;
+        ppinfo.proto = IPPROTO_TCP;
+        ppinfo.version = PROXY_PROTOCOL_VERSION(conn->pp_version);
+        ppinfo.cmd = 1;
+        if (AF_INET == ppinfo.af) {
+            ppinfo.addr.ip4.src_addr = conn->caddr.in.s_addr;
+            ppinfo.addr.ip4.dst_addr = conn->vaddr.in.s_addr;
+            ppinfo.addr.ip4.src_port = conn->cport;
+            ppinfo.addr.ip4.dst_port = conn->vport;
+        } else if (AF_INET6 == ppinfo.af) {
+            rte_memcpy(ppinfo.addr.ip6.src_addr, conn->caddr.in6.s6_addr, 16);
+            rte_memcpy(ppinfo.addr.ip6.dst_addr, conn->vaddr.in6.s6_addr, 16);
+            ppinfo.addr.ip6.src_port = conn->cport;
+            ppinfo.addr.ip6.dst_port = conn->vport;
+        } else {
+            return EDPVS_NOTSUPP;
+        }
+    }
+
+    return proxy_proto_insert(&ppinfo, conn, mbuf, tcph, hdr_shift);
+}
+
+static int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
                           struct tcphdr *tcph)
 {
     uint32_t mtu;
@@ -427,6 +604,16 @@ static void tcp_out_save_seq(struct rte_mbuf *mbuf,
                 - ip4_hdrlen(mbuf) - (th->doff << 2));
 
     conn->rs_end_ack = th->ack_seq;
+}
+
+static void tcp_out_adjust_window(struct dp_vs_conn *conn, struct tcphdr *th)
+{
+    uint32_t wnd_client;
+
+    wnd_client = ntohs(th->window) * (1 << conn->wscale_rs) / (1 << conn->wscale_vs);
+    if (unlikely(wnd_client > 0xffff))
+        wnd_client = 0xffff;
+    th->window = htons(wnd_client);
 }
 
 static void tcp_out_adjust_mss(int af, struct tcphdr *tcph)
@@ -560,7 +747,6 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
 {
     struct tcphdr *th, _tcph;
     struct dp_vs_service *svc;
-    bool outwall = false;
 
     assert(proto && iph && mbuf && conn && verdict);
 
@@ -609,7 +795,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
     }
 
     svc = dp_vs_service_lookup(iph->af, iph->proto, &iph->daddr, th->dest,
-                               0, mbuf, NULL, &outwall, rte_lcore_id());
+                               0, mbuf, NULL, rte_lcore_id());
     if (!svc) {
         /* Drop tcp packet which is send to vip and !vport */
         if (g_defence_tcp_drop &&
@@ -623,7 +809,7 @@ static int tcp_conn_sched(struct dp_vs_proto *proto,
         return EDPVS_NOSERV;
     }
 
-    *conn = dp_vs_schedule(svc, iph, mbuf, false, outwall);
+    *conn = dp_vs_schedule(svc, iph, mbuf, false);
     if (!*conn) {
         *verdict = INET_DROP;
         return EDPVS_RESOURCE;
@@ -694,9 +880,12 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
                         struct dp_vs_conn *conn, struct rte_mbuf *mbuf)
 {
     struct tcphdr *th;
-    /* af/mbuf may be changed for nat64 which in af is ipv6 and out is ipv4 */
-    int af = tuplehash_out(conn).af;
-    int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
+    int af;             /* outbound af */
+    int iphdrlen, toalen;
+    int err, pp_hdr_shift = 0;
+
+    af = tuplehash_out(conn).af;
+    iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
 
     if (mbuf_may_pull(mbuf, iphdrlen + sizeof(*th)) != 0)
         return EDPVS_INVPKT;
@@ -710,30 +899,58 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
 
     /*
      * for SYN packet
-     * 1. remove tcp timestamp option
-     *    laddress for different client have diff timestamp.
-     * 2. save original TCP sequence for seq-adjust later.
-     *    since TCP option will be change.
-     * 3. add TOA option
-     *    so that RS with TOA module can get real client IP.
+     * 1. remove tcp timestamp option,
+     *    laddrs for different clients have diff timestamp.
+     * 2. save original TCP sequence for seq-adjust later
+     *    since TCP option will be changed.
      */
     if (th->syn && !th->ack) {
         tcp_in_remove_ts(th);
         tcp_in_init_seq(conn, mbuf, th);
-        tcp_in_add_toa(conn, mbuf, th);
     }
 
-    /* add toa to first data packet */
+    /* Add toa/proxy_protocol to the first data packet */
     if (ntohl(th->ack_seq) == conn->fnat_seq.fdata_seq
-            && !th->syn && !th->rst /*&& !th->fin*/)
-        tcp_in_add_toa(conn, mbuf, th);
+            && !th->syn && !th->rst /*&& !th->fin*/) {
+        if (PROXY_PROTOCOL_V2 == PROXY_PROTOCOL_VERSION(conn->pp_version)
+                || PROXY_PROTOCOL_V1 == PROXY_PROTOCOL_VERSION(conn->pp_version)) {
+            if (conn->fnat_seq.isn - conn->fnat_seq.delta + 1 == ntohl(th->seq)) {
+                /* avoid inserting repetitive proxy protocol data
+                 * when the first rs ack is delayed */
+                err = tcp_in_add_proxy_proto(conn, mbuf, th, iphdrlen, &pp_hdr_shift);
+                if (unlikely(EDPVS_OK != err))
+                    RTE_LOG(INFO, IPVS, "%s: insert proxy protocol fail -- %s\n",
+                            __func__, dpvs_strerror(err));
+                th = ((void *)th) + pp_hdr_shift;
+            }
+        } else { /* use toa */
+            err = tcp_in_add_toa(conn, mbuf, th);
+            if (unlikely(EDPVS_OK != err)) {
+                toalen = tuplehash_in(conn).af == AF_INET ? TCP_OLEN_IP4_ADDR : TCP_OLEN_IP6_ADDR;
+                if (tcp_in_prune_options(af, toalen, mbuf, th) >= toalen
+                        && (EDPVS_NOROOM == err || EDPVS_FRAG == err)) {
+                    err = tcp_in_add_toa(conn, mbuf, th);
+                }
+                if (EDPVS_OK != err) {
+                    char caddrbuf[64], vaddrbuf[64], laddrbuf[64], daddrbuf[64];
+                    const char *caddr, *vaddr, *laddr, *daddr;
+                    caddr = inet_ntop(conn->af, &conn->caddr, caddrbuf, sizeof(caddrbuf)) ? caddrbuf : "::";
+                    vaddr = inet_ntop(conn->af, &conn->vaddr, vaddrbuf, sizeof(vaddrbuf)) ? vaddrbuf : "::";
+                    laddr = inet_ntop(af, &conn->laddr, laddrbuf, sizeof(laddrbuf)) ? laddrbuf : "::";
+                    daddr = inet_ntop(af, &conn->daddr, daddrbuf, sizeof(daddrbuf)) ? daddrbuf : "::";
+                    RTE_LOG(WARNING, IPVS, "TOA add failed(%s): [%s]:%d -> [%s]:%d; [%s]:%d -> [%s]:%d\n",
+                            dpvs_strerror(err), caddr, htons(conn->cport), vaddr, htons(conn->vport),
+                            laddr, htons(conn->lport), daddr, htons(conn->dport));
+                }
+            }
+        }
+    }
 
     tcp_in_adjust_seq(conn, th);
 
     /* L4 translation */
     th->source  = conn->lport;
     th->dest    = conn->dport;
-
 
     return tcp_send_csum(af, iphdrlen, th, conn, mbuf, conn->in_dev);
 }
@@ -762,6 +979,8 @@ static int tcp_fnat_out_handler(struct dp_vs_proto *proto,
     /* L4 translation */
     th->source  = conn->vport;
     th->dest    = conn->cport;
+
+    tcp_out_adjust_window(conn, th);
 
     if (th->syn && th->ack)
         tcp_out_adjust_mss(af, th);
@@ -911,6 +1130,11 @@ tcp_state_out:
     conn->state = new_state;
 
     dp_vs_conn_set_timeout(conn, proto);
+
+    if (new_state == DPVS_TCP_S_CLOSE && conn->old_state == DPVS_TCP_S_SYN_RECV)
+        dp_vs_dest_detected_dead(conn->dest); // connection reset by dest
+    else if (new_state == DPVS_TCP_S_ESTABLISHED)
+        dp_vs_dest_detected_alive(conn->dest);
 
     if (dest) {
         if (!(conn->flags & DPVS_CONN_F_INACTIVE)
@@ -1156,6 +1380,10 @@ static int tcp_conn_expire(struct dp_vs_proto *proto,
         if (err != EDPVS_OK)
             RTE_LOG(WARNING, IPVS, "%s: fail RST Client.\n", __func__);
     }
+
+    /* the backend dest went down silently */
+    if (DPVS_TCP_S_SYN_RECV == conn->state || DPVS_TCP_S_SYN_SENT == conn->state)
+        dp_vs_dest_detected_dead(conn->dest);
 
     return EDPVS_OK;
 }

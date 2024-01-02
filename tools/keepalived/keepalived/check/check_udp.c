@@ -321,6 +321,9 @@ udp_connect_thread(thread_ref_t thread)
 	checker_t *checker = THREAD_ARG(thread);
 	udp_check_t *udp_check = CHECKER_ARG(checker);
 	conn_opts_t *co = checker->co;
+	uint8_t *payload;
+	uint16_t payload_len;
+	bool new_payload;
 	int fd;
 	int status;
 
@@ -334,15 +337,35 @@ udp_connect_thread(thread_ref_t thread)
 		return 0;
 	}
 
+	if (PROXY_PROTOCOL_V2 == checker->vs->proxy_protocol) {
+		payload_len = udp_check->payload_len + PROXY_PROTOCOL_CHECK_V2_LEN;
+		if (!udp_check->payload_len)
+			payload_len += 16;
+		payload = MALLOC(payload_len);
+		if (!payload)
+			return 1;
+		new_payload = true;
+		memcpy(payload, PROXY_PROTOCOL_CHECK_V2, PROXY_PROTOCOL_CHECK_V2_LEN);
+		if (udp_check->payload_len > 0)
+			memcpy(payload + PROXY_PROTOCOL_CHECK_V2_LEN, udp_check->payload, udp_check->payload_len);
+		else
+			set_buf(payload + PROXY_PROTOCOL_CHECK_V2_LEN, 16);
+	} else {
+		payload_len = udp_check->payload_len;
+		payload = udp_check->payload;
+		new_payload = false;
+	}
+
 	if ((fd = socket(co->dst.ss_family, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, IPPROTO_UDP)) == -1) {
 		log_message(LOG_INFO, "UDP connect fail to create socket. Rescheduling.");
 		thread_add_timer(thread->master, udp_connect_thread, checker,
 				checker->delay_loop);
-
+		if (new_payload)
+			FREE(payload);
 		return 0;
 	}
 
-	status = udp_bind_connect(fd, co, udp_check->payload, udp_check->payload_len);
+	status = udp_bind_connect(fd, co, payload, payload_len);
 
 	/* handle udp connection status & register check worker thread */
 	if (udp_check_state(fd, status, thread, udp_check_thread, co->connection_to)) {
@@ -350,6 +373,8 @@ udp_connect_thread(thread_ref_t thread)
 		udp_epilog(thread, false);
 	}
 
+	if (new_payload)
+		FREE(payload);
 	return 0;
 }
 

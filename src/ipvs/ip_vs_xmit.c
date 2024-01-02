@@ -70,6 +70,7 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
         err = proto->fnat_in_handler(proto, conn, mbuf);
         if(err != EDPVS_OK)
             return err;
+        ip4h = ip4_hdr(mbuf);
     }
 
     if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
@@ -476,6 +477,7 @@ static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
         err = proto->fnat_in_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
+        iph = ip4_hdr(mbuf);
     }
 
     if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
@@ -674,6 +676,7 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
         err = proto->fnat_in_handler(proto, conn, mbuf);
         if (err != EDPVS_OK)
             goto errout;
+        ip4h = ip4_hdr(mbuf);
     }
 
     if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
@@ -1520,20 +1523,11 @@ static int __dp_vs_out_xmit_snat4(struct dp_vs_proto *proto,
         fl4.fl4_daddr = conn->caddr.in;
         fl4.fl4_saddr = conn->vaddr.in;
         fl4.fl4_tos = iph->type_of_service;
-        
 
-        if (conn->outwall) {
-	    rt = route_gfw_net_lookup(&conn->caddr.in);
-            if (!rt) {
-                err = EDPVS_NOROUTE;
-                goto errout;
-            }
-        } else {
-            rt = route4_output(&fl4);
-            if (!rt) {
-                err = EDPVS_NOROUTE;
-                goto errout;
-            }
+        rt = route4_output(&fl4);
+        if (!rt) {
+            err = EDPVS_NOROUTE;
+            goto errout;
         }
         MBUF_USERDATA(mbuf, struct route_entry *, MBUF_FIELD_ROUTE) = rt;
 
@@ -2236,7 +2230,7 @@ static int __dp_vs_xmit_tunnel6(struct dp_vs_proto *proto,
     new_ip6h->ip6_nxt = IPPROTO_IPV6;
     new_ip6h->ip6_hops = old_ip6h->ip6_hops;
 
-    new_ip6h->ip6_src = rt6->rt6_src.addr;
+    new_ip6h->ip6_src = rt6->rt6_src.addr.in6;
     if (unlikely(ipv6_addr_any(&new_ip6h->ip6_src))) {
         RTE_LOG(INFO, IPVS, "%s: route6 without source, slect source"
                 " address from inetaddr.\n", __func__);

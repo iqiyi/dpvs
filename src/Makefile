@@ -19,8 +19,6 @@
 # Makefile for dpvs (DPVS main program).
 #
 
-#DEBUG := 1		# enable for debug
-
 TARGET := dpvs
 
 ifneq ("$(wildcard VERSION)","")
@@ -59,7 +57,7 @@ ifeq ($(shell test $(GCC_VERSION) -ge 70 && echo 1), 1)
 	CFLAGS += -Wstringop-overflow=0
 endif
 
-ifeq ($(DEBUG),)
+ifneq ($(CONFIG_DEBUG), y)
 	CFLAGS += -O3
 else
 	CFLAGS += -g -O0 -D DEBUG

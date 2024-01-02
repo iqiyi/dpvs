@@ -17,6 +17,7 @@
  */
 #include<assert.h>
 #include "route6.h"
+#include "conf/route.h"
 #include "linux_ipv6.h"
 #include "ctrl.h"
 #include "route6_lpm.h"
@@ -48,12 +49,12 @@ static int rt6_msg_seq(void)
     return seq++;
 }
 
-static inline void rt6_zero_prefix_tail(struct rt6_prefix *rt6_p)
+static inline void rt6_zero_prefix_tail(rt_addr_t *rt6_p)
 {
     struct in6_addr addr6;
 
-    ipv6_addr_prefix(&addr6, &rt6_p->addr, rt6_p->plen);
-    memcpy(&rt6_p->addr, &addr6, sizeof(addr6));
+    ipv6_addr_prefix(&addr6, &rt6_p->addr.in6, rt6_p->plen);
+    memcpy(&rt6_p->addr.in6, &addr6, sizeof(addr6));
 }
 
 static void rt6_cfg_zero_prefix_tail(const struct dp_vs_route6_conf *src,
@@ -262,12 +263,12 @@ static int __route6_add_del(const struct in6_addr *dest, int plen, uint32_t flag
         cf.ops  = RT6_OPS_ADD;
     else
         cf.ops  = RT6_OPS_DEL;
-    cf.dst.addr = *dest;
+    cf.dst.addr.in6 = *dest;
     cf.dst.plen = plen;
     cf.flags    = flags;
     cf.gateway  = *gw;
     snprintf(cf.ifname, sizeof(cf.ifname), "%s", dev->name);
-    cf.src.addr = *src;
+    cf.src.addr.in6 = *src;
     cf.src.plen = plen;
     cf.mtu      = mtu;
 
@@ -343,17 +344,42 @@ static bool rt6_conf_check(const struct dp_vs_route6_conf *rt6_cfg)
 
 static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
 {
-    const struct dp_vs_route6_conf *rt6_cfg_in = in;
+    const struct dp_vs_route6_conf  *rt6_cfg_in = in;
     struct dp_vs_route6_conf rt6_cfg;
 
-    if (!rt6_conf_check(rt6_cfg_in)) {
-        RTE_LOG(INFO, RT6, "%s: invalid route6 sockopt!\n", __func__);
-        return EDPVS_INVAL;
-    }
+#ifdef CONFIG_DPVS_AGENT
+    const struct dp_vs_route_detail *detail = in;
 
-    rt6_cfg_zero_prefix_tail(rt6_cfg_in, &rt6_cfg);
+    if (opt == DPVSAGENT_ROUTE6_ADD || opt == DPVSAGENT_ROUTE6_DEL) {
+        memcpy(&rt6_cfg.dst, &detail->dst, sizeof(rt_addr_t));
+        memcpy(&rt6_cfg.src, &detail->src, sizeof(rt_addr_t));
+        memcpy(&rt6_cfg.prefsrc, &detail->prefsrc, sizeof(rt_addr_t));
+        memcpy(&rt6_cfg.gateway, &detail->gateway.addr, sizeof(struct in6_addr));
+        memcpy(rt6_cfg.ifname, detail->ifname, IFNAMSIZ);
+        rt6_cfg.mtu = detail->mtu;
+        rt6_cfg.flags = detail->flags;
+        rt6_cfg.ops = opt == DPVSAGENT_ROUTE6_ADD ? RT6_OPS_ADD : RT6_OPS_DEL;
+
+        rt6_zero_prefix_tail(&rt6_cfg.dst);
+    } else {
+#endif
+        if (!rt6_conf_check(rt6_cfg_in)) {
+            RTE_LOG(INFO, RT6, "%s: invalid route6 sockopt!\n", __func__);
+            return EDPVS_INVAL;
+        }
+
+        rt6_cfg_zero_prefix_tail(rt6_cfg_in, &rt6_cfg);
+#ifdef CONFIG_DPVS_AGENT
+    }
+#endif
 
     switch (opt) {
+#ifdef CONFIG_DPVS_AGENT
+        case DPVSAGENT_ROUTE6_ADD:
+            /*fallthrough*/
+        case DPVSAGENT_ROUTE6_DEL:
+            /*fallthrough*/
+#endif
         case SOCKOPT_SET_ROUTE6_ADD_DEL:
             return rt6_add_del(&rt6_cfg);
         case SOCKOPT_SET_ROUTE6_FLUSH:
@@ -371,6 +397,18 @@ static int rt6_sockopt_get(sockoptid_t opt, const void *in, size_t inlen,
         *outlen = 0;
     return EDPVS_OK;
 }
+
+#ifdef CONFIG_DPVS_AGENT
+static struct dpvs_sockopts agent_route6_sockopts = {
+    .version        = SOCKOPT_VERSION,
+    .set_opt_min    = DPVSAGENT_ROUTE6_ADD,
+    .set_opt_max    = DPVSAGENT_ROUTE6_DEL,
+    .set            = rt6_sockopt_set,
+    .get_opt_min    = DPVSAGENT_ROUTE6_GET,
+    .get_opt_max    = DPVSAGENT_ROUTE6_GET,
+    .get            = rt6_sockopt_get,
+};
+#endif
 
 static struct dpvs_sockopts route6_sockopts = {
     .version        = SOCKOPT_VERSION,
@@ -438,6 +476,13 @@ int route6_init(void)
         return err;
     }
 
+#ifdef CONFIG_DPVS_AGENT
+    if ((err = sockopt_register(&agent_route6_sockopts)) != EDPVS_OK) {
+        RTE_LOG(ERR, RT6, "%s: fail to register route6 sockopt!\n", __func__);
+        return err;
+    }
+#endif
+
     return EDPVS_OK;
 }
 
@@ -448,6 +493,11 @@ int route6_term(void)
     struct dpvs_msg_type msg_type;
 
     rt6_method_term();
+
+#ifdef CONFIG_DPVS_AGENT
+    if ((err = sockopt_unregister(&agent_route6_sockopts)) != EDPVS_OK)
+        RTE_LOG(WARNING, RT6, "%s: fail to unregister route6 sockopt!\n", __func__);
+#endif
 
     if ((err = sockopt_unregister(&route6_sockopts)) != EDPVS_OK)
         RTE_LOG(WARNING, RT6, "%s: fail to unregister route6 sockopt!\n", __func__);

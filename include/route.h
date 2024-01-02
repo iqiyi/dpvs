@@ -105,5 +105,4 @@ int route_del(struct in_addr* dest,uint8_t netmask, uint32_t flag,
               struct in_addr* gw, struct netif_port *port,
               struct in_addr* src, unsigned long mtu,short metric);
 
-struct route_entry *route_gfw_net_lookup(const struct in_addr *dest);
 #endif

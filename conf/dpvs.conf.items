@@ -40,6 +40,7 @@ netif_defs {
         }
     !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>
+    !    allmulticast                       <disable>
     !    kni_name               dpdk0.kni   <char[32]>
     }
 
@@ -56,6 +57,7 @@ netif_defs {
         }
     !    mtu                    1500
     !    promisc_mode
+    !    allmulticast                       <disable>
     !    kni_name               dpdk1.kni
     }
 
@@ -211,9 +213,6 @@ ctrl_defs {
         sync_msg_timeout_us             2000    <2000, 1-∞>
         priority_level                  low     <low, low|norm|high|ign>
     }
-    ipc_msg {
-        <init> unix_domain /var/run/dpvs_ctrl   </var/run/dpvs_ctrl, max chars: 256>
-    }
 }
 
 ! ipvs config
@@ -232,6 +231,7 @@ ipvs_defs {
         uoa_mode                opp   <opp for private protocol by default, or ipo for IP-option mode>
         uoa_max_trail           3     <max trails for send UOA for a connection>
         timeout {               <1-31535999>
+            oneway      300     <300>
             normal      300     <300>
             last        3       <3>
         }
@@ -258,10 +258,10 @@ ipvs_defs {
                 mss             1452        <1452, 1-65535>
                 ttl             63          <63, 1-255>
                 sack                        <enable>
-            !    wscale                      <disable>
+            !    wscale                      <0, 0-14>
             !    timestamp                   <disable>
             }
-            close_client_window             <enable>
+            !close_client_window             <disable>
             !defer_rs_syn                   <disable>
             rs_syn_max_retry    3           <3, 1-99>
             ack_storm_thresh    10          <10, 1-999>

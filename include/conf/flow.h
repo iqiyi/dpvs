@@ -26,6 +26,7 @@
 #define __DPVS_FLOW_CONF_H__
 
 #include <netinet/in.h>
+#include "inet.h"
 
 /* linux:include/uapi/route.h */
 #define RTF_UP          0x0001      /* route usable                 */
@@ -45,11 +46,10 @@
 #define RTF_LOCALIN     0x0800
 #define RTF_DEFAULT     0x1000
 #define RTF_KNI         0X2000
-#define RTF_OUTWALL     0x4000
 
-struct rt6_prefix {
-    struct in6_addr     addr;
-    int                 plen;
-};
+typedef struct rt_addr {
+    union inet_addr addr;
+    int             plen; /*prefix len*/
+} rt_addr_t;
 
 #endif /* __DPVS_FLOW_CONF_H__ */

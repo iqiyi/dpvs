@@ -101,7 +101,6 @@ extern int dpvs_update_service(dpvs_service_compat_t *svc);
 /* update a virtual service based on option */
 extern int dpvs_update_service_by_options(dpvs_service_compat_t *svc, unsigned int options);
 
-
 /* delete a virtual service */
 extern int dpvs_del_service(dpvs_service_compat_t *svc);
 /* zero the counters of a service or all */
@@ -138,7 +137,7 @@ extern int dpvs_start_daemon(ipvs_daemon_t *dm);
 extern int dpvs_stop_daemon(ipvs_daemon_t *dm);
 
 /* get all the ipvs services */
-extern dpvs_service_table_t *dpvs_get_services(dpvs_service_table_t *t);
+extern dpvs_services_front_t *dpvs_get_services(dpvs_services_front_t *t);
 
 /* get the destination array of the specified service */
 extern dpvs_dest_table_t* dpvs_get_dests(dpvs_dest_table_t* table);
@@ -151,7 +150,6 @@ extern ipvs_timeout_t *dpvs_get_timeout(void);
 
 /* get ipvs daemon information */
 extern ipvs_daemon_t *dpvs_get_daemon(void);
-
 
 extern const char *ipvs_strerror(int err);
 
@@ -166,7 +164,7 @@ extern int dpvs_set_ipaddr(struct inet_addr_param *param, int cmd);
 extern struct dp_vs_blklst_conf_array *dpvs_get_blklsts(void);
 
 typedef int (*dpvs_service_cmp_t)(dpvs_service_compat_t *,dpvs_service_compat_t*);
-extern void dpvs_sort_services(dpvs_service_table_t *s, dpvs_service_cmp_t f);
+extern void dpvs_sort_services(dpvs_services_front_t *s, dpvs_service_cmp_t f);
 extern int dpvs_cmp_services(dpvs_service_compat_t *s1, dpvs_service_compat_t *s2);
 
 typedef int (*dpvs_dest_cmp_t)(dpvs_dest_compat_t*, dpvs_dest_compat_t*);

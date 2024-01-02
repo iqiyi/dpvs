@@ -154,6 +154,14 @@ static int vlan_get_promisc(struct netif_port *dev, bool *promisc)
     return netif_get_promisc(vlan->real_dev, promisc);
 }
 
+static int vlan_get_allmulticast(struct netif_port *dev, bool *allmulticast)
+{
+    struct vlan_dev_priv *vlan = netif_priv(dev);
+    assert(vlan && vlan->real_dev);
+
+    return netif_get_allmulticast(vlan->real_dev, allmulticast);
+}
+
 static int vlan_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
 {
     struct vlan_dev_priv *vlan = netif_priv(dev);
@@ -168,6 +176,7 @@ static struct netif_ops vlan_netif_ops = {
     .op_get_queue        = vlan_get_queue,
     .op_get_link         = vlan_get_link,
     .op_get_promisc      = vlan_get_promisc,
+    .op_get_allmulticast = vlan_get_allmulticast,
     .op_get_stats        = vlan_get_stats,
 };
 

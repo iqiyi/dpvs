@@ -104,6 +104,7 @@ struct port_conf_stream {
     int tx_desc_nb;
 
     bool promisc_mode;
+    bool allmulticast;
 
     struct list_head port_list_node;
 };
@@ -158,6 +159,16 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 
 /* function declarations */
 static void kni_lcore_loop(void *dummy);
+
+static inline bool is_physical_port(portid_t pid)
+{
+    return pid >= phy_pid_base && pid < phy_pid_end;
+}
+
+static inline bool is_bond_port(portid_t pid)
+{
+    return pid >= bond_pid_base && pid < bond_pid_end;
+}
 
 bool is_lcore_id_valid(lcoreid_t cid)
 {
@@ -297,6 +308,7 @@ static void device_handler(vector_t tokens)
     port_cfg->mtu = NETIF_DEFAULT_ETH_MTU;
 
     port_cfg->promisc_mode = false;
+    port_cfg->allmulticast = false;
     strncpy(port_cfg->rss, "tcp", sizeof(port_cfg->rss));
 
     list_add(&port_cfg->port_list_node, &port_list);
@@ -418,6 +430,13 @@ static void promisc_mode_handler(vector_t tokens)
     struct port_conf_stream *current_device = list_entry(port_list.next,
             struct port_conf_stream, port_list_node);
     current_device->promisc_mode = true;
+}
+
+static void allmulticast_handler(vector_t tokens)
+{
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+    current_device->allmulticast = true;
 }
 
 static void custom_mtu_handler(vector_t tokens)
@@ -897,6 +916,7 @@ void install_netif_keywords(void)
     install_keyword("descriptor_number", tx_desc_nb_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
+    install_keyword("allmulticast", allmulticast_handler, KW_TYPE_INIT);
     install_keyword("mtu", custom_mtu_handler,KW_TYPE_INIT);
     install_keyword("kni_name", kni_name_handler, KW_TYPE_INIT);
     install_sublevel_end();
@@ -2202,7 +2222,7 @@ static inline int validate_xmit_mbuf(struct rte_mbuf *mbuf,
 int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     lcoreid_t cid;
-    int pid, qindex;
+    int pid, qindex, ntxq;
     struct netif_queue_conf *txq;
     struct netif_ops *ops;
     int ret = EDPVS_OK;
@@ -2258,9 +2278,15 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 
     /* port id is determined by routing */
     pid = dev->id;
+    ntxq = lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].ntxq;
+    if (unlikely(ntxq <= 0)) {
+        RTE_LOG(WARNING, NETIF, "%s: no txq on device %s, drop the sending packet\n", __func__, dev->name);
+        rte_pktmbuf_free(mbuf);
+        lcore_stats[cid].dropped++;
+        return EDPVS_RESOURCE;
+    }
     /* qindex is hashed by physical address of mbuf */
-    qindex = (((uint32_t) mbuf->buf_iova) >> 8) %
-        (lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].ntxq);
+    qindex = (((uint32_t) mbuf->buf_iova) >> 8) % ntxq;
     //RTE_LOG(DEBUG, NETIF, "tx-queue hash(%x) = %d\n", ((uint32_t)mbuf->buf_iova) >> 8, qindex);
     txq = &lcore_conf[lcore2index[cid]].pqs[port2index[cid][pid]].txqs[qindex];
 
@@ -3136,7 +3162,7 @@ static inline int port_name_alloc(portid_t pid, char *pname, size_t buflen)
 {
     assert(pname && buflen > 0);
     memset(pname, 0, buflen);
-    if (pid >= phy_pid_base && pid < phy_pid_end) {
+    if (is_physical_port(pid)) {
         struct port_conf_stream *current_cfg;
         list_for_each_entry_reverse(current_cfg, &port_list, port_list_node) {
             if (current_cfg->port_id < 0) {
@@ -3150,7 +3176,7 @@ static inline int port_name_alloc(portid_t pid, char *pname, size_t buflen)
         }
         RTE_LOG(ERR, NETIF, "%s: not enough ports configured in dpvs.conf\n", __func__);
         return EDPVS_NOTEXIST;
-    } else if (pid >= bond_pid_base && pid < bond_pid_end) {
+    } else if (is_bond_port(pid)) {
         struct bond_conf_stream *current_cfg;
         list_for_each_entry_reverse(current_cfg, &bond_list, bond_list_node) {
             if (current_cfg->port_id == pid) {
@@ -3289,37 +3315,91 @@ static int dpdk_set_mc_list(struct netif_port *dev)
 {
     struct rte_ether_addr addrs[NETIF_MAX_HWADDR];
     int err;
-    int ret;
     size_t naddr = NELEMS(addrs);
+
+    if (rte_eth_allmulticast_get(dev->id) == 1)
+        return EDPVS_OK;
 
     err = __netif_mc_dump(dev, addrs, &naddr);
     if (err != EDPVS_OK)
         return err;
 
-    ret = rte_eth_dev_set_mc_addr_list((uint8_t)dev->id, addrs, naddr);
-    if (ret == -ENOTSUP) {
-        /* If nic doesn't support to set multicast filter, enable all. */
-        RTE_LOG(WARNING, NETIF, "%s: rte_eth_dev_set_mc_addr_list is not supported, "
-                "enable all multicast.\n", __func__);
+    err = rte_eth_dev_set_mc_addr_list(dev->id, addrs, naddr);
+    if (err) {
+        RTE_LOG(WARNING, NETIF, "%s: rte_eth_dev_set_mc_addr_list failed -- %s,"
+                "enable all multicast\n", dev->name, rte_strerror(-err));
         rte_eth_allmulticast_enable(dev->id);
-        return  EDPVS_OK;
-    }
-    if (ret) {
-        RTE_LOG(WARNING, NETIF, "%s: rte_eth_dev_set_mc_addr_list failed -- %s",
-                dev->name, rte_strerror(ret));
-        return EDPVS_DPDKAPIFAIL;
+        return EDPVS_OK;
     }
 
     return EDPVS_OK;
 }
 
+static int netif_op_get_xstats(struct netif_port *dev, netif_nic_xstats_get_t **pget)
+{
+    int i, nentries, err;
+    struct rte_eth_xstat *xstats = NULL;
+    struct rte_eth_xstat_name *xstats_names = NULL;
+    netif_nic_xstats_get_t *get = NULL;
+
+    nentries = rte_eth_xstats_get(dev->id, NULL, 0);
+    if (nentries < 0)
+        return EDPVS_DPDKAPIFAIL;
+
+    get = rte_calloc("xstats_get", 1, nentries * sizeof(struct netif_nic_xstats_entry), 0);
+    if (unlikely(!get))
+        return EDPVS_NOMEM;
+    xstats = rte_calloc("xstats", 1, nentries * sizeof(struct rte_eth_xstat), 0);
+    if (unlikely(!xstats)) {
+        err = EDPVS_NOMEM;
+        goto errout;
+    }
+    xstats_names = rte_calloc("xstats_names", 1, nentries * sizeof(struct rte_eth_xstat_name), 0);
+    if (unlikely(!xstats_names)) {
+        err = EDPVS_NOMEM;
+        goto errout;
+    }
+
+    err = rte_eth_xstats_get(dev->id, xstats, nentries);
+    if (err < 0 || err != nentries)
+        goto errout;
+    err = rte_eth_xstats_get_names(dev->id, xstats_names, nentries);
+    if (err < 0 || err != nentries)
+        goto errout;
+    get->pid = dev->id;
+    get->nentries = nentries;
+    for (i = 0; i < nentries; i++) {
+        get->entries[i].id = xstats[i].id;
+        get->entries[i].val = xstats[i].value;
+        rte_memcpy(get->entries[i].name, xstats_names[i].name, sizeof(get->entries[i].name)-1);
+    }
+
+    *pget = get;
+    rte_free(xstats);
+    rte_free(xstats_names);
+    return EDPVS_OK;
+errout:
+    if (xstats)
+        rte_free(xstats);
+    if (xstats_names)
+        rte_free(xstats_names);
+    if (get)
+        rte_free(get);
+    if (err == EDPVS_OK)
+        err = EDPVS_RESOURCE;
+    *pget = NULL;
+    return err;
+}
+
 static struct netif_ops dpdk_netif_ops = {
     .op_set_mc_list      = dpdk_set_mc_list,
+    .op_get_xstats       = netif_op_get_xstats,
 };
 
 static struct netif_ops bond_netif_ops = {
     .op_update_addr      = update_bond_macaddr,
     .op_set_mc_list      = bond_set_mc_list,
+    .op_get_xstats       = netif_op_get_xstats,
 };
 
 static inline void setup_dev_of_flags(struct netif_port *port)
@@ -3384,10 +3464,10 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
 
     port->id = id;
     port->bond = (union netif_bond *)(port + 1);
-    if (id >= phy_pid_base && id < phy_pid_end) {
+    if (is_physical_port(id)) {
         port->type = PORT_TYPE_GENERAL; /* update later in netif_rte_port_alloc */
         port->netif_ops = &dpdk_netif_ops;
-    } else if (id >= bond_pid_base && id < bond_pid_end) {
+    } else if (is_bond_port(id)) {
         port->type = PORT_TYPE_BOND_MASTER;
         port->netif_ops = &bond_netif_ops;
     } else {
@@ -3518,7 +3598,18 @@ int netif_get_promisc(struct netif_port *dev, bool *promisc)
     if (dev->netif_ops->op_get_promisc)
         return dev->netif_ops->op_get_promisc(dev, promisc);
 
-    *promisc = rte_eth_promiscuous_get((uint8_t)dev->id) ? true : false;
+    *promisc = rte_eth_promiscuous_get(dev->id) ? true : false;
+    return EDPVS_OK;
+}
+
+int netif_get_allmulticast(struct netif_port *dev, bool *allmulticast)
+{
+    assert(dev && dev->netif_ops && allmulticast);
+
+    if (dev->netif_ops->op_get_allmulticast)
+        return dev->netif_ops->op_get_allmulticast(dev, allmulticast);
+
+    *allmulticast = rte_eth_allmulticast_get(dev->id) ? true : false;
     return EDPVS_OK;
 }
 
@@ -3535,6 +3626,16 @@ int netif_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
         return EDPVS_DPDKAPIFAIL;
 
     return EDPVS_OK;
+}
+
+int netif_get_xstats(struct netif_port *dev, netif_nic_xstats_get_t **xstats)
+{
+    assert (dev && dev->netif_ops && xstats);
+
+    if (dev->netif_ops->op_get_xstats)
+        return dev->netif_ops->op_get_xstats(dev, xstats);
+
+    return EDPVS_NOTSUPP;
 }
 
 int netif_port_conf_get(struct netif_port *port, struct rte_eth_conf *eth_conf)
@@ -3646,7 +3747,7 @@ static void adapt_device_conf(portid_t port_id, uint64_t *rss_hf,
 
 /* fill in rx/tx queue configurations, including queue number,
  * decriptor number, bonding device's rss */
-static void fill_port_config(struct netif_port *port, char *promisc_on)
+static void fill_port_config(struct netif_port *port, char *promisc_on, char *allmulticast)
 {
     assert(port);
 
@@ -3741,6 +3842,12 @@ static void fill_port_config(struct netif_port *port, char *promisc_on)
         else
             *promisc_on = 0;
     }
+    if (allmulticast) {
+        if (cfg_stream && cfg_stream->allmulticast)
+            *allmulticast = 1;
+        else
+            *allmulticast = 0;
+    }
 }
 
 static int add_bond_slaves(struct netif_port *port)
@@ -3811,7 +3918,7 @@ int netif_port_start(struct netif_port *port)
     int ii, ret;
     lcoreid_t cid;
     queueid_t qid;
-    char promisc_on;
+    char promisc_on, allmulticast;
     char buf[512];
     struct rte_eth_txconf txconf;
     struct rte_eth_link link;
@@ -3821,7 +3928,7 @@ int netif_port_start(struct netif_port *port)
     if (unlikely(NULL == port))
         return EDPVS_INVAL;
 
-    fill_port_config(port, &promisc_on);
+    fill_port_config(port, &promisc_on, &allmulticast);
     if (!port->nrxq && !port->ntxq) {
         RTE_LOG(WARNING, NETIF, "%s: no queues to setup for %s\n", __func__, port->name);
         return EDPVS_DPDKAPIFAIL;
@@ -3938,6 +4045,12 @@ int netif_port_start(struct netif_port *port)
     if (promisc_on) {
         RTE_LOG(INFO, NETIF, "promiscous mode enabled for device %s\n", port->name);
         rte_eth_promiscuous_enable(port->id);
+    }
+
+    // enable allmulticast mode if configured
+    if (allmulticast) {
+        RTE_LOG(INFO, NETIF, "allmulticast enabled for device %s\n", port->name);
+        rte_eth_allmulticast_enable(port->id);
     }
 
      /* update mac addr to netif_port and netif_kni after start */
@@ -4659,6 +4772,7 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
     struct rte_eth_link link;
     netif_nic_basic_get_t *get;
     bool promisc;
+    bool allmulticast;
     int err;
 
     get = rte_zmalloc(NULL, sizeof(netif_nic_basic_get_t),
@@ -4716,6 +4830,13 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
         return err;
     }
     get->promisc = promisc ? 1 : 0;
+
+    err = netif_get_allmulticast(port, &allmulticast);
+    if (err != EDPVS_OK) {
+        rte_free(get);
+        return err;
+    }
+    get->allmulticast = allmulticast ? 1 : 0;
 
     if (port->flag & NETIF_PORT_FLAG_FORWARD2KNI)
         get->fwd2kni = 1;
@@ -4788,7 +4909,7 @@ static int get_port_ext_info(struct netif_port *port, void **out, size_t *out_le
 {
     assert(out || out_len);
 
-    struct rte_eth_dev_info dev_info;
+    struct rte_eth_dev_info dev_info = { 0 };
     netif_nic_ext_get_t *get, *new;
     char ctrlbuf[NETIF_CTRL_BUFFER_LEN];
     int len, naddr, err;
@@ -4801,8 +4922,10 @@ static int get_port_ext_info(struct netif_port *port, void **out, size_t *out_le
     get->port_id = port->id;
 
     /* dev info */
-    rte_eth_dev_info_get(port->id, &dev_info);
-    copy_dev_info(&get->dev_info, &dev_info);
+    if (is_physical_port( port->id) || is_bond_port(port->id)) {
+        rte_eth_dev_info_get(port->id, &dev_info);
+        copy_dev_info(&get->dev_info, &dev_info);
+    }
 
     /* cfg_queues */
     if (port->type == PORT_TYPE_GENERAL ||
@@ -4904,6 +5027,25 @@ static int get_port_stats(struct netif_port *port, void **out, size_t *out_len)
 
     *out = get;
     *out_len = sizeof(netif_nic_stats_get_t);
+
+    return EDPVS_OK;
+}
+
+static int get_port_xstats(struct netif_port *port, void **out, size_t *out_len)
+{
+    int err;
+    assert(out && out_len);
+
+    netif_nic_xstats_get_t *get;
+    err = netif_get_xstats(port, &get);
+    if (err != EDPVS_OK) {
+        if (err == EDPVS_NOTSUPP)
+            return EDPVS_OK;
+        return err;
+    }
+
+    *out = get;
+    *out_len = sizeof(netif_nic_xstats_get_t) + get->nentries * sizeof(struct netif_nic_xstats_entry);
 
     return EDPVS_OK;
 }
@@ -5032,6 +5174,15 @@ static int netif_sockopt_get(sockoptid_t opt, const void *in, size_t inlen,
                 return EDPVS_NOTEXIST;
             ret = get_port_stats(port, out, outlen);
             break;
+        case SOCKOPT_NETIF_GET_PORT_XSTATS:
+            if (!in)
+                return EDPVS_INVAL;
+            name = (char *)in;
+            port = netif_port_get_by_name(name);
+            if (!port)
+                return EDPVS_NOTEXIST;
+            ret = get_port_xstats(port, out, outlen);
+            break;
         case SOCKOPT_NETIF_GET_PORT_EXT_INFO:
             if (!in)
                 return EDPVS_INVAL;
@@ -5077,17 +5228,25 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
     assert(port_cfg);
 
     if (port_cfg->promisc_on) {
-        if (!rte_eth_promiscuous_get(port->id)) {
+        if (rte_eth_promiscuous_get(port->id) != 1)
             rte_eth_promiscuous_enable(port->id);
-            RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s enabled\n",
-                    __func__, port_cfg->pname);
-        }
+        RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s enabled\n", __func__, port_cfg->pname);
     } else if (port_cfg->promisc_off) {
-        if (rte_eth_promiscuous_get(port->id)) {
+        if (rte_eth_promiscuous_get(port->id) != 0)
             rte_eth_promiscuous_disable(port->id);
-            RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s disabled\n",
-                    __func__, port_cfg->pname);
+        RTE_LOG(INFO, NETIF, "[%s] promiscuous mode for %s disabled\n", __func__, port_cfg->pname);
+    }
+
+    if (port_cfg->allmulticast_on) {
+        if (rte_eth_allmulticast_get(port->id) != 1)
+            rte_eth_allmulticast_enable(port->id);
+        RTE_LOG(INFO, NETIF, "[%s] allmulticast for %s enabled\n", __func__, port_cfg->pname);
+    } else if (port_cfg->allmulticast_off) {
+        if (rte_eth_allmulticast_get(port->id) != 0) {
+            rte_eth_allmulticast_disable(port->id);
+            netif_set_mc_list(port);
         }
+        RTE_LOG(INFO, NETIF, "[%s] allmulticast for %s disabled\n", __func__, port_cfg->pname);
     }
 
     if (port_cfg->forward2kni_on) {

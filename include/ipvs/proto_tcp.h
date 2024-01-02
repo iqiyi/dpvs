@@ -102,8 +102,12 @@ struct tcp_state {
 struct tcphdr *tcp_hdr(const struct rte_mbuf *mbuf);
 void tcp4_send_csum(struct rte_ipv4_hdr *iph, struct tcphdr *th);
 void tcp6_send_csum(struct rte_ipv6_hdr *iph, struct tcphdr *th);
+int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
+        const struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+        struct netif_port *dev);
 struct rte_mempool *get_mbuf_pool(const struct dp_vs_conn *conn, int dir);
 void install_proto_tcp_keywords(void);
 void tcp_keyword_value_init(void);
+void tcp_in_adjust_seq(struct dp_vs_conn *conn, struct tcphdr *th);
 
 #endif

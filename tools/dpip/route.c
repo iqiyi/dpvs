@@ -35,25 +35,18 @@ static void route_help(void)
         "Parameters:\n"
         "    ROUTE      := PREFIX [ via ADDR ] [ dev IFNAME ] [ OPTIONS ]\n"
         "    PREFIX     := { ADDR/PLEN | ADDR | default }\n"
-        "    OPTIONS    := [ SCOPE | mtu MTU | src ADDR | tos TOS\n"
-        "                    | metric NUM | PROTOCOL | FLAGS ]\n"
+        "    OPTIONS    := [ SCOPE | mtu MTU | src ADDR | metric NUM ]\n"
         "    SCOPE      := [ scope { host | link | global | NUM } ]\n"
-        "    PROTOCOL   := [ proto { auto | boot | static | ra | NUM } ]\n"
-        "    FLAGS      := [ onlink | local ]\n"
-        "    TABLE      := [ table outwall ]\n"
         "Examples:\n"
         "    dpip route show\n"
         "    dpip route add default via 10.0.0.1\n"
         "    dpip route add 172.0.0.0/16 via 172.0.0.3 dev dpdk0\n"
         "    dpip route add 192.168.0.0/24 dev dpdk0\n"
-        "    dpip -6 route add ffe1::/128 dev dpdk0"
+        "    dpip -6 route add ffe1::/128 dev dpdk0\n"
         "    dpip -6 route add 2001:db8:1::/64 via 2001:db8:1::1 dev dpdk0\n"
         "    dpip route del 172.0.0.0/16\n"
         "    dpip route set 172.0.0.0/16 via 172.0.0.1\n"
         "    dpip route flush\n"
-        "    dpip route show table outwall\n"
-        "    dpip route add default via 10.0.0.1 dev dpdk1 table outwall\n"
-        "    dpip route del default via 10.0.0.1 dev dpdk1 table outwall\n"
         );
 }
 
@@ -119,19 +112,31 @@ static const char *flags_itoa(uint32_t flags)
     return flags_buf;
 }
 
-static void route4_dump(const struct dp_vs_route_conf *route)
+static void route4_dump(struct dp_vs_route_detail *route)
 {
     char dst[64], via[64], src[64];
 
+    int scope;
+    if (route->flags & RTF_LOCALIN) {
+        scope = ROUTE_CF_SCOPE_HOST;
+    } else if (route->flags & RTF_KNI) {
+        scope = ROUTE_CF_SCOPE_KNI;
+    } else if (route->gateway.addr.in.s_addr == htonl(INADDR_ANY)) {
+        scope = ROUTE_CF_SCOPE_LINK;
+        route->flags |= ROUTE_CF_FLAG_ONLINK;
+    } else {
+        scope = ROUTE_CF_SCOPE_GLOBAL;
+    }
+
     printf("%s %s/%d via %s src %s dev %s"
-            " mtu %d tos %d scope %s metric %d proto %s %s\n",
+            " mtu %d tos 0 scope %s metric %d proto %s %s\n",
             af_itoa(route->af),
-            inet_ntop(route->af, &route->dst, dst, sizeof(dst)) ? dst : "::",
-            route->plen,
-            inet_ntop(route->af, &route->via, via, sizeof(via)) ? via : "::",
-            inet_ntop(route->af, &route->src, src, sizeof(src)) ? src : "::",
-            route->ifname, route->mtu, route->tos, scope_itoa(route->scope),
-            route->metric, proto_itoa(route->proto), flags_itoa(route->flags));
+            inet_ntop(route->af, &route->dst.addr.in, dst, sizeof(dst)) ? dst : "::",
+            route->dst.plen,
+            inet_ntop(route->af, &route->gateway.addr.in, via, sizeof(via)) ? via : "::",
+            inet_ntop(route->af, &route->src.addr.in, src, sizeof(src)) ? src : "::",
+            route->ifname, route->mtu, scope_itoa(scope),
+            route->metric, proto_itoa(0), flags_itoa(route->flags));
 
     return;
 }
@@ -152,7 +157,7 @@ static void route6_dump(const struct dp_vs_route6_conf *rt6_cfg)
     } else
         snprintf(scope, sizeof(scope), "%s", "::");
 
-    if (ipv6_addr_any(&rt6_cfg->dst.addr) && rt6_cfg->dst.plen == 0) {
+    if (ipv6_addr_any(&rt6_cfg->dst.addr.in6) && rt6_cfg->dst.plen == 0) {
         snprintf(dst, sizeof(dst), "%s", "default");
         printf("%s %s", af_itoa(AF_INET6), dst);
     } else {
@@ -163,7 +168,7 @@ static void route6_dump(const struct dp_vs_route6_conf *rt6_cfg)
     if (!ipv6_addr_any(&rt6_cfg->gateway))
         printf(" via %s", inet_ntop(AF_INET6, (union inet_addr*)&rt6_cfg->gateway,
                     gateway, sizeof(gateway)) ? gateway : "::");
-    if (!ipv6_addr_any(&rt6_cfg->src.addr))
+    if (!ipv6_addr_any(&rt6_cfg->src.addr.in6))
         printf(" src %s", inet_ntop(AF_INET6, (union inet_addr*)&rt6_cfg->src.addr,
                     src, sizeof(src)) ? src : "::");
     printf(" dev %s", rt6_cfg->ifname);
@@ -177,70 +182,43 @@ static void route6_dump(const struct dp_vs_route6_conf *rt6_cfg)
 }
 
 static int route4_parse_args(struct dpip_conf *conf,
-                            struct dp_vs_route_conf *route)
+                            struct dp_vs_route_detail *route)
 {
     char *prefix = NULL;
+    int scope;
 
     memset(route, 0, sizeof(*route));
     route->af = conf->af;
-    route->scope = ROUTE_CF_SCOPE_NONE;
+    scope = ROUTE_CF_SCOPE_NONE;
 
     while (conf->argc > 0) {
         if (strcmp(conf->argv[0], "via") == 0) {
             NEXTARG_CHECK(conf, "via");
-            if (inet_pton_try(&route->af, conf->argv[0], &route->via) <= 0)
+            if (inet_pton_try((int*)&route->af, conf->argv[0], &route->gateway.addr) <= 0)
                 return -1;
         } else if (strcmp(conf->argv[0], "dev") == 0) {
             NEXTARG_CHECK(conf, "dev");
             snprintf(route->ifname, sizeof(route->ifname), "%s", conf->argv[0]);
-        } else if (strcmp(conf->argv[0], "tos") == 0) {
-            NEXTARG_CHECK(conf, "tos");
-            route->tos = atoi(conf->argv[0]);
         } else if (strcmp(conf->argv[0], "mtu") == 0) {
             NEXTARG_CHECK(conf, "mtu");
             route->mtu = atoi(conf->argv[0]);
         } else if (strcmp(conf->argv[0], "scope") == 0) {
             NEXTARG_CHECK(conf, "scope");
-
             if (strcmp(conf->argv[0], "host") == 0)
-                route->scope = ROUTE_CF_SCOPE_HOST;
+                route->flags |= RTF_LOCALIN;
             else if (strcmp(conf->argv[0], "kni_host") == 0)
-                route->scope = ROUTE_CF_SCOPE_KNI;
+                route->flags |= RTF_KNI;
             else if (strcmp(conf->argv[0], "link") == 0)
-                route->scope = ROUTE_CF_SCOPE_LINK;
-            else if (strcmp(conf->argv[0], "global") == 0)
-                route->scope = ROUTE_CF_SCOPE_GLOBAL;
-            else
-                route->scope = atoi(conf->argv[0]);
+                route->flags |= ROUTE_CF_FLAG_ONLINK;
         } else if (strcmp(conf->argv[0], "src") == 0) {
             NEXTARG_CHECK(conf, "src");
-            if (inet_pton_try(&route->af, conf->argv[0], &route->src) <= 0)
+            if (inet_pton_try((int*)&route->af, conf->argv[0], &route->src.addr) <= 0)
                 return -1;
         } else if (strcmp(conf->argv[0], "metric") == 0) {
             NEXTARG_CHECK(conf, "metric");
             route->metric = atoi(conf->argv[0]);
-        } else if (strcmp(conf->argv[0], "proto") == 0) {
-            NEXTARG_CHECK(conf, "proto");
-
-            if (strcmp(conf->argv[0], "auto") == 0)
-                route->proto = ROUTE_CF_PROTO_AUTO;
-            else if (strcmp(conf->argv[0], "boot") == 0)
-                route->proto = ROUTE_CF_PROTO_BOOT;
-            else if (strcmp(conf->argv[0], "static") == 0)
-                route->proto = ROUTE_CF_PROTO_STATIC;
-            else if (strcmp(conf->argv[0], "ra") == 0)
-                route->proto = ROUTE_CF_PROTO_RA;
-            else
-                route->proto = atoi(conf->argv[0]);
-        } else if (strcmp(conf->argv[0], "onlink") == 0) {
-            ;/* on-link is output only */
         } else if (strcmp(conf->argv[0], "local") == 0) {
-            route->scope = ROUTE_CF_SCOPE_HOST;
-        } else if (strcmp(conf->argv[0], "table") == 0) {
-            NEXTARG_CHECK(conf, "outwall");
-            if (strcmp(conf->argv[0], "outwall") != 0)
-                return -1;
-            route->outwalltb = 1;
+            route->flags |= RTF_HOST;
         } else {
             prefix = conf->argv[0];
         }
@@ -263,7 +241,7 @@ static int route4_parse_args(struct dpip_conf *conf,
 
     /* PREFIX */
     if (strcmp(prefix, "default") == 0) {
-        memset(&route->dst, 0, sizeof(route->dst));
+        memset(&route->dst.addr.in, 0, sizeof(route->dst.addr.in));
         if (route->af == AF_UNSPEC)
             route->af = AF_INET;
     } else {
@@ -273,10 +251,10 @@ static int route4_parse_args(struct dpip_conf *conf,
         if ((plen = strchr(addr, '/')) != NULL)
             *plen++ = '\0';
 
-        if (inet_pton_try(&route->af, prefix, &route->dst) <= 0)
+        if (inet_pton_try((int*)&route->af, prefix, &route->dst.addr) <= 0)
             return -1;
 
-        route->plen = plen ? atoi(plen) : 0;
+        route->dst.plen = plen ? atoi(plen) : 0;
     }
 
     if (route->af != AF_INET && route->af != AF_INET6) {
@@ -294,20 +272,18 @@ static int route4_parse_args(struct dpip_conf *conf,
      * ELSE (@via is not set)
      *       scope == LINK
      */
-    if (route->scope == ROUTE_CF_SCOPE_NONE) {
-        if (inet_is_addr_any(route->af, &route->via)) {
-            route->scope = ROUTE_CF_SCOPE_LINK;
-            route->flags |= ROUTE_CF_FLAG_ONLINK;
-        } else {
-            route->scope = ROUTE_CF_SCOPE_GLOBAL;
-        }
+    if (scope == ROUTE_CF_SCOPE_NONE) {
+        if (inet_is_addr_any(route->af, &route->gateway.addr)) {
+            route->flags |= ROUTE_CF_FLAG_ONLINK; /*ROUTE_CF_FLAG_ONLINK is invalid flags value*/
+        } 
+        route->flags |= RTF_FORWARD;
     }
 
-    if (!route->plen && (strcmp(prefix, "default") != 0)) {
+    if (!route->dst.plen && (strcmp(prefix, "default") != 0)) {
         if (route->af == AF_INET)
-            route->plen = 32;
+            route->dst.plen = 32;
         else
-            route->plen = 128;
+            route->dst.plen = 128;
     }
 
     if (conf->verbose)
@@ -368,7 +344,7 @@ static int route6_parse_args(struct dpip_conf *conf,
         NEXTARG(conf);
     }
 
-    if ((rt6_cfg->flags & RTF_FORWARD) && (ipv6_addr_any(&rt6_cfg->dst.addr) == 0))
+    if ((rt6_cfg->flags & RTF_FORWARD) && (ipv6_addr_any(&rt6_cfg->dst.addr.in6) == 0))
         rt6_cfg->flags |= RTF_DEFAULT;
     if (!(rt6_cfg->flags & (RTF_LOCALIN|RTF_KNI|RTF_FORWARD|RTF_DEFAULT)))
             rt6_cfg->flags |= RTF_FORWARD;
@@ -415,7 +391,8 @@ static int route6_parse_args(struct dpip_conf *conf,
 static int route4_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
                         struct dpip_conf *conf)
 {
-    struct dp_vs_route_conf route;
+    // struct dp_vs_route_conf route;
+    struct dp_vs_route_detail route;
     struct dp_vs_route_conf_array *array;
     size_t size, i;
     int err;
@@ -444,7 +421,7 @@ static int route4_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
 
         if (size < sizeof(*array)
                 || size != sizeof(*array) + \
-                           array->nroute * sizeof(struct dp_vs_route_conf)) {
+                           array->nroute * sizeof(struct dp_vs_route_detail)) {
             fprintf(stderr, "corrupted response.\n");
             dpvs_sockopt_msg_free(array);
             return EDPVS_INVAL;

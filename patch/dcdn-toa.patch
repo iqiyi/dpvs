@@ -1,0 +1,136 @@
+From cee6889685240558ebea795615539b7289070842 Mon Sep 17 00:00:00 2001
+From: wangyetong <wangyetong@qiyi.com>
+Date: Thu, 14 Sep 2023 15:33:42 +0800
+Subject: [PATCH] added dcdn toa
+
+---
+ include/ipvs/conn.h        |  4 ++++
+ include/ipvs/proto_tcp.h   |  2 ++
+ src/ipvs/ip_vs_proto_tcp.c | 55 +++++++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 60 insertions(+), 1 deletion(-)
+
+diff --git a/include/ipvs/conn.h b/include/ipvs/conn.h
+index 843721e..78fb0ba 100644
+--- a/include/ipvs/conn.h
++++ b/include/ipvs/conn.h
+@@ -167,6 +167,10 @@ struct dp_vs_conn {
+     /* connection redirect in fnat/snat/nat modes */
+     struct dp_vs_redirect  *redirect;
+ 
++    /* dcdn toa found or not */
++    bool dcdn_found;
++    /* dcdn toa address */
++    struct in_addr    dcdn_addr;
+ } __rte_cache_aligned;
+ 
+ /* for syn-proxy to save all ack packet in conn before rs's syn-ack arrives */
+diff --git a/include/ipvs/proto_tcp.h b/include/ipvs/proto_tcp.h
+index 3d1515a..f0cf50c 100644
+--- a/include/ipvs/proto_tcp.h
++++ b/include/ipvs/proto_tcp.h
+@@ -28,6 +28,7 @@ enum {
+     TCP_OPT_SACK_PERM   = 4,
+     TCP_OPT_SACK        = 5,
+     TCP_OPT_TIMESTAMP   = 8,
++    TCP_OPT_DCDN_ADDR   = 28,
+     TCP_OPT_ADDR        = 254, /* non-standard */
+ };
+ 
+@@ -35,6 +36,7 @@ enum {
+ #define TCP_OLEN_TIMESTAMP          10
+ #define TCP_OLEN_IP4_ADDR           8
+ #define TCP_OLEN_IP6_ADDR           20
++#define TOA_DCDN_IPV4               1
+ 
+ #define TCP_OLEN_TSTAMP_ALIGNED     12
+ #define TCP_OLEN_SACK_BASE          2
+diff --git a/src/ipvs/ip_vs_proto_tcp.c b/src/ipvs/ip_vs_proto_tcp.c
+index 6acbbca..5b185fa 100644
+--- a/src/ipvs/ip_vs_proto_tcp.c
++++ b/src/ipvs/ip_vs_proto_tcp.c
+@@ -441,6 +441,43 @@ static int tcp_in_add_proxy_proto(struct dp_vs_conn *conn, struct rte_mbuf *mbuf
+     return proxy_proto_insert(&ppinfo, conn, mbuf, tcph, hdr_shift);
+ }
+ 
++/* check dcdn toa option */
++static inline int tcp_in_check_toa(struct dp_vs_conn *conn, struct tcphdr *tcph, struct in_addr *addr)
++{
++    unsigned char *ptr;
++    int len;
++
++    ptr = (unsigned char *)(tcph + 1);
++    len = (tcph->doff << 2) - sizeof(struct tcphdr);
++
++    while (len > 0) {
++        int opcode = *ptr++;
++        int opsize;
++
++        switch (opcode) {
++        case TCP_OPT_EOL:
++            return EDPVS_NOTEXIST;
++        case TCP_OPT_NOP:
++            len--;
++            continue;
++        default:
++            opsize = *ptr++;
++            if (opsize < 2)    /* silly options */
++                return EDPVS_NOTEXIST;
++            if (opsize > len)
++                return EDPVS_NOTEXIST;    /* partial options */
++            if ((opcode == TCP_OPT_DCDN_ADDR)
++                    && (*ptr == TOA_DCDN_IPV4) && (opsize == TCP_OLEN_IP4_ADDR - 1) && addr) {
++                memcpy(addr, ptr + 1, sizeof(struct in_addr));
++                return EDPVS_OK;
++            }
++            ptr += opsize - 2;
++            len -= opsize;
++        }
++    }
++    return EDPVS_NOTEXIST;
++}
++
+ static int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+                           struct tcphdr *tcph)
+ {
+@@ -518,7 +555,10 @@ static int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+ 
+     if (conn->af == AF_INET) {
+         struct tcpopt_ip4_addr *toa_ip4 = (struct tcpopt_ip4_addr *)(tcph + 1);
+-        toa_ip4->addr = conn->caddr.in;
++        if (conn->dcdn_found)
++            toa_ip4->addr = conn->dcdn_addr;
++        else
++            toa_ip4->addr = conn->caddr.in;
+     }
+     else {
+         struct tcpopt_ip6_addr *toa_ip6 = (struct tcpopt_ip6_addr *)(tcph + 1);
+@@ -842,6 +882,10 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
+     int af;             /* outbound af */
+     int iphdrlen;
+     int err, pp_hdr_shift = 0;
++    struct in_addr dcdn_addr;
++#ifdef CONFIG_DPVS_IPVS_DEBUG
++    char dcdn_buf[64];
++#endif
+ 
+     af = tuplehash_out(conn).af;
+     iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
+@@ -866,6 +910,15 @@ static int tcp_fnat_in_handler(struct dp_vs_proto *proto,
+     if (th->syn && !th->ack) {
+         tcp_in_remove_ts(th);
+         tcp_in_init_seq(conn, mbuf, th);
++        if (tcp_in_check_toa(conn, th, &dcdn_addr) == EDPVS_OK) {
++            conn->dcdn_found = true;
++            conn->dcdn_addr = dcdn_addr;
++#ifdef CONFIG_DPVS_IPVS_DEBUG
++            inet_ntop(AF_INET, &dcdn_addr, dcdn_buf, sizeof(dcdn_buf));
++            RTE_LOG(DEBUG, IPVS, "get dcdn toa addr %s\n", dcdn_buf);
++#endif
++        }
++        tcp_in_add_toa(conn, mbuf, th);
+     }
+ 
+     /* Add toa/proxy_protocol to the first data packet */
+-- 
+1.8.3.1
+

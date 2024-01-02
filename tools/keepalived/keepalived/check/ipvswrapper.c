@@ -762,6 +762,7 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     srule->flags = vs->flags;
     srule->netmask = (vs->af == AF_INET6) ? 128 : ((uint32_t) 0xffffffff);
     srule->proto = vs->service_type;
+    srule->proxy_protocol = vs->proxy_protocol;
     srule->bps = vs->bps;
     srule->limit_proportion = vs->limit_proportion;
     srule->conn_timeout = vs->conn_timeout;
@@ -778,7 +779,7 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     }
 
     if (vs->persistence_timeout &&
-            (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_DEL)) {
+            (cmd == IP_VS_SO_SET_ADD || cmd == IP_VS_SO_SET_DEL || cmd == IP_VS_SO_SET_EDIT)) {
         srule->timeout = vs->persistence_timeout;
         srule->flags |= IP_VS_SVC_F_PERSISTENT;
 
@@ -787,11 +788,11 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
     }
 
     if (vs->syn_proxy) {
-        srule->flags |= IP_VS_CONN_F_SYNPROXY;
+        srule->flags |= IP_VS_SVC_F_SYNPROXY;
     }
 
     if (vs->expire_quiescent_conn) {
-        srule->flags |= IP_VS_CONN_F_EXPIRE_QUIESCENT;
+        srule->flags |= IP_VS_SVC_F_EXPIRE_QUIESCENT;
     }
 
     if (!strcmp(vs->sched, "conhash")) {
@@ -832,16 +833,14 @@ ipvs_set_drule(int cmd, dpvs_dest_compat_t *drule, real_server_t * rs)
 
     drule->port = inet_sockaddrport(&rs->addr);
     drule->conn_flags = rs->forwarding_method;
-    drule->weight = rs->weight;
+    /*Do not change dead rs weight in dpvs at reload*/
+    if (cmd == IP_VS_SO_SET_EDITDEST && rs->reloaded && rs->set && !ISALIVE(rs))
+        drule->weight = 0;
+    else
+        drule->weight = rs->weight;
+    drule->fwdmode = rs->forwarding_method;
     drule->max_conn = rs->u_threshold;
     drule->min_conn = rs->l_threshold;
-#ifdef _HAVE_IPVS_TUN_TYPE_
-    drule->tun_type = rs->tun_type;
-    drule->tun_port = rs->tun_port;
-#ifdef _HAVE_IPVS_TUN_CSUM_
-    drule->tun_flags = rs->tun_flags;
-#endif
-#endif
 }
 
 /*check whitelist addr*/

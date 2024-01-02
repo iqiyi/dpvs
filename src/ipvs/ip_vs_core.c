@@ -86,7 +86,8 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
     assert(svc && iph && mbuf);
 
     conn_flags = (is_synproxy_on ? DPVS_CONN_F_SYNPROXY : 0);
-    conn_flags |= (svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT);
+    if (svc->flags | DP_VS_SVC_F_EXPIRE_QUIESCENT)
+        conn_flags |= DPVS_CONN_F_EXPIRE_QUIESCENT;
 
     if (svc->af == AF_INET6) {
         /* FIXME: Is OK to use svc->netmask as IPv6 prefix length ? */
@@ -181,8 +182,7 @@ static struct dp_vs_conn *dp_vs_sched_persist(struct dp_vs_service *svc,
 static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
                                        const struct dp_vs_iphdr *iph,
                                        uint16_t *ports,
-                                       struct rte_mbuf *mbuf,
-                                       bool outwall)
+                                       struct rte_mbuf *mbuf)
 {
     int err;
     struct dp_vs_conn *conn;
@@ -262,7 +262,6 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
                     ports[1], saddr6->sin6_port, 0, &param);
         }
     }
-    param.outwall = outwall;
     conn = dp_vs_conn_new(mbuf, iph, &param, dest, 0);
     if (!conn) {
         sa_release(NULL, &daddr, &saddr);
@@ -277,8 +276,7 @@ static struct dp_vs_conn *dp_vs_snat_schedule(struct dp_vs_dest *dest,
 struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                                   const struct dp_vs_iphdr *iph,
                                   struct rte_mbuf *mbuf,
-                                  bool is_synproxy_on,
-                                  bool outwall)
+                                  bool is_synproxy_on)
 {
     uint16_t _ports[2], *ports; /* sport, dport */
     struct dp_vs_dest *dest;
@@ -298,7 +296,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
 
     dest = svc->scheduler->schedule(svc, mbuf, iph);
     if (!dest) {
-        RTE_LOG(WARNING, IPVS, "%s: no dest found.\n", __func__);
+        RTE_LOG(INFO, IPVS, "%s: no dest found.\n", __func__);
 #ifdef CONFIG_DPVS_MBUF_DEBUG
         dp_vs_mbuf_dump("found dest failed.", iph->af, mbuf);
 #endif
@@ -306,7 +304,7 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
     }
 
     if (dest->fwdmode == DPVS_FWD_MODE_SNAT)
-        return dp_vs_snat_schedule(dest, iph, ports, mbuf, outwall);
+        return dp_vs_snat_schedule(dest, iph, ports, mbuf);
 
     if (unlikely(iph->proto == IPPROTO_ICMP)) {
         struct icmphdr *ich, _icmph;
@@ -345,7 +343,8 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
         flags |= DPVS_CONN_F_SYNPROXY;
     if (svc->flags & DP_VS_SVC_F_ONEPACKET && iph->proto == IPPROTO_UDP)
         flags |= DPVS_CONN_F_ONE_PACKET;
-    flags |= (svc->flags & DPVS_CONN_F_EXPIRE_QUIESCENT);
+    if (svc->flags & DP_VS_SVC_F_EXPIRE_QUIESCENT)
+        flags |= DPVS_CONN_F_EXPIRE_QUIESCENT;
 
     conn = dp_vs_conn_new(mbuf, iph, &param, dest, flags);
     if (!conn)

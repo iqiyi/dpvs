@@ -7,7 +7,7 @@
 struct conhash_s* conhash_init(conhash_cb_hashfunc pfhash)
 {
     /* alloc memory and set to zero */
-    struct conhash_s *conhash = (struct conhash_s*)rte_zmalloc("connhash",sizeof(struct conhash_s), RTE_CACHE_LINE_SIZE);
+    struct conhash_s *conhash = (struct conhash_s*)rte_zmalloc("conhash",sizeof(struct conhash_s), RTE_CACHE_LINE_SIZE);
     if(conhash == NULL)
     {
         return NULL;

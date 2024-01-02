@@ -51,6 +51,7 @@ struct dpvs_timer {
      * 'interval' for periodic timer.
      */
     dpvs_tick_t         delay;
+    dpvs_tick_t         left;
 };
 
 dpvs_tick_t timeval_to_ticks(const struct timeval *tv);

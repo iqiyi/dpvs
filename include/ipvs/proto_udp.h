@@ -19,9 +19,12 @@
 #define __DP_VS_PROTO_UDP_H__
 
 #include <netinet/udp.h>
+#include "uoa.h"
 
 enum {
-    DPVS_UDP_S_NORMAL   = 0,
+    DPVS_UDP_S_NONE     = 0,
+    DPVS_UDP_S_ONEWAY,
+    DPVS_UDP_S_NORMAL,
     DPVS_UDP_S_LAST
 };
 
@@ -32,5 +35,8 @@ void udp_keyword_value_init(void);
 
 void udp4_send_csum(struct rte_ipv4_hdr *iph, struct rte_udp_hdr *uh);
 void udp6_send_csum(struct rte_ipv6_hdr *iph, struct rte_udp_hdr *uh);
+int udp_send_csum(int af, int iphdrlen, struct rte_udp_hdr *uh,
+        const struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
+        const struct opphdr *opp, struct netif_port *dev);
 
 #endif

@@ -20,6 +20,11 @@
 #
 SUBDIRS = keepalived ipvsadm dpip
 
+ifeq ($(CONFIG_DPVS_AGENT), y)
+SUBDIRS += healthcheck
+SUBDIRS += dpvs-agent
+endif
+
 all: config
 	for i in $(SUBDIRS); do $(MAKE) -C $$i || exit 1; done
 
@@ -42,3 +47,7 @@ install:
 	install -m 744 keepalived/bin/keepalived $(INSDIR)/keepalived
 	install -m 744 ipvsadm/ipvsadm $(INSDIR)/ipvsadm
 	install -m 744 dpip/build/dpip $(INSDIR)/dpip
+ifeq ($(CONFIG_DPVS_AGENT), y)
+	install -m 744 healthcheck/healthcheck $(INSDIR)/healthcheck
+	install -m 744 dpvs-agent/cmd/dpvs-agent-server/dpvs-agent $(INSDIR)/dpvs-agent
+endif

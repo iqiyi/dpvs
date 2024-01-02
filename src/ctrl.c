@@ -42,6 +42,10 @@ static int g_msg_timeout = MSG_TIMEOUT_US;
 
 static uint8_t g_msg_prio = MSG_PRIO_LOW;
 
+const char* dpvs_sockopts_name[] = {
+    DPVSMSG_SOCKOPT_ENUM(ENUM_STRING)
+};
+
 #define DPVS_MT_BITS 8
 #define DPVS_MT_LEN (1 << DPVS_MT_BITS)
 #define DPVS_MT_MASK (DPVS_MT_LEN - 1)
@@ -374,7 +378,7 @@ struct dpvs_msg* msg_make(msgid_t type, uint32_t seq,
     msg->mode = mode;
     msg->cid = cid;
     msg->len = len;
-    if (len)
+    if (len && data)
         rte_memcpy(msg->data, data, len);
     msg->reply.data = NULL;
     msg->reply.len = 0;
@@ -1148,7 +1152,7 @@ static inline int msg_term(void)
 
 /////////////////////////////// sockopt process msg ///////////////////////////////////////////
 
-char ipc_unix_domain[256];
+static char ipc_unix_domain[256];
 
 static struct list_head sockopt_list;
 
@@ -1233,9 +1237,9 @@ int sockopt_register(struct dpvs_sockopts *sockopts)
     if (sockopts_exist(sockopts)) {
         RTE_LOG(WARNING, MSGMGR, "%s: socket msg type already exist\n", __func__);
         rte_exit(EXIT_FAILURE, "sockopt type already exist ->\n"
-                "\t\tget: %d - %d\n\t\tset: %d - %d\n",
-                sockopts->get_opt_min, sockopts->get_opt_max,
-                sockopts->set_opt_min, sockopts->set_opt_max);
+                "\t\tget: %s - %s\n\t\tset: %s - %s\n",
+                dpvs_sockopts_name[sockopts->get_opt_min], dpvs_sockopts_name[sockopts->get_opt_max],
+                dpvs_sockopts_name[sockopts->set_opt_min], dpvs_sockopts_name[sockopts->set_opt_max]);
 
         return EDPVS_EXIST;
     }
@@ -1297,8 +1301,8 @@ static inline int sockopt_msg_recv(int clt_fd, struct dpvs_sock_msg **pmsg)
     if (msg_hdr.len > 0) {
         res = readn(clt_fd, msg->data, msg->len);
         if (res != msg->len) {
-            RTE_LOG(WARNING, MSGMGR, "%s: sockopt msg body recv fail -- "
-                    "%d/%d recieved\n", __func__, res, (int)msg->len);
+            RTE_LOG(WARNING, MSGMGR, "%s: sockopt[%s] msg body recv fail -- "
+                    "%d/%d recieved\n", __func__, dpvs_sockopts_name[msg->id], res, (int)msg->len);
             rte_free(msg);
             *pmsg = NULL;
             return EDPVS_IO;
@@ -1326,22 +1330,22 @@ static int sockopt_msg_send(int clt_fd,
     len = sizeof(struct dpvs_sock_msg_reply);
     res = sendn(clt_fd, hdr, len, MSG_NOSIGNAL);
     if (len != res) {
-        RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg header send error"
-                " -- %d/%d sent\n", __func__, hdr->id, res, len);
+        RTE_LOG(WARNING, MSGMGR, "[%s:msg#%s] sockopt reply msg header send error"
+                " -- %d/%d sent\n", __func__, dpvs_sockopts_name[hdr->id], res, len);
         return EDPVS_IO;
     }
 
     if (hdr->errcode) {
-        RTE_LOG(DEBUG, MSGMGR, "[%s:msg#%d] errcode set in sockopt msg reply: %s\n",
-                __func__, hdr->id, dpvs_strerror(hdr->errcode));
+        RTE_LOG(DEBUG, MSGMGR, "[%s:msg#%s] errcode set in sockopt msg reply: %s\n",
+                __func__, dpvs_sockopts_name[hdr->id], dpvs_strerror(hdr->errcode));
         return hdr->errcode;
     }
 
     if (data_len) {
         res = sendn(clt_fd, data, data_len, MSG_NOSIGNAL);
         if (data_len != res) {
-            RTE_LOG(WARNING, MSGMGR, "[%s:msg#%d] sockopt reply msg body send error"
-                    " -- %d/%d sent\n", __func__, hdr->id, res, data_len);
+            RTE_LOG(WARNING, MSGMGR, "[%s:msg#%s] sockopt reply msg body send error"
+                    " -- %d/%d sent\n", __func__, dpvs_sockopts_name[hdr->id], res, data_len);
             return EDPVS_IO;
         }
     }
@@ -1391,8 +1395,8 @@ static int sockopt_ctl(__rte_unused void *arg)
             reply_data = NULL;
             reply_data_len = 0;
 #ifdef CONFIG_MSG_DEBUG
-            RTE_LOG(INFO, MSGMGR, "%s: socket msg<type=%s, id=%d> callback failed\n",
-                    __func__, msg->type == SOCKOPT_GET ? "GET" : "SET", msg->id);
+            RTE_LOG(INFO, MSGMGR, "%s: socket msg<type=%s, name=%s> callback failed\n",
+                    __func__, msg->type == SOCKOPT_GET ? "GET" : "SET", dpvs_sockopts_name[msg->id]);
 #endif
         }
 
@@ -1597,38 +1601,11 @@ static void msg_priority_level_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
-static void ipc_unix_domain_handler(vector_t tokens)
-{
-    char *str, *dup_str;
-    size_t slen;
-
-    str = set_value(tokens);
-    slen = strlen(str);
-
-    dup_str = strdup(str);
-    dirname(dup_str);
-    memset(ipc_unix_domain, 0, sizeof(ipc_unix_domain));
-
-    if (slen > 0 && slen < sizeof(ipc_unix_domain) &&
-            access(dup_str, F_OK) == 0) {
-        RTE_LOG(INFO, MSGMGR, "ipc_unix_domain = %s\n", str);
-        strncpy(ipc_unix_domain, str, sizeof(ipc_unix_domain) - 1);
-    } else {
-        RTE_LOG(WARNING, MSGMGR, "invalid ipc_unix_domain %s, using default %s\n",
-                str, dpvs_ipc_file);
-        strncpy(ipc_unix_domain, dpvs_ipc_file, sizeof(ipc_unix_domain) - 1);
-    }
-
-    free(dup_str);
-    FREE_PTR(str);
-}
-
 void control_keyword_value_init(void)
 {
     if (dpvs_state_get() == DPVS_STATE_INIT) {
         /* KW_TYPE_INIT keyword */
         msg_ring_size = DPVS_MSG_RING_SIZE_DEF;
-        strncpy(ipc_unix_domain, dpvs_ipc_file, sizeof(ipc_unix_domain) - 1);
     }
     /* KW_TYPE_NORMAL keyword */
     g_msg_timeout = MSG_TIMEOUT_US;
@@ -1643,9 +1620,5 @@ void install_control_keywords(void)
     install_keyword("ring_size", msg_ring_size_handler, KW_TYPE_INIT);
     install_keyword("sync_msg_timeout_us", msg_timeout_handler, KW_TYPE_NORMAL);
     install_keyword("priority_level", msg_priority_level_handler, KW_TYPE_NORMAL);
-    install_sublevel_end();
-    install_keyword("ipc_msg", NULL, KW_TYPE_INIT);
-    install_sublevel();
-    install_keyword("unix_domain", ipc_unix_domain_handler, KW_TYPE_INIT);
     install_sublevel_end();
 }

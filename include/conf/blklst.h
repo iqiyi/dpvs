@@ -31,14 +31,15 @@ struct dp_vs_blklst_entry {
 
 typedef struct dp_vs_blklst_conf {
     /* identify service */
-    int                 af;
-    uint8_t             proto;
+    union inet_addr     blklst;
     union inet_addr     vaddr;
-    uint16_t            vport;
+    int                 af;
     uint32_t            fwmark;
+    uint16_t            vport;
+    uint8_t             proto;
+    uint8_t             padding;
 
     /* for set */
-    union inet_addr     blklst;
 } dpvs_blklst_t;
 
 struct dp_vs_blklst_conf_array {

@@ -584,6 +584,7 @@ alloc_vs(const char *param1, const char *param2)
 #endif
 	}
 
+	new->proxy_protocol = PROXY_PROTOCOL_DISABLE;
 	new->virtualhost = NULL;
 	new->alpha = false;
 	new->omega = false;

@@ -97,7 +97,7 @@ static void dp_vs_mh_reset(struct dp_vs_mh_state *s)
     l = &s->lookup[0];
     for (i = 0; i < DP_VS_MH_TAB_SIZE; i++) {
         if (l->dest) {
-            dp_vs_dest_put(l->dest);
+            dp_vs_dest_put(l->dest, true);
             l->dest = NULL;
         }
         l++;
@@ -195,7 +195,7 @@ static int dp_vs_mh_populate(struct dp_vs_mh_state *s,
             new_dest = list_entry(p, struct dp_vs_dest, n_list);
             if (dest != new_dest) {
                 if (dest)
-                    dp_vs_dest_put(dest);
+                    dp_vs_dest_put(dest, true);
                 rte_atomic32_inc(&new_dest->refcnt);
                 s->lookup[c].dest = new_dest;
             }

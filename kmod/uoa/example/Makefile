@@ -24,6 +24,8 @@ all: udp_serv uperf opp
 CFLAGS = -g -O0
 CFLAGS += -I ../../../include/ -I ../../../include/conf -I ../
 
+CFLAGS += -D WITH_IPV6_ENABLE
+
 udp_serv: udp_serv.c
 	gcc $(CFLAGS) -o udp_serv udp_serv.c
 

@@ -22,6 +22,7 @@
 #ifndef __DPVS_ROUTE_CONF_H__
 #define __DPVS_ROUTE_CONF_H__
 
+#include "flow.h"
 #include "inet.h"
 #include "net/if.h"
 #include "conf/sockopts.h"
@@ -59,12 +60,23 @@ struct dp_vs_route_conf {
     uint8_t         metric;
     uint8_t         proto;  /* routing protocol */
     uint32_t        flags;
-    int32_t         outwalltb;
 } __attribute__((__packed__));
+
+typedef struct dp_vs_route_detail {
+    uint32_t    af;
+    uint32_t    mtu;
+    uint32_t    flags;
+    uint32_t    metric;
+    rt_addr_t   dst;
+    rt_addr_t   src;
+    rt_addr_t   gateway;
+    rt_addr_t   prefsrc;
+    char        ifname[IFNAMSIZ];
+} dpvs_route_detail_t;
 
 struct dp_vs_route_conf_array {
     int                 nroute;
-    struct dp_vs_route_conf   routes[0];
+    struct dp_vs_route_detail   routes[0];
 } __attribute__((__packed__));
 
 #endif /* __DPVS_ROUTE_CONF_H__ */
