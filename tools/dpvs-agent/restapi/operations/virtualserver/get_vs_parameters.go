@@ -22,10 +22,13 @@ func NewGetVsParams() GetVsParams {
 	var (
 		// initialize parameters with default values
 
-		statsDefault = bool(false)
+		snapshotDefault = bool(true)
+		statsDefault    = bool(false)
 	)
 
 	return GetVsParams{
+		Snapshot: &snapshotDefault,
+
 		Stats: &statsDefault,
 	}
 }
@@ -39,6 +42,11 @@ type GetVsParams struct {
 	// HTTP Request Object
 	HTTPRequest *http.Request `json:"-"`
 
+	/*
+	  In: query
+	  Default: true
+	*/
+	Snapshot *bool
 	/*
 	  In: query
 	  Default: false
@@ -57,6 +65,11 @@ func (o *GetVsParams) BindRequest(r *http.Request, route *middleware.MatchedRout
 
 	qs := runtime.Values(r.URL.Query())
 
+	qSnapshot, qhkSnapshot, _ := qs.GetOK("snapshot")
+	if err := o.bindSnapshot(qSnapshot, qhkSnapshot, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
 	qStats, qhkStats, _ := qs.GetOK("stats")
 	if err := o.bindStats(qStats, qhkStats, route.Formats); err != nil {
 		res = append(res, err)
@@ -64,6 +77,30 @@ func (o *GetVsParams) BindRequest(r *http.Request, route *middleware.MatchedRout
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+// bindSnapshot binds and validates parameter Snapshot from query.
+func (o *GetVsParams) bindSnapshot(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+	// AllowEmptyValue: false
+
+	if raw == "" { // empty values pass all other validations
+		// Default values have been previously initialized by NewGetVsParams()
+		return nil
+	}
+
+	value, err := swag.ConvertBool(raw)
+	if err != nil {
+		return errors.InvalidType("snapshot", "query", "bool", raw)
+	}
+	o.Snapshot = &value
+
 	return nil
 }
 

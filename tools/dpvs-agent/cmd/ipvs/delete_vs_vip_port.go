@@ -17,6 +17,7 @@ package ipvs
 import (
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
 
@@ -47,9 +48,11 @@ func (h *delVsItem) Handle(params apiVs.DeleteVsVipPortParams) middleware.Respon
 	result := vs.Del(h.connPool, h.logger)
 	switch result {
 	case types.EDPVS_OK:
+		settings.ShareSnapshot().ServiceDel(params.VipPort)
 		h.logger.Info("Del virtual server success.", "VipPort", params.VipPort)
 		return apiVs.NewDeleteVsVipPortOK()
 	case types.EDPVS_NOTEXIST:
+		settings.ShareSnapshot().ServiceDel(params.VipPort)
 		h.logger.Warn("Del a not exist virtual server done.", "VipPort", params.VipPort, "result", result.String())
 		return apiVs.NewDeleteVsVipPortNotFound()
 	default:

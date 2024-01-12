@@ -18,6 +18,7 @@ import (
 	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
 
@@ -55,6 +56,8 @@ func (h *getVsVipPort) Handle(params apiVs.GetVsVipPortParams) middleware.Respon
 		return apiVs.NewGetVsVipPortNotFound()
 	}
 
+	shareSnapshot := settings.ShareSnapshot()
+
 	vsModels := new(models.VirtualServerList)
 	vsModels.Items = make([]*models.VirtualServerSpecExpand, len(vss))
 
@@ -76,7 +79,10 @@ func (h *getVsVipPort) Handle(params apiVs.GetVsVipPortParams) middleware.Respon
 
 		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", rss)
 
-		vsModels.Items[i] = vs.GetModel()
+		vsModel := vs.GetModel()
+		shareSnapshot.ServiceUpsert(vsModel)
+		// vsModel.Version = shareSnapshot.ServiceVersion(vs.ID())
+		vsModels.Items[i] = vsModel
 		vsStats := (*types.ServerStats)(vsModels.Items[i].Stats)
 		vsModels.Items[i].RSs = new(models.RealServerExpandList)
 		vsModels.Items[i].RSs.Items = make([]*models.RealServerSpecExpand, len(rss))

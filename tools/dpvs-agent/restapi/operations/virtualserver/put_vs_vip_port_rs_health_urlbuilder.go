@@ -10,16 +10,13 @@ import (
 	"net/url"
 	golangswaggerpaths "path"
 	"strings"
-
-	"github.com/go-openapi/swag"
 )
 
-// GetVsVipPortURL generates an URL for the get vs vip port operation
-type GetVsVipPortURL struct {
+// PutVsVipPortRsHealthURL generates an URL for the put vs vip port rs health operation
+type PutVsVipPortRsHealthURL struct {
 	VipPort string
 
-	Snapshot *bool
-	Stats    *bool
+	Version string
 
 	_basePath string
 	// avoid unkeyed usage
@@ -29,7 +26,7 @@ type GetVsVipPortURL struct {
 // WithBasePath sets the base path for this url builder, only required when it's different from the
 // base path specified in the swagger spec.
 // When the value of the base path is an empty string
-func (o *GetVsVipPortURL) WithBasePath(bp string) *GetVsVipPortURL {
+func (o *PutVsVipPortRsHealthURL) WithBasePath(bp string) *PutVsVipPortRsHealthURL {
 	o.SetBasePath(bp)
 	return o
 }
@@ -37,21 +34,21 @@ func (o *GetVsVipPortURL) WithBasePath(bp string) *GetVsVipPortURL {
 // SetBasePath sets the base path for this url builder, only required when it's different from the
 // base path specified in the swagger spec.
 // When the value of the base path is an empty string
-func (o *GetVsVipPortURL) SetBasePath(bp string) {
+func (o *PutVsVipPortRsHealthURL) SetBasePath(bp string) {
 	o._basePath = bp
 }
 
 // Build a url path and query string
-func (o *GetVsVipPortURL) Build() (*url.URL, error) {
+func (o *PutVsVipPortRsHealthURL) Build() (*url.URL, error) {
 	var _result url.URL
 
-	var _path = "/vs/{VipPort}"
+	var _path = "/vs/{VipPort}/rs/health"
 
 	vipPort := o.VipPort
 	if vipPort != "" {
 		_path = strings.Replace(_path, "{VipPort}", vipPort, -1)
 	} else {
-		return nil, errors.New("vipPort is required on GetVsVipPortURL")
+		return nil, errors.New("vipPort is required on PutVsVipPortRsHealthURL")
 	}
 
 	_basePath := o._basePath
@@ -62,20 +59,9 @@ func (o *GetVsVipPortURL) Build() (*url.URL, error) {
 
 	qs := make(url.Values)
 
-	var snapshotQ string
-	if o.Snapshot != nil {
-		snapshotQ = swag.FormatBool(*o.Snapshot)
-	}
-	if snapshotQ != "" {
-		qs.Set("snapshot", snapshotQ)
-	}
-
-	var statsQ string
-	if o.Stats != nil {
-		statsQ = swag.FormatBool(*o.Stats)
-	}
-	if statsQ != "" {
-		qs.Set("stats", statsQ)
+	versionQ := o.Version
+	if versionQ != "" {
+		qs.Set("version", versionQ)
 	}
 
 	_result.RawQuery = qs.Encode()
@@ -84,7 +70,7 @@ func (o *GetVsVipPortURL) Build() (*url.URL, error) {
 }
 
 // Must is a helper function to panic when the url builder returns an error
-func (o *GetVsVipPortURL) Must(u *url.URL, err error) *url.URL {
+func (o *PutVsVipPortRsHealthURL) Must(u *url.URL, err error) *url.URL {
 	if err != nil {
 		panic(err)
 	}
@@ -95,17 +81,17 @@ func (o *GetVsVipPortURL) Must(u *url.URL, err error) *url.URL {
 }
 
 // String returns the string representation of the path with query string
-func (o *GetVsVipPortURL) String() string {
+func (o *PutVsVipPortRsHealthURL) String() string {
 	return o.Must(o.Build()).String()
 }
 
 // BuildFull builds a full url with scheme, host, path and query string
-func (o *GetVsVipPortURL) BuildFull(scheme, host string) (*url.URL, error) {
+func (o *PutVsVipPortRsHealthURL) BuildFull(scheme, host string) (*url.URL, error) {
 	if scheme == "" {
-		return nil, errors.New("scheme is required for a full url on GetVsVipPortURL")
+		return nil, errors.New("scheme is required for a full url on PutVsVipPortRsHealthURL")
 	}
 	if host == "" {
-		return nil, errors.New("host is required for a full url on GetVsVipPortURL")
+		return nil, errors.New("host is required for a full url on PutVsVipPortRsHealthURL")
 	}
 
 	base, err := o.Build()
@@ -119,6 +105,6 @@ func (o *GetVsVipPortURL) BuildFull(scheme, host string) (*url.URL, error) {
 }
 
 // StringFull returns the string representation of a complete url
-func (o *GetVsVipPortURL) StringFull(scheme, host string) string {
+func (o *PutVsVipPortRsHealthURL) StringFull(scheme, host string) string {
 	return o.Must(o.BuildFull(scheme, host)).String()
 }

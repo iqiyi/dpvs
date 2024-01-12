@@ -86,6 +86,9 @@ type VirtualServerSpecExpand struct {
 
 	// timeout
 	Timeout uint32 `json:"Timeout,omitempty"`
+
+	// version
+	Version string `json:"Version,omitempty"`
 }
 
 // Validate validates this virtual server spec expand

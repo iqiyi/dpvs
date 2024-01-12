@@ -10,15 +10,11 @@ import (
 	"net/url"
 	golangswaggerpaths "path"
 	"strings"
-
-	"github.com/go-openapi/swag"
 )
 
 // PutVsVipPortRsURL generates an URL for the put vs vip port rs operation
 type PutVsVipPortRsURL struct {
 	VipPort string
-
-	Healthcheck *bool
 
 	_basePath string
 	// avoid unkeyed usage
@@ -58,18 +54,6 @@ func (o *PutVsVipPortRsURL) Build() (*url.URL, error) {
 		_basePath = "/v2"
 	}
 	_result.Path = golangswaggerpaths.Join(_basePath, _path)
-
-	qs := make(url.Values)
-
-	var healthcheckQ string
-	if o.Healthcheck != nil {
-		healthcheckQ = swag.FormatBool(*o.Healthcheck)
-	}
-	if healthcheckQ != "" {
-		qs.Set("healthcheck", healthcheckQ)
-	}
-
-	_result.RawQuery = qs.Encode()
 
 	return &_result, nil
 }

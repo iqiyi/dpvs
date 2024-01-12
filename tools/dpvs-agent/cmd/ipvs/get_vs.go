@@ -18,6 +18,7 @@ import (
 	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
 
@@ -47,10 +48,10 @@ func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
 		return apiVs.NewGetVsOK()
 	}
 
+	shareSnapshot := settings.ShareSnapshot()
+
 	h.logger.Info("Get all virtual server done.", "vss", vss)
-	vsModels := new(models.VirtualServerList)
-	vsModels.Items = make([]*models.VirtualServerSpecExpand, len(vss))
-	for i, vs := range vss {
+	for _, vs := range vss {
 		front := types.NewRealServerFront()
 
 		err := front.ParseVipPortProto(vs.ID())
@@ -68,18 +69,45 @@ func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
 
 		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", rss)
 
-		vsModels.Items[i] = vs.GetModel()
-		vsStats := (*types.ServerStats)(vsModels.Items[i].Stats)
-		vsModels.Items[i].RSs = new(models.RealServerExpandList)
-		vsModels.Items[i].RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
+		vsModel := vs.GetModel()
+		vsStats := (*types.ServerStats)(vsModel.Stats)
+		vsModel.RSs = new(models.RealServerExpandList)
+		vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
 
 		for j, rs := range rss {
 			rsModel := rs.GetModel()
 			rsStats := (*types.ServerStats)(rsModel.Stats)
-			vsModels.Items[i].RSs.Items[j] = rsModel
+			vsModel.RSs.Items[j] = rsModel
 			vsStats.Increase(rsStats)
 		}
+
+		if shareSnapshot.NodeSpec.Laddrs == nil {
+			laddr := types.NewLocalAddrFront()
+			if err := laddr.ParseVipPortProto(vs.ID()); err != nil {
+				// FIXME: Invalid
+				return apiVs.NewGetVsOK()
+			}
+
+			laddrs, err := laddr.Get(h.connPool, h.logger)
+			if err != nil {
+				// FIXME: Invalid
+				return apiVs.NewGetVsOK()
+			}
+
+			shareSnapshot.NodeSpec.Laddrs = new(models.LocalAddressExpandList)
+			laddrModels := shareSnapshot.NodeSpec.Laddrs
+			laddrModels.Items = make([]*models.LocalAddressSpecExpand, len(laddrs))
+			for k, lip := range laddrs {
+				laddrModels.Items[k] = lip.GetModel()
+			}
+		}
+
+		shareSnapshot.ServiceUpsert(vsModel)
 	}
 
-	return apiVs.NewGetVsOK().WithPayload(vsModels)
+	if params.Snapshot != nil && *params.Snapshot {
+		shareSnapshot.DumpTo(settings.LocalConfigFile(), h.logger)
+	}
+
+	return apiVs.NewGetVsOK().WithPayload(shareSnapshot.GetModels(h.logger))
 }

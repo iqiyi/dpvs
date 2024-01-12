@@ -18,6 +18,7 @@ import (
 	// "github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
 
@@ -63,6 +64,7 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 	result := front.Update(rss, h.connPool, h.logger)
 	switch result {
 	case types.EDPVS_EXIST, types.EDPVS_OK:
+		settings.ShareSnapshot().ServiceVersionUpdate(params.VipPort, h.logger)
 		h.logger.Info("Set real server to virtual server success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
 		return apiVs.NewPostVsVipPortRsOK()
 	default:

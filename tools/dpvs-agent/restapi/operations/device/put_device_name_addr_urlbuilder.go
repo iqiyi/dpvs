@@ -18,7 +18,8 @@ import (
 type PutDeviceNameAddrURL struct {
 	Name string
 
-	Sapool *bool
+	Sapool   *bool
+	Snapshot *bool
 
 	_basePath string
 	// avoid unkeyed usage
@@ -67,6 +68,14 @@ func (o *PutDeviceNameAddrURL) Build() (*url.URL, error) {
 	}
 	if sapoolQ != "" {
 		qs.Set("sapool", sapoolQ)
+	}
+
+	var snapshotQ string
+	if o.Snapshot != nil {
+		snapshotQ = swag.FormatBool(*o.Snapshot)
+	}
+	if snapshotQ != "" {
+		qs.Set("snapshot", snapshotQ)
 	}
 
 	_result.RawQuery = qs.Encode()

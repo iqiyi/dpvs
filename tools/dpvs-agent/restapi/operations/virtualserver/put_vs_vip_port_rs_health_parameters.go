@@ -12,32 +12,24 @@ import (
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/strfmt"
-	"github.com/go-openapi/swag"
 	"github.com/go-openapi/validate"
 
 	"github.com/dpvs-agent/models"
 )
 
-// NewPutVsVipPortParams creates a new PutVsVipPortParams object
-// with the default values initialized.
-func NewPutVsVipPortParams() PutVsVipPortParams {
+// NewPutVsVipPortRsHealthParams creates a new PutVsVipPortRsHealthParams object
+//
+// There are no default values defined in the spec.
+func NewPutVsVipPortRsHealthParams() PutVsVipPortRsHealthParams {
 
-	var (
-		// initialize parameters with default values
-
-		snapshotDefault = bool(true)
-	)
-
-	return PutVsVipPortParams{
-		Snapshot: &snapshotDefault,
-	}
+	return PutVsVipPortRsHealthParams{}
 }
 
-// PutVsVipPortParams contains all the bound params for the put vs vip port operation
+// PutVsVipPortRsHealthParams contains all the bound params for the put vs vip port rs health operation
 // typically these are obtained from a http.Request
 //
-// swagger:parameters PutVsVipPort
-type PutVsVipPortParams struct {
+// swagger:parameters PutVsVipPortRsHealth
+type PutVsVipPortRsHealthParams struct {
 
 	// HTTP Request Object
 	HTTPRequest *http.Request `json:"-"`
@@ -48,21 +40,21 @@ type PutVsVipPortParams struct {
 	*/
 	VipPort string
 	/*
-	  In: query
-	  Default: true
-	*/
-	Snapshot *bool
-	/*
 	  In: body
 	*/
-	Spec *models.VirtualServerSpecTiny
+	Rss *models.RealServerTinyList
+	/*
+	  Required: true
+	  In: query
+	*/
+	Version string
 }
 
 // BindRequest both binds and validates a request, it assumes that complex things implement a Validatable(strfmt.Registry) error interface
 // for simple values it will use straight method calls.
 //
-// To ensure default values, the struct must have been initialized with NewPutVsVipPortParams() beforehand.
-func (o *PutVsVipPortParams) BindRequest(r *http.Request, route *middleware.MatchedRoute) error {
+// To ensure default values, the struct must have been initialized with NewPutVsVipPortRsHealthParams() beforehand.
+func (o *PutVsVipPortRsHealthParams) BindRequest(r *http.Request, route *middleware.MatchedRoute) error {
 	var res []error
 
 	o.HTTPRequest = r
@@ -74,16 +66,11 @@ func (o *PutVsVipPortParams) BindRequest(r *http.Request, route *middleware.Matc
 		res = append(res, err)
 	}
 
-	qSnapshot, qhkSnapshot, _ := qs.GetOK("snapshot")
-	if err := o.bindSnapshot(qSnapshot, qhkSnapshot, route.Formats); err != nil {
-		res = append(res, err)
-	}
-
 	if runtime.HasBody(r) {
 		defer r.Body.Close()
-		var body models.VirtualServerSpecTiny
+		var body models.RealServerTinyList
 		if err := route.Consumer.Consume(r.Body, &body); err != nil {
-			res = append(res, errors.NewParseError("spec", "body", "", err))
+			res = append(res, errors.NewParseError("rss", "body", "", err))
 		} else {
 			// validate body object
 			if err := body.Validate(route.Formats); err != nil {
@@ -96,9 +83,14 @@ func (o *PutVsVipPortParams) BindRequest(r *http.Request, route *middleware.Matc
 			}
 
 			if len(res) == 0 {
-				o.Spec = &body
+				o.Rss = &body
 			}
 		}
+	}
+
+	qVersion, qhkVersion, _ := qs.GetOK("version")
+	if err := o.bindVersion(qVersion, qhkVersion, route.Formats); err != nil {
+		res = append(res, err)
 	}
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
@@ -107,7 +99,7 @@ func (o *PutVsVipPortParams) BindRequest(r *http.Request, route *middleware.Matc
 }
 
 // bindVipPort binds and validates parameter VipPort from path.
-func (o *PutVsVipPortParams) bindVipPort(rawData []string, hasKey bool, formats strfmt.Registry) error {
+func (o *PutVsVipPortRsHealthParams) bindVipPort(rawData []string, hasKey bool, formats strfmt.Registry) error {
 	var raw string
 	if len(rawData) > 0 {
 		raw = rawData[len(rawData)-1]
@@ -120,26 +112,23 @@ func (o *PutVsVipPortParams) bindVipPort(rawData []string, hasKey bool, formats 
 	return nil
 }
 
-// bindSnapshot binds and validates parameter Snapshot from query.
-func (o *PutVsVipPortParams) bindSnapshot(rawData []string, hasKey bool, formats strfmt.Registry) error {
+// bindVersion binds and validates parameter Version from query.
+func (o *PutVsVipPortRsHealthParams) bindVersion(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	if !hasKey {
+		return errors.Required("version", "query", rawData)
+	}
 	var raw string
 	if len(rawData) > 0 {
 		raw = rawData[len(rawData)-1]
 	}
 
-	// Required: false
+	// Required: true
 	// AllowEmptyValue: false
 
-	if raw == "" { // empty values pass all other validations
-		// Default values have been previously initialized by NewPutVsVipPortParams()
-		return nil
+	if err := validate.RequiredString("version", "query", raw); err != nil {
+		return err
 	}
-
-	value, err := swag.ConvertBool(raw)
-	if err != nil {
-		return errors.InvalidType("snapshot", "query", "bool", raw)
-	}
-	o.Snapshot = &value
+	o.Version = raw
 
 	return nil
 }
