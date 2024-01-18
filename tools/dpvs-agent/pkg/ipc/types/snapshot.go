@@ -29,6 +29,13 @@ func (snapshot *NodeSnapshot) ServiceVersionUpdate(id string, logger hclog.Logge
 	logger.Error("Update service version failed.", "id", id)
 }
 
+func (snapshot *NodeSnapshot) ServiceGet(id string) *models.VirtualServerSpecExpand {
+	if svc, exist := snapshot.Services[strings.ToLower(id)]; exist {
+		return svc
+	}
+	return nil
+}
+
 func (snapshot *NodeSnapshot) ServiceDel(id string) {
 	if _, exist := snapshot.Services[strings.ToLower(id)]; exist {
 		delete(snapshot.Services, strings.ToLower(id))

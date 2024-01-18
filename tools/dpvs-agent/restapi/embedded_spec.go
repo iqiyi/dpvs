@@ -1370,15 +1370,12 @@ func init() {
         ],
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RealServerExpandList"
-            }
+            "description": "Success"
           },
           "270": {
             "description": "the rss-config parameter is outdated, update nothing and return the latest rs info",
             "schema": {
-              "$ref": "#/definitions/RealServerExpandList"
+              "$ref": "#/definitions/VirtualServerSpecExpand"
             },
             "x-go-name": "Unexpected"
           },
@@ -3894,15 +3891,12 @@ func init() {
         ],
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RealServerExpandList"
-            }
+            "description": "Success"
           },
           "270": {
             "description": "the rss-config parameter is outdated, update nothing and return the latest rs info",
             "schema": {
-              "$ref": "#/definitions/RealServerExpandList"
+              "$ref": "#/definitions/VirtualServerSpecExpand"
             },
             "x-go-name": "Unexpected"
           },

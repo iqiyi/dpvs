@@ -1110,13 +1110,14 @@ paths:
       responses:
         '200':
           description: Success
-          schema:
-            "$ref": "#/definitions/RealServerExpandList"
+          #schema:
+          #  "$ref": "#/definitions/RealServerExpandList"
         '270':
           description: "the rss-config parameter is outdated, update nothing and return the latest rs info"
           x-go-name: Unexpected
           schema:
-            "$ref": "#/definitions/RealServerExpandList"
+          #  "$ref": "#/definitions/RealServerExpandList"
+            "$ref": "#/definitions/VirtualServerSpecExpand"
         '460':
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend

@@ -21,7 +21,6 @@ import (
 	"github.com/dpvs-agent/pkg/ipc/types"
 	"github.com/dpvs-agent/pkg/settings"
 
-	"github.com/dpvs-agent/models"
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
 
 	"github.com/go-openapi/runtime/middleware"
@@ -62,11 +61,9 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 		activeRSs[rs.ID()] = rs
 	}
 
-	rssModels := new(models.RealServerExpandList)
-	rssModels.Items = make([]*models.RealServerSpecExpand, len(active))
 	validRSs := make([]*types.RealServerSpec, 0)
 	if params.Rss != nil {
-		for i, rs := range params.Rss.Items {
+		for _, rs := range params.Rss.Items {
 			var fwdmode types.DpvsFwdMode
 			fwdmode.FromString(rs.Mode)
 			newRs := types.NewRealServerSpec()
@@ -79,16 +76,17 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 			newRs.SetInhibited(rs.Inhibited)
 			newRs.SetOverloaded(rs.Overloaded)
 
-			if activeRs, existed := activeRSs[newRs.ID()]; existed {
-				rssModels.Items[i] = activeRs.GetModel()
+			if _, existed := activeRSs[newRs.ID()]; existed {
 				validRSs = append(validRSs, newRs)
 			}
 		}
 	}
 
+	vsModel := shareSnapshot.ServiceGet(params.VipPort)
+
 	if !strings.EqualFold(params.Version, version) {
 		h.logger.Info("The service", "VipPort", params.VipPort, "version expired. The newest version", version)
-		return apiVs.NewPutVsVipPortRsHealthUnexpected().WithPayload(rssModels)
+		return apiVs.NewPutVsVipPortRsHealthUnexpected().WithPayload(vsModel)
 	}
 
 	existOnly := true
@@ -96,7 +94,7 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 	switch result {
 	case types.EDPVS_EXIST, types.EDPVS_OK:
 		h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
-		return apiVs.NewPutVsVipPortRsHealthOK().WithPayload(rssModels)
+		return apiVs.NewPutVsVipPortRsHealthOK()
 	case types.EDPVS_NOTEXIST:
 		if existOnly {
 			h.logger.Error("Edit not exist real server.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
