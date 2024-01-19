@@ -63,6 +63,10 @@ func DefaultServerConfig() ServerConfig {
 type CheckerConfig struct {
 	Id
 
+	// Version denotes the virtual service version. It used to protect the vs from
+	// incorrect weight updates by healthcheck when the vs's weight changed externally.
+	Version uint64
+
 	Target
 	State
 	Weight uint16
@@ -76,11 +80,12 @@ type CheckerConfig struct {
 var DefaultCheckConfig CheckerConfig
 
 // NewConfig returns an initialised Config.
-func NewCheckerConfig(id *Id, checker CheckMethod,
-	target *Target, state State, weight uint16,
-	interval, timeout time.Duration, retry uint) *CheckerConfig {
+func NewCheckerConfig(id *Id, version uint64, checker CheckMethod,
+	target *Target, state State, weight uint16, interval,
+	timeout time.Duration, retry uint) *CheckerConfig {
 	config := CheckerConfig{
 		Id:          *id,
+		Version:     version,
 		Target:      *target,
 		State:       state,
 		Weight:      weight,

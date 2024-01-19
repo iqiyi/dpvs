@@ -1743,11 +1743,6 @@ func init() {
     "RealServerSpecTiny": {
       "type": "object",
       "properties": {
-        "consistentWeight": {
-          "type": "integer",
-          "format": "uint16",
-          "x-omitempty": false
-        },
         "inhibited": {
           "type": "boolean",
           "default": false
@@ -4271,11 +4266,6 @@ func init() {
     "RealServerSpecTiny": {
       "type": "object",
       "properties": {
-        "consistentWeight": {
-          "type": "integer",
-          "format": "uint16",
-          "x-omitempty": false
-        },
         "inhibited": {
           "type": "boolean",
           "default": false

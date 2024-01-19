@@ -35,7 +35,7 @@ var (
 )
 
 // Checks provides a map of healthcheck configurations.
-type Checkers struct {
+type CheckerConfigs struct {
 	Configs map[Id]*CheckerConfig
 }
 
@@ -79,6 +79,7 @@ func (hc *Checker) Status() Status {
 	hc.lock.RLock()
 	defer hc.lock.RUnlock()
 	status := Status{
+		Version:   hc.Version,
 		LastCheck: hc.start,
 		Failures:  hc.failures,
 		Successes: hc.successes,
@@ -86,8 +87,6 @@ func (hc *Checker) Status() Status {
 	}
 	if hc.state == StateHealthy {
 		status.Weight = hc.uweight
-	} else {
-		status.PrevWeight = hc.uweight
 	}
 	if hc.result != nil {
 		status.Duration = hc.result.Duration
@@ -101,6 +100,10 @@ func (hc *Checker) updateConfig(conf *CheckerConfig) {
 	if len(hc.Id) == 0 {
 		hc.CheckerConfig = *conf
 	} else {
+		if conf.Version < hc.Version {
+			return
+		}
+		hc.Version = conf.Version
 		if conf.State != StateUnknown {
 			hc.State = conf.State
 		}
@@ -187,8 +190,10 @@ func (hc *Checker) healthcheck() {
 	}
 
 	status := "SUCCESS"
+	state := StateHealthy
 	if !result.Success {
 		status = "FAILURE"
+		state = StateUnhealthy
 	}
 	log.Infof("%v: %s: %v", hc.Id, status, result)
 
@@ -197,15 +202,12 @@ func (hc *Checker) healthcheck() {
 	hc.start = start
 	hc.result = result
 
-	var state State
 	if result.Success {
-		state = StateHealthy
 		hc.failed = 0
 		hc.successes++
 	} else {
 		hc.failed++
 		hc.failures++
-		state = StateUnhealthy
 	}
 
 	if hc.state == StateHealthy && hc.failed > 0 && hc.failed <= uint64(hc.CheckerConfig.Retry) {

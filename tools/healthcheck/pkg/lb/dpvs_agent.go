@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +33,7 @@ var _ Comm = (*DpvsAgentComm)(nil)
 var (
 	serverDefault = "localhost:53225"
 	listUri       = LbApi{"/v2/vs", http.MethodGet}
-	noticeUri     = LbApi{"/v2/vs/%s/rs/health", http.MethodPut}
+	noticeUri     = LbApi{"/v2/vs/%s/rs/health?version=%d", http.MethodPut}
 
 	client *http.Client = &http.Client{Timeout: httpClientTimeout}
 )
@@ -50,11 +51,10 @@ type LbApi struct {
 }
 
 type DpvsAgentRs struct {
-	IP               string `json:"ip"`
-	Port             uint16 `json:"port"`
-	Weight           uint16 `json:"weight"`
-	ConsistentWeight uint16 `json:"consistentWeight,omitempty"`
-	Inhibited        bool   `json:"inhibited,omitempty"`
+	IP        string `json:"ip"`
+	Port      uint16 `json:"port"`
+	Weight    uint16 `json:"weight"`
+	Inhibited bool   `json:"inhibited,omitempty"`
 }
 
 type DpvsAgentRsItem struct {
@@ -69,7 +69,9 @@ type DpvsAgentRsListPut struct {
 	Items []DpvsAgentRs
 }
 
+// refer to `tools/dpvs-agent/models/virtual_server_spec_expand.go: VirtualServerSpecExpand`
 type DpvsAgentVs struct {
+	Version   string
 	Addr      string
 	Port      uint16
 	Proto     uint16
@@ -87,6 +89,10 @@ func (avs *DpvsAgentVs) serviceId() string {
 }
 
 func (avs *DpvsAgentVs) toVs() (*VirtualService, error) {
+	version, err := strconv.ParseUint(avs.Version, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Vs Version %q", avs.Version)
+	}
 	vip := net.ParseIP(avs.Addr)
 	if vip == nil {
 		return nil, fmt.Errorf("invalid Vs Addr %q", avs.Addr)
@@ -113,6 +119,7 @@ func (avs *DpvsAgentVs) toVs() (*VirtualService, error) {
 		}
 	}
 	vs := &VirtualService{
+		Version:  version,
 		Checker:  checker,
 		IP:       vip,
 		Port:     vport,
@@ -151,11 +158,10 @@ func (arsl *DpvsAgentRsList) toRsList() ([]RealServer, error) {
 			return nil, fmt.Errorf("invalid RS IP %q", ars.Spec.IP)
 		}
 		rs := &RealServer{
-			IP:         rip,
-			Port:       ars.Spec.Port,
-			Weight:     ars.Spec.Weight,
-			PrevWeight: ars.Spec.ConsistentWeight,
-			Inhibited:  ars.Spec.Inhibited,
+			IP:        rip,
+			Port:      ars.Spec.Port,
+			Weight:    ars.Spec.Weight,
+			Inhibited: ars.Spec.Inhibited,
 		}
 		rss[i] = *rs
 	}
@@ -204,16 +210,15 @@ func (comm *DpvsAgentComm) ListVirtualServices() ([]VirtualService, error) {
 	return vslist, nil
 }
 
-func (comm *DpvsAgentComm) UpdateByChecker(vs VirtualService) ([]RealServer, error) {
+func (comm *DpvsAgentComm) UpdateByChecker(vs *VirtualService) (*VirtualService, error) {
 	for _, rs := range vs.RSs {
 		ars := &DpvsAgentRsListPut{
 			Items: []DpvsAgentRs{
 				{
-					IP:               rs.IP.String(),
-					Port:             rs.Port,
-					Weight:           rs.Weight,
-					ConsistentWeight: rs.PrevWeight,
-					Inhibited:        rs.Inhibited,
+					IP:        rs.IP.String(),
+					Port:      rs.Port,
+					Weight:    rs.Weight,
+					Inhibited: rs.Inhibited,
 				},
 			},
 		}
@@ -222,7 +227,7 @@ func (comm *DpvsAgentComm) UpdateByChecker(vs VirtualService) ([]RealServer, err
 			return nil, err
 		}
 		for _, notice := range comm.noticeApis {
-			url := fmt.Sprintf(notice.Url, vs.Id)
+			url := fmt.Sprintf(notice.Url, vs.Id, vs.Version)
 			req, err := http.NewRequest(notice.HttpMethod, url, bytes.NewBuffer(data))
 			req.Header.Set("Content-Type", "application/json")
 			resp, err := client.Do(req)
@@ -234,12 +239,12 @@ func (comm *DpvsAgentComm) UpdateByChecker(vs VirtualService) ([]RealServer, err
 				if data, err = io.ReadAll(resp.Body); err != nil {
 					return nil, fmt.Errorf("CODE: %v", resp.StatusCode)
 				}
-				var rss DpvsAgentRsList
-				if err = json.Unmarshal(data, &rss); err != nil {
+				var vs DpvsAgentVs
+				if err = json.Unmarshal(data, &vs); err != nil {
 					return nil, fmt.Errorf("CODE: %v, ERROR: %s", resp.StatusCode,
 						strings.TrimSpace(string(data)))
 				}
-				ret, err := rss.toRsList()
+				ret, err := vs.toVs()
 				if err != nil {
 					//fmt.Println("Data:", data, "len(RSs): ", len(rss.Items), "RSs:", rss)
 					return nil, fmt.Errorf("CODE: %v, Error: %v", resp.StatusCode, err)

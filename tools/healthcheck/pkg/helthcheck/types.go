@@ -56,29 +56,6 @@ func (id Id) Rs() *Target {
 	return NewTargetFromStr(strId[idx+1:])
 }
 
-// MethodType is the type of check method supported for now.
-type MethodType int
-
-const (
-	MethodTypeNone MethodType = iota
-	MethodTypeTCP
-	MethodTypeUDP
-	MethodTypePING
-)
-
-// String returns the name for the given MethodType.
-func (h MethodType) String() string {
-	switch h {
-	case MethodTypeTCP:
-		return "TCP"
-	case MethodTypeUDP:
-		return "UDP"
-	case MethodTypePING:
-		return "PING"
-	}
-	return "(unknown)"
-}
-
 // CheckMethod is the interface that must be implemented by a healthcheck.
 type CheckMethod interface {
 	Check(target Target, timeout time.Duration) *Result
@@ -201,14 +178,14 @@ func NewResult(start time.Time, msg string, success bool, err error) *Result {
 
 // Status represents the current status of a healthcheck instance.
 type Status struct {
+	Version   uint64 // the vs version
 	LastCheck time.Time
 	Duration  time.Duration
 	Failures  uint64
 	Successes uint64
 	State
-	Weight     uint16
-	PrevWeight uint16
-	Message    string
+	Weight  uint16
+	Message string
 }
 
 // Notification stores a status notification for a healthcheck.
@@ -220,7 +197,7 @@ type Notification struct {
 
 // String returns the string representation for the given notification.
 func (n *Notification) String() string {
-	return fmt.Sprintf("ID %v, %v, Weight %d, PrevWeight %d Fail %v, Success %v, Last check %s in %v",
-		n.Id, stateNames[n.Status.State], n.Status.Weight, n.Status.PrevWeight, n.Status.Failures,
+	return fmt.Sprintf("ID %v, Version %d, %v, Weight %d, Fail %v, Success %v, Last check %s in %v",
+		n.Id, n.Version, stateNames[n.Status.State], n.Status.Weight, n.Status.Failures,
 		n.Status.Successes, n.Status.LastCheck.Format("2006-01-02 15:04:05.000"), n.Status.Duration)
 }

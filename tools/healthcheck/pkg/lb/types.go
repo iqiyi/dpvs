@@ -32,15 +32,15 @@ const (
 )
 
 type RealServer struct {
-	IP         net.IP
-	Port       uint16
-	Weight     uint16 // current weight in dpvs for ListVirtualServices, target weight for UpdateByChecker
-	PrevWeight uint16 // current weight in healthcheck for UpdateByChecker
-	Inhibited  bool
+	IP        net.IP
+	Port      uint16
+	Weight    uint16
+	Inhibited bool
 }
 
 type VirtualService struct {
 	Id       string
+	Version  uint64
 	Checker  Checker
 	Protocol utils.IPProto
 	Port     uint16
@@ -53,7 +53,7 @@ type Comm interface {
 	ListVirtualServices() ([]VirtualService, error)
 	// Update RSs health state, return nil error and the lastest info of RSs whose
 	// weight have been changed administively on success, or error on failure.
-	UpdateByChecker(targets VirtualService) ([]RealServer, error)
+	UpdateByChecker(targets *VirtualService) (*VirtualService, error)
 }
 
 func (checker Checker) String() string {

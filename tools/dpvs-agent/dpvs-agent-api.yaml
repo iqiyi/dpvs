@@ -296,10 +296,6 @@ definitions:
         type: "integer"
         format: "uint16"
         x-omitempty: false
-      consistentWeight:
-        type: "integer"
-        format: "uint16"
-        x-omitempty: false
       mode:
         type: "string"
         enum:
