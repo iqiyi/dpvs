@@ -102,7 +102,9 @@ func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
 			}
 		}
 
+		shareSnapshot.ServiceLock(vs.ID())
 		shareSnapshot.ServiceUpsert(vsModel)
+		shareSnapshot.ServiceUnlock(vs.ID())
 	}
 
 	if params.Snapshot != nil && *params.Snapshot {

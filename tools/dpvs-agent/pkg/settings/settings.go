@@ -23,7 +23,7 @@ func setUp() {
 		NodeSpec: &models.DpvsNodeSpec{
 			AnnouncePort: &models.VsAnnouncePort{},
 		},
-		Services: make(map[string]*models.VirtualServerSpecExpand),
+		Snapshot: make(map[string]*types.ServiceSnapshot),
 	}
 }
 

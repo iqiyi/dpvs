@@ -17,6 +17,7 @@ package ipvs
 import (
 	"strings"
 
+	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
 	"github.com/dpvs-agent/pkg/settings"
@@ -47,14 +48,17 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 		return apiVs.NewPutVsVipPortRsHealthInvalidFrontend()
 	}
 
+	shareSnapshot := settings.ShareSnapshot()
+
+	shareSnapshot.ServiceRLock(params.VipPort) // RLock
+	version := shareSnapshot.ServiceVersion(params.VipPort)
 	// get active backends
 	active, err := front.Get(h.connPool, h.logger)
 	if err != nil {
+		shareSnapshot.ServiceRUnlock(params.VipPort) // RUnlock
 		return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
 	}
-
-	shareSnapshot := settings.ShareSnapshot()
-	version := shareSnapshot.ServiceVersion(params.VipPort)
+	shareSnapshot.ServiceRUnlock(params.VipPort) // RUnlock
 
 	activeRSs := make(map[string]*types.RealServerSpec)
 	for _, rs := range active {
@@ -82,17 +86,98 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 		}
 	}
 
-	vsModel := shareSnapshot.ServiceGet(params.VipPort)
-
 	if !strings.EqualFold(params.Version, version) {
 		h.logger.Info("The service", "VipPort", params.VipPort, "version expired. The newest version", version)
+		if shareSnapshot.ServiceRLock(params.VipPort) {
+			defer shareSnapshot.ServiceRUnlock(params.VipPort)
+		}
+		vsModel := shareSnapshot.ServiceGet(params.VipPort)
+		if vsModel == nil {
+			spec := types.NewVirtualServerSpec()
+			spec.ParseVipPortProto(params.VipPort)
+
+			vss, err := spec.Get(h.connPool, h.logger)
+			if err != nil {
+				return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
+			}
+			for _, vs := range vss {
+				front := types.NewRealServerFront()
+				front.ParseVipPortProto(vs.ID())
+
+				front.SetNumDests(vs.GetNumDests())
+
+				rss, err := front.Get(h.connPool, h.logger)
+				if err != nil {
+					h.logger.Error("Get real server list of virtual server failed.", "ID", vs.ID(), "Error", err.Error())
+					return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
+				}
+				vsModel = vs.GetModel()
+				vsModel.RSs = new(models.RealServerExpandList)
+				vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
+				for i, rs := range rss {
+					rsModel := rs.GetModel()
+					// rsStats := (*types.ServerStats)(rsModel.Stats)
+					vsModel.RSs.Items[i] = rsModel
+					// vsStats.Increase(rsStats)
+				}
+				shareSnapshot.ServiceUpsert(vsModel)
+			}
+		}
+		h.logger.Error("Virtual service version miss match.", "VipPort", params.VipPort, "correct version", version, "url query param version", params.Version)
 		return apiVs.NewPutVsVipPortRsHealthUnexpected().WithPayload(vsModel)
+	}
+
+	if shareSnapshot.ServiceLock(params.VipPort) {
+		defer shareSnapshot.ServiceUnlock(params.VipPort)
 	}
 
 	existOnly := true
 	result := front.Edit(existOnly, validRSs, h.connPool, h.logger)
 	switch result {
 	case types.EDPVS_EXIST, types.EDPVS_OK:
+		// update Snapshot
+		if newRSs, err := front.Get(h.connPool, h.logger); err == nil {
+			rsModels := new(models.RealServerExpandList)
+			rsModels.Items = make([]*models.RealServerSpecExpand, len(newRSs))
+			for i, rs := range newRSs {
+				rsModels.Items[i] = rs.GetModel()
+			}
+
+			vsModel := shareSnapshot.ServiceGet(params.VipPort)
+			if vsModel == nil {
+				spec := types.NewVirtualServerSpec()
+				spec.ParseVipPortProto(params.VipPort)
+
+				vss, err := spec.Get(h.connPool, h.logger)
+				if err != nil {
+					return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
+				}
+				for _, vs := range vss {
+					front := types.NewRealServerFront()
+					front.ParseVipPortProto(vs.ID())
+
+					front.SetNumDests(vs.GetNumDests())
+
+					rss, err := front.Get(h.connPool, h.logger)
+					if err != nil {
+						h.logger.Error("Get real server list of virtual server failed.", "ID", vs.ID(), "Error", err.Error())
+						return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
+					}
+					vsModel = vs.GetModel()
+					vsModel.RSs = new(models.RealServerExpandList)
+					vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
+					for i, rs := range rss {
+						rsModel := rs.GetModel()
+						vsModel.RSs.Items[i] = rsModel
+						// rsStats := (*types.ServerStats)(rsModel.Stats)
+						// vsStats.Increase(rsStats)
+					}
+				}
+			}
+			vsModel.RSs = rsModels
+			shareSnapshot.ServiceUpsert(vsModel)
+		}
+
 		h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
 		return apiVs.NewPutVsVipPortRsHealthOK()
 	case types.EDPVS_NOTEXIST:

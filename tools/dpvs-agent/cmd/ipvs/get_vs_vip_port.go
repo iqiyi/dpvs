@@ -80,8 +80,7 @@ func (h *getVsVipPort) Handle(params apiVs.GetVsVipPortParams) middleware.Respon
 		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", rss)
 
 		vsModel := vs.GetModel()
-		shareSnapshot.ServiceUpsert(vsModel)
-		// vsModel.Version = shareSnapshot.ServiceVersion(vs.ID())
+
 		vsModels.Items[i] = vsModel
 		vsStats := (*types.ServerStats)(vsModels.Items[i].Stats)
 		vsModels.Items[i].RSs = new(models.RealServerExpandList)
@@ -93,6 +92,10 @@ func (h *getVsVipPort) Handle(params apiVs.GetVsVipPortParams) middleware.Respon
 			vsModels.Items[i].RSs.Items[j] = rsModel
 			vsStats.Increase(rsStats)
 		}
+
+		shareSnapshot.ServiceLock(vs.ID())
+		shareSnapshot.ServiceUpsert(vsModel)
+		shareSnapshot.ServiceUnlock(vs.ID())
 	}
 
 	return apiVs.NewGetVsVipPortOK().WithPayload(vsModels)

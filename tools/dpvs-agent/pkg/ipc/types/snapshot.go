@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -14,64 +15,125 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
+type ServiceSnapshot struct {
+	Service *models.VirtualServerSpecExpand
+	lock    *sync.RWMutex
+}
+
 type NodeSnapshot struct {
 	NodeSpec *models.DpvsNodeSpec
-	Services map[string]*models.VirtualServerSpecExpand
+	Snapshot map[string]*ServiceSnapshot
 }
 
-func (snapshot *NodeSnapshot) ServiceVersionUpdate(id string, logger hclog.Logger) {
-	services := snapshot.Services
-	logger.Info("Update server version begin.", "id", id, "services", services)
-	if _, exist := services[strings.ToLower(id)]; exist {
-		services[strings.ToLower(id)].Version = strconv.FormatInt(time.Now().UnixNano()/1e6, 10)
+func (snap *ServiceSnapshot) Lock() {
+	snap.lock.Lock()
+}
+
+func (snap *ServiceSnapshot) Unlock() {
+	snap.lock.Unlock()
+}
+
+func (snap *ServiceSnapshot) RLock() {
+	snap.lock.RLock()
+}
+
+func (snap *ServiceSnapshot) RUnlock() {
+	snap.lock.RUnlock()
+}
+
+func (node *NodeSnapshot) ServiceRLock(id string) bool {
+	snap, exist := node.Snapshot[strings.ToLower(id)]
+	if exist {
+		snap.RLock()
+	}
+
+	return exist
+}
+
+func (node *NodeSnapshot) ServiceRUnlock(id string) {
+	if snap, exist := node.Snapshot[strings.ToLower(id)]; exist {
+		snap.RUnlock()
+	}
+}
+
+func (node *NodeSnapshot) ServiceLock(id string) bool {
+	snap, exist := node.Snapshot[strings.ToLower(id)]
+	if exist {
+		snap.Lock()
+	}
+
+	return exist
+}
+
+func (node *NodeSnapshot) ServiceUnlock(id string) {
+	if snap, exist := node.Snapshot[strings.ToLower(id)]; exist {
+		snap.Unlock()
+	}
+}
+
+func (node *NodeSnapshot) ServiceVersionUpdate(id string, logger hclog.Logger) {
+	snapshot := node.Snapshot
+	logger.Info("Update server version begin.", "id", id, "services snapshot", snapshot)
+	if _, exist := snapshot[strings.ToLower(id)]; exist {
+		snapshot[strings.ToLower(id)].Service.Version = strconv.FormatInt(time.Now().UnixNano()/1e6, 10)
 		return
 	}
-	logger.Error("Update service version failed.", "id", id)
+	logger.Error("Update service version failed. Service not Exist.", "id", id)
 }
 
-func (snapshot *NodeSnapshot) ServiceGet(id string) *models.VirtualServerSpecExpand {
-	if svc, exist := snapshot.Services[strings.ToLower(id)]; exist {
-		return svc
+func (node *NodeSnapshot) SnapshotGet(id string) *ServiceSnapshot {
+	if snap, exist := node.Snapshot[strings.ToLower(id)]; exist {
+		return snap
 	}
 	return nil
 }
 
-func (snapshot *NodeSnapshot) ServiceDel(id string) {
-	if _, exist := snapshot.Services[strings.ToLower(id)]; exist {
-		delete(snapshot.Services, strings.ToLower(id))
+func (node *NodeSnapshot) ServiceGet(id string) *models.VirtualServerSpecExpand {
+	if snap, exist := node.Snapshot[strings.ToLower(id)]; exist {
+		return snap.Service
+	}
+	return nil
+}
+
+func (node *NodeSnapshot) ServiceDel(id string) {
+	if _, exist := node.Snapshot[strings.ToLower(id)]; exist {
+		delete(node.Snapshot, strings.ToLower(id))
 	}
 }
 
-func (snapshot *NodeSnapshot) ServiceVersion(id string) string {
-	if _, exist := snapshot.Services[strings.ToLower(id)]; exist {
-		return snapshot.Services[strings.ToLower(id)].Version
+func (node *NodeSnapshot) ServiceVersion(id string) string {
+	if _, exist := node.Snapshot[strings.ToLower(id)]; exist {
+		return node.Snapshot[strings.ToLower(id)].Service.Version
 	}
 	return strconv.FormatInt(time.Now().UnixNano()/1e6, 10)
 }
 
-func (snapshot *NodeSnapshot) ServiceAdd(vs *VirtualServerSpec) {
-	version := snapshot.ServiceVersion(vs.ID())
+func (node *NodeSnapshot) ServiceAdd(vs *VirtualServerSpec) {
+	version := node.ServiceVersion(vs.ID())
 
-	snapshot.Services[strings.ToLower(vs.ID())] = vs.GetModel()
+	svc := vs.GetModel()
+	svc.Version = version
 
-	snapshot.Services[strings.ToLower(vs.ID())].Version = version
+	node.Snapshot[strings.ToLower(vs.ID())] = &ServiceSnapshot{Service: svc, lock: new(sync.RWMutex)}
 }
 
-func (snapshot *NodeSnapshot) ServiceUpsert(spec *models.VirtualServerSpecExpand) {
+func (node *NodeSnapshot) ServiceUpsert(spec *models.VirtualServerSpecExpand) {
 	svc := (*VirtualServerSpecExpandModel)(spec)
 
-	version := snapshot.ServiceVersion(svc.ID())
+	version := node.ServiceVersion(svc.ID())
 
-	snapshot.Services[strings.ToLower(svc.ID())] = spec
+	if _, exist := node.Snapshot[strings.ToLower(svc.ID())]; !exist {
+		node.Snapshot[strings.ToLower(svc.ID())] = &ServiceSnapshot{Service: spec, lock: new(sync.RWMutex)}
+	}
 
-	snapshot.Services[strings.ToLower(svc.ID())].Version = version
+	node.Snapshot[strings.ToLower(svc.ID())].Service.Version = version
 }
 
-func (snapshot *NodeSnapshot) GetModels(logger hclog.Logger) *models.VirtualServerList {
-	services := &models.VirtualServerList{Items: make([]*models.VirtualServerSpecExpand, len(snapshot.Services))}
+func (node *NodeSnapshot) GetModels(logger hclog.Logger) *models.VirtualServerList {
+	services := &models.VirtualServerList{Items: make([]*models.VirtualServerSpecExpand, len(node.Snapshot))}
 	i := 0
-	for _, svc := range snapshot.Services {
-		services.Items[i] = svc
+	for _, snap := range node.Snapshot {
+		services.Items[i] = snap.Service
 		i++
 	}
 	return services
@@ -87,7 +149,7 @@ func (spec *VirtualServerSpecExpandModel) ID() string {
 	return fmt.Sprintf("%s-%d-%s", spec.Addr, spec.Port, proto)
 }
 
-func (snapshot *NodeSnapshot) LoadFrom(cacheFile string, logger hclog.Logger) error {
+func (node *NodeSnapshot) LoadFrom(cacheFile string, logger hclog.Logger) error {
 	content, err := os.ReadFile(cacheFile)
 	if err != nil {
 		logger.Error("Read dpvs service cache file failed.", "Error", err.Error())
@@ -99,19 +161,19 @@ func (snapshot *NodeSnapshot) LoadFrom(cacheFile string, logger hclog.Logger) er
 		return err
 	}
 
-	snapshot.NodeSpec = nodeSnapshot.NodeSpec
+	node.NodeSpec = nodeSnapshot.NodeSpec
 	for _, svcModel := range nodeSnapshot.Services.Items {
 		svc := (*VirtualServerSpecExpandModel)(svcModel)
-		snapshot.Services[strings.ToLower(svc.ID())] = svcModel
+		node.Snapshot[strings.ToLower(svc.ID())].Service = svcModel
 	}
 
 	return nil
 }
 
-func (snapshot *NodeSnapshot) DumpTo(cacheFile string, logger hclog.Logger) error {
+func (node *NodeSnapshot) DumpTo(cacheFile string, logger hclog.Logger) error {
 	nodeSnapshot := &models.NodeServiceSnapshot{
-		NodeSpec: snapshot.NodeSpec,
-		Services: snapshot.GetModels(logger),
+		NodeSpec: node.NodeSpec,
+		Services: node.GetModels(logger),
 	}
 
 	content, err := json.Marshal(nodeSnapshot)

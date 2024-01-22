@@ -15,8 +15,10 @@
 package ipvs
 
 import (
+	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
 
@@ -62,6 +64,11 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 		}
 	}
 
+	shareSnapshot := settings.ShareSnapshot()
+	if shareSnapshot.ServiceLock(params.VipPort) {
+		defer shareSnapshot.ServiceUnlock(params.VipPort)
+	}
+
 	existOnly := false
 	result := front.Edit(existOnly, rss, h.connPool, h.logger)
 
@@ -69,6 +76,21 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 	switch result {
 	case types.EDPVS_EXIST, types.EDPVS_OK:
 		h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
+		// Update Snapshot
+		if newRSs, err := front.Get(h.connPool, h.logger); err == nil {
+			rsModels := new(models.RealServerExpandList)
+			rsModels.Items = make([]*models.RealServerSpecExpand, len(newRSs))
+			for i, rs := range newRSs {
+				rsModels.Items[i] = rs.GetModel()
+			}
+
+			vsModel := shareSnapshot.ServiceGet(params.VipPort)
+			if vsModel != nil {
+				vsModel.RSs = rsModels
+				shareSnapshot.ServiceUpsert(vsModel)
+			}
+		}
+		shareSnapshot.ServiceVersionUpdate(params.VipPort, h.logger)
 		return apiVs.NewPutVsVipPortRsOK()
 	case types.EDPVS_NOTEXIST:
 		h.logger.Error("Unreachable branch")

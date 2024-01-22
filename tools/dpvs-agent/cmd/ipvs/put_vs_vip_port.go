@@ -17,6 +17,7 @@ package ipvs
 import (
 	"strings"
 
+	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
 	"github.com/dpvs-agent/pkg/settings"
@@ -85,16 +86,21 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 		}
 	}
 
+	shareSnapshot := settings.ShareSnapshot()
 	result := vs.Add(h.connPool, h.logger)
 	h.logger.Info("Add virtual server done.", "vs", vs, "result", result.String())
 	switch result {
 	case types.EDPVS_OK:
 		// return 201
-		settings.ShareSnapshot().ServiceAdd(vs)
+		shareSnapshot.ServiceAdd(vs)
 		h.logger.Info("Created new virtual server success.", "VipPort", params.VipPort)
 		return apiVs.NewPutVsVipPortCreated()
 	case types.EDPVS_EXIST:
 		h.logger.Info("The virtual server already exist! Try to update.", "VipPort", params.VipPort)
+		if shareSnapshot.ServiceLock(vs.ID()) {
+			defer shareSnapshot.ServiceUnlock(vs.ID())
+		}
+
 		reason := vs.Update(h.connPool, h.logger)
 		if reason != types.EDPVS_OK {
 			// return 461
@@ -102,6 +108,29 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 			return apiVs.NewPutVsVipPortInvalidBackend()
 		}
 		h.logger.Info("Update virtual server success.", "VipPort", params.VipPort)
+
+		if vss, err := vs.Get(h.connPool, h.logger); err == nil {
+			for _, newVs := range vss {
+				front := types.NewRealServerFront()
+				if err := front.ParseVipPortProto(newVs.ID()); err != nil {
+					continue
+				}
+
+				vsModel := newVs.GetModel()
+				front.SetNumDests(newVs.GetNumDests())
+				if rss, err := front.Get(h.connPool, h.logger); err != nil {
+					vsModel.RSs = new(models.RealServerExpandList)
+					vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
+					for i, rs := range rss {
+						vsModel.RSs.Items[i] = rs.GetModel()
+					}
+				}
+
+				shareSnapshot.ServiceLock(newVs.ID())
+				shareSnapshot.ServiceUpsert(vsModel)
+				shareSnapshot.ServiceUnlock(newVs.ID())
+			}
+		}
 		// return 200
 		return apiVs.NewPutVsVipPortOK()
 	default:

@@ -15,7 +15,7 @@
 package ipvs
 
 import (
-	// "github.com/dpvs-agent/models"
+	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
 	"github.com/dpvs-agent/pkg/settings"
@@ -61,10 +61,30 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 		rss[i].SetFwdMode(fwdmode)
 	}
 
+	shareSnapshot := settings.ShareSnapshot()
+	if shareSnapshot.ServiceLock(params.VipPort) {
+		defer shareSnapshot.ServiceUnlock(params.VipPort)
+	}
+
 	result := front.Update(rss, h.connPool, h.logger)
 	switch result {
 	case types.EDPVS_EXIST, types.EDPVS_OK:
-		settings.ShareSnapshot().ServiceVersionUpdate(params.VipPort, h.logger)
+		// Update Snapshot
+		if newRSs, err := front.Get(h.connPool, h.logger); err == nil {
+			rsModels := new(models.RealServerExpandList)
+			rsModels.Items = make([]*models.RealServerSpecExpand, len(newRSs))
+			for i, rs := range newRSs {
+				rsModels.Items[i] = rs.GetModel()
+			}
+
+			vsModel := shareSnapshot.ServiceGet(params.VipPort)
+			if vsModel != nil {
+				vsModel.RSs = rsModels
+				shareSnapshot.ServiceUpsert(vsModel)
+			}
+		}
+		shareSnapshot.ServiceVersionUpdate(params.VipPort, h.logger)
+
 		h.logger.Info("Set real server to virtual server success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
 		return apiVs.NewPostVsVipPortRsOK()
 	default:
