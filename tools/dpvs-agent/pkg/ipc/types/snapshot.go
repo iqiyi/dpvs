@@ -42,7 +42,7 @@ func (snap *ServiceSnapshot) RUnlock() {
 	snap.lock.RUnlock()
 }
 
-func (node *NodeSnapshot) snapshotID(id string) string {
+func (node *NodeSnapshot) SnapshotID(id string) string {
 	items := strings.Split(id, "-")
 	if len(items) != 3 {
 		return ""
@@ -72,7 +72,7 @@ func (node *NodeSnapshot) snapshotID(id string) string {
 }
 
 func (node *NodeSnapshot) ServiceRLock(id string) bool {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 
 	snap, exist := node.Snapshot[strings.ToLower(snapID)]
 	if exist {
@@ -83,14 +83,14 @@ func (node *NodeSnapshot) ServiceRLock(id string) bool {
 }
 
 func (node *NodeSnapshot) ServiceRUnlock(id string) {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 	if snap, exist := node.Snapshot[strings.ToLower(snapID)]; exist {
 		snap.RUnlock()
 	}
 }
 
 func (node *NodeSnapshot) ServiceLock(id string) bool {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 	snap, exist := node.Snapshot[strings.ToLower(snapID)]
 	if exist {
 		snap.Lock()
@@ -100,14 +100,14 @@ func (node *NodeSnapshot) ServiceLock(id string) bool {
 }
 
 func (node *NodeSnapshot) ServiceUnlock(id string) {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 	if snap, exist := node.Snapshot[strings.ToLower(snapID)]; exist {
 		snap.Unlock()
 	}
 }
 
 func (node *NodeSnapshot) ServiceVersionUpdate(id string, logger hclog.Logger) {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 	snapshot := node.Snapshot
 	logger.Info("Update server version begin.", "id", id, "services snapshot", snapshot)
 	if _, exist := snapshot[strings.ToLower(snapID)]; exist {
@@ -118,7 +118,7 @@ func (node *NodeSnapshot) ServiceVersionUpdate(id string, logger hclog.Logger) {
 }
 
 func (node *NodeSnapshot) SnapshotGet(id string) *ServiceSnapshot {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 	if snap, exist := node.Snapshot[strings.ToLower(snapID)]; exist {
 		return snap
 	}
@@ -126,7 +126,7 @@ func (node *NodeSnapshot) SnapshotGet(id string) *ServiceSnapshot {
 }
 
 func (node *NodeSnapshot) ServiceGet(id string) *models.VirtualServerSpecExpand {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 	if snap, exist := node.Snapshot[strings.ToLower(snapID)]; exist {
 		return snap.Service
 	}
@@ -134,14 +134,14 @@ func (node *NodeSnapshot) ServiceGet(id string) *models.VirtualServerSpecExpand 
 }
 
 func (node *NodeSnapshot) ServiceDel(id string) {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 	if _, exist := node.Snapshot[strings.ToLower(snapID)]; exist {
 		delete(node.Snapshot, strings.ToLower(snapID))
 	}
 }
 
 func (node *NodeSnapshot) ServiceVersion(id string) string {
-	snapID := node.snapshotID(id)
+	snapID := node.SnapshotID(id)
 	if _, exist := node.Snapshot[strings.ToLower(snapID)]; exist {
 		return node.Snapshot[strings.ToLower(snapID)].Service.Version
 	}
@@ -164,6 +164,8 @@ func (node *NodeSnapshot) ServiceUpsert(spec *models.VirtualServerSpecExpand) {
 
 	if _, exist := node.Snapshot[strings.ToLower(svc.ID())]; !exist {
 		node.Snapshot[strings.ToLower(svc.ID())] = &ServiceSnapshot{Service: spec, lock: new(sync.RWMutex)}
+	} else {
+		node.Snapshot[strings.ToLower(svc.ID())].Service = spec
 	}
 
 	node.Snapshot[strings.ToLower(svc.ID())].Service.Version = version
