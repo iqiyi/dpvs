@@ -62,6 +62,7 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 			rss[i].SetInhibited(rs.Inhibited)
 			rss[i].SetOverloaded(rs.Overloaded)
 		}
+		h.logger.Info("Apply real server update.", "VipPort", params.VipPort, "rss", rss)
 	}
 
 	shareSnapshot := settings.ShareSnapshot()

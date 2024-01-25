@@ -111,7 +111,11 @@ func (node *NodeSnapshot) ServiceVersionUpdate(id string, logger hclog.Logger) {
 	snapshot := node.Snapshot
 	logger.Info("Update server version begin.", "id", id, "services snapshot", snapshot)
 	if _, exist := snapshot[strings.ToLower(snapID)]; exist {
+		expireVersion := snapshot[strings.ToLower(snapID)].Service.Version
 		snapshot[strings.ToLower(snapID)].Service.Version = strconv.FormatInt(time.Now().UnixNano()/1e6, 10)
+		latestVersion := snapshot[strings.ToLower(snapID)].Service.Version
+
+		logger.Info("Service version update done.", "expireVersion", expireVersion, "latest Version", latestVersion)
 		return
 	}
 	logger.Error("Update service version failed. Service not Exist.", "id", id)
@@ -178,6 +182,8 @@ func (node *NodeSnapshot) GetModels(logger hclog.Logger) *models.VirtualServerLi
 		services.Items[i] = snap.Service
 		i++
 	}
+
+	logger.Info("services", services)
 	return services
 }
 

@@ -82,12 +82,15 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 
 			if _, existed := activeRSs[newRs.ID()]; existed {
 				validRSs = append(validRSs, newRs)
+				from := activeRSs[newRs.ID()]
+				to := newRs
+				h.logger.Info("real server update.", "ID", newRs.ID(), "client Version", params.Version, "from", from, "to", to)
 			}
 		}
 	}
 
 	if !strings.EqualFold(params.Version, version) {
-		h.logger.Info("The service", "VipPort", params.VipPort, "version expired. The newest version", version)
+		h.logger.Info("The service", "VipPort", params.VipPort, "version expired. The latest version", version)
 		if shareSnapshot.ServiceRLock(params.VipPort) {
 			defer shareSnapshot.ServiceRUnlock(params.VipPort)
 		}
