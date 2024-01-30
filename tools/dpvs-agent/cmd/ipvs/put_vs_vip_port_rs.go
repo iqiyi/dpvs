@@ -59,8 +59,14 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 			rss[i].SetProto(front.GetProto())
 			rss[i].SetWeight(uint32(rs.Weight))
 			rss[i].SetFwdMode(fwdmode)
-			rss[i].SetInhibited(rs.Inhibited)
 			rss[i].SetOverloaded(rs.Overloaded)
+			// NOTE: inhibited set by healthcheck module with API /vs/${ID}/rs/health only
+			// we clear it default
+			inhibited := false
+			if rs.Inhibited != nil {
+				inhibited = *rs.Inhibited
+			}
+			rss[i].SetInhibited(&inhibited)
 		}
 		h.logger.Info("Apply real server update.", "VipPort", params.VipPort, "rss", rss)
 	}

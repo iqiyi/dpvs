@@ -56,9 +56,15 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 		rss[i].SetWeight(uint32(rs.Weight))
 		rss[i].SetProto(front.GetProto())
 		rss[i].SetAddr(rs.IP)
-		rss[i].SetInhibited(rs.Inhibited)
 		rss[i].SetOverloaded(rs.Overloaded)
 		rss[i].SetFwdMode(fwdmode)
+		// NOTE: inhibited set by healthcheck module with API /vs/${ID}/rs/health only
+		// we clear it default
+		inhibited := false
+		if rs.Inhibited != nil {
+			inhibited = *rs.Inhibited
+		}
+		rss[i].SetInhibited(&inhibited)
 	}
 
 	shareSnapshot := settings.ShareSnapshot()
