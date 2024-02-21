@@ -54,7 +54,7 @@ type DpvsAgentRs struct {
 	IP        string `json:"ip"`
 	Port      uint16 `json:"port"`
 	Weight    uint16 `json:"weight"`
-	Inhibited bool   `json:"inhibited,omitempty"`
+	Inhibited *bool  `json:"inhibited,omitempty"`
 }
 
 type DpvsAgentRsItem struct {
@@ -158,10 +158,12 @@ func (arsl *DpvsAgentRsList) toRsList() ([]RealServer, error) {
 			return nil, fmt.Errorf("invalid RS IP %q", ars.Spec.IP)
 		}
 		rs := &RealServer{
-			IP:        rip,
-			Port:      ars.Spec.Port,
-			Weight:    ars.Spec.Weight,
-			Inhibited: ars.Spec.Inhibited,
+			IP:     rip,
+			Port:   ars.Spec.Port,
+			Weight: ars.Spec.Weight,
+		}
+		if ars.Spec.Inhibited != nil {
+			rs.Inhibited = *ars.Spec.Inhibited
 		}
 		rss[i] = *rs
 	}
@@ -218,7 +220,7 @@ func (comm *DpvsAgentComm) UpdateByChecker(vs *VirtualService) (*VirtualService,
 					IP:        rs.IP.String(),
 					Port:      rs.Port,
 					Weight:    rs.Weight,
-					Inhibited: rs.Inhibited,
+					Inhibited: &rs.Inhibited,
 				},
 			},
 		}

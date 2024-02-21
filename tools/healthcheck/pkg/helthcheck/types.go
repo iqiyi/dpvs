@@ -100,11 +100,11 @@ func NewTargetFromStr(str string) *Target {
 	if idx1 < 0 || idx2 < 0 || idx1 >= idx2 {
 		return nil
 	}
-	port, err := strconv.ParseUint(str[idx2:], 10, 16)
+	port, err := strconv.ParseUint(str[idx2+1:], 10, 16)
 	if err != nil {
 		return nil
 	}
-	proto := utils.IPProtoFromStr(str[idx1:idx2])
+	proto := utils.IPProtoFromStr(str[idx1+1 : idx2])
 	if proto == 0 {
 		return nil
 	}
@@ -121,6 +121,16 @@ func (t Target) String() string {
 		return fmt.Sprintf("%v:%v:%d", t.IP, t.Proto, t.Port)
 	}
 	return fmt.Sprintf("[%v]:%v:%d", t.IP, t.Proto, t.Port)
+}
+
+func (t *Target) Equal(t2 *Target) bool {
+	if t2 == nil {
+		return false
+	}
+	if t.Port != t2.Port || t.Proto != t2.Proto {
+		return false
+	}
+	return t.IP.Equal(t2.IP)
 }
 
 // Addr returns the IP:Port representation of a healthcheck target

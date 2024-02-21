@@ -183,12 +183,13 @@ func (s *Server) notifier() {
 				log.Warningf("Failed to Update %v healthy status to %v(weight: %d): %v",
 					notification.Id, notification.State, notification.Status.Weight, err)
 			} else if changed != nil {
-				log.Warningf("%v:%s has changed, resync config %v ...",
-					notification.Id, notification.Target, *changed)
 				for _, rs := range changed.RSs {
 					version := changed.Version
 					id := notification.Id
 					target := &Target{rs.IP, rs.Port, vs.Protocol}
+					if !target.Equal(id.Rs()) {
+						continue
+					}
 					weight := rs.Weight
 					state := StateUnknown
 					if rs.Inhibited {
@@ -196,8 +197,11 @@ func (s *Server) notifier() {
 					} else {
 						state = StateHealthy
 					}
+					log.Warningf("%v::%s has changed, resync config %v ...",
+						notification.Id, notification.Target, rs)
 					config := NewCheckerConfig(&id, version, nil, target, state, weight, 0, 0, 0)
 					s.resync <- config
+					break
 				}
 			} else {
 				// resync checker config to stop repeated notificaitons
