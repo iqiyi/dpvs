@@ -247,14 +247,9 @@ func (s *Server) manager() {
 			for id, hc := range s.healthchecks {
 				hc.Update(configs[id])
 			}
-		case conf := <-s.resync:
-			hc := s.healthchecks[conf.Id]
-			if hc != nil {
-				hc.Update(conf)
-			}
 		case <-notifyTicker.C:
 			log.Infof("Total checkers: %d", len(s.healthchecks))
-			// Ssend notifications periodically when status in checker doesn't match config.
+			// Send notifications periodically when status in checker doesn't match config.
 			// It should get here only when the notification had failed.
 			for _, hc := range s.healthchecks {
 				notification := hc.Notification()
@@ -266,12 +261,25 @@ func (s *Server) manager() {
 	}
 }
 
+func (s *Server) resyncer() {
+	for {
+		select {
+		case conf := <-s.resync:
+			hc := s.healthchecks[conf.Id]
+			if hc != nil {
+				hc.Update(conf)
+			}
+		}
+	}
+}
+
 // Run runs a healthcheck server.
 func (s *Server) Run() {
 	log.Infof("Starting healthcheck server (%v) ...", s.config)
 	go s.updater()
 	go s.notifier()
 	go s.manager()
+	go s.resyncer()
 
 	<-s.quit
 }

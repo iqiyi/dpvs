@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#dpvs_agent_server=localhost:53225
 
 ## Step 1.
 echo -e "Cleaning existing services ..."
@@ -23,40 +24,44 @@ now=$(date +%F.%T)
 echo -e "[$now] Start"
 
 ## Step 2.
-echo -e "Adding test services ..."
+now=$(date +%F.%T)
+echo -e "[$now] Adding test services ..."
 rsid=5000
 for i in $(seq 0 32)
 do
     for j in $(seq 1 255)
     do
         vip="192.168.${i}.${j}"
-        flag="-t"
-        #udp=$((j%2))
-        #[ "$udp" -eq 1 ] && flag="-u"
-        #echo $vip $flag
-        ipvsadm -A $flag $vip:80
+        #echo $vip:80
+        ipvsadm -At $vip:80
+        #curl -sS -X PUT "http://${dpvs_agent_server}/v2/vs/${vip}-80-tcp" -H "Content-type:application/json" -d "{\"SchedName\":\"wrr\"}" >/dev/null
+        ipvsadm -Pt $vip:80 -z 192.168.88.241 -F dpdk0 >/dev/null 2>&1
+        #curl -X PUT "http://${dpvs_agent_server}/v2/vs/${vip}-80-tcp/laddr" -H "Content-type:application/json" -d "{\"device\":\"dpdk0\", \"addr\":\"192.168.88.241\"}"
         for k in $(seq 5)
         do
             seg3=$((rsid/255))
             seg4=$((rsid%255))
             rsid=$((rsid+1))
             rip="192.168.${seg3}.${seg4}"
-            #echo "-> $rip"
-            ipvsadm -a $flag $vip:80 -r $rip:8080 -b -w 100
+            #echo "-> $rip:8080"
+            ipvsadm -at $vip:80 -r $rip:8080 -b -w 100
+            #curl -sS -X PUT "http://${dpvs_agent_server}/v2/vs/${vip}-80-tcp/rs" -H "Content-type:application/json" -d "{\"Items\":[{\"ip\":\"${rip}\", \"port\":80, \"weight\":100}]}" > /dev/null
         done
         #dpip addr add $vip/32 dev dpdk0
     done
 done
 
 ## Step 3.
+now=$(date +%F.%T)
 echo ""
 echo "****************************************"
-echo -e "Start healthcheck program on your own."
+echo -e "[$now] Start healthcheck program on your own."
 echo "****************************************"
 echo ""
 
 ## Step 4.
-echo -e "Do Checking ..."
+now=$(date +%F.%T)
+echo -e "[$now] Do Checking ..."
 while true
 do
     now=$(date +%F.%T)
