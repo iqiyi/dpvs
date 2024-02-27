@@ -57,7 +57,6 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 				rsModel := (*types.RealServerSpecExpandModel)(rs)
 				activeRSs[rsModel.ID()] = rs
 			}
-			h.logger.Info("service activeRSs", activeRSs)
 
 			validRSs := make([]*types.RealServerSpec, 0)
 			if params.Rss != nil {
@@ -73,7 +72,6 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 					newRs.SetFwdMode(fwdmode)
 					newRs.SetInhibited(rs.Inhibited)
 					newRs.SetOverloaded(rs.Overloaded)
-					h.logger.Info("new real rs ID", newRs.ID())
 					if _, existed := activeRSs[newRs.ID()]; existed {
 						validRSs = append(validRSs, newRs)
 						from := activeRSs[newRs.ID()].Spec
