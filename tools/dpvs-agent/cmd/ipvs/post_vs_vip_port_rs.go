@@ -15,6 +15,8 @@
 package ipvs
 
 import (
+	"strings"
+
 	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
@@ -76,19 +78,36 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 	switch result {
 	case types.EDPVS_EXIST, types.EDPVS_OK:
 		// Update Snapshot
-		if newRSs, err := front.Get(h.connPool, h.logger); err == nil {
-			rsModels := new(models.RealServerExpandList)
-			rsModels.Items = make([]*models.RealServerSpecExpand, len(newRSs))
-			for i, rs := range newRSs {
-				rsModels.Items[i] = rs.GetModel()
+		vsModel := shareSnapshot.ServiceGet(params.VipPort)
+		if vsModel == nil {
+			spec := types.NewVirtualServerSpec()
+			err := spec.ParseVipPortProto(params.VipPort)
+			if err != nil {
+				h.logger.Warn("Convert to virtual server failed.", "VipPort", params.VipPort, "Error", err.Error())
+				// FIXME return
+			}
+			vss, err := spec.Get(h.connPool, h.logger)
+			if err != nil {
+				h.logger.Error("Get virtual server failed.", "svc VipPort", params.VipPort, "Error", err.Error())
+				// FIXME return
 			}
 
-			vsModel := shareSnapshot.ServiceGet(params.VipPort)
-			if vsModel != nil {
-				vsModel.RSs = rsModels
-				shareSnapshot.ServiceUpsert(vsModel)
+			for _, vs := range vss {
+				if strings.EqualFold(vs.ID(), spec.ID()) {
+					shareSnapshot.ServiceAdd(vs)
+					break
+				}
+			}
+		} else {
+			vsModel.RSs = &models.RealServerExpandList{
+				Items: make([]*models.RealServerSpecExpand, len(rss)),
+			}
+
+			for i, rs := range rss {
+				vsModel.RSs.Items[i] = rs.GetModel()
 			}
 		}
+
 		shareSnapshot.ServiceVersionUpdate(params.VipPort, h.logger)
 
 		h.logger.Info("Set real server to virtual server success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())

@@ -578,6 +578,9 @@ func init() {
           },
           {
             "$ref": "#/parameters/snapshot"
+          },
+          {
+            "$ref": "#/parameters/healthcheck"
           }
         ],
         "responses": {
@@ -586,6 +589,13 @@ func init() {
             "schema": {
               "$ref": "#/definitions/VirtualServerList"
             }
+          },
+          "204": {
+            "description": "No Content",
+            "schema": {
+              "$ref": "#/definitions/VirtualServerList"
+            },
+            "x-go-name": "NoContent"
           }
         }
       }
@@ -599,6 +609,9 @@ func init() {
         "parameters": [
           {
             "$ref": "#/parameters/snapshot"
+          },
+          {
+            "$ref": "#/parameters/healthcheck"
           },
           {
             "$ref": "#/parameters/service-id"
@@ -2962,6 +2975,12 @@ func init() {
             "default": true,
             "name": "snapshot",
             "in": "query"
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "name": "healthcheck",
+            "in": "query"
           }
         ],
         "responses": {
@@ -2970,6 +2989,13 @@ func init() {
             "schema": {
               "$ref": "#/definitions/VirtualServerList"
             }
+          },
+          "204": {
+            "description": "No Content",
+            "schema": {
+              "$ref": "#/definitions/VirtualServerList"
+            },
+            "x-go-name": "NoContent"
           }
         }
       }
@@ -2985,6 +3011,12 @@ func init() {
             "type": "boolean",
             "default": true,
             "name": "snapshot",
+            "in": "query"
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "name": "healthcheck",
             "in": "query"
           },
           {

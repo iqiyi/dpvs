@@ -948,10 +948,16 @@ paths:
       parameters:
         - "$ref": "#/parameters/stats"
         - "$ref": "#/parameters/snapshot"
+        - "$ref": "#/parameters/healthcheck"
       summary: "display all vip:port:proto and rsip:port list"
       responses:
         '200':
           description: Success
+          schema:
+            "$ref": "#/definitions/VirtualServerList"
+        '204':
+          description: No Content
+          x-go-name: NoContent
           schema:
             "$ref": "#/definitions/VirtualServerList"
   /vs/{VipPort}:
@@ -960,6 +966,7 @@ paths:
       - "virtualserver"
       parameters:
         - "$ref": "#/parameters/snapshot"
+        - "$ref": "#/parameters/healthcheck"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/stats"
       summary: "get a specific virtual server"

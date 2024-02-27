@@ -15,7 +15,9 @@
 package ipvs
 
 import (
-	"github.com/dpvs-agent/models"
+	"fmt"
+	"strings"
+
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
 	"github.com/dpvs-agent/pkg/settings"
@@ -84,19 +86,29 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 	case types.EDPVS_EXIST, types.EDPVS_OK:
 		h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
 		// Update Snapshot
-		if newRSs, err := front.Get(h.connPool, h.logger); err == nil {
-			rsModels := new(models.RealServerExpandList)
-			rsModels.Items = make([]*models.RealServerSpecExpand, len(newRSs))
-			for i, rs := range newRSs {
-				rsModels.Items[i] = rs.GetModel()
+		vsModel := shareSnapshot.ServiceGet(params.VipPort)
+		newRSs := make([]*types.RealServerSpec, 0)
+		for _, newRs := range rss {
+			exist := false
+			for _, cacheRs := range vsModel.RSs.Items {
+				rsID := fmt.Sprintf("%s:%d", cacheRs.Spec.IP, cacheRs.Spec.Port)
+				if !strings.EqualFold(newRs.ID(), rsID) {
+					continue
+				}
+				// update weight only
+				cacheRs.Spec.Weight = uint16(newRs.GetWeight())
+				break
 			}
 
-			vsModel := shareSnapshot.ServiceGet(params.VipPort)
-			if vsModel != nil {
-				vsModel.RSs = rsModels
-				shareSnapshot.ServiceUpsert(vsModel)
+			if !exist {
+				newRSs = append(newRSs, newRs)
 			}
 		}
+
+		for _, rs := range newRSs {
+			vsModel.RSs.Items = append(vsModel.RSs.Items, rs.GetModel())
+		}
+
 		shareSnapshot.ServiceVersionUpdate(params.VipPort, h.logger)
 		return apiVs.NewPutVsVipPortRsOK()
 	case types.EDPVS_NOTEXIST:

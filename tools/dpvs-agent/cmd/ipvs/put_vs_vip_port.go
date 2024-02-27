@@ -17,7 +17,6 @@ package ipvs
 import (
 	"strings"
 
-	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
 	"github.com/dpvs-agent/pkg/settings"
@@ -97,6 +96,7 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 		return apiVs.NewPutVsVipPortCreated()
 	case types.EDPVS_EXIST:
 		h.logger.Info("The virtual server already exist! Try to update.", "VipPort", params.VipPort)
+
 		if shareSnapshot.ServiceLock(vs.ID()) {
 			defer shareSnapshot.ServiceUnlock(vs.ID())
 		}
@@ -107,30 +107,22 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 			h.logger.Error("Update virtual server failed.", "VipPort", params.VipPort, "reason", reason.String())
 			return apiVs.NewPutVsVipPortInvalidBackend()
 		}
+
+		newVsModel := vs.GetModel()
+		vsModel := shareSnapshot.ServiceGet(vs.ID())
+		vsModel.Bps = newVsModel.Bps
+		vsModel.ConnTimeout = newVsModel.ConnTimeout
+		vsModel.LimitProportion = newVsModel.LimitProportion
+		vsModel.ExpireQuiescent = newVsModel.ExpireQuiescent
+		vsModel.Fwmark = newVsModel.Fwmark
+		vsModel.SynProxy = newVsModel.SynProxy
+		vsModel.Match = newVsModel.Match
+		vsModel.SchedName = newVsModel.SchedName
+		vsModel.Timeout = newVsModel.Timeout
+		vsModel.Flags = newVsModel.Flags
+
 		h.logger.Info("Update virtual server success.", "VipPort", params.VipPort)
 
-		if vss, err := vs.Get(h.connPool, h.logger); err == nil {
-			for _, newVs := range vss {
-				front := types.NewRealServerFront()
-				if err := front.ParseVipPortProto(newVs.ID()); err != nil {
-					continue
-				}
-
-				vsModel := newVs.GetModel()
-				front.SetNumDests(newVs.GetNumDests())
-				if rss, err := front.Get(h.connPool, h.logger); err != nil {
-					vsModel.RSs = new(models.RealServerExpandList)
-					vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
-					for i, rs := range rss {
-						vsModel.RSs.Items[i] = rs.GetModel()
-					}
-				}
-
-				shareSnapshot.ServiceLock(newVs.ID())
-				shareSnapshot.ServiceUpsert(vsModel)
-				shareSnapshot.ServiceUnlock(newVs.ID())
-			}
-		}
 		// return 200
 		return apiVs.NewPutVsVipPortOK()
 	default:

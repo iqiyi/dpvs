@@ -157,6 +157,9 @@ func (node *NodeSnapshot) ServiceAdd(vs *VirtualServerSpec) {
 
 	svc := vs.GetModel()
 	svc.Version = version
+	if svc.RSs == nil {
+		svc.RSs = &models.RealServerExpandList{Items: make([]*models.RealServerSpecExpand, 0)}
+	}
 
 	node.Snapshot[strings.ToLower(vs.ID())] = &ServiceSnapshot{Service: svc, lock: new(sync.RWMutex)}
 }
@@ -187,6 +190,12 @@ func (node *NodeSnapshot) GetModels(logger hclog.Logger) *models.VirtualServerLi
 	return services
 }
 
+type RealServerSpecExpandModel models.RealServerSpecExpand
+
+func (rs *RealServerSpecExpandModel) ID() string {
+	return fmt.Sprintf("%s:%d", net.ParseIP(rs.Spec.IP), rs.Spec.Port)
+}
+
 type VirtualServerSpecExpandModel models.VirtualServerSpecExpand
 
 func (spec *VirtualServerSpecExpandModel) ID() string {
@@ -194,7 +203,8 @@ func (spec *VirtualServerSpecExpandModel) ID() string {
 	if spec.Proto == unix.IPPROTO_UDP {
 		proto = "udp"
 	}
-	return fmt.Sprintf("%s-%d-%s", spec.Addr, spec.Port, proto)
+
+	return fmt.Sprintf("%s-%d-%s", net.ParseIP(spec.Addr).String(), spec.Port, proto)
 }
 
 func (node *NodeSnapshot) LoadFrom(cacheFile string, logger hclog.Logger) error {

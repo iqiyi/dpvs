@@ -40,18 +40,28 @@ func NewGetVs(cp *pool.ConnPool, parentLogger hclog.Logger) *getVs {
 }
 
 func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
+	shareSnapshot := settings.ShareSnapshot()
+	if params.Healthcheck != nil && !*params.Healthcheck {
+		return apiVs.NewGetVsOK().WithPayload(shareSnapshot.GetModels(h.logger))
+	}
+
+	// if params.Snapshot != nil && *params.Snapshot {
+	//	shareSnapshot.DumpTo(settings.LocalConfigFile(), h.logger)
+	// }
+
 	front := types.NewVirtualServerFront()
 	vss, err := front.Get(h.connPool, h.logger)
 	if err != nil {
 		h.logger.Error("Get virtual server list failed.", "Error", err.Error())
-		// FIXME: Invalid
-		return apiVs.NewGetVsOK()
+		return apiVs.NewGetVsNoContent()
 	}
 
-	shareSnapshot := settings.ShareSnapshot()
+	vsModels := models.VirtualServerList{
+		Items: make([]*models.VirtualServerSpecExpand, len(vss)),
+	}
 
 	h.logger.Info("Get all virtual server done.", "vss", vss)
-	for _, vs := range vss {
+	for i, vs := range vss {
 		front := types.NewRealServerFront()
 
 		err := front.ParseVipPortProto(vs.ID())
@@ -69,52 +79,18 @@ func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
 
 		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", rss)
 
-		vsModel := vs.GetModel()
-		vsStats := (*types.ServerStats)(vsModel.Stats)
-		vsModel.RSs = new(models.RealServerExpandList)
-		vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
+		vsModels.Items[i] = vs.GetModel()
+		vsStats := (*types.ServerStats)(vsModels.Items[i].Stats)
+		vsModels.Items[i].RSs = new(models.RealServerExpandList)
+		vsModels.Items[i].RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
 
 		for j, rs := range rss {
 			rsModel := rs.GetModel()
 			rsStats := (*types.ServerStats)(rsModel.Stats)
-			vsModel.RSs.Items[j] = rsModel
+			vsModels.Items[i].RSs.Items[j] = rsModel
 			vsStats.Increase(rsStats)
 		}
-
-		if shareSnapshot.NodeSpec.Laddrs == nil {
-			laddr := types.NewLocalAddrFront()
-			if err := laddr.ParseVipPortProto(vs.ID()); err != nil {
-				// FIXME: Invalid
-				return apiVs.NewGetVsOK()
-			}
-
-			laddrs, err := laddr.Get(h.connPool, h.logger)
-			if err != nil {
-				// FIXME: Invalid
-				return apiVs.NewGetVsOK()
-			}
-
-			shareSnapshot.NodeSpec.Laddrs = new(models.LocalAddressExpandList)
-			laddrModels := shareSnapshot.NodeSpec.Laddrs
-			laddrModels.Items = make([]*models.LocalAddressSpecExpand, len(laddrs))
-			for k, lip := range laddrs {
-				laddrModels.Items[k] = lip.GetModel()
-			}
-		}
-
-		if shareSnapshot.ServiceGet(vs.ID()) == nil {
-			shareSnapshot.ServiceUpsert(vsModel)
-			continue
-		}
-
-		shareSnapshot.ServiceLock(vs.ID())
-		shareSnapshot.ServiceUpsert(vsModel)
-		shareSnapshot.ServiceUnlock(vs.ID())
 	}
 
-	if params.Snapshot != nil && *params.Snapshot {
-		shareSnapshot.DumpTo(settings.LocalConfigFile(), h.logger)
-	}
-
-	return apiVs.NewGetVsOK().WithPayload(shareSnapshot.GetModels(h.logger))
+	return apiVs.NewGetVsOK().WithPayload(&vsModels)
 }

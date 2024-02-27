@@ -40,7 +40,6 @@ func NewPutVsRsHealth(cp *pool.ConnPool, parentLogger hclog.Logger) *putVsRsHeal
 	}
 	return &putVsRsHealth{connPool: cp, logger: logger}
 }
-
 func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middleware.Responder {
 	front := types.NewRealServerFront()
 	if err := front.ParseVipPortProto(params.VipPort); err != nil {
@@ -48,150 +47,65 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 		return apiVs.NewPutVsVipPortRsHealthInvalidFrontend()
 	}
 
+	activeRSs := make(map[string]*models.RealServerSpecExpand)
+	var vsModel *models.VirtualServerSpecExpand
 	shareSnapshot := settings.ShareSnapshot()
-
-	shareSnapshot.ServiceRLock(params.VipPort) // RLock
-	version := shareSnapshot.ServiceVersion(params.VipPort)
-	// get active backends
-	active, err := front.Get(h.connPool, h.logger)
-	if err != nil {
-		shareSnapshot.ServiceRUnlock(params.VipPort) // RUnlock
-		return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
-	}
-	shareSnapshot.ServiceRUnlock(params.VipPort) // RUnlock
-
-	activeRSs := make(map[string]*types.RealServerSpec)
-	for _, rs := range active {
-		activeRSs[rs.ID()] = rs
-	}
-
-	validRSs := make([]*types.RealServerSpec, 0)
-	if params.Rss != nil {
-		for _, rs := range params.Rss.Items {
-			var fwdmode types.DpvsFwdMode
-			fwdmode.FromString(rs.Mode)
-			newRs := types.NewRealServerSpec()
-			newRs.SetAf(front.GetAf())
-			newRs.SetAddr(rs.IP)
-			newRs.SetPort(rs.Port)
-			newRs.SetProto(front.GetProto())
-			newRs.SetWeight(uint32(rs.Weight))
-			newRs.SetFwdMode(fwdmode)
-			newRs.SetInhibited(rs.Inhibited)
-			newRs.SetOverloaded(rs.Overloaded)
-
-			if _, existed := activeRSs[newRs.ID()]; existed {
-				validRSs = append(validRSs, newRs)
-				from := activeRSs[newRs.ID()]
-				to := newRs
-				h.logger.Info("real server update.", "ID", newRs.ID(), "client Version", params.Version, "from", from, "to", to)
+	if shareSnapshot.ServiceRLock(params.VipPort) {
+		vsModel = shareSnapshot.ServiceGet(params.VipPort)
+		if vsModel != nil {
+			for _, rs := range vsModel.RSs.Items {
+				rsModel := (*types.RealServerSpecExpandModel)(rs)
+				activeRSs[rsModel.ID()] = rs
 			}
-		}
-	}
+			h.logger.Info("service activeRSs", activeRSs)
 
-	if !strings.EqualFold(params.Version, version) {
-		h.logger.Info("The service", "VipPort", params.VipPort, "version expired. The latest version", version)
-		if shareSnapshot.ServiceRLock(params.VipPort) {
-			defer shareSnapshot.ServiceRUnlock(params.VipPort)
-		}
-		vsModel := shareSnapshot.ServiceGet(params.VipPort)
-		if vsModel == nil {
-			spec := types.NewVirtualServerSpec()
-			spec.ParseVipPortProto(params.VipPort)
+			validRSs := make([]*types.RealServerSpec, 0)
+			if params.Rss != nil {
+				for _, rs := range params.Rss.Items {
+					var fwdmode types.DpvsFwdMode
+					fwdmode.FromString(rs.Mode)
+					newRs := types.NewRealServerSpec()
+					newRs.SetAf(front.GetAf())
+					newRs.SetAddr(rs.IP)
+					newRs.SetPort(rs.Port)
+					newRs.SetProto(front.GetProto())
+					newRs.SetWeight(uint32(rs.Weight))
+					newRs.SetFwdMode(fwdmode)
+					newRs.SetInhibited(rs.Inhibited)
+					newRs.SetOverloaded(rs.Overloaded)
+					h.logger.Info("new real rs ID", newRs.ID())
+					if _, existed := activeRSs[newRs.ID()]; existed {
+						validRSs = append(validRSs, newRs)
+						from := activeRSs[newRs.ID()].Spec
+						to := newRs
+						h.logger.Info("real server update.", "ID", newRs.ID(), "client Version", params.Version, "from", from, "to", to)
+					}
+				}
+			}
 
-			vss, err := spec.Get(h.connPool, h.logger)
-			if err != nil {
+			if !strings.EqualFold(vsModel.Version, params.Version) {
+				h.logger.Info("The service", "VipPort", params.VipPort, "version expired. Latest Version", vsModel.Version, "Client Version", params.Version)
+				shareSnapshot.ServiceRUnlock(params.VipPort)
+				return apiVs.NewPutVsVipPortRsHealthUnexpected().WithPayload(vsModel)
+			}
+
+			existOnly := true
+			result := front.Edit(existOnly, validRSs, h.connPool, h.logger)
+			switch result {
+			case types.EDPVS_EXIST, types.EDPVS_OK:
+				h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
+				return apiVs.NewPutVsVipPortRsHealthOK()
+			case types.EDPVS_NOTEXIST:
+				if existOnly {
+					h.logger.Error("Edit not exist real server.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
+					return apiVs.NewPutVsVipPortRsHealthInvalidFrontend()
+				}
+				h.logger.Error("Unreachable branch")
+			default:
+				h.logger.Error("Set real server sets failed.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
 				return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
 			}
-			for _, vs := range vss {
-				front := types.NewRealServerFront()
-				front.ParseVipPortProto(vs.ID())
-
-				front.SetNumDests(vs.GetNumDests())
-
-				rss, err := front.Get(h.connPool, h.logger)
-				if err != nil {
-					h.logger.Error("Get real server list of virtual server failed.", "ID", vs.ID(), "Error", err.Error())
-					return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
-				}
-				vsModel = vs.GetModel()
-				vsModel.RSs = new(models.RealServerExpandList)
-				vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
-				for i, rs := range rss {
-					rsModel := rs.GetModel()
-					// rsStats := (*types.ServerStats)(rsModel.Stats)
-					vsModel.RSs.Items[i] = rsModel
-					// vsStats.Increase(rsStats)
-				}
-				shareSnapshot.ServiceUpsert(vsModel)
-			}
 		}
-		h.logger.Error("Virtual service version miss match.", "VipPort", params.VipPort, "correct version", version, "url query param version", params.Version)
-		return apiVs.NewPutVsVipPortRsHealthUnexpected().WithPayload(vsModel)
-	}
-
-	if shareSnapshot.ServiceLock(params.VipPort) {
-		defer shareSnapshot.ServiceUnlock(params.VipPort)
-	}
-
-	existOnly := true
-	result := front.Edit(existOnly, validRSs, h.connPool, h.logger)
-	switch result {
-	case types.EDPVS_EXIST, types.EDPVS_OK:
-		// update Snapshot
-		if newRSs, err := front.Get(h.connPool, h.logger); err == nil {
-			rsModels := new(models.RealServerExpandList)
-			rsModels.Items = make([]*models.RealServerSpecExpand, len(newRSs))
-			for i, rs := range newRSs {
-				rsModels.Items[i] = rs.GetModel()
-			}
-
-			vsModel := shareSnapshot.ServiceGet(params.VipPort)
-			if vsModel == nil {
-				spec := types.NewVirtualServerSpec()
-				spec.ParseVipPortProto(params.VipPort)
-
-				vss, err := spec.Get(h.connPool, h.logger)
-				if err != nil {
-					return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
-				}
-				for _, vs := range vss {
-					front := types.NewRealServerFront()
-					front.ParseVipPortProto(vs.ID())
-
-					front.SetNumDests(vs.GetNumDests())
-
-					rss, err := front.Get(h.connPool, h.logger)
-					if err != nil {
-						h.logger.Error("Get real server list of virtual server failed.", "ID", vs.ID(), "Error", err.Error())
-						return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
-					}
-					vsModel = vs.GetModel()
-					vsModel.RSs = new(models.RealServerExpandList)
-					vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
-					for i, rs := range rss {
-						rsModel := rs.GetModel()
-						vsModel.RSs.Items[i] = rsModel
-						// rsStats := (*types.ServerStats)(rsModel.Stats)
-						// vsStats.Increase(rsStats)
-					}
-				}
-			}
-			vsModel.RSs = rsModels
-			shareSnapshot.ServiceUpsert(vsModel)
-		}
-
-		h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
-		return apiVs.NewPutVsVipPortRsHealthOK()
-	case types.EDPVS_NOTEXIST:
-		if existOnly {
-			h.logger.Error("Edit not exist real server.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
-			return apiVs.NewPutVsVipPortRsHealthInvalidFrontend()
-		}
-		h.logger.Error("Unreachable branch")
-	default:
-		h.logger.Error("Set real server sets failed.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
-		return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
 	}
 	return apiVs.NewPutVsVipPortRsHealthFailure()
 }
