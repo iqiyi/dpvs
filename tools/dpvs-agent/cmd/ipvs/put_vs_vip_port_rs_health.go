@@ -51,6 +51,8 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 	var vsModel *models.VirtualServerSpecExpand
 	shareSnapshot := settings.ShareSnapshot()
 	if shareSnapshot.ServiceRLock(params.VipPort) {
+		defer shareSnapshot.ServiceRUnlock(params.VipPort)
+
 		vsModel = shareSnapshot.ServiceGet(params.VipPort)
 		if vsModel != nil {
 			for _, rs := range vsModel.RSs.Items {
@@ -83,7 +85,6 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 
 			if !strings.EqualFold(vsModel.Version, params.Version) {
 				h.logger.Info("The service", "VipPort", params.VipPort, "version expired. Latest Version", vsModel.Version, "Client Version", params.Version)
-				shareSnapshot.ServiceRUnlock(params.VipPort)
 				return apiVs.NewPutVsVipPortRsHealthUnexpected().WithPayload(vsModel)
 			}
 
