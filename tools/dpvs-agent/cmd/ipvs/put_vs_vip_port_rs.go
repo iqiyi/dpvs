@@ -92,12 +92,13 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 			exist := false
 			for _, cacheRs := range vsModel.RSs.Items {
 				rsID := fmt.Sprintf("%s:%d", cacheRs.Spec.IP, cacheRs.Spec.Port)
-				if !strings.EqualFold(newRs.ID(), rsID) {
-					continue
+				if strings.EqualFold(newRs.ID(), rsID) {
+					// update weight only
+					inhibited := newRs.GetInhibited()
+					cacheRs.Spec.Weight = uint16(newRs.GetWeight())
+					cacheRs.Spec.Inhibited = &inhibited
+					break
 				}
-				// update weight only
-				cacheRs.Spec.Weight = uint16(newRs.GetWeight())
-				break
 			}
 
 			if !exist {

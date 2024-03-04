@@ -15,6 +15,7 @@
 package ipvs
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/dpvs-agent/models"
@@ -92,6 +93,16 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 			result := front.Edit(existOnly, validRSs, h.connPool, h.logger)
 			switch result {
 			case types.EDPVS_EXIST, types.EDPVS_OK:
+				for _, newRs := range validRSs {
+					for _, rs := range vsModel.RSs.Items {
+						rsID := fmt.Sprintf("%s:%d", rs.Spec.IP, rs.Spec.Port)
+						if strings.EqualFold(newRs.ID(), rsID) {
+							inhibited := newRs.GetInhibited()
+							rs.Spec.Inhibited = &inhibited
+							break
+						}
+					}
+				}
 				h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
 				return apiVs.NewPutVsVipPortRsHealthOK()
 			case types.EDPVS_NOTEXIST:
