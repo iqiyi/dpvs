@@ -96,6 +96,11 @@ func (hc *Checker) Status() Status {
 }
 
 func (hc *Checker) updateConfig(conf *CheckerConfig) {
+	// Note:
+	//   The conf::Weight must be the original weight not modified by healthcheck program,
+	//   while conf::State reflects the health state derived from the inhibited flag set by
+	//   the healthcheck program.
+
 	//log.Infof("[updateConfig] id(%v) version(%d->%d) target(%v) %v->%v weight(%d->%d)\n", conf.Id,
 	//	hc.Version, conf.Version, conf.Target, hc.State, conf.State, hc.Weight, conf.Weight)
 
@@ -108,21 +113,18 @@ func (hc *Checker) updateConfig(conf *CheckerConfig) {
 		return
 	}
 
-	if conf.State == StateUnhealthy {
-		// Only update checker's State when the conf's state is unhealthy.
-		// Note that the conf's version should NOT be updated.
-		hc.State = conf.State
-		hc.lock.Lock()
-		state := hc.state
-		hc.state = conf.State
-		hc.lock.Unlock()
-		if state != conf.State {
-			log.Warningf("%v: healthcheck's state changed externally %v -> %v",
-				hc.Id, state, conf.State)
-		}
-	} else {
+	hc.State = conf.State
+	hc.lock.Lock()
+	state := hc.state
+	hc.state = conf.State
+	hc.lock.Unlock()
+	if state != conf.State {
+		log.Warningf("%v: healthcheck's state changed externally %v -> %v",
+			hc.Id, state, conf.State)
+	}
+
+	if conf.State != StateUnhealthy || conf.State == StateUnhealthy && conf.Weight > 0 {
 		// Update all the checker configs when conf's state is healthy.
-		hc.State = conf.State
 		hc.Weight = conf.Weight
 		if conf.Interval > 0 {
 			hc.Interval = conf.Interval
@@ -135,9 +137,7 @@ func (hc *Checker) updateConfig(conf *CheckerConfig) {
 		}
 
 		hc.lock.Lock()
-		state := hc.state
 		weight := hc.uweight
-		hc.state = conf.State
 		hc.uweight = conf.Weight
 		hc.lock.Unlock()
 
@@ -145,10 +145,6 @@ func (hc *Checker) updateConfig(conf *CheckerConfig) {
 		if weight != conf.Weight {
 			log.Warningf("%v: healthcheck's user weight changed %d -> %d",
 				hc.Id, weight, conf.Weight)
-		}
-		if state != conf.State {
-			log.Warningf("%v: healthcheck's state changed externally %v -> %v",
-				hc.Id, state, conf.State)
 		}
 	}
 }
