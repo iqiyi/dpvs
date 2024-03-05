@@ -48,6 +48,10 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 		return apiVs.NewPostVsVipPortRsInvalidFrontend()
 	}
 
+	if params.Rss == nil || params.Rss.Items == nil {
+		return apiVs.NewPostVsVipPortRsInvalidFrontend()
+	}
+
 	rss := make([]*types.RealServerSpec, len(params.Rss.Items))
 	for i, rs := range params.Rss.Items {
 		var fwdmode types.DpvsFwdMode

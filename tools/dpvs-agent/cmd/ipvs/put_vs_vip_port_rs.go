@@ -49,7 +49,7 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 	}
 
 	var rss []*types.RealServerSpec
-	if params.Rss != nil {
+	if params.Rss != nil && params.Rss.Items != nil {
 		rss = make([]*types.RealServerSpec, len(params.Rss.Items))
 		for i, rs := range params.Rss.Items {
 			var fwdmode types.DpvsFwdMode
@@ -97,6 +97,7 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 					inhibited := newRs.GetInhibited()
 					cacheRs.Spec.Weight = uint16(newRs.GetWeight())
 					cacheRs.Spec.Inhibited = &inhibited
+					exist = true
 					break
 				}
 			}

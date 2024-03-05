@@ -62,7 +62,7 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 			}
 
 			validRSs := make([]*types.RealServerSpec, 0)
-			if params.Rss != nil {
+			if params.Rss != nil && params.Rss.Items != nil {
 				for _, rs := range params.Rss.Items {
 					var fwdmode types.DpvsFwdMode
 					fwdmode.FromString(rs.Mode)

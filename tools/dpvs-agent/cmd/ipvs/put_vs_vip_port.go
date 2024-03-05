@@ -17,6 +17,7 @@ package ipvs
 import (
 	"strings"
 
+	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
 	"github.com/dpvs-agent/pkg/settings"
@@ -110,6 +111,14 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 
 		newVsModel := vs.GetModel()
 		vsModel := shareSnapshot.ServiceGet(vs.ID())
+		if vsModel == nil {
+			newVsModel.RSs = &models.RealServerExpandList{
+				Items: make([]*models.RealServerSpecExpand, 0),
+			}
+			shareSnapshot.ServiceUpsert(newVsModel)
+			return apiVs.NewPutVsVipPortOK()
+		}
+
 		vsModel.Bps = newVsModel.Bps
 		vsModel.ConnTimeout = newVsModel.ConnTimeout
 		vsModel.LimitProportion = newVsModel.LimitProportion
@@ -120,6 +129,13 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 		vsModel.SchedName = newVsModel.SchedName
 		vsModel.Timeout = newVsModel.Timeout
 		vsModel.Flags = newVsModel.Flags
+		if vsModel.RSs == nil {
+			vsModel.RSs = &models.RealServerExpandList{}
+		}
+
+		if vsModel.RSs.Items == nil {
+			vsModel.RSs.Items = make([]*models.RealServerSpecExpand, 0)
+		}
 
 		h.logger.Info("Update virtual server success.", "VipPort", params.VipPort)
 
