@@ -56,29 +56,6 @@ func (id Id) Rs() *Target {
 	return NewTargetFromStr(strId[idx+1:])
 }
 
-// MethodType is the type of check method supported for now.
-type MethodType int
-
-const (
-	MethodTypeNone MethodType = iota
-	MethodTypeTCP
-	MethodTypeUDP
-	MethodTypePING
-)
-
-// String returns the name for the given MethodType.
-func (h MethodType) String() string {
-	switch h {
-	case MethodTypeTCP:
-		return "TCP"
-	case MethodTypeUDP:
-		return "UDP"
-	case MethodTypePING:
-		return "PING"
-	}
-	return "(unknown)"
-}
-
 // CheckMethod is the interface that must be implemented by a healthcheck.
 type CheckMethod interface {
 	Check(target Target, timeout time.Duration) *Result
@@ -123,11 +100,11 @@ func NewTargetFromStr(str string) *Target {
 	if idx1 < 0 || idx2 < 0 || idx1 >= idx2 {
 		return nil
 	}
-	port, err := strconv.ParseUint(str[idx2:], 10, 16)
+	port, err := strconv.ParseUint(str[idx2+1:], 10, 16)
 	if err != nil {
 		return nil
 	}
-	proto := utils.IPProtoFromStr(str[idx1:idx2])
+	proto := utils.IPProtoFromStr(str[idx1+1 : idx2])
 	if proto == 0 {
 		return nil
 	}
@@ -144,6 +121,16 @@ func (t Target) String() string {
 		return fmt.Sprintf("%v:%v:%d", t.IP, t.Proto, t.Port)
 	}
 	return fmt.Sprintf("[%v]:%v:%d", t.IP, t.Proto, t.Port)
+}
+
+func (t *Target) Equal(t2 *Target) bool {
+	if t2 == nil {
+		return false
+	}
+	if t.Port != t2.Port || t.Proto != t2.Proto {
+		return false
+	}
+	return t.IP.Equal(t2.IP)
 }
 
 // Addr returns the IP:Port representation of a healthcheck target
@@ -201,6 +188,7 @@ func NewResult(start time.Time, msg string, success bool, err error) *Result {
 
 // Status represents the current status of a healthcheck instance.
 type Status struct {
+	Version   uint64 // the vs version
 	LastCheck time.Time
 	Duration  time.Duration
 	Failures  uint64
@@ -219,7 +207,7 @@ type Notification struct {
 
 // String returns the string representation for the given notification.
 func (n *Notification) String() string {
-	return fmt.Sprintf("ID %v, %v, Weight %d, Fail %v, Success %v, Last check %s in %v", n.Id,
-		stateNames[n.Status.State], n.Status.Weight, n.Status.Failures, n.Status.Successes,
-		n.Status.LastCheck.Format("2006-01-02 15:04:05.000"), n.Status.Duration)
+	return fmt.Sprintf("ID %v, Version %d, %v, Weight %d, Fail %v, Success %v, Last check %s in %v",
+		n.Id, n.Version, stateNames[n.Status.State], n.Status.Weight, n.Status.Failures,
+		n.Status.Successes, n.Status.LastCheck.Format("2006-01-02 15:04:05.000"), n.Status.Duration)
 }

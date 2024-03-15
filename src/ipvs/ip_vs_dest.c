@@ -74,6 +74,10 @@ static void __dp_vs_dest_update(struct dp_vs_service *svc,
     int conn_flags;
 
     rte_atomic16_set(&dest->weight, udest->weight);
+    if (udest->flags & DPVS_DEST_F_INHIBITED)
+        dp_vs_dest_set_inhibited(dest);
+    else
+        dp_vs_dest_clear_inhibited(dest);
     conn_flags = udest->conn_flags | DPVS_CONN_F_INACTIVE;
     dest->fwdmode = udest->fwdmode;
     rte_atomic16_set(&dest->conn_flags, conn_flags);

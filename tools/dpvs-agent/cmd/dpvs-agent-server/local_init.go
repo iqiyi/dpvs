@@ -32,15 +32,16 @@ func (agent *DpvsAgentServer) LocalLoad(cp *pool.ConnPool, parentLogger hclog.Lo
 		logger = parentLogger.Named("LoadConfigFile")
 	}
 
-	snapshot := settings.ShareSnapshot()
-	if err := snapshot.LoadFrom(settings.LocalConfigFile(), logger); err != nil {
+	nodeSnap := settings.ShareSnapshot()
+	if err := nodeSnap.LoadFrom(settings.LocalConfigFile(), logger); err != nil {
 		return err
 	}
 
-	announcePort := snapshot.NodeSpec.AnnouncePort
-	laddrs := snapshot.NodeSpec.Laddrs
+	announcePort := nodeSnap.NodeSpec.AnnouncePort
+	laddrs := nodeSnap.NodeSpec.Laddrs
 
-	for _, service := range snapshot.Services {
+	for _, snap := range nodeSnap.Snapshot {
+		service := snap.Service
 		// 1> ipvsadm -A vip:port -s wrr
 		vs := types.NewVirtualServerSpec()
 		vs.SetAddr(service.Addr)

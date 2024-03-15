@@ -64,6 +64,7 @@ func NewHttpChecker(method, host, uri string, proxyProto int) *HttpChecker {
 	}
 	return &HttpChecker{
 		Method:        method,
+		Host:          host,
 		Uri:           uri,
 		ResponseCodes: []HttpCodeRange{{200, 299}, {300, 399}, {400, 499}},
 		Response:      "",

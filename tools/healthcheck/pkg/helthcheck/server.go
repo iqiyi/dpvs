@@ -35,6 +35,7 @@ type Server struct {
 	healthchecks map[Id]*Checker
 	configs      chan map[Id]*CheckerConfig
 	notify       chan *Notification
+	resync       chan *CheckerConfig
 
 	quit chan bool
 }
@@ -63,6 +64,7 @@ func NewServer(cfg *ServerConfig) *Server {
 		healthchecks: make(map[Id]*Checker),
 		notify:       make(chan *Notification, cfg.NotifyChannelSize),
 		configs:      make(chan map[Id]*CheckerConfig),
+		resync:       make(chan *CheckerConfig, cfg.NotifyChannelSize),
 
 		quit: make(chan bool, 1),
 	}
@@ -78,8 +80,10 @@ func (s *Server) NewChecker(typ lb.Checker, proto utils.IPProto) CheckMethod {
 		checker = NewUDPChecker("", "", 0)
 	case lb.CheckerPING:
 		checker = NewPingChecker()
-	case lb.CheckerUDPPing:
+	case lb.CheckerUDPPING:
 		checker = NewUDPPingChecker("", "", 0)
+	case lb.CheckerHTTP:
+		checker = NewHttpChecker("", "", "", 0)
 	case lb.CheckerNone:
 		if s.config.LbAutoMethod {
 			switch proto {
@@ -94,12 +98,12 @@ func (s *Server) NewChecker(typ lb.Checker, proto utils.IPProto) CheckMethod {
 }
 
 // getHealthchecks attempts to get the current healthcheck configurations from DPVS
-func (s *Server) getHealthchecks() (*Checkers, error) {
+func (s *Server) getHealthchecks() (*CheckerConfigs, error) {
 	vss, err := s.comm.ListVirtualServices()
 	if err != nil {
 		return nil, err
 	}
-	results := &Checkers{Configs: make(map[Id]*CheckerConfig)}
+	results := &CheckerConfigs{Configs: make(map[Id]*CheckerConfig)}
 	for _, vs := range vss {
 		for _, rs := range vs.RSs {
 			target := &Target{rs.IP, rs.Port, vs.Protocol}
@@ -111,13 +115,16 @@ func (s *Server) getHealthchecks() (*Checkers, error) {
 			}
 			weight := rs.Weight
 			state := StateUnknown
-			if weight > 0 && rs.Inhibited == false {
-				state = StateHealthy
-			} else if weight == 0 && rs.Inhibited == true {
+			// Backend can be down adminstratively, so its weight
+			// should not be considered for health state.
+			if rs.Inhibited {
 				state = StateUnhealthy
+			} else {
+				state = StateHealthy
 			}
 			// TODO: allow users to specify check interval, timeout and retry
-			config := NewCheckerConfig(id, checker,
+			config := NewCheckerConfig(id,
+				vs.Version, checker,
 				target, state, weight,
 				DefaultCheckConfig.Interval,
 				DefaultCheckConfig.Timeout,
@@ -151,17 +158,17 @@ func (s *Server) updater() {
 
 // notifier batches healthcheck notifications and sends them to DPVS.
 func (s *Server) notifier() {
-	// TODO: support more concurrency and rate limit
+	// TODO: support a lot more concurrences and rate limit
 	for {
 		select {
 		case notification := <-s.notify:
 			log.Infof("Sending notification >>> %v", notification)
-			//fmt.Println("Sending notification >>>", notification)
 			inhibited := false
 			if notification.Status.State == StateUnhealthy {
 				inhibited = true
 			}
 			vs := &lb.VirtualService{
+				Version:  notification.Status.Version,
 				Id:       notification.Id.Vs(),
 				Protocol: notification.Target.Proto,
 				RSs: []lb.RealServer{{
@@ -172,9 +179,35 @@ func (s *Server) notifier() {
 				}},
 			}
 
-			if err := s.comm.UpdateByChecker([]lb.VirtualService{*vs}); err != nil {
+			if changed, err := s.comm.UpdateByChecker(vs); err != nil {
 				log.Warningf("Failed to Update %v healthy status to %v(weight: %d): %v",
 					notification.Id, notification.State, notification.Status.Weight, err)
+			} else if changed != nil {
+				for _, rs := range changed.RSs {
+					version := changed.Version
+					id := notification.Id
+					target := &Target{rs.IP, rs.Port, vs.Protocol}
+					if !target.Equal(id.Rs()) {
+						continue
+					}
+					weight := rs.Weight
+					state := StateUnknown
+					if rs.Inhibited {
+						state = StateUnhealthy
+					} else {
+						state = StateHealthy
+					}
+					log.Warningf("%v::%s has changed, resync config %v ...",
+						notification.Id, notification.Target, rs)
+					config := NewCheckerConfig(&id, version, nil, target, state, weight, 0, 0, 0)
+					s.resync <- config
+					break
+				}
+			} else {
+				// resync checker config to stop repeated notificaitons
+				config := NewCheckerConfig(&notification.Id, notification.Version, nil,
+					&notification.Target, notification.State, notification.Weight, 0, 0, 0)
+				s.resync <- config
 			}
 		}
 	}
@@ -186,10 +219,9 @@ func (s *Server) notifier() {
 // the current configurations to each of the running healthchecks.
 func (s *Server) manager() {
 	notifyTicker := time.NewTicker(s.config.NotifyInterval)
-	var configs map[Id]*CheckerConfig
 	for {
 		select {
-		case configs = <-s.configs:
+		case configs := <-s.configs:
 
 			// Remove healthchecks that have been deleted.
 			for id, hc := range s.healthchecks {
@@ -205,8 +237,8 @@ func (s *Server) manager() {
 					hc := NewChecker(s.notify, conf.State, conf.Weight)
 					hc.SetDryrun(s.config.DryRun)
 					s.healthchecks[id] = hc
-					checkTicker := time.NewTicker(time.Duration((1 + rand.Intn(
-						int(DefaultCheckConfig.Interval.Milliseconds())))) * time.Millisecond)
+					checkTicker := time.NewTicker(time.Duration(1+rand.Intn(int(
+						DefaultCheckConfig.Interval.Milliseconds()))) * time.Millisecond)
 					go hc.Run(checkTicker.C)
 				}
 			}
@@ -215,16 +247,27 @@ func (s *Server) manager() {
 			for id, hc := range s.healthchecks {
 				hc.Update(configs[id])
 			}
-
 		case <-notifyTicker.C:
 			log.Infof("Total checkers: %d", len(s.healthchecks))
-			// Send notifications when status changed.
-			for id, hc := range s.healthchecks {
+			// Send notifications periodically when status in checker doesn't match config.
+			// It should get here only when the notification had failed.
+			for _, hc := range s.healthchecks {
 				notification := hc.Notification()
-				if configs[id].State != notification.State {
-					// FIXME: Don't resend the notification after a successful one.
+				if hc.State != notification.State {
 					hc.notify <- notification
 				}
+			}
+		}
+	}
+}
+
+func (s *Server) resyncer() {
+	for {
+		select {
+		case conf := <-s.resync:
+			hc := s.healthchecks[conf.Id]
+			if hc != nil {
+				hc.Update(conf)
 			}
 		}
 	}
@@ -236,6 +279,7 @@ func (s *Server) Run() {
 	go s.updater()
 	go s.notifier()
 	go s.manager()
+	go s.resyncer()
 
 	<-s.quit
 }

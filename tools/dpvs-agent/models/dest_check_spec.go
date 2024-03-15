@@ -41,6 +41,12 @@ const (
 
 	// DestCheckSpecPing captures enum value "ping"
 	DestCheckSpecPing DestCheckSpec = "ping"
+
+	// DestCheckSpecUdpping captures enum value "udpping"
+	DestCheckSpecUdpping DestCheckSpec = "udpping"
+
+	// DestCheckSpecHTTP captures enum value "http"
+	DestCheckSpecHTTP DestCheckSpec = "http"
 )
 
 // for schema
@@ -48,7 +54,7 @@ var destCheckSpecEnum []interface{}
 
 func init() {
 	var res []DestCheckSpec
-	if err := json.Unmarshal([]byte(`["passive","tcp","udp","ping"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["passive","tcp","udp","ping","udpping","http"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {

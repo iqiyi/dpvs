@@ -578,6 +578,9 @@ func init() {
           },
           {
             "$ref": "#/parameters/snapshot"
+          },
+          {
+            "$ref": "#/parameters/healthcheck"
           }
         ],
         "responses": {
@@ -586,6 +589,13 @@ func init() {
             "schema": {
               "$ref": "#/definitions/VirtualServerList"
             }
+          },
+          "204": {
+            "description": "No Content",
+            "schema": {
+              "$ref": "#/definitions/VirtualServerList"
+            },
+            "x-go-name": "NoContent"
           }
         }
       }
@@ -599,6 +609,9 @@ func init() {
         "parameters": [
           {
             "$ref": "#/parameters/snapshot"
+          },
+          {
+            "$ref": "#/parameters/healthcheck"
           },
           {
             "$ref": "#/parameters/service-id"
@@ -1370,15 +1383,12 @@ func init() {
         ],
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RealServerExpandList"
-            }
+            "description": "Success"
           },
           "270": {
             "description": "the rss-config parameter is outdated, update nothing and return the latest rs info",
             "schema": {
-              "$ref": "#/definitions/RealServerExpandList"
+              "$ref": "#/definitions/VirtualServerSpecExpand"
             },
             "x-go-name": "Unexpected"
           },
@@ -1443,7 +1453,9 @@ func init() {
         "passive",
         "tcp",
         "udp",
-        "ping"
+        "ping",
+        "udpping",
+        "http"
       ]
     },
     "DpvsNodeSpec": {
@@ -2963,6 +2975,12 @@ func init() {
             "default": true,
             "name": "snapshot",
             "in": "query"
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "name": "healthcheck",
+            "in": "query"
           }
         ],
         "responses": {
@@ -2971,6 +2989,13 @@ func init() {
             "schema": {
               "$ref": "#/definitions/VirtualServerList"
             }
+          },
+          "204": {
+            "description": "No Content",
+            "schema": {
+              "$ref": "#/definitions/VirtualServerList"
+            },
+            "x-go-name": "NoContent"
           }
         }
       }
@@ -2986,6 +3011,12 @@ func init() {
             "type": "boolean",
             "default": true,
             "name": "snapshot",
+            "in": "query"
+          },
+          {
+            "type": "boolean",
+            "default": false,
+            "name": "healthcheck",
             "in": "query"
           },
           {
@@ -3894,15 +3925,12 @@ func init() {
         ],
         "responses": {
           "200": {
-            "description": "Success",
-            "schema": {
-              "$ref": "#/definitions/RealServerExpandList"
-            }
+            "description": "Success"
           },
           "270": {
             "description": "the rss-config parameter is outdated, update nothing and return the latest rs info",
             "schema": {
-              "$ref": "#/definitions/RealServerExpandList"
+              "$ref": "#/definitions/VirtualServerSpecExpand"
             },
             "x-go-name": "Unexpected"
           },
@@ -3967,7 +3995,9 @@ func init() {
         "passive",
         "tcp",
         "udp",
-        "ping"
+        "ping",
+        "udpping",
+        "http"
       ]
     },
     "DpvsNodeSpec": {
