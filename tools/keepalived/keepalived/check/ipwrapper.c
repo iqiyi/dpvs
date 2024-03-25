@@ -1024,6 +1024,12 @@ clear_diff_rs(virtual_server_t *old_vs, virtual_server_t *new_vs, list old_check
 		}
 	}
 	clear_service_rs(old_vs, rs_to_remove, false);
+
+	//keep new_vs quorum_state_up same with old_vs
+	if (old_vs->quorum_state_up != new_vs->quorum_state_up) {
+		new_vs->quorum_state_up = old_vs->quorum_state_up;
+	}
+
 	free_list(&rs_to_remove);
 }
 
