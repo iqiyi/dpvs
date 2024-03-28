@@ -1128,6 +1128,9 @@ char *dump_vs_match(const virtual_server_t *vs)
 		case IPPROTO_UDP:
 			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "udp");
 			break;
+		case IPPROTO_SCTP:
+			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "sctp");
+			break;
 		case IPPROTO_ICMP:
 			snprintf(vs_str, sizeof(vs_str) - 1, "%s", "icmp");
 			break;

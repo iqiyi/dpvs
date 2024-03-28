@@ -25,6 +25,7 @@
 #include <netinet/ip6.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include "sctp/sctp.h"
 #include "netif.h"
 #include "vlan.h"
 #include "tc/tc.h"
@@ -54,6 +55,7 @@ static int match_classify(struct tc_cls *cls, struct rte_mbuf *mbuf,
     struct ip6_hdr *ip6h = NULL;
     struct tcphdr *th;
     struct udphdr *uh;
+    struct sctphdr *sh;
     uint8_t l4_proto = 0;
     int offset = sizeof(*eh);
     __be16 pkt_type = eh->ether_type;
@@ -173,6 +175,17 @@ l2parse:
         uh = rte_pktmbuf_mtod_offset(mbuf, struct udphdr *, offset);
         sport = uh->source;
         dport = uh->dest;
+        break;
+
+    case IPPROTO_SCTP:
+        if (mbuf_may_pull(mbuf, offset + sizeof(struct sctphdr)) != 0) {
+            err = TC_ACT_SHOT;
+            goto done;
+        }
+
+        sh = rte_pktmbuf_mtod_offset(mbuf, struct sctphdr *, offset);
+        sport = sh->src_port;
+        dport = sh->dest_port;
         break;
 
     default: /* priv->proto is not assigned */

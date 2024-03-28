@@ -49,7 +49,7 @@ static void cls_help(void)
         "    PATTERN    := comma seperated of tokens below,\n"
         "                  { PROTO | SRANGE | DRANGE | IIF | OIF }\n"
         "    CHILD_QSCH := child qsch handle of the qsch cls attached.\n"
-        "    PROTO      := \"{ tcp | udp }\"\n"
+        "    PROTO      := \"{ tcp | sctp | udp }\"\n"
         "    SRANGE     := \"from=RANGE\"\n"
         "    DRANGE     := \"to=RANGE\"\n"
         "    RANGE      := ADDR[-ADDR][:PORT[-PORT]]\n"

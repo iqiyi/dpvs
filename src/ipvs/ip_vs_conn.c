@@ -30,6 +30,7 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
+#include "ipvs/proto_sctp.h"
 #include "ipvs/proto_icmp.h"
 #include "parser/parser.h"
 #include "ctrl.h"
@@ -517,7 +518,9 @@ void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp)
 
     /* set proper timeout */
     if ((conn->proto == IPPROTO_TCP && conn->state == DPVS_TCP_S_ESTABLISHED)
-            || conn->proto == IPPROTO_UDP) {
+            || conn->proto == IPPROTO_UDP
+            || (conn->proto == IPPROTO_SCTP && 
+               conn->state == DPVS_SCTP_S_ESTABLISHED)) {
         conn_timeout = dp_vs_conn_get_timeout(conn);
 
         if (conn_timeout > 0) {
@@ -1308,6 +1311,39 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
                     break;
             }
             break;
+        case IPPROTO_SCTP:
+            switch (state) {
+            case DPVS_SCTP_S_NONE:
+                return "SCTP_NONE";
+            case DPVS_SCTP_S_INIT1:
+                return "SCTP_INIT1";
+            case DPVS_SCTP_S_INIT:
+                return "SCTP_INIT";
+            case DPVS_SCTP_S_COOKIE_SENT:
+                return "SCTP_COOKIE_SENT";
+            case DPVS_SCTP_S_COOKIE_REPLIED:
+                return "SCTP_COOKIE_REPLIED";
+            case DPVS_SCTP_S_COOKIE_WAIT:
+                return "SCTP_COOKIE_WAIT";
+            case DPVS_SCTP_S_COOKIE:
+                return "SCTP_COOKIE";
+            case DPVS_SCTP_S_COOKIE_ECHOED:
+                return "SCTP_COOKIE_ECHOED";
+            case DPVS_SCTP_S_ESTABLISHED:
+                return "SCTP_ESTABLISHED";
+            case DPVS_SCTP_S_SHUTDOWN_SENT:
+                return "SCTP_SHUTDOWN_SENT";
+            case DPVS_SCTP_S_SHUTDOWN_RECEIVED:
+                return "SCTP_SHUTDOWN_RECEIVED";
+            case DPVS_SCTP_S_SHUTDOWN_ACK_SENT:
+                return "SCTP_SHUTDOWN_ACK_SENT";
+            case DPVS_SCTP_S_REJECTED:
+                return "SCTP_REJECTED";
+            case DPVS_SCTP_S_CLOSED:
+                return "SCTP_CLOSED";
+            default:
+                return "SCTP_UNKNOWN";
+            }
         case IPPROTO_ICMP:
         case IPPROTO_ICMPV6:
             switch (state) {
