@@ -24,7 +24,7 @@ import (
 	log "github.com/golang/glog"
 )
 
-const uweightDefault uint16 = 1
+const uweightDefault uint16 = 100
 
 var (
 	proxyProtoV1LocalCmd        = "PROXY UNKNOWN\r\n"
@@ -35,7 +35,7 @@ var (
 )
 
 // Checks provides a map of healthcheck configurations.
-type Checkers struct {
+type CheckerConfigs struct {
 	Configs map[Id]*CheckerConfig
 }
 
@@ -69,7 +69,7 @@ func NewChecker(notify chan<- *Notification, state State, weight uint16) *Checke
 		state:   state,
 		uweight: weight,
 		notify:  notify,
-		update:  make(chan CheckerConfig, 1),
+		update:  make(chan CheckerConfig, 2),
 		quit:    make(chan bool, 1),
 	}
 }
@@ -79,6 +79,7 @@ func (hc *Checker) Status() Status {
 	hc.lock.RLock()
 	defer hc.lock.RUnlock()
 	status := Status{
+		Version:   hc.Version,
 		LastCheck: hc.start,
 		Failures:  hc.failures,
 		Successes: hc.successes,
@@ -95,14 +96,55 @@ func (hc *Checker) Status() Status {
 }
 
 func (hc *Checker) updateConfig(conf *CheckerConfig) {
-	hc.CheckerConfig = *conf
-	if conf.State != StateUnhealthy {
+	// Note:
+	//   The conf::Weight must be the original weight not modified by healthcheck program,
+	//   while conf::State reflects the health state derived from the inhibited flag set by
+	//   the healthcheck program.
+
+	//log.Infof("[updateConfig] id(%v) version(%d->%d) target(%v) %v->%v weight(%d->%d)\n", conf.Id,
+	//	hc.Version, conf.Version, conf.Target, hc.State, conf.State, hc.Weight, conf.Weight)
+
+	if len(hc.Id) == 0 {
+		hc.CheckerConfig = *conf
+		return
+	}
+
+	if conf.Version < hc.Version {
+		return
+	}
+
+	hc.State = conf.State
+	hc.lock.Lock()
+	state := hc.state
+	hc.state = conf.State
+	hc.lock.Unlock()
+	if state != conf.State {
+		log.Warningf("%v: healthcheck's state changed externally %v -> %v",
+			hc.Id, state, conf.State)
+	}
+
+	if conf.State != StateUnhealthy || conf.State == StateUnhealthy && conf.Weight > 0 {
+		// Update all the checker configs when conf's state is healthy.
+		hc.Weight = conf.Weight
+		if conf.Interval > 0 {
+			hc.Interval = conf.Interval
+		}
+		if conf.Timeout > 0 {
+			hc.Timeout = conf.Timeout
+		}
+		if conf.Retry > 0 {
+			hc.Retry = conf.Retry
+		}
+
 		hc.lock.Lock()
 		weight := hc.uweight
 		hc.uweight = conf.Weight
 		hc.lock.Unlock()
+
+		hc.Version = conf.Version
 		if weight != conf.Weight {
-			log.Infof("%v: user weight changed %d -> %d", hc.Id, weight, conf.Weight)
+			log.Warningf("%v: healthcheck's user weight changed %d -> %d",
+				hc.Id, weight, conf.Weight)
 		}
 	}
 }
@@ -154,8 +196,10 @@ func (hc *Checker) healthcheck() {
 	}
 
 	status := "SUCCESS"
+	state := StateHealthy
 	if !result.Success {
 		status = "FAILURE"
+		state = StateUnhealthy
 	}
 	log.Infof("%v: %s: %v", hc.Id, status, result)
 
@@ -164,15 +208,12 @@ func (hc *Checker) healthcheck() {
 	hc.start = start
 	hc.result = result
 
-	var state State
 	if result.Success {
-		state = StateHealthy
 		hc.failed = 0
 		hc.successes++
 	} else {
 		hc.failed++
 		hc.failures++
-		state = StateUnhealthy
 	}
 
 	if hc.state == StateHealthy && hc.failed > 0 && hc.failed <= uint64(hc.CheckerConfig.Retry) {
@@ -222,7 +263,7 @@ func (hc *Checker) Run(start <-chan time.Time) {
 			return
 
 		case config := <-hc.update:
-			if hc.Interval != config.Interval {
+			if config.Interval > 0 && hc.Interval != config.Interval {
 				ticker.Stop()
 				if start != nil {
 					<-start
@@ -255,6 +296,6 @@ func (hc *Checker) Update(config *CheckerConfig) {
 	select {
 	case hc.update <- *config:
 	default:
-		log.Warningf("Unable to update %v, last update still queued", hc.Id)
+		log.Warningf("Unable to update %v, last two update still queued", hc.Id)
 	}
 }

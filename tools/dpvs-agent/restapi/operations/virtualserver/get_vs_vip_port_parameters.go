@@ -22,11 +22,14 @@ func NewGetVsVipPortParams() GetVsVipPortParams {
 	var (
 		// initialize parameters with default values
 
-		snapshotDefault = bool(true)
-		statsDefault    = bool(false)
+		healthcheckDefault = bool(false)
+		snapshotDefault    = bool(true)
+		statsDefault       = bool(false)
 	)
 
 	return GetVsVipPortParams{
+		Healthcheck: &healthcheckDefault,
+
 		Snapshot: &snapshotDefault,
 
 		Stats: &statsDefault,
@@ -47,6 +50,11 @@ type GetVsVipPortParams struct {
 	  In: path
 	*/
 	VipPort string
+	/*
+	  In: query
+	  Default: false
+	*/
+	Healthcheck *bool
 	/*
 	  In: query
 	  Default: true
@@ -75,6 +83,11 @@ func (o *GetVsVipPortParams) BindRequest(r *http.Request, route *middleware.Matc
 		res = append(res, err)
 	}
 
+	qHealthcheck, qhkHealthcheck, _ := qs.GetOK("healthcheck")
+	if err := o.bindHealthcheck(qHealthcheck, qhkHealthcheck, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
 	qSnapshot, qhkSnapshot, _ := qs.GetOK("snapshot")
 	if err := o.bindSnapshot(qSnapshot, qhkSnapshot, route.Formats); err != nil {
 		res = append(res, err)
@@ -100,6 +113,30 @@ func (o *GetVsVipPortParams) bindVipPort(rawData []string, hasKey bool, formats 
 	// Required: true
 	// Parameter is provided by construction from the route
 	o.VipPort = raw
+
+	return nil
+}
+
+// bindHealthcheck binds and validates parameter Healthcheck from query.
+func (o *GetVsVipPortParams) bindHealthcheck(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+	// AllowEmptyValue: false
+
+	if raw == "" { // empty values pass all other validations
+		// Default values have been previously initialized by NewGetVsVipPortParams()
+		return nil
+	}
+
+	value, err := swag.ConvertBool(raw)
+	if err != nil {
+		return errors.InvalidType("healthcheck", "query", "bool", raw)
+	}
+	o.Healthcheck = &value
 
 	return nil
 }

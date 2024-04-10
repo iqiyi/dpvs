@@ -1,44 +1,14 @@
 #!/bin/sh
 # program: dpvs
-# Dec 19, 2023 #
+# Mar 12, 2024 #
 ##
-# Features
-# - New tool: **dpvs-agent**, a management daemon tool for dpvs based on OpenAPI.
-# - New tool: **healthcheck**, a service health check daemon tool cooperating with dpvs-agent.
-# - Dpvs: Develop **passive health check** methods for tcp and bidirectional udp backends.
-# - Dpvs: Add supports for **Proxy Protocol** with both v1 and v2 versions.
-# - Dpvs: Add supports for extended statistics of ethernet devices.
-# - Dpvs: Add configuration file and dpip supports for allmulticast setting switch.
-# - Build: Transfer all build configurations to a top-level file `config.mk`.
-# - Containerization: Draft a Dockerfile and a tutorial document to build and run dpvs in container.
-#
 # Bugfixes
-# - Dpvs: Protect toa from source address spoofing attack and increase success ratio for source address delievery via toa.
-# - Dpvs: Adjust tcp window scale in outbound direction for synproxy to improve throughput in bulk upload cases.
-# - Dpvs: Fix timer inaccuracy problem when timing over 524s.
-# - Dpvs: Fix the crash problem caused by ether address list buffer overflow.
-# - Dpvs: Fix the crash problem caused by dividing by zero when bonding slaves attempt to send packets out.
-# - Dpvs: Fix the crash problem caused by inconsistent data structures of `dp_vs_dest_compat` between dpvs and keepalived.
-# - Dpvs: Correct ipo option length for judgement of branching to standalone uoa.
-# - Dpvs: Inhibit setting multicast ether address from slave lcores.
-# - Dpvs: Fix service flag conflicts of synproxy and expire-quiescent.
-# - Dpvs: Fix the chaos use of flag, flags and fwdmode in dest and service structures.
-# - Dpvs: Fix service flush function not usable problem.
-# - Dpvs: Fix invalid port problem when getting verbose information of netif devices.
-# - Dpvs: Use atomic operation to generate packet id for ipv4 header.
-# - Dpvs: Remove fragile implementations of strategy routing for snat.
-# - Dpvs: Remove the stale config item "ipc_msg/unix_domain".
-# - Keepalived: Do not delete and re-add vs/rs to eliminate service disturbances at reload.
-# - Keepalived: Fix a carsh problem caused by missing definition of allowlist/denylist config items.
-# - Ipvsadm: Add `conn-timeout` configuration option for service.
-# - Ipvsadm: Fix the ambiguous use of '-Y' configuration option.
-# - Ipvsadm: Fix icmpv6 configuration option `-1` lost problem..
-# - Ipvsadm: Update help text, including supported schedulers, laddr and allow/deny ip list.
-# - Dpip: Fix line break problem in help message.
-# - Uoa: Enable ipv6 with a macro for uoa example server.
+# - tools: Fix concurrency problem between dpvs-agent and healthcheck in editing realserver .
+# - tools/dpvs-agent: Add the snapshot cache.
+# - tools/healthchech: Fix occasionally arising bad icmp checksum problem for udp and udpping checkers.
 #
 
 export VERSION=1.9
-export RELEASE=6
+export RELEASE=7
 
 echo $VERSION-$RELEASE

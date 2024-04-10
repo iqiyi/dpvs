@@ -21,6 +21,7 @@ package hc
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"net"
@@ -113,8 +114,8 @@ func newICMPv4EchoRequest(id, seqnum, msglen uint16, filler []byte) icmpMsg {
 	cs := icmpChecksum(msg)
 	// place checksum back in header; using ^= avoids the assumption that the
 	// checksum bytes are zero
-	msg[2] ^= uint8(cs & 0xff)
-	msg[3] ^= uint8(cs >> 8)
+	cs ^= binary.BigEndian.Uint16(msg[2:4])
+	binary.BigEndian.PutUint16(msg[2:4], cs)
 	return msg
 }
 
@@ -122,13 +123,13 @@ func icmpChecksum(msg icmpMsg) uint16 {
 	cklen := len(msg)
 	s := uint32(0)
 	for i := 0; i < cklen-1; i += 2 {
-		s += uint32(msg[i+1])<<8 | uint32(msg[i])
+		s += uint32(binary.BigEndian.Uint16(msg[i : i+2]))
 	}
 	if cklen&1 == 1 {
-		s += uint32(msg[cklen-1])
+		s += uint32(msg[cklen-1]) << 8
 	}
 	s = (s >> 16) + (s & 0xffff)
-	s = s + (s >> 16)
+	s += (s >> 16)
 	return uint16(^s)
 }
 
@@ -175,9 +176,12 @@ func exchangeICMPEcho(network string, ip net.IP, timeout time.Duration, echo icm
 	c.SetDeadline(time.Now().Add(timeout))
 	reply := make([]byte, 256)
 	for {
-		_, addr, err := c.ReadFrom(reply)
+		n, addr, err := c.ReadFrom(reply)
 		if err != nil {
 			return err
+		}
+		if n < 0 || n > len(reply) {
+			return fmt.Errorf("Unexpect ICMP reply len %d", n)
 		}
 		if !ip.Equal(net.ParseIP(addr.String())) {
 			continue
@@ -191,9 +195,9 @@ func exchangeICMPEcho(network string, ip net.IP, timeout time.Duration, echo icm
 			continue
 		}
 		if reply[0] == ICMP4_ECHO_REPLY {
-			cs := icmpChecksum(reply)
+			cs := icmpChecksum(reply[:n])
 			if cs != 0 {
-				return fmt.Errorf("Bad ICMP checksum: %x", rchksum)
+				return fmt.Errorf("Bad ICMP checksum: %x, len: %d, data: %v", rchksum, n, reply[:n])
 			}
 		}
 		// TODO(angusc): Validate checksum for IPv6

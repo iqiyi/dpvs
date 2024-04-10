@@ -15,7 +15,9 @@
 package ipvs
 
 import (
-	// "github.com/dpvs-agent/models"
+	"strings"
+
+	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
 	"github.com/dpvs-agent/pkg/settings"
@@ -46,6 +48,10 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 		return apiVs.NewPostVsVipPortRsInvalidFrontend()
 	}
 
+	if params.Rss == nil || params.Rss.Items == nil {
+		return apiVs.NewPostVsVipPortRsInvalidFrontend()
+	}
+
 	rss := make([]*types.RealServerSpec, len(params.Rss.Items))
 	for i, rs := range params.Rss.Items {
 		var fwdmode types.DpvsFwdMode
@@ -56,15 +62,58 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 		rss[i].SetWeight(uint32(rs.Weight))
 		rss[i].SetProto(front.GetProto())
 		rss[i].SetAddr(rs.IP)
-		rss[i].SetInhibited(rs.Inhibited)
 		rss[i].SetOverloaded(rs.Overloaded)
 		rss[i].SetFwdMode(fwdmode)
+		// NOTE: inhibited set by healthcheck module with API /vs/${ID}/rs/health only
+		// we clear it default
+		inhibited := false
+		if rs.Inhibited != nil {
+			inhibited = *rs.Inhibited
+		}
+		rss[i].SetInhibited(&inhibited)
+	}
+
+	shareSnapshot := settings.ShareSnapshot()
+	if shareSnapshot.ServiceLock(params.VipPort) {
+		defer shareSnapshot.ServiceUnlock(params.VipPort)
 	}
 
 	result := front.Update(rss, h.connPool, h.logger)
 	switch result {
 	case types.EDPVS_EXIST, types.EDPVS_OK:
-		settings.ShareSnapshot().ServiceVersionUpdate(params.VipPort, h.logger)
+		// Update Snapshot
+		vsModel := shareSnapshot.ServiceGet(params.VipPort)
+		if vsModel == nil {
+			spec := types.NewVirtualServerSpec()
+			err := spec.ParseVipPortProto(params.VipPort)
+			if err != nil {
+				h.logger.Warn("Convert to virtual server failed.", "VipPort", params.VipPort, "Error", err.Error())
+				// FIXME return
+			}
+			vss, err := spec.Get(h.connPool, h.logger)
+			if err != nil {
+				h.logger.Error("Get virtual server failed.", "svc VipPort", params.VipPort, "Error", err.Error())
+				// FIXME return
+			}
+
+			for _, vs := range vss {
+				if strings.EqualFold(vs.ID(), spec.ID()) {
+					shareSnapshot.ServiceAdd(vs)
+					break
+				}
+			}
+		} else {
+			vsModel.RSs = &models.RealServerExpandList{
+				Items: make([]*models.RealServerSpecExpand, len(rss)),
+			}
+
+			for i, rs := range rss {
+				vsModel.RSs.Items[i] = rs.GetModel()
+			}
+		}
+
+		shareSnapshot.ServiceVersionUpdate(params.VipPort, h.logger)
+
 		h.logger.Info("Set real server to virtual server success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
 		return apiVs.NewPostVsVipPortRsOK()
 	default:

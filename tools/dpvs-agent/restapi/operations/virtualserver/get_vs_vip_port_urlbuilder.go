@@ -18,8 +18,9 @@ import (
 type GetVsVipPortURL struct {
 	VipPort string
 
-	Snapshot *bool
-	Stats    *bool
+	Healthcheck *bool
+	Snapshot    *bool
+	Stats       *bool
 
 	_basePath string
 	// avoid unkeyed usage
@@ -61,6 +62,14 @@ func (o *GetVsVipPortURL) Build() (*url.URL, error) {
 	_result.Path = golangswaggerpaths.Join(_basePath, _path)
 
 	qs := make(url.Values)
+
+	var healthcheckQ string
+	if o.Healthcheck != nil {
+		healthcheckQ = swag.FormatBool(*o.Healthcheck)
+	}
+	if healthcheckQ != "" {
+		qs.Set("healthcheck", healthcheckQ)
+	}
 
 	var snapshotQ string
 	if o.Snapshot != nil {

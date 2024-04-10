@@ -26,24 +26,22 @@ func TestListAndUpdate(t *testing.T) {
 		t.Errorf("list error: %v", err)
 	}
 	t.Logf("list Results: %v", vss)
-	if len(vss) < 2 {
+	if len(vss) < 1 {
 		return
 	}
-	t.Logf("Updating %v", vss[1])
-	vss[1].RSs[0].Weight = 0
-	vss[1].RSs[0].Inhibited = true
-	//vss[1].RSs[0].Port = 8081
-	//vss[1].RSs[1].Weight = 100
-	//vss[1].RSs[1].Inhibited = false
-	//vss[1].RSs[1].IP = net.ParseIP("1.2.3.4")
-	if err = comm.UpdateByChecker(vss[1:2]); err != nil {
+	t.Logf("Updating %v", vss[0])
+	vss[0].RSs[0].Weight = 0
+	vss[0].RSs[0].Inhibited = true
+	//vss[0].RSs[0].Port = 8081
+	//vss[0].RSs[0].IP = net.ParseIP("1.2.3.4")
+	if _, err = comm.UpdateByChecker(&vss[0]); err != nil {
 		t.Errorf("inhibit rs error: %v", err)
 	}
 	time.Sleep(3 * time.Second)
-	t.Logf("Restoring %v", vss[1])
-	vss[1].RSs[0].Weight = 100
-	vss[1].RSs[0].Inhibited = false
-	if err = comm.UpdateByChecker(vss[1:2]); err != nil {
+	t.Logf("Restoring %v", vss[0])
+	vss[0].RSs[0].Weight = 100
+	vss[0].RSs[0].Inhibited = false
+	if _, err = comm.UpdateByChecker(&vss[0]); err != nil {
 		t.Errorf("restore rs error: %v", err)
 	}
 }

@@ -58,7 +58,7 @@ func TestHttpChecker(t *testing.T) {
 			}
 		*/
 		id := Id(target.String())
-		config := NewCheckerConfig(&id, checker, &target, StateUnknown,
+		config := NewCheckerConfig(&id, 0, checker, &target, StateUnknown,
 			0, 3*time.Second, 2*time.Second, 3)
 		result := checker.Check(target, config.Timeout)
 		fmt.Printf("[ HTTP ] %s ==> %v\n", target, result)
@@ -68,14 +68,14 @@ func TestHttpChecker(t *testing.T) {
 		checker := NewHttpChecker("", "", "", 1)
 		checker.Host = target.Addr()
 		id := Id(target.String())
-		config := NewCheckerConfig(&id, checker, &target, StateUnknown,
+		config := NewCheckerConfig(&id, 0, checker, &target, StateUnknown,
 			0, 3*time.Second, 2*time.Second, 3)
 		result := checker.Check(target, config.Timeout)
 		fmt.Printf("[ HTTP(PPv1) ] %s ==> %v\n", target, result)
 		checker2 := NewHttpChecker("", "", "", 2)
 		checker2.Host = target.Addr()
 		id2 := Id(target.String())
-		config2 := NewCheckerConfig(&id2, checker2, &target, StateUnknown,
+		config2 := NewCheckerConfig(&id2, 0, checker2, &target, StateUnknown,
 			0, 3*time.Second, 2*time.Second, 3)
 		result2 := checker2.Check(target, config2.Timeout)
 		fmt.Printf("[ HTTP(PPv2) ] %s ==> %v\n", target, result2)
@@ -90,7 +90,7 @@ func TestHttpChecker(t *testing.T) {
 			checker.Secure = true
 		}
 		id := Id(host)
-		config := NewCheckerConfig(&id, checker, &Target{}, StateUnknown,
+		config := NewCheckerConfig(&id, 0, checker, &Target{}, StateUnknown,
 			0, 3*time.Second, 2*time.Second, 3)
 		result := checker.Check(Target{}, config.Timeout)
 		if result.Success == false {

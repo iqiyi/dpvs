@@ -22,11 +22,6 @@ PutVsVipPortRsHealthOK Success
 swagger:response putVsVipPortRsHealthOK
 */
 type PutVsVipPortRsHealthOK struct {
-
-	/*
-	  In: Body
-	*/
-	Payload *models.RealServerExpandList `json:"body,omitempty"`
 }
 
 // NewPutVsVipPortRsHealthOK creates PutVsVipPortRsHealthOK with default headers values
@@ -35,27 +30,12 @@ func NewPutVsVipPortRsHealthOK() *PutVsVipPortRsHealthOK {
 	return &PutVsVipPortRsHealthOK{}
 }
 
-// WithPayload adds the payload to the put vs vip port rs health o k response
-func (o *PutVsVipPortRsHealthOK) WithPayload(payload *models.RealServerExpandList) *PutVsVipPortRsHealthOK {
-	o.Payload = payload
-	return o
-}
-
-// SetPayload sets the payload to the put vs vip port rs health o k response
-func (o *PutVsVipPortRsHealthOK) SetPayload(payload *models.RealServerExpandList) {
-	o.Payload = payload
-}
-
 // WriteResponse to the client
 func (o *PutVsVipPortRsHealthOK) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
 
+	rw.Header().Del(runtime.HeaderContentType) //Remove Content-Type on empty responses
+
 	rw.WriteHeader(200)
-	if o.Payload != nil {
-		payload := o.Payload
-		if err := producer.Produce(rw, payload); err != nil {
-			panic(err) // let the recovery middleware deal with this
-		}
-	}
 }
 
 // PutVsVipPortRsHealthUnexpectedCode is the HTTP code returned for type PutVsVipPortRsHealthUnexpected
@@ -71,7 +51,7 @@ type PutVsVipPortRsHealthUnexpected struct {
 	/*
 	  In: Body
 	*/
-	Payload *models.RealServerExpandList `json:"body,omitempty"`
+	Payload *models.VirtualServerSpecExpand `json:"body,omitempty"`
 }
 
 // NewPutVsVipPortRsHealthUnexpected creates PutVsVipPortRsHealthUnexpected with default headers values
@@ -81,13 +61,13 @@ func NewPutVsVipPortRsHealthUnexpected() *PutVsVipPortRsHealthUnexpected {
 }
 
 // WithPayload adds the payload to the put vs vip port rs health unexpected response
-func (o *PutVsVipPortRsHealthUnexpected) WithPayload(payload *models.RealServerExpandList) *PutVsVipPortRsHealthUnexpected {
+func (o *PutVsVipPortRsHealthUnexpected) WithPayload(payload *models.VirtualServerSpecExpand) *PutVsVipPortRsHealthUnexpected {
 	o.Payload = payload
 	return o
 }
 
 // SetPayload sets the payload to the put vs vip port rs health unexpected response
-func (o *PutVsVipPortRsHealthUnexpected) SetPayload(payload *models.RealServerExpandList) {
+func (o *PutVsVipPortRsHealthUnexpected) SetPayload(payload *models.VirtualServerSpecExpand) {
 	o.Payload = payload
 }
 
