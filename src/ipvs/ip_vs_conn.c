@@ -1221,9 +1221,8 @@ static int conn_term_lcore(void *arg)
     if (!rte_lcore_is_enabled(rte_lcore_id()))
         return EDPVS_DISABLED;
 
-    conn_flush();
-
     if (this_conn_tbl) {
+        conn_flush();
         rte_free(this_conn_tbl);
         this_conn_tbl = NULL;
     }
