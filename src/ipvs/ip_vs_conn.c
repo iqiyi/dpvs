@@ -669,7 +669,7 @@ static int dp_vs_conn_expire(void *priv)
 
     /* refcnt == 1 means we are the only referer.
      * no one is using the conn and it's timed out. */
-    if (rte_atomic32_read(&conn->refcnt) == 1) {
+    if (rte_atomic32_sub_return(&conn->refcnt, 1) == 0) {
         dp_vs_conn_detach_timer(conn, false);
 
         /* I was controlled by someone */
@@ -684,8 +684,6 @@ static int dp_vs_conn_expire(void *priv)
         dp_vs_laddr_unbind(conn);
         dp_vs_conn_free_packets(conn);
 
-        rte_atomic32_dec(&conn->refcnt);
-
 #ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
         conn_stats_dump("del conn", conn);
 #endif
@@ -696,16 +694,15 @@ static int dp_vs_conn_expire(void *priv)
         dp_vs_conn_free(conn);
 
         return DTIMER_STOP;
+    } else {
+        dp_vs_conn_hash(conn);
+
+        /* some one is using it when expire,
+         * try del it again later */
+        dp_vs_conn_refresh_timer(conn, false);
+
+        return DTIMER_OK;
     }
-
-    dp_vs_conn_hash(conn);
-
-    /* some one is using it when expire,
-     * try del it again later */
-    dp_vs_conn_refresh_timer(conn, false);
-
-    rte_atomic32_dec(&conn->refcnt);
-    return DTIMER_OK;
 }
 
 void dp_vs_conn_expire_now(struct dp_vs_conn *conn)
