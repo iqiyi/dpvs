@@ -118,7 +118,7 @@ static inline int __laddr_step(struct dp_vs_service *svc)
     * */
     if (strncmp(svc->scheduler->name, "rr", 2) == 0 ||
             strncmp(svc->scheduler->name, "wrr", 3) == 0)
-        return (random() % 100) < 5 ? 2 : 1;
+        return rte_rand_max(100) < 5 ? 2 : 1;
 
     return 1;
 }

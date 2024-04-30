@@ -311,6 +311,7 @@ int main(int argc, char *argv[])
 
     gettimeofday(&tv, NULL);
     srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
+    rte_srand((uint64_t)(tv.tv_sec ^ tv.tv_usec ^ getpid()));
     sys_start_time();
 
     if (get_numa_nodes() > DPVS_MAX_SOCKET) {
