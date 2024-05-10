@@ -795,6 +795,10 @@ static void ipvs_set_srule(int cmd, dpvs_service_compat_t *srule, virtual_server
         srule->flags |= IP_VS_SVC_F_EXPIRE_QUIESCENT;
     }
 
+    if (vs->quic) {
+        srule->flags |= IP_VS_SVC_F_QUIC;
+    }
+
     if (!strcmp(vs->sched, "conhash")) {
         if (vs->hash_target) {
             if ((srule->proto != IPPROTO_UDP) &&

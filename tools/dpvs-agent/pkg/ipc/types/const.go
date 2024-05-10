@@ -47,6 +47,7 @@ const (
 	DPVS_SVC_F_SIP_HASH                // 0x100
 	DPVS_SVC_F_QID_HASH                // 0x200
 	DPVS_SVC_F_MATCH                   // 0x400
+	DPVS_SVC_F_QUIC                    // 0x800
 )
 
 const (

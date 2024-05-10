@@ -70,6 +70,10 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 			vs.SetFlagsExpireQuiescent()
 		}
 
+		if params.Spec.Quic != nil && *params.Spec.Quic {
+			vs.SetFlagsQuic()
+		}
+
 		if params.Spec.SynProxy != nil && *params.Spec.SynProxy {
 			vs.SetFlagsSynProxy()
 		}
@@ -123,6 +127,7 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 		vsModel.ConnTimeout = newVsModel.ConnTimeout
 		vsModel.LimitProportion = newVsModel.LimitProportion
 		vsModel.ExpireQuiescent = newVsModel.ExpireQuiescent
+		vsModel.Quic = newVsModel.Quic
 		vsModel.Fwmark = newVsModel.Fwmark
 		vsModel.SynProxy = newVsModel.SynProxy
 		vsModel.Match = newVsModel.Match

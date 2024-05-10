@@ -1400,6 +1400,7 @@ clear_diff_services(list old_checkers_queue)
 				vs->bps != new_vs->bps || vs->limit_proportion != new_vs->limit_proportion ||
 				vs->hash_target != new_vs->hash_target || vs->syn_proxy != new_vs->syn_proxy ||
 				vs->expire_quiescent_conn != new_vs->expire_quiescent_conn ||
+				vs->quic != new_vs->quic ||
 				strcmp(vs->srange, new_vs->srange) || strcmp(vs->drange, new_vs->drange) ||
 				strcmp(vs->iifname, new_vs->iifname) || strcmp(vs->oifname, new_vs->oifname)) {
 				ipvs_cmd(IP_VS_SO_SET_EDIT, new_vs, NULL);

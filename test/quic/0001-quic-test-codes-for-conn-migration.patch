@@ -1,0 +1,63 @@
+From 462d64d15bed454a7fc1a367490910018b583003 Mon Sep 17 00:00:00 2001
+From: ywc689 <ywc689@163.com>
+Date: Wed, 15 May 2024 10:33:44 +0800
+Subject: [PATCH] quic test codes for conn migration
+
+Signed-off-by: ywc689 <ywc689@163.com>
+---
+ src/ipvs/ip_vs_core.c      | 14 ++++++++++++++
+ src/ipvs/ip_vs_proto_udp.c |  6 ++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/src/ipvs/ip_vs_core.c b/src/ipvs/ip_vs_core.c
+index b92e984..08c2479 100644
+--- a/src/ipvs/ip_vs_core.c
++++ b/src/ipvs/ip_vs_core.c
+@@ -38,6 +38,7 @@
+ #include "ipvs/proto_udp.h"
+ #include "route6.h"
+ #include "ipvs/redirect.h"
++#include "ipvs/quic.h"
+ 
+ static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
+                                    struct dp_vs_iphdr *iph)
+@@ -990,6 +991,19 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
+         return INET_DROP;
+     }
+ 
++    // TODO: remove the test codes
++    if (iph.proto == IPPROTO_UDP && conn && dir == DPVS_CONN_DIR_INBOUND) {
++        int err;
++        struct quic_server qsvr;
++        char buf[256];
++
++        err = quic_parse_server(mbuf, &iph, &qsvr);
++        if (err == EDPVS_OK) {
++            quic_dump_server(&qsvr, buf, sizeof(buf));
++            RTE_LOG(INFO, IPVS, "*** got quic server in mbuf: %s ***\n", buf);
++        }
++    }
++
+     /*
+      * The connection is not locally found, however the redirect is found so
+      * forward the packet to the remote redirect owner core.
+diff --git a/src/ipvs/ip_vs_proto_udp.c b/src/ipvs/ip_vs_proto_udp.c
+index df58fc9..73a88bf 100644
+--- a/src/ipvs/ip_vs_proto_udp.c
++++ b/src/ipvs/ip_vs_proto_udp.c
+@@ -180,6 +180,12 @@ static int udp_conn_sched(struct dp_vs_proto *proto,
+         struct quic_server qsvr = { 0 };
+         int err = quic_parse_server(mbuf, iph, &qsvr);
+         if (likely(err == EDPVS_OK)) {
++           // TODO: remove the test codes
++           {
++               qsvr.wildcard = 16;
++               qsvr.addr.in.s_addr = htonl(0x581e); //x.x.88.30
++               qsvr.port = htons(4141);
++            }
+             if (qsvr.wildcard > 0) {
+                 *conn = quic_schedule(svc, &qsvr, iph, mbuf);
+                 if (*conn)
+-- 
+1.8.3.1
+

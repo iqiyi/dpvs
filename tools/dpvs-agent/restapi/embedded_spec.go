@@ -1975,6 +1975,13 @@ func init() {
             18
           ]
         },
+        "Quic": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false"
+          ]
+        },
         "RSs": {
           "$ref": "#/definitions/RealServerExpandList"
         },
@@ -2041,6 +2048,10 @@ func init() {
             "v1-insecure",
             "disable"
           ]
+        },
+        "Quic": {
+          "type": "boolean",
+          "default": false
         },
         "SchedName": {
           "type": "string",
@@ -4517,6 +4528,13 @@ func init() {
             18
           ]
         },
+        "Quic": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false"
+          ]
+        },
         "RSs": {
           "$ref": "#/definitions/RealServerExpandList"
         },
@@ -4583,6 +4601,10 @@ func init() {
             "v1-insecure",
             "disable"
           ]
+        },
+        "Quic": {
+          "type": "boolean",
+          "default": false
         },
         "SchedName": {
           "type": "string",

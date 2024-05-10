@@ -555,6 +555,11 @@ definitions:
         enum:
           - "true"
           - "false"
+      Quic:
+        type: "string"
+        enum:
+          - "true"
+          - "false"
       Timeout:
         type: "integer"
         format: "uint32"
@@ -601,6 +606,9 @@ definitions:
         type: "boolean"
         default: false
       ExpireQuiescent:
+        type: "boolean"
+        default: false
+      Quic:
         type: "boolean"
         default: false
       Timeout:
