@@ -137,8 +137,8 @@ func main() {
 	flag.Var(&bs, "bind", "bind to")
 	www := flag.String("www", "", "www data")
 	tcp := flag.Bool("tcp", false, "also listen on TCP")
-	key := flag.String("key", "../certs/key.pem", "TLS key (requires -cert option)")
-	cert := flag.String("cert", "../certs/cert.pem", "TLS certificate (requires -key option)")
+	key := flag.String("key", "./http3/certs/key.pem", "TLS key (requires -cert option)")
+	cert := flag.String("cert", "./http3/certs/cert.pem", "TLS certificate (requires -key option)")
 	flag.Parse()
 
 	if len(bs) == 0 {

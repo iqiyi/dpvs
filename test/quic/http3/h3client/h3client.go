@@ -20,7 +20,7 @@ func main() {
 	quiet := flag.Bool("q", false, "don't print the data")
 	keyLogFile := flag.String("keylog", "", "key log file")
 	insecure := flag.Bool("insecure", false, "skip certificate verification")
-	cert := flag.String("cert", "../certs/cert.pem", "TLS certificate")
+	cert := flag.String("cert", "", "TLS certificate")
 	flag.Parse()
 	urls := flag.Args()
 

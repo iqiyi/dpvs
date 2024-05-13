@@ -3,47 +3,61 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"runtime/trace"
 
 	"github.com/quic-go/quic-go"
 )
 
-var servAddr = ":4242"
-
-var keyLogFile = "quic-go-client-sshkey.log"
-
 func main() {
-	if len(os.Args) > 1 {
-		servAddr = os.Args[1]
-	}
-	fmt.Printf("target server: %s\n", servAddr)
+	servAddr := flag.String("server", ":4242", "quic server address")
+	keyLogFile := flag.String("keylog", "", "key log file")
+	traceFile := flag.String("trace", "", "trace file name")
+	flag.Parse()
 
-	keyLog, err := os.OpenFile(keyLogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatal(err)
+	if *traceFile != "" {
+		tracef, err := os.Create(*traceFile)
+		if err != nil {
+			log.Fatalf("failed to create trace output file: %v", err)
+		}
+		defer tracef.Close()
+		err = trace.Start(tracef)
+		if err != nil {
+			log.Fatalf("failed to start trace: %v", err)
+		}
+		defer trace.Stop()
 	}
-	defer keyLog.Close()
 
-	ctx := context.Background()
+	fmt.Printf("target server: %s\n", *servAddr)
+
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-echo-example"},
-		KeyLogWriter:       keyLog,
+	}
+	if *keyLogFile != "" {
+		keyLog, err := os.OpenFile(*keyLogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer keyLog.Close()
+		tlsConf.KeyLogWriter = keyLog
 	}
 
+	ctx := context.Background()
 	/*
-		conn, err := quic.DialAddr(ctx, servAddr, tlsConf, nil)
+		conn, err := quic.DialAddr(ctx, *servAddr, tlsConf, nil)
 		if err != nil {
 			log.Fatal("Cannot dial QUIC server:", err)
 		}
 		defer conn.CloseWithError(0, "")
 	*/
 
-	serverAddr, err := net.ResolveUDPAddr("udp", servAddr)
+	serverAddr, err := net.ResolveUDPAddr("udp", *servAddr)
 	if err != nil {
 		log.Fatal("ServerAddr resolution fail:", err)
 	}
@@ -56,6 +70,14 @@ func main() {
 	defer listener.Close()
 
 	conn, err := quic.Dial(ctx, listener, serverAddr, tlsConf, nil)
+	/*
+		cidGenerator := cid.NewDpvsQCID(10, 4, 0, nil, 0)
+		transport := &quic.Transport{
+			Conn:                  listener,
+			ConnectionIDGenerator: cidGenerator,
+		}
+		conn, err := transport.Dial(ctx, serverAddr, tlsConf, nil)
+	*/
 	if err != nil {
 		log.Fatal("Cannot dial QUIC server:", err)
 	}

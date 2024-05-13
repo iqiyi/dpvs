@@ -8,43 +8,58 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"flag"
 	"fmt"
 	"log"
 	"math/big"
 	"net"
 	"os"
+	"syscall"
 
 	quic "github.com/quic-go/quic-go"
 
+	"quic-test/pkg/cid"
 	"quic-test/pkg/uoa"
 )
 
-var servAddr = ":4242"
+var (
+	hostIP net.IP
+)
 
-var keyLogFile = "quic-go-server-sshkey.log"
+func init() {
+	if hostIP, _ = cid.FindLocalIP(""); hostIP == nil {
+		hostIP = net.IPv4(127, 0, 0, 1)
+	}
+	fmt.Println("Host IP:", hostIP)
+}
 
 func main() {
-	if len(os.Args) > 1 {
-		servAddr = os.Args[1]
-	}
-	fmt.Printf("Quic Server listens on %s\n", servAddr)
+	servAddr := flag.String("server", ":4242", "server listener address")
+	keyLogFile := flag.String("keylog", "", "key log file")
+	uoaCliAddr := flag.Bool("uoa", true, "enable uoa client address")
+	flag.Parse()
 
-	keyLog, err := os.Create(keyLogFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer keyLog.Close()
+	fmt.Printf("Quic Server listens on %s (uoa client address %v)\n", *servAddr, *uoaCliAddr)
 
 	tlsConf := generateTLSConfig()
-	tlsConf.KeyLogWriter = keyLog
+	if *keyLogFile != "" {
+		keyLog, err := os.Create(*keyLogFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer keyLog.Close()
+		tlsConf.KeyLogWriter = keyLog
+	}
+
+	cidGenerator := cid.NewDpvsQCID(10, 4, 0, hostIP, 0)
 
 	/*
-		listener, err := quic.ListenAddr(servAddr, tlsConf, nil)
+		listener, err := quic.ListenAddr(*servAddr, tlsConf, nil)
 		if err != nil {
 			panic(err)
 		}
 	*/
-	udpAddr, err := net.ResolveUDPAddr("udp", servAddr)
+	udpAddr, err := net.ResolveUDPAddr("udp", *servAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -53,12 +68,18 @@ func main() {
 		panic(err)
 	}
 	listener, err := (&quic.Transport{
-		Conn: udpConn,
+		Conn:                  udpConn,
+		ConnectionIDGenerator: cidGenerator,
 	}).Listen(tlsConf, nil)
 	if err != nil {
 		panic(err)
 	}
 	defer listener.Close()
+
+	var uoaConn *net.UDPConn
+	if *uoaCliAddr {
+		uoaConn = udpConn
+	}
 
 	ctx := context.Background()
 	for {
@@ -66,21 +87,35 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		go handleSession(ctx, udpConn, sess)
+		go handleSession(ctx, uoaConn, sess)
 	}
 }
 
 func handleSession(ctx context.Context, udpConn *net.UDPConn, sess quic.Connection) {
-	file, err := udpConn.File()
-	if err != nil {
-		panic(err)
-	}
-	uoaAddr, err := uoa.GetUoaAddr(file.Fd(), sess.RemoteAddr(), sess.LocalAddr())
-	if err != nil {
-		fmt.Printf("New connection from %v, uoaAddr failed for %v\n", sess.RemoteAddr(), err)
+	if udpConn != nil {
+		file, err := udpConn.File()
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+
+		// FIXME: Even though the file is an duplicate from the original udpConn.
+		// a just single call to file.Fd() blocks the quic session noticeably when
+		// using the default blocking mode. Having no idea about the cause of this
+		// problem, just set the fd to be nonblock, hoping without other influences.
+		fd := file.Fd()
+		syscall.SetNonblock(int(fd), true)
+
+		uoaAddr, err := uoa.GetUoaAddr(fd, sess.RemoteAddr(), sess.LocalAddr())
+		if err != nil {
+			fmt.Printf("New connection from %v, uoaAddr failed for %v\n", sess.RemoteAddr(), err)
+		} else {
+			fmt.Printf("New connection from %v, uoaAddr %v\n", sess.RemoteAddr(), uoaAddr)
+		}
 	} else {
-		fmt.Printf("New connection from %v, uoaAddr %v\n", sess.RemoteAddr(), uoaAddr)
+		fmt.Printf("New connection from %v\n", sess.RemoteAddr())
 	}
+
 	stream, err := sess.AcceptStream(ctx)
 	if err != nil {
 		panic(err)

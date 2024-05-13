@@ -7,7 +7,7 @@ import (
 )
 
 func TestQuicCIDGenerator_IPv4(t *testing.T) {
-	err, cid := QuicCIDGenerator(10, 3, 2, net.ParseIP("192.168.111.222"), 8029)
+	cid, err := QuicCIDGeneratorFunction(10, 3, 2, net.ParseIP("192.168.111.222"), 8029)
 	if err != nil {
 		t.Errorf("QuicCIDGenerator error return: %v", err)
 	}
@@ -27,7 +27,8 @@ func TestQuicCIDGenerator_IPv4(t *testing.T) {
 }
 
 func TestQuicCIDGenerator_IPv6(t *testing.T) {
-	err, cid := QuicCIDGenerator(16, 6, 2, net.ParseIP("2001::123:4567:89ab:cdef"), 51321)
+	cid, err := QuicCIDGeneratorFunction(16, 6, 2,
+		net.ParseIP("2001::123:4567:89ab:cdef"), 51321)
 	if err != nil {
 		t.Errorf("QuicCIDGenerator error return: %v", err)
 	}
