@@ -1,0 +1,248 @@
+From 832740515032f6169635f13eacc0fa50d5560d51 Mon Sep 17 00:00:00 2001
+From: wencyu <ywc689@163.com>
+Date: Wed, 29 May 2024 10:20:09 +0800
+Subject: [PATCH 2/7] patch: quic connection migration for l4lb/dpvs
+
+Signed-off-by: wencyu <ywc689@163.com>
+---
+ src/event/quic/bpf/ngx_quic_reuseport_helper.c |  8 ++--
+ src/event/quic/ngx_event_quic_bpf_code.c       | 58 +++++++++++++-----------
+ src/event/quic/ngx_event_quic_connid.c         | 62 ++++++++++++++++++++++++++
+ src/event/quic/ngx_event_quic_transport.c      |  1 +
+ 4 files changed, 101 insertions(+), 28 deletions(-)
+
+diff --git a/src/event/quic/bpf/ngx_quic_reuseport_helper.c b/src/event/quic/bpf/ngx_quic_reuseport_helper.c
+index 999e760..bdca492 100644
+--- a/src/event/quic/bpf/ngx_quic_reuseport_helper.c
++++ b/src/event/quic/bpf/ngx_quic_reuseport_helper.c
+@@ -76,7 +76,7 @@ int ngx_quic_select_socket_by_dcid(struct sk_reuseport_md *ctx)
+     int             rc;
+     __u64           key;
+     size_t          len, offset;
+-    unsigned char  *start, *end, *data, *dcid;
++    unsigned char  *start, *end, *data, *dcid, *cookie;
+ 
+     start = ctx->data;
+     end = (unsigned char *) ctx->data_end;
+@@ -104,12 +104,14 @@ int ngx_quic_select_socket_by_dcid(struct sk_reuseport_md *ctx)
+     dcid = &data[1];
+     advance_data(len); /* we expect the packet to have full DCID */
+ 
++    cookie = dcid + (len - sizeof(__u64)); /* socket cookie is at the tail of DCID */
++
+     /* make verifier happy */
+-    if (dcid + sizeof(__u64) > end) {
++    if (cookie + sizeof(__u64) > end) {
+         goto failed;
+     }
+ 
+-    key = ngx_quic_parse_uint64(dcid);
++    key = ngx_quic_parse_uint64(cookie);
+ 
+     rc = bpf_sk_select_reuseport(ctx, &ngx_quic_sockmap, &key, 0);
+ 
+diff --git a/src/event/quic/ngx_event_quic_bpf_code.c b/src/event/quic/ngx_event_quic_bpf_code.c
+index 5c9dea1..1124c04 100644
+--- a/src/event/quic/ngx_event_quic_bpf_code.c
++++ b/src/event/quic/ngx_event_quic_bpf_code.c
+@@ -7,62 +7,69 @@
+ 
+ 
+ static ngx_bpf_reloc_t bpf_reloc_prog_ngx_quic_reuseport_helper[] = {
+-    { "ngx_quic_sockmap", 55 },
++    { "ngx_quic_sockmap", 62 },
+ };
+ 
+ static struct bpf_insn bpf_insn_prog_ngx_quic_reuseport_helper[] = {
+     /* opcode dst          src         offset imm */
+     { 0x79,   BPF_REG_4,   BPF_REG_1, (int16_t)      0,        0x0 },
+     { 0x79,   BPF_REG_3,   BPF_REG_1, (int16_t)      8,        0x0 },
++    { 0xbf,   BPF_REG_6,   BPF_REG_4, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x2d,   BPF_REG_6,   BPF_REG_3, (int16_t)     61,        0x0 },
+     { 0xbf,   BPF_REG_2,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x8 },
+-    { 0x2d,   BPF_REG_2,   BPF_REG_3, (int16_t)     54,        0x0 },
+-    { 0xbf,   BPF_REG_5,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_5,   BPF_REG_0, (int16_t)      0,        0x9 },
+-    { 0x2d,   BPF_REG_5,   BPF_REG_3, (int16_t)     51,        0x0 },
+-    { 0xb7,   BPF_REG_5,   BPF_REG_0, (int16_t)      0,       0x14 },
++    {  0x7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x9 },
++    { 0x2d,   BPF_REG_2,   BPF_REG_3, (int16_t)     58,        0x0 },
++    { 0xb7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,       0x14 },
++    { 0xb7,   BPF_REG_5,   BPF_REG_0, (int16_t)      0,        0x8 },
+     { 0xb7,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x9 },
+-    { 0x71,   BPF_REG_6,   BPF_REG_2, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_6,   BPF_REG_6, (int16_t)      0,        0x0 },
+     { 0x67,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,       0x38 },
+     { 0xc7,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,       0x38 },
+-    { 0x65,   BPF_REG_6,   BPF_REG_0, (int16_t)     10, 0xffffffff },
++    { 0x65,   BPF_REG_6,   BPF_REG_0, (int16_t)     11, 0xffffffff },
+     { 0xbf,   BPF_REG_2,   BPF_REG_4, (int16_t)      0,        0x0 },
+     {  0x7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0xd },
+-    { 0x2d,   BPF_REG_2,   BPF_REG_3, (int16_t)     42,        0x0 },
++    { 0x2d,   BPF_REG_2,   BPF_REG_3, (int16_t)     48,        0x0 },
+     { 0xbf,   BPF_REG_5,   BPF_REG_4, (int16_t)      0,        0x0 },
+     {  0x7,   BPF_REG_5,   BPF_REG_0, (int16_t)      0,        0xe },
+-    { 0x2d,   BPF_REG_5,   BPF_REG_3, (int16_t)     39,        0x0 },
++    { 0x2d,   BPF_REG_5,   BPF_REG_3, (int16_t)     45,        0x0 },
++    { 0xb7,   BPF_REG_5,   BPF_REG_0, (int16_t)      0,        0xd },
+     { 0xb7,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0xe },
+-    { 0x71,   BPF_REG_5,   BPF_REG_2, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_2,   BPF_REG_2, (int16_t)      0,        0x0 },
+     { 0xb7,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,        0x8 },
+-    { 0x2d,   BPF_REG_6,   BPF_REG_5, (int16_t)     35,        0x0 },
+-    {  0xf,   BPF_REG_5,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x2d,   BPF_REG_6,   BPF_REG_2, (int16_t)     40,        0x0 },
++    { 0xbf,   BPF_REG_6,   BPF_REG_2, (int16_t)      0,        0x0 },
++    {  0xf,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0xbf,   BPF_REG_0,   BPF_REG_4, (int16_t)      0,        0x0 },
++    {  0xf,   BPF_REG_0,   BPF_REG_6, (int16_t)      0,        0x0 },
++    { 0x2d,   BPF_REG_0,   BPF_REG_3, (int16_t)     35,        0x0 },
+     {  0xf,   BPF_REG_4,   BPF_REG_5, (int16_t)      0,        0x0 },
+-    { 0x2d,   BPF_REG_4,   BPF_REG_3, (int16_t)     32,        0x0 },
++    {  0xf,   BPF_REG_2,   BPF_REG_4, (int16_t)      0,        0x0 },
+     { 0xbf,   BPF_REG_4,   BPF_REG_2, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x9 },
+-    { 0x2d,   BPF_REG_4,   BPF_REG_3, (int16_t)     29,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      1,        0x0 },
++    {  0x7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0x2d,   BPF_REG_4,   BPF_REG_3, (int16_t)     30,        0x0 },
++    {  0x7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0, 0xfffffff9 },
++    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      0,        0x0 },
+     { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x38 },
+-    { 0x71,   BPF_REG_3,   BPF_REG_2, (int16_t)      2,        0x0 },
++    { 0x71,   BPF_REG_3,   BPF_REG_2, (int16_t)      1,        0x0 },
+     { 0x67,   BPF_REG_3,   BPF_REG_0, (int16_t)      0,       0x30 },
+     { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      3,        0x0 },
++    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      2,        0x0 },
+     { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x28 },
+     { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      4,        0x0 },
++    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      3,        0x0 },
+     { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x20 },
+     { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      5,        0x0 },
++    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      4,        0x0 },
+     { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x18 },
+     { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      6,        0x0 },
++    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      5,        0x0 },
+     { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x10 },
+     { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      7,        0x0 },
++    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      6,        0x0 },
+     { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x8 },
+     { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_2,   BPF_REG_2, (int16_t)      8,        0x0 },
++    { 0x71,   BPF_REG_2,   BPF_REG_2, (int16_t)      7,        0x0 },
+     { 0x4f,   BPF_REG_3,   BPF_REG_2, (int16_t)      0,        0x0 },
+     { 0x7b,  BPF_REG_10,   BPF_REG_3, (int16_t)  65528,        0x0 },
+     { 0xbf,   BPF_REG_3,  BPF_REG_10, (int16_t)      0,        0x0 },
+@@ -86,3 +93,4 @@ ngx_bpf_program_t ngx_quic_reuseport_helper = {
+     .license = "BSD",
+     .type = BPF_PROG_TYPE_SK_REUSEPORT,
+ };
++
+diff --git a/src/event/quic/ngx_event_quic_connid.c b/src/event/quic/ngx_event_quic_connid.c
+index f508682..9046db1 100644
+--- a/src/event/quic/ngx_event_quic_connid.c
++++ b/src/event/quic/ngx_event_quic_connid.c
+@@ -15,6 +15,8 @@
+ #if (NGX_QUIC_BPF)
+ static ngx_int_t ngx_quic_bpf_attach_id(ngx_connection_t *c, u_char *id);
+ #endif
++static ngx_int_t ngx_quic_dcid_encode_server_info(ngx_connection_t *c,
++        u_char *id);
+ static ngx_int_t ngx_quic_retire_client_id(ngx_connection_t *c,
+     ngx_quic_client_id_t *cid);
+ static ngx_quic_client_id_t *ngx_quic_alloc_client_id(ngx_connection_t *c,
+@@ -38,6 +40,12 @@ ngx_quic_create_server_id(ngx_connection_t *c, u_char *id)
+     }
+ #endif
+ 
++    /* encode server info into DCID for L4LB/DPVS  */
++    if (ngx_quic_dcid_encode_server_info(c, id) != NGX_OK) {
++        ngx_log_error(NGX_LOG_ERR, c->log, 0,
++                "quic server info failed to be encoded");
++    }
++
+     return NGX_OK;
+ }
+ 
+@@ -69,6 +77,60 @@ ngx_quic_bpf_attach_id(ngx_connection_t *c, u_char *id)
+ 
+ #endif
+ 
++/*
++ *  L4LB/DPVS QUIC Connction ID Format {
++ *      First Octet (8),
++ *      L3 Address Length (3),
++ *      L4 Address Flag (1),
++ *      L3 Address (8...64),
++ *      [ L4 Address (16) ]
++ *      Nonce (32...140)
++ *  }
++ *
++ *  Specifically for this case:
++ *      L3 Address Length := 3 (IPv4), 4 (IPv6)
++ *      L4 Address Flag   := 0
++ */
++static ngx_int_t
++ngx_quic_dcid_encode_server_info(ngx_connection_t *c, u_char *id)
++{
++    unsigned int len;
++    u_char *addr, *ptr;
++    struct sockaddr *sa;
++
++    sa = c->local_sockaddr;
++    if (sa->sa_family == AF_INET) {
++        addr = (u_char *)(&((struct sockaddr_in *)sa)->sin_addr);
++        len = 3;
++        addr += (4 - len);
++    } else if (sa->sa_family == AF_INET6) {
++        addr = (u_char *)(&((struct sockaddr_in6 *)sa)->sin6_addr);
++        len = 4;
++        addr += (16 - len);
++    } else {
++        return NGX_OK;
++    }
++
++    if (len + sizeof(uint64_t) + 2 > NGX_QUIC_SERVER_CID_LEN) {
++        return NGX_ERROR;
++    }
++
++    ptr = id;
++    ptr++;
++
++    *ptr = 0;
++    *ptr++ = (((len - 1) & 0x7) << 5) | ((*addr >> 4) & 0xf);
++
++    while (--len > 0) {
++        *ptr++ = ((*addr & 0xf) << 4) | ((*(addr+1) >> 4) & 0xf);
++        addr++;
++    }
++
++    *ptr &= 0xf;
++    *ptr |= ((*addr & 0xf) << 4);
++
++    return NGX_OK;
++}
+ 
+ ngx_int_t
+ ngx_quic_handle_new_connection_id_frame(ngx_connection_t *c,
+diff --git a/src/event/quic/ngx_event_quic_transport.c b/src/event/quic/ngx_event_quic_transport.c
+index 19670a6..1cbec6c 100644
+--- a/src/event/quic/ngx_event_quic_transport.c
++++ b/src/event/quic/ngx_event_quic_transport.c
+@@ -2198,5 +2198,6 @@ ngx_quic_create_close(u_char *p, ngx_quic_frame_t *f)
+ void
+ ngx_quic_dcid_encode_key(u_char *dcid, uint64_t key)
+ {
++    dcid += (NGX_QUIC_SERVER_CID_LEN - sizeof(key));
+     (void) ngx_quic_write_uint64(dcid, key);
+ }
+-- 
+1.8.3.1
+
