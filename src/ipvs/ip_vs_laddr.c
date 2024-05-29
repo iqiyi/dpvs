@@ -175,7 +175,8 @@ int dp_vs_laddr_bind(struct dp_vs_conn *conn, struct dp_vs_service *svc)
 
     if (!conn || !conn->dest || !svc)
         return EDPVS_INVAL;
-    if (svc->proto != IPPROTO_TCP && svc->proto != IPPROTO_UDP)
+    if (svc->proto != IPPROTO_TCP && svc->proto != IPPROTO_UDP && 
+		svc->proto != IPPROTO_SCTP)
         return EDPVS_NOTSUPP;
     if (dp_vs_conn_is_template(conn))
         return EDPVS_OK;

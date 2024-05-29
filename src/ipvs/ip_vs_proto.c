@@ -71,6 +71,7 @@ struct dp_vs_proto *dp_vs_proto_lookup(uint8_t proto)
 
 extern struct dp_vs_proto dp_vs_proto_udp;
 extern struct dp_vs_proto dp_vs_proto_tcp;
+extern struct dp_vs_proto dp_vs_proto_sctp;
 extern struct dp_vs_proto dp_vs_proto_icmp;
 extern struct dp_vs_proto dp_vs_proto_icmp6;
 
@@ -88,6 +89,11 @@ int dp_vs_proto_init(void)
         goto tcp_error;
     }
 
+    if ((err = proto_register(&dp_vs_proto_sctp)) != EDPVS_OK) {
+        RTE_LOG(ERR, IPVS, "%s: fail to register SCTP\n", __func__);
+        goto sctp_error;
+    }
+
     if ((err = proto_register(&dp_vs_proto_icmp6)) != EDPVS_OK) {
         RTE_LOG(ERR, IPVS, "%s: fail to register ICMPV6\n", __func__);
         goto icmp6_error;
@@ -103,6 +109,8 @@ int dp_vs_proto_init(void)
 icmp_error:
     proto_unregister(&dp_vs_proto_icmp6);
 icmp6_error:
+    proto_unregister(&dp_vs_proto_sctp);
+sctp_error:
     proto_unregister(&dp_vs_proto_tcp);
 tcp_error:
     proto_unregister(&dp_vs_proto_udp);
@@ -116,6 +124,9 @@ int dp_vs_proto_term(void)
 
     if (proto_unregister(&dp_vs_proto_icmp6) != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "%s: fail to unregister ICMPV6\n", __func__);
+
+    if (proto_unregister(&dp_vs_proto_sctp) != EDPVS_OK)
+        RTE_LOG(ERR, IPVS, "%s: fail to unregister SCTP\n", __func__);
 
     if (proto_unregister(&dp_vs_proto_tcp) != EDPVS_OK)
         RTE_LOG(ERR, IPVS, "%s: fail to unregister TCP\n", __func__);

@@ -89,6 +89,7 @@ static inline const char *inet_proto_name(uint8_t proto)
     const static char *proto_names[256] = {
         [IPPROTO_TCP]     = "TCP",
         [IPPROTO_UDP]     = "UDP",
+        [IPPROTO_SCTP]    = "SCTP",
         [IPPROTO_ICMP]    = "ICMP",
         [IPPROTO_ICMPV6]  = "ICMPV6",
     };

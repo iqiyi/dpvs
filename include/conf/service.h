@@ -52,8 +52,9 @@
 #define DEST_HC_PASSIVE                 0x01
 #define DEST_HC_TCP                     0x02
 #define DEST_HC_UDP                     0x04
-#define DEST_HC_PING                    0x08
-#define DEST_HC_MASK_EXTERNAL           0x0e
+#define DEST_HC_SCTP                    0x08
+#define DEST_HC_PING                    0x10
+#define DEST_HC_MASK_EXTERNAL           0x1e
 
 /* defaults for dest passive health check */
 #define DEST_DOWN_NOTICE_DEFAULT        1

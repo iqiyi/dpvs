@@ -678,7 +678,8 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
         struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
 
         if (unlikely(ip4h->next_proto_id != IPPROTO_TCP &&
-            ip4h->next_proto_id != IPPROTO_UDP)) {
+            ip4h->next_proto_id != IPPROTO_UDP &&
+            ip4h->next_proto_id != IPPROTO_SCTP)) {
             RTE_LOG(DEBUG, IFTRAF,
                 "%s: unspported proto[core: %d, proto: %d]\n",
                 __func__, cid, ip4h->next_proto_id);
@@ -740,7 +741,8 @@ static int iftraf_pkt_deliver(int af, struct rte_mbuf *mbuf, struct netif_port *
         uint8_t ip6nxt = ip6h->ip6_nxt;
 
         if (unlikely(ip6nxt != IPPROTO_TCP &&
-            ip6nxt != IPPROTO_UDP)) {
+            ip6nxt != IPPROTO_UDP &&
+            ip6nxt != IPPROTO_SCTP)) {
             RTE_LOG(DEBUG, IFTRAF,
                 "%s: unspported proto[core: %d, proto: %d]\n",
                 __func__, cid, ip6nxt);

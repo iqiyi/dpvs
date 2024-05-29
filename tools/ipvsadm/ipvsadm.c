@@ -329,6 +329,7 @@ enum {
     TAG_SORT,
     TAG_NO_SORT,
     TAG_PERSISTENCE_ENGINE,
+    TAG_SCTP_SERVICE,
     TAG_SOCKPAIR,
     TAG_HASH_TARGET,
     TAG_CPU,
@@ -432,6 +433,8 @@ static int parse_dest_check(const char *optarg, struct dest_check_configs *conf)
         conf->types |= DEST_HC_TCP;
     } else if (!strcmp(optarg, "udp")) {
         conf->types |= DEST_HC_UDP;
+    } else if (!strcmp(optarg, "sctp")) {
+        conf->types |= DEST_HC_SCTP;
     } else if (!strcmp(optarg, "ping")) {
         conf->types |= DEST_HC_PING;
     } else if (!strcmp(optarg, "default")) {
@@ -504,6 +507,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             NULL, NULL },
         { "udp-service", 'u', POPT_ARG_STRING, &optarg, 'u',
             NULL, NULL },
+        { "sctp-service", '\0', POPT_ARG_STRING, &optarg,
+            TAG_SCTP_SERVICE, NULL, NULL },
         { "icmp-service", 'q', POPT_ARG_STRING, &optarg, 'q',
             NULL, NULL },
         { "icmpv6-service", '1', POPT_ARG_STRING, &optarg, '1',
@@ -668,11 +673,14 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case 'u':
             case 'q':
             case '1':
+            case TAG_SCTP_SERVICE:
                 set_option(options, OPT_SERVICE);
                 if (c == 't') {
                     ce->dpvs_svc.proto = IPPROTO_TCP;
                 } else if (c == 'u') {
                     ce->dpvs_svc.proto = IPPROTO_UDP;
+                } else if (c == TAG_SCTP_SERVICE) {
+                    ce->dpvs_svc.proto = IPPROTO_SCTP;
                 } else if (c == 'q') {
                     ce->dpvs_svc.proto = IPPROTO_ICMP;
                 } else if (c == '1') { /*a~Z is out. ipvsadm is really not friendly here*/
@@ -1379,7 +1387,7 @@ parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
 /*
  * Get sockpair from the arguments.
  * sockpair := PROTO:SIP:SPORT:TIP:TPORT
- * PROTO := [tcp|udp]
+ * PROTO := [tcp|udp|sctp]
  * SIP,TIP := dotted-decimal ip address or square-blacketed ip6 address
  * SPORT,TPORT := range(0, 65535)
  */
@@ -1402,6 +1410,8 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
         proto = IPPROTO_TCP;
     else if (strncmp(pos, "udp", 3) == 0)
         proto = IPPROTO_UDP;
+    else if (strncmp(pos, "sctp", 4) == 0)
+        proto = IPPROTO_SCTP;
     else
         return 0;
 
@@ -1474,7 +1484,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 /*
  * comma separated parameters list, all fields is used to match packets.
  *
- *   proto      := tcp | udp | icmp |icmpv6
+ *   proto      := tcp | udp | sctp | icmp |icmpv6
  *   src-range  := RANGE
  *   dst-range  := RANGE
  *   iif        := IFNAME
@@ -1510,6 +1520,8 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
                 dpvs_svc->proto = IPPROTO_TCP;
             } else if (strcmp(val, "udp") == 0) {
                 dpvs_svc->proto = IPPROTO_UDP;
+            } else if (strcmp(val, "sctp") == 0) {
+                dpvs_svc->proto = IPPROTO_SCTP;
             } else if (strcmp(val, "icmp") == 0) {
                 dpvs_svc->proto = IPPROTO_ICMP;
             } else if (strcmp(val, "icmpv6") == 0) {
@@ -1685,6 +1697,7 @@ static void usage_exit(const char *program, const int exit_status)
             "Options:\n"
             "  --tcp-service  -t service-address   service-address is host[:port]\n"
             "  --udp-service  -u service-address   service-address is host[:port]\n"
+            "  --sctp-service    service-address   service-address is host[:port]\n"
             "  --icmp-service -q service-address   service-address is host[:port]\n"
             "  --icmpv6-service -1 service-address   service-address is host[:port]\n"
             "  --fwmark-service  -f fwmark         fwmark is an integer greater than zero\n"
@@ -1728,7 +1741,7 @@ static void usage_exit(const char *program, const int exit_status)
             "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
             "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
             "  --dest-check   CHECK_CONF           config health check, inhibit scheduling to failed backends\n"
-            "                                      CHECK_CONF:=disable|default(passive)|DETAIL(passive)|tcp|udp|ping, DETAIL:=UPDOWN|DOWNONLY\n"
+            "                                      CHECK_CONF:=disable|default(passive)|DETAIL(passive)|tcp|udp|sctp|ping, DETAIL:=UPDOWN|DOWNONLY\n"
             "                                      UPDOWN:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n"
             "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n"
             "  --laddr        -z local-ip          local IP\n"
@@ -1786,6 +1799,8 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
         snprintf(proto_str, sizeof(proto_str), "%s", "tcp");
     else if (conn_entry->proto == IPPROTO_UDP)
         snprintf(proto_str, sizeof(proto_str), "%s", "udp");
+    else if (conn_entry->proto == IPPROTO_SCTP)
+        snprintf(proto_str, sizeof(proto_str), "%s", "sctp");
     else if (conn_entry->proto == IPPROTO_ICMP)
         snprintf(proto_str, sizeof(proto_str), "%s", "icmp");
     else if (conn_entry->proto == IPPROTO_ICMPV6)
@@ -2034,6 +2049,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
                 proto = "-t";
             else if (se->proto == IPPROTO_UDP)
                 proto = "-u";
+            else if (se->proto == IPPROTO_SCTP)
+                proto = "--sctp-service";
             else
                 proto = "-q";
 
@@ -2043,6 +2060,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
                 proto = "TCP";
             else if (se->proto == IPPROTO_UDP)
                 proto = "UDP";
+            else if (se->proto == IPPROTO_SCTP)
+                proto = "SCTP";
             else if (se->proto == IPPROTO_ICMP)
                 proto = "ICMP";
             else
@@ -2063,6 +2082,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             proto = "tcp";
         else if (se->proto == IPPROTO_UDP)
             proto = "udp";
+        else if (se->proto == IPPROTO_SCTP)
+            proto = "sctp";
         else if (se->proto == IPPROTO_ICMP)
             proto = "icmp";
         else
@@ -2203,6 +2224,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
                     strcat(buf, "tcp,");
                 if (se->check_conf.types & DEST_HC_UDP)
                     strcat(buf, "udp,");
+                if (se->check_conf.types & DEST_HC_SCTP)
+                    strcat(buf, "sctp,");
                 if (se->check_conf.types & DEST_HC_PING)
                     strcat(buf, "ping,");
                 *strrchr(buf, ',') = '\0';
@@ -2409,6 +2432,9 @@ static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
         case IPPROTO_UDP:
             snprintf(proto, sizeof(proto), "%s", "UDP");
             break;
+        case IPPROTO_SCTP:
+            snprintf(proto, sizeof(proto), "%s", "SCTP");
+            break;
         case IPPROTO_ICMP:
             snprintf(proto, sizeof(proto), "%s", "ICMP");
             break;
@@ -2508,6 +2534,9 @@ static void print_service_and_whtlsts(struct dp_vs_whtlst_conf *whtlst)
             break;
         case IPPROTO_UDP:
             snprintf(proto, sizeof(proto), "%s", "UDP");
+            break;
+        case IPPROTO_SCTP:
+            snprintf(proto, sizeof(proto), "%s", "SCTP");
             break;
         case IPPROTO_ICMP:
             snprintf(proto, sizeof(proto), "%s", "ICMP");
@@ -2706,6 +2735,9 @@ int service_to_port(const char *name, unsigned short proto)
     else if (proto == IPPROTO_UDP
             && (service = getservbyname(name, "udp")) != NULL)
         return ntohs((unsigned short) service->s_port);
+    else if (proto == IPPROTO_SCTP
+            && (service = getservbyname(name, "sctp")) != NULL)
+        return ntohs((unsigned short) service->s_port);
     else if (proto == IPPROTO_ICMP
             && (service = getservbyname(name, "icmp")) != NULL)
         return ntohs((unsigned short) service->s_port);
@@ -2726,6 +2758,9 @@ static char * port_to_service(unsigned short port, unsigned short proto)
         return service->s_name;
     else if (proto == IPPROTO_UDP &&
             (service = getservbyport(htons(port), "udp")) != NULL)
+        return service->s_name;
+    else if (proto == IPPROTO_SCTP &&
+            (service = getservbyport(htons(port), "sctp")) != NULL)
         return service->s_name;
     else if (proto == IPPROTO_ICMP &&
             (service = getservbyport(htons(port), "icmp")) != NULL)
