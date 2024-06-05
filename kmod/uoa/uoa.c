@@ -199,7 +199,11 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
         unsigned int start;
 
         do {
+#if (RHEL_MAJOR == 9 && RHEL_MINOR < 4)
             start = u64_stats_fetch_begin_irq(&s->syncp);
+#else
+            start = u64_stats_fetch_begin(&s->syncp);
+#endif
 #endif
             success  = s->success;
             miss     = s->miss;
@@ -209,7 +213,11 @@ static int uoa_stats_percpu_show(struct seq_file *seq, void *arg)
             saved    = s->uoa_saved;
             ack_fail = s->uoa_ack_fail;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
+#if (RHEL_MAJOR == 9 && RHEL_MINOR < 4)
         } while (u64_stats_fetch_retry_irq(&s->syncp, start));
+#else
+        } while (u64_stats_fetch_retry(&s->syncp, start));
+#endif
 #endif
 
         seq_printf(seq,
