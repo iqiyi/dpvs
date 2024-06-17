@@ -1253,6 +1253,8 @@ clear_diff_blklst(virtual_server_t * old_vs, virtual_server_t * new_vs)
 		return 0;
 	if (!clear_diff_blklst_entry(old->range, new->range, old_vs))
 		return 0;
+	if (!clear_diff_blklst_entry(old->ipset, new->ipset, old_vs))
+		return 0;
 
 	return 1;
 }

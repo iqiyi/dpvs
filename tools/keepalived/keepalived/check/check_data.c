@@ -732,7 +732,9 @@ dump_blklst_entry(FILE *fp, const void *data)
 {
 	const blklst_addr_entry *blklst_entry = data;
 
-	if (blklst_entry->range)
+	if (!strncmp(blklst_entry->ipset, "ipset:", sizeof("ipset:") - 1))
+	    conf_write(fp, "   IPSET = %s", blklst_entry->ipset);
+	else if (blklst_entry->range)
 	    conf_write(fp, "   IP Range = %s-%d"
 			, inet_sockaddrtos(&blklst_entry->addr)
 			, blklst_entry->range);
@@ -752,6 +754,7 @@ alloc_blklst_group(char *gname)
 	memcpy(new->gname, gname, size);
 	new->addr_ip = alloc_list(free_blklst_entry, dump_blklst_entry);
 	new->range = alloc_list(free_blklst_entry, dump_blklst_entry);
+	new->ipset = alloc_list(free_blklst_entry, dump_blklst_entry);
 
 	list_add(check_data->blklst_group, new);
 }
@@ -761,14 +764,22 @@ alloc_blklst_entry(const vector_t *strvec)
 {
 	blklst_addr_group *blklst_group = LIST_TAIL_DATA(check_data->blklst_group);
 	blklst_addr_entry *new;
+	const char *str_entry;
 
 	new = (blklst_addr_entry *) MALLOC(sizeof (blklst_addr_entry));
+	str_entry = strvec_slot(strvec, 0);
 
-	inet_stor(vector_slot(strvec, 0), &new->range);
+	if (!strncmp(str_entry, "ipset:", sizeof("ipset:") - 1)) {
+		strncpy(new->ipset, &str_entry[sizeof("ipset:")-1], sizeof(new->ipset) - 1);
+		list_add(blklst_group->ipset, new);
+		return;
+	}
+
+	inet_stor(str_entry, &new->range);
 	/* If no range specified, new->range == UINT32_MAX */
 	if (new->range == UINT32_MAX)
 		new->range = 0;
-	inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
+	inet_stosockaddr(str_entry, NULL, &new->addr);
 
 	if (!new->range)
 		list_add(blklst_group->addr_ip, new);

@@ -299,17 +299,10 @@ int dpvs_del_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr)
 /*for black list*/
 static void dpvs_fill_blklst_conf(dpvs_service_compat_t *svc, dpvs_blklst_t *blklst)
 {
-    blklst->af        = svc->af;
-    blklst->proto     = svc->proto;
-    blklst->vport     = svc->port;
-    blklst->fwmark    = svc->fwmark;
-    if (svc->af == AF_INET) {
-        blklst->vaddr.in = svc->addr.in;
-    } else {
-        blklst->vaddr.in6 = svc->addr.in6;
-    }
-
-    return;
+    blklst->af    = svc->af;
+    blklst->proto = svc->proto;
+    blklst->vport = svc->port;
+    blklst->vaddr = svc->addr;
 }
 
 int dpvs_add_blklst(dpvs_service_compat_t* svc, dpvs_blklst_t *blklst)

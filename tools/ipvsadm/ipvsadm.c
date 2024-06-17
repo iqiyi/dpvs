@@ -902,15 +902,19 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 {
                     dpvs_service_compat_t  dpvs_svc;
                     set_option(options,OPT_BLKLST_ADDRESS);
-                    parse = parse_service(optarg,
-                            &dpvs_svc);
-                    if (!(parse & SERVICE_ADDR))
-                        fail(2, "illegal blacklist address");
-
-                    ce->dpvs_blklst.af     = dpvs_svc.af;
-                    ce->dpvs_blklst.blklst = dpvs_svc.addr;
+                    if (!strncmp(optarg, "ipset:", strlen("ipset:"))) {
+                        strncpy(ce->dpvs_blklst.ipset, &optarg[strlen("ipset:")],
+                                sizeof(ce->dpvs_blklst.ipset) - 1);
+                    } else {
+                        parse = parse_service(optarg, &dpvs_svc);
+                        if (parse & SERVICE_ADDR) {
+                            ce->dpvs_blklst.af      = dpvs_svc.af;
+                            ce->dpvs_blklst.subject = dpvs_svc.addr;
+                        } else {
+                            fail(2, "illegal blacklist entry format, require [ IP | ipset:NAME ]");
+                        }
+                    }
                     break;
-
                 }
             case '2':
                 {
@@ -1682,9 +1686,9 @@ static void usage_exit(const char *program, const int exit_status)
             "  --add-laddr       -P        add local address\n"
             "  --del-laddr       -Q        del local address\n"
             "  --get-laddr       -G        get local address\n"
-            "  --add-blklst      -U        add blacklist address\n"
-            "  --del-blklst      -V        del blacklist address\n"
-            "  --get-blklst      -B        get blacklist address\n"
+            "  --add-blklst      -U        add blacklist address or ipset\n"
+            "  --del-blklst      -V        del blacklist address or ipset\n"
+            "  --get-blklst      -B        get blacklist address or ipset\n"
             "  --add-whtlst      -O        add whitelist address\n"
             "  --del-whtlst      -Y        del whitelist address\n"
             "  --get-whtlst      -W        get whitelist address\n"
@@ -1752,7 +1756,7 @@ static void usage_exit(const char *program, const int exit_status)
             "                                      UPDOWN:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n"
             "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n"
             "  --laddr        -z local-ip          local IP\n"
-            "  --blklst       -k blacklist-ip      blacklist IP for specific service\n"
+            "  --blklst       -k blacklist-ip      specify blacklist ip address or ipset(format: \"ipset:NAME\")\n"
             "  --whtlst       -2 whitelist-ip      whitelist IP for specific service\n"
             "  --quic                              itef quic protocol service\n",
         DEF_SCHED);
@@ -2423,17 +2427,17 @@ static int list_all_laddrs(lcoreid_t index)
 
 static void list_blklsts_print_title(void)
 {
-    printf("%-20s %-8s %-20s\n",
-            "VIP:VPORT" ,
+    printf("%-8s %-30s %-30s\n",
             "PROTO" ,
+            "VIP:VPORT" ,
             "BLACKLIST");
 }
 
-static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
+static void print_service_and_blklsts(const struct dp_vs_blklst_conf *blklst)
 {
-    char vip[64], bip[64], port[8], proto[8];
+    char subject[64], vip[64], vport[8], proto[8], vip_port[64];
     const char *pattern = (blklst->af == AF_INET ?
-            "%s:%-8s %-8s %-20s\n" : "[%s]:%-8s %-8s %-20s\n");
+            "%-8s %-30s %-30s\n" : "%-8s %-30s %-30s\n");
 
     switch (blklst->proto) {
         case IPPROTO_TCP:
@@ -2455,10 +2459,19 @@ static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
             break;
     }
 
-    snprintf(port, sizeof(port), "%u", ntohs(blklst->vport));
+    snprintf(vport, sizeof(vport), "%u", ntohs(blklst->vport));
+    inet_ntop(blklst->af, (const void *)&blklst->vaddr, vip, sizeof(vip));
+    if (blklst->af == AF_INET6)
+        snprintf(vip_port, sizeof(vip_port), "[%s]:%s", vip, vport);
+    else
+        snprintf(vip_port, sizeof(vip_port), "%s:%s", vip, vport);
 
-    printf(pattern, inet_ntop(blklst->af, (const void *)&blklst->vaddr, vip, sizeof(vip)),
-            port, proto, inet_ntop(blklst->af, (const void *)&blklst->blklst, bip, sizeof(bip)));
+    if (blklst->ipset[0] == '\0')
+        inet_ntop(blklst->af, (const void *)&blklst->subject, subject, sizeof(subject));
+    else
+        snprintf(subject, sizeof(subject), "ipset:%s", blklst->ipset);
+
+    printf(pattern, proto, vip_port, subject);
 }
 
 static bool inet_addr_equal(int af, const union inet_addr *a1, const union inet_addr *a2)
@@ -2473,9 +2486,19 @@ static bool inet_addr_equal(int af, const union inet_addr *a1, const union inet_
     }
 }
 
+static inline void __list_blklst(int af, const union inet_addr *addr, uint16_t port,
+        uint16_t protocol, const struct dp_vs_blklst_conf_array *cfarr) {
+    int i;
+    for (i = 0; i < cfarr->naddr; i++) {
+        if (inet_addr_equal(af, addr, (const union inet_addr *) &cfarr->blklsts[i].vaddr) &&
+                port == cfarr->blklsts[i].vport && protocol == cfarr->blklsts[i].proto) {
+            print_service_and_blklsts(&cfarr->blklsts[i]);
+        }
+    }
+}
+
 static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint16_t protocol)
 {
-    int i;
     struct dp_vs_blklst_conf_array *get;
 
     if (!(get = dpvs_get_blklsts())) {
@@ -2483,14 +2506,9 @@ static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint1
         return -1;
     }
 
-    for (i = 0; i < get->naddr; i++) {
-        if (inet_addr_equal(af, addr,(const union inet_addr *) &get->blklsts[i].vaddr) &&
-                port == get->blklsts[i].vport && protocol == get->blklsts[i].proto) {
-            print_service_and_blklsts(&get->blklsts[i]);
-        }
-    }
-    free(get);
+    __list_blklst(af, addr, port, protocol, get);
 
+    free(get);
     return 0;
 }
 
@@ -2498,6 +2516,7 @@ static int list_all_blklsts(void)
 {
     int i;
     dpvs_services_front_t* table;
+    struct dp_vs_blklst_conf_array *barray;
 
     table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
@@ -2513,12 +2532,18 @@ static int list_all_blklsts(void)
         exit(1);
     }
 
-    list_blklsts_print_title();
-    for (i = 0; i < table->count; i++) {
-        list_blklst(table->entrytable[i].af, &table->entrytable[i].addr,
-                table->entrytable[i].port, table->entrytable[i].proto);
+    if(!(barray = dpvs_get_blklsts())) {
+        fprintf(stderr, "%s\n", ipvs_strerror(errno));
+        exit(1);
     }
 
+    list_blklsts_print_title();
+    for (i = 0; i < table->count; i++) {
+        __list_blklst(table->entrytable[i].af, &table->entrytable[i].addr,
+                table->entrytable[i].port, table->entrytable[i].proto, barray);
+    }
+
+    free(barray);
     free(table);
 
     return 0;
