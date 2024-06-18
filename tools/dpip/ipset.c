@@ -1081,7 +1081,11 @@ ipset_info_dump(struct ipset_info *info, bool sort)
     struct ipset_member *member;
     char header[HEADER_LEN], *members;
 
-    type = get_type_idx();
+    type = get_type_idx_from_type(info->type);
+    if (type < 0) {
+        fprintf(stderr, "unsupported ipset type %s\n", info->type);
+        return;
+    }
 
     /* header */
     types[type].dump_header(header, info);
