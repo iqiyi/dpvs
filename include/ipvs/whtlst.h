@@ -19,20 +19,23 @@
 #define __DPVS_WHTLST_H__
 #include "conf/common.h"
 #include "ipvs/service.h"
+#include "ipset/ipset.h"
 
 struct whtlst_entry {
     struct list_head    list;
-    int                 af;
+
     union inet_addr     vaddr;
     uint16_t            vport;
     uint8_t             proto;
-    union inet_addr     whtlst;
+    uint8_t             af;
+
+    union inet_addr     subject;
+    struct ipset        *set;
+    bool                dst_match;  /* internal use of ipset */
 };
 
-struct whtlst_entry *dp_vs_whtlst_lookup(int af, uint8_t proto, const union inet_addr *vaddr,
-                                         uint16_t vport, const union inet_addr *whtlst);
-bool dp_vs_whtlst_allow(int af, uint8_t proto, const union inet_addr *vaddr,
-                        uint16_t vport, const union inet_addr *whtlst);
+bool dp_vs_whtlst_filtered(int af, uint8_t proto, const union inet_addr *vaddr,
+        uint16_t vport, const union inet_addr *subject, struct rte_mbuf *mbuf);
 void dp_vs_whtlst_flush(struct dp_vs_service *svc);
 
 int dp_vs_whtlst_init(void);

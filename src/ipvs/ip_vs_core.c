@@ -984,9 +984,8 @@ static int __dp_vs_in(void *priv, struct rte_mbuf *mbuf,
 
     /* packet belongs to existing connection ? */
     conn = prot->conn_lookup(prot, &iph, mbuf, &dir, false, &drop, &peer_cid);
-
     if (unlikely(drop)) {
-        RTE_LOG(DEBUG, IPVS, "%s: deny ip try to visit.\n", __func__);
+        RTE_LOG(DEBUG, IPVS, "%s: packet dropped by ipvs acl\n", __func__);
         return INET_DROP;
     }
 

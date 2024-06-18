@@ -329,14 +329,7 @@ static void dpvs_fill_whtlst_conf(dpvs_service_compat_t *svc, dpvs_whtlst_t *wht
     whtlst->af        = svc->af;
     whtlst->proto     = svc->proto;
     whtlst->vport     = svc->port;
-    whtlst->fwmark    = svc->fwmark;
-    if (svc->af == AF_INET) {
-        whtlst->vaddr.in = svc->addr.in;
-    } else {
-        whtlst->vaddr.in6 = svc->addr.in6;
-    }
-
-    return;
+    whtlst->vaddr     = svc->addr;
 }
 
 int dpvs_add_whtlst(dpvs_service_compat_t* svc, dpvs_whtlst_t *whtlst)
