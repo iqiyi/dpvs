@@ -293,7 +293,7 @@ int dpvs_del_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr)
     dpvs_fill_ipaddr_conf(0, 0, laddr, &param);
     dpvs_setsockopt(SOCKOPT_SET_IFADDR_DEL, &param, sizeof(struct inet_addr_param));
 
-    return dpvs_setsockopt(SOCKOPT_SET_LADDR_DEL, laddr, sizeof(laddr));
+    return dpvs_setsockopt(SOCKOPT_SET_LADDR_DEL, laddr, sizeof(dpvs_laddr_table_t));
 }
 
 /*for black list*/
