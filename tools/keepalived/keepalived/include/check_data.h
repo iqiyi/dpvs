@@ -236,6 +236,7 @@ typedef struct _virtual_server {
 							 * the service from IPVS topology. */
 	bool				syn_proxy;
 	bool				expire_quiescent_conn;
+	bool				quic;
 	unsigned int			connection_to;	/* connection time-out */
 	unsigned long			delay_loop;	/* Interval between running checker */
 	unsigned long			warmup;		/* max random timeout to start checker */
@@ -314,6 +315,7 @@ static inline bool quorum_equal(const notify_script_t *quorum1,
                          (X)->hash_target             == (Y)->hash_target               &&\
                          (X)->syn_proxy               == (Y)->syn_proxy                 &&\
                          (X)->expire_quiescent_conn   == (Y)->expire_quiescent_conn     &&\
+                         (X)->quic                    == (Y)->quic                      &&\
                          quorum_equal((X)->notify_quorum_up, (Y)->notify_quorum_up)     &&\
                          quorum_equal((X)->notify_quorum_down, (Y)->notify_quorum_down) &&\
                          !strcmp((X)->sched, (Y)->sched)                                &&\

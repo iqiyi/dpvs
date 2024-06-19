@@ -42,6 +42,9 @@ type VirtualServerSpecTiny struct {
 	// Enum: [v2 v2-insecure v1 v1-insecure disable]
 	ProxyProtocol string `json:"ProxyProtocol,omitempty"`
 
+	// quic
+	Quic *bool `json:"Quic,omitempty"`
+
 	// sched name
 	// Enum: [rr wrr wlc conhash]
 	SchedName string `json:"SchedName,omitempty"`

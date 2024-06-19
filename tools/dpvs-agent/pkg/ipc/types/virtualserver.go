@@ -289,6 +289,10 @@ func (vs *VirtualServerSpec) SetFlagsExpireQuiescent() {
 	vs.setFlags(DPVS_SVC_F_EXPIRE_QUIESCENT)
 }
 
+func (vs *VirtualServerSpec) SetFlagsQuic() {
+	vs.setFlags(DPVS_SVC_F_QUIC)
+}
+
 func (vs *VirtualServerSpec) SetFlagsPersistent() {
 	vs.setFlags(DPVS_SVC_F_PERSISTENT)
 }

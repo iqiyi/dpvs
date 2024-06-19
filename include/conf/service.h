@@ -42,6 +42,7 @@
 #define IP_VS_SVC_F_SIP_HASH            0x0100              /* sip hash target */
 #define IP_VS_SVC_F_QID_HASH            0x0200              /* quic cid hash target */
 #define IP_VS_SVC_F_MATCH               0x0400              /* snat match */
+#define IP_VS_SVC_F_QUIC                0x0800              /* quic/h3 protocol */
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK   IP_VS_SVC_F_SCHED1  /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT       IP_VS_SVC_F_SCHED2  /* SH use port */
 

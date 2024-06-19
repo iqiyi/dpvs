@@ -337,6 +337,7 @@ enum {
     TAG_DEST_CHECK,
     TAG_CONN_TIMEOUT,
     TAG_PROXY_PROTOCOL,
+    TAG_QUIC,
 };
 
 /* various parsing helpers & parsing functions */
@@ -567,6 +568,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         { "dest-check", '\0', POPT_ARG_STRING, &optarg, TAG_DEST_CHECK, NULL, NULL},
         { "conn-timeout", '\0', POPT_ARG_INT, &intarg, TAG_CONN_TIMEOUT, NULL, NULL},
         { "proxy-protocol", '\0', POPT_ARG_STRING, &optarg, TAG_PROXY_PROTOCOL, NULL, NULL},
+        { "quic", '\0', POPT_ARG_NONE, NULL, TAG_QUIC, NULL, NULL},
         { NULL, 0, 0, NULL, 0, NULL, NULL }
     };
 
@@ -974,6 +976,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 {
                     set_option(options, OPT_EXPIRE_QUIESCENT_CONN);
                     ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_EXPIRE_QUIESCENT;
+                    break;
+                }
+            case TAG_QUIC:
+                {
+                    ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_QUIC;
                     break;
                 }
             case TAG_DEST_CHECK:
@@ -1746,7 +1753,8 @@ static void usage_exit(const char *program, const int exit_status)
             "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n"
             "  --laddr        -z local-ip          local IP\n"
             "  --blklst       -k blacklist-ip      blacklist IP for specific service\n"
-            "  --whtlst       -2 whitelist-ip      whitelist IP for specific service\n",
+            "  --whtlst       -2 whitelist-ip      whitelist IP for specific service\n"
+            "  --quic                              itef quic protocol service\n",
         DEF_SCHED);
 
     exit(exit_status);
@@ -2196,6 +2204,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             printf(" pp%s", proxy_protocol_str(se->proxy_protocol));
         if (se->flags & IP_VS_SVC_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
+        if (se->flags & IP_VS_SVC_F_QUIC && se->proto == IPPROTO_UDP)
+            printf(" quic");
         if (se->check_conf.types) {
             printf(" dest-check");
             if (dest_check_passive(&se->check_conf)) {

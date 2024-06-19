@@ -39,6 +39,14 @@ struct conhash_sched_data {
 /*
  * QUIC CID hash target for quic*
  * QUIC CID(qid) should be configured in UDP service
+ *
+ * This is an early Google QUIC implementation, and has been obsoleted.
+ * https://docs.google.com/document/d/1WJvyZflAO2pq77yOLbp9NsGjC1CHetAXV8I0fQe-B_U/edit?pli=1#heading=h.o9jvitkc5d2g
+ *
+ * Use IETF QUIC(officially published in 2021) instead.
+ * Configure `--quic` option on DPVS service to enable it.
+ * The quic application on RS  must conform with the CID format agreement
+ * declared in `include/ipvs/quic.h`.
  */
 static int get_quic_hash_target(int af, const struct rte_mbuf *mbuf,
                                 uint64_t *quic_cid)
