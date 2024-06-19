@@ -185,6 +185,8 @@ definitions:
     properties:
       addr:
         type: string
+      ipset:
+        type: string
   InetAddrSpec:
     properties:
       addr:

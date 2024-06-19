@@ -31,14 +31,22 @@ import (
 	"github.com/dpvs-agent/pkg/ipc/pool"
 )
 
+/* derived from: include/conf/ipset.h */
+const IPSET_MAXNAMELEN = 32
+
+/*
+derived from:
+  - include/conf/blklst.h
+  - include/conf/whtlst.h
+*/
 type CertificateAuthoritySpec struct {
-	src     [0x10]byte
-	dst     [0x10]byte
-	af      uint32
-	fwmark  uint32
-	port    uint16
-	proto   uint8
-	padding uint8
+	vaddr [0x10]byte
+	vport uint16
+	proto uint8
+	af    uint8
+
+	caddr [0x10]byte
+	ipset [IPSET_MAXNAMELEN]byte
 }
 
 type CertificateAuthorityFront struct {
@@ -54,12 +62,12 @@ func NewCertificateAuthorityFront() *CertificateAuthorityFront {
 }
 
 func (o *CertificateAuthoritySpec) Copy(src *CertificateAuthoritySpec) bool {
-	o.af = src.af
-	o.fwmark = src.fwmark
-	o.port = src.port
+	copy(o.vaddr[:], src.vaddr[:])
+	o.vport = src.vport
 	o.proto = src.proto
-	copy(o.src[:], src.src[:])
-	copy(o.dst[:], src.dst[:])
+	o.af = src.af
+	copy(o.caddr[:], src.caddr[:])
+	copy(o.ipset[:], src.ipset[:])
 	return true
 }
 
@@ -80,19 +88,19 @@ func (o *CertificateAuthoritySpec) ParseVipPortProto(vipport string) error {
 		o.proto = unix.IPPROTO_TCP
 	}
 
-	// port := items[1]
-	port, err := strconv.Atoi(items[1])
+	// vport := items[1]
+	vport, err := strconv.Atoi(items[1])
 	if err != nil {
 		return err
 	}
-	o.SetPort(uint16(port))
+	o.SetVport(uint16(vport))
 
-	vip := items[0]
-	if net.ParseIP(vip) == nil {
-		return errors.New(fmt.Sprintf("invalid ip addr: %s\n", vip))
+	vaddr := items[0]
+	if net.ParseIP(vaddr) == nil {
+		return errors.New(fmt.Sprintf("invalid ip addr: %s\n", vaddr))
 	}
 
-	o.SetDst(vip)
+	o.SetVaddr(vaddr)
 
 	return nil
 }
@@ -150,42 +158,53 @@ func (o *CertificateAuthorityFront) GetCount() uint32 {
 	return o.count
 }
 
-func (o *CertificateAuthoritySpec) SetAf(af uint32) {
+func (o *CertificateAuthoritySpec) SetAf(af uint8) {
 	o.af = af
 }
 
-func (o *CertificateAuthoritySpec) SetSrc(addr string) {
+func (o *CertificateAuthoritySpec) SetCaddr(addr string) {
+	if len(addr) == 0 {
+		var zeros [0x10]byte
+		copy(o.caddr[:], zeros[:])
+		return
+	}
 	if strings.Contains(addr, ":") {
 		o.SetAf(unix.AF_INET6)
-		copy(o.src[:], net.ParseIP(addr))
+		copy(o.caddr[:], net.ParseIP(addr))
 		return
 	}
 	o.SetAf(unix.AF_INET)
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, net.ParseIP(addr))
-	copy(o.src[:], buf.Bytes()[12:])
+	copy(o.caddr[:], buf.Bytes()[12:])
 }
 
-func (o *CertificateAuthoritySpec) SetDst(addr string) {
+func (o *CertificateAuthoritySpec) SetVaddr(addr string) {
 	if strings.Contains(addr, ":") {
 		o.SetAf(unix.AF_INET6)
-		copy(o.dst[:], net.ParseIP(addr))
+		copy(o.vaddr[:], net.ParseIP(addr))
 		return
 	}
 	o.SetAf(unix.AF_INET)
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, net.ParseIP(addr))
-	copy(o.dst[:], buf.Bytes()[12:])
+	copy(o.vaddr[:], buf.Bytes()[12:])
 }
 
-func (o *CertificateAuthoritySpec) SetFwmark(fwmark uint32) {
-	o.fwmark = fwmark
+func (o *CertificateAuthoritySpec) SetIpset(ipset string) {
+	if len(ipset) == 0 {
+		var zeros [IPSET_MAXNAMELEN]byte
+		copy(o.ipset[:], zeros[:])
+		return
+	}
+	buf := []byte(ipset)
+	copy(o.ipset[:], buf[6:])
 }
 
-func (o *CertificateAuthoritySpec) SetPort(port uint16) {
+func (o *CertificateAuthoritySpec) SetVport(port uint16) {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, uint16(port))
-	o.port = binary.BigEndian.Uint16(buf.Bytes())
+	o.vport = binary.BigEndian.Uint16(buf.Bytes())
 }
 
 func (o *CertificateAuthoritySpec) SetProto(proto string) {

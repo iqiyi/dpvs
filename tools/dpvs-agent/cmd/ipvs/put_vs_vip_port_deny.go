@@ -17,6 +17,7 @@ package ipvs
 import (
 	// "fmt"
 	"net"
+	"strings"
 
 	// "github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
@@ -50,18 +51,29 @@ func (h *putVsDeny) Handle(params apiVs.PutVsVipPortDenyParams) middleware.Respo
 
 	failed := false
 	for _, deny := range params.ACL.Items {
-		if net.ParseIP(deny.Addr) == nil {
-			h.logger.Error("Invalid ip addr add.", "VipPort", params.VipPort, "Addr", deny.Addr)
-			return apiVs.NewPutVsVipPortDenyInvalidFrontend()
+		spec.SetCaddr("")
+		spec.SetIpset("")
+		if len(deny.Ipset) > 0 {
+			if !strings.HasPrefix(deny.Ipset, "ipset:") {
+				h.logger.Error("Invalid deny ipset format in add.", "VipPort", params.VipPort,
+					"Ipset", deny.Ipset, "expecting \"ipset:NAME\"")
+				return apiVs.NewPutVsVipPortDenyInvalidFrontend()
+			}
+			spec.SetIpset(deny.Ipset)
+		} else {
+			if net.ParseIP(deny.Addr) == nil {
+				h.logger.Error("Invalid deny ip addr in add.", "VipPort", params.VipPort, "Addr", deny.Addr)
+				return apiVs.NewPutVsVipPortDenyInvalidFrontend()
+			}
+			spec.SetCaddr(deny.Addr)
 		}
-		spec.SetSrc(deny.Addr)
 
 		if result := spec.Add(h.connPool, true, h.logger); result != types.EDPVS_OK {
 			h.logger.Error("Add ip addr to black list failed.", "VipPort", params.VipPort, "Addr", deny.Addr, "result", result.String())
 			failed = true
 			continue
 		}
-		h.logger.Info("Add ip addr to black list success.", "VipPort", params.VipPort, "Addr", deny.Addr)
+		h.logger.Info("Add entry to black list success.", "VipPort", params.VipPort, "Addr", deny.Addr, "Ipset", deny.Ipset)
 	}
 
 	if failed {

@@ -1444,6 +1444,9 @@ func init() {
       "properties": {
         "addr": {
           "type": "string"
+        },
+        "ipset": {
+          "type": "string"
         }
       }
     },
@@ -3996,6 +3999,9 @@ func init() {
     "CertAuthSpec": {
       "properties": {
         "addr": {
+          "type": "string"
+        },
+        "ipset": {
           "type": "string"
         }
       }

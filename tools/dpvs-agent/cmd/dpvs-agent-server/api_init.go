@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/lestrrat-go/file-rotatelogs"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 
 	"github.com/dpvs-agent/cmd/device"
 	"github.com/dpvs-agent/cmd/ipvs"
