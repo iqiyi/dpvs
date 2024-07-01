@@ -1,0 +1,34 @@
+diff --git a/kernel/linux/kni/kni_misc.c b/kernel/linux/kni/kni_misc.c
+index 2b464c4381..08e2662fd8 100644
+--- a/kernel/linux/kni/kni_misc.c
++++ b/kernel/linux/kni/kni_misc.c
+@@ -399,11 +399,8 @@ kni_ioctl_create(struct net *net, uint32_t ioctl_num,
+ 	if (is_valid_ether_addr(dev_info.mac_addr))
+ 		memcpy(net_dev->dev_addr, dev_info.mac_addr, ETH_ALEN);
+ 	else
+-		/*
+-		 * Generate random mac address. eth_random_addr() is the
+-		 * newer version of generating mac address in kernel.
+-		 */
+-		random_ether_addr(net_dev->dev_addr);
++		/* Assign random MAC address. */
++		eth_hw_addr_random(net_dev);
+ 
+ 	if (dev_info.mtu)
+ 		net_dev->mtu = dev_info.mtu;
+diff --git a/kernel/linux/kni/kni_net.c b/kernel/linux/kni/kni_net.c
+index 4b752083da..0cecae9a01 100644
+--- a/kernel/linux/kni/kni_net.c
++++ b/kernel/linux/kni/kni_net.c
+@@ -411,7 +411,11 @@ kni_net_rx_normal(struct kni_dev *kni)
+ 		skb->ip_summed = CHECKSUM_UNNECESSARY;
+ 
+ 		/* Call netif interface */
++#ifdef HAVE_NETIF_RX_NI
+ 		netif_rx_ni(skb);
++#else
++		netif_rx(skb);
++#endif
+ 
+ 		/* Update statistics */
+ 		dev->stats.rx_bytes += len;
