@@ -3298,7 +3298,7 @@ static int bond_set_mc_list(struct netif_port *dev)
         slave = dev->bond->master.slaves[i];
 
         rte_rwlock_write_lock(&slave->dev_lock);
-        err = __netif_mc_sync_multiple(slave, dev);
+        err = __netif_mc_sync_multiple(slave, dev, dev->bond->master.slave_nb);
         rte_rwlock_write_unlock(&slave->dev_lock);
 
         if (err != EDPVS_OK) {
@@ -3320,10 +3320,11 @@ static int dpdk_set_mc_list(struct netif_port *dev)
     if (rte_eth_allmulticast_get(dev->id) == 1)
         return EDPVS_OK;
 
-    err = __netif_mc_dump(dev, addrs, &naddr);
+    err = __netif_mc_dump(dev, 0, addrs, &naddr);
     if (err != EDPVS_OK)
         return err;
 
+    RTE_LOG(DEBUG, NETIF, "%s: configuring %lu multicast hw-addrs\n", dev->name, naddr);
     err = rte_eth_dev_set_mc_addr_list(dev->id, addrs, naddr);
     if (err) {
         RTE_LOG(WARNING, NETIF, "%s: rte_eth_dev_set_mc_addr_list failed -- %s,"
@@ -3506,6 +3507,7 @@ static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
         return NULL;
     }
     port->in_ptr->dev = port;
+
     for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
         INIT_LIST_HEAD(&port->in_ptr->ifa_list[ii]);
         INIT_LIST_HEAD(&port->in_ptr->ifm_list[ii]);
@@ -3916,7 +3918,6 @@ static int config_fdir_conf(struct rte_fdir_conf *fdir_conf)
 int netif_port_start(struct netif_port *port)
 {
     int ii, ret;
-    lcoreid_t cid;
     queueid_t qid;
     char promisc_on, allmulticast;
     char buf[512];
@@ -4058,13 +4059,10 @@ int netif_port_start(struct netif_port *port)
         port->netif_ops->op_update_addr(port);
 
     /* add in6_addr multicast address */
-    rte_eal_mp_remote_launch(idev_add_mcast_init, port, CALL_MAIN);
-    RTE_LCORE_FOREACH_WORKER(cid) {
-        if ((ret = rte_eal_wait_lcore(cid)) < 0) {
-            RTE_LOG(WARNING, NETIF, "%s: lcore %d: multicast address add failed for device %s\n",
-                    __func__, cid, port->name);
-            return ret;
-        }
+    if ((ret = idev_add_mcast_init(port)) != EDPVS_OK) {
+        RTE_LOG(WARNING, NETIF, "%s: idev_add_mcast_init failed -- %d(%s)\n",
+                __func__, ret, dpvs_strerror(ret));
+        return ret;
     }
 
     /* update rss reta */
@@ -4094,25 +4092,6 @@ int netif_port_stop(struct netif_port *port)
 
     port->flag |= NETIF_PORT_FLAG_STOPPED;
     return EDPVS_OK;
-}
-
-int __netif_set_mc_list(struct netif_port *dev)
-{
-    if (!dev->netif_ops->op_set_mc_list)
-        return EDPVS_NOTSUPP;
-
-    return dev->netif_ops->op_set_mc_list(dev);
-}
-
-int netif_set_mc_list(struct netif_port *dev)
-{
-    int err;
-
-    rte_rwlock_write_lock(&dev->dev_lock);
-    err = __netif_set_mc_list(dev);
-    rte_rwlock_write_unlock(&dev->dev_lock);
-
-    return err;
 }
 
 int netif_port_register(struct netif_port *port)
