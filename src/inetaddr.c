@@ -90,15 +90,15 @@ static inline void idev_put(struct inet_device *idev)
 static inline void imc_hash(struct inet_ifmcaddr *imc, struct inet_device *idev)
 {
     list_add(&imc->d_list, &idev->this_ifm_list);
-    rte_atomic32_inc(&imc->refcnt);
+    ++imc->refcnt;
 }
 
 static inline void imc_unhash(struct inet_ifmcaddr *imc)
 {
-    assert(rte_atomic32_read(&imc->refcnt) > 1);
+    assert(imc->refcnt> 1);
 
     list_del(&imc->d_list);
-    rte_atomic32_dec(&imc->refcnt);
+    --imc->refcnt;
 }
 
 static struct inet_ifmcaddr *imc_lookup(int af, const struct inet_device *idev,
@@ -109,7 +109,7 @@ static struct inet_ifmcaddr *imc_lookup(int af, const struct inet_device *idev,
 
     list_for_each_entry(imc, &idev->ifm_list[cid], d_list) {
         if (inet_addr_equal(af, &imc->addr, maddr)) {
-            rte_atomic32_inc(&imc->refcnt);
+            ++imc->refcnt;
             return imc;
         }
     }
@@ -121,7 +121,7 @@ static void imc_put(struct inet_ifmcaddr *imc)
 {
     char ipstr[64];
 
-    if (rte_atomic32_dec_and_test(&imc->refcnt)) {
+    if (--imc->refcnt == 0) {
         RTE_LOG(DEBUG, IFA, "[%02d] %s: del mcaddr %s\n",
                 rte_lcore_id(), __func__,
                 inet_ntop(imc->af, &imc->addr, ipstr, sizeof(ipstr)));
@@ -136,20 +136,27 @@ static int idev_mc_add(int af, struct inet_device *idev,
     struct inet_ifmcaddr *imc;
     char ipstr[64];
 
-    imc = imc_lookup(af, idev, maddr);
-    if (imc) {
-        imc_put(imc);
-        return EDPVS_EXIST;
+    if (imc_lookup(af, idev, maddr)) {
+        /*
+         * Hold the imc and return.
+         *
+         * Multiple IPv6 unicast address may be mapped to one IPv6 solicated-node
+         * multicast address. So increase the imc refcnt each time idev_mc_add called.
+         *
+         * Possibly imc added repeated? No, at least for now. The imc is set within the
+         * rigid program, not allowing user to configure it.
+         * */
+        return EDPVS_OK;
     }
 
     imc = rte_calloc(NULL, 1, sizeof(struct inet_ifmcaddr), RTE_CACHE_LINE_SIZE);
     if (!imc)
         return EDPVS_NOMEM;
 
-    imc->af   = af;
-    imc->idev = idev;
-    imc->addr = *maddr;
-    rte_atomic32_init(&imc->refcnt);
+    imc->af     = af;
+    imc->idev   = idev;
+    imc->addr   = *maddr;
+    imc->refcnt = 1;
 
     imc_hash(imc, idev);
 
@@ -169,7 +176,10 @@ static int idev_mc_del(int af, struct inet_device *idev,
     if (!imc)
         return EDPVS_NOTEXIST;
 
-    imc_unhash(imc);
+    if (--imc->refcnt == 2) {
+        imc_unhash(imc);
+    }
+
     imc_put(imc);
 
     return EDPVS_OK;
@@ -192,8 +202,6 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add, bool is_master)
 
     if (add) {
         err = idev_mc_add(ifa->af, ifa->idev, &iaddr);
-        if (EDPVS_EXIST == err)
-            return EDPVS_OK;
         if (err)
             return err;
         if (is_master) {
@@ -222,7 +230,7 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add, bool is_master)
 }
 
 /* add ipv6 multicast address after port start */
-int idev_add_mcast_init(void *args)
+static int __idev_add_mcast_init(void *args)
 {
     int err;
     struct inet_device *idev;
@@ -276,6 +284,21 @@ free_idev_nodes:
 errout:
     idev_put(idev);
     return err;
+}
+
+int idev_add_mcast_init(struct netif_port *dev)
+{
+    int err;
+    lcoreid_t cid;
+
+    rte_eal_mp_remote_launch(__idev_add_mcast_init, dev, CALL_MAIN);
+    RTE_LCORE_FOREACH_WORKER(cid) {
+        err = rte_eal_wait_lcore(cid);
+        if (unlikely(err < 0))
+            return err;
+    }
+
+    return EDPVS_OK;
 }
 
 /* refer to linux:ipv6_chk_mcast_addr */
