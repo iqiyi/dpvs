@@ -218,7 +218,7 @@ RS=192.168.100.2
 
 ./dpip addr add ${VIP}/24 dev dpdk0
 ./ipvsadm -A -t ${VIP}:80 -s rr
-./ipvsadm -a -t ${VIP}:80 -r ${RS} -b
+./ipvsadm -a -t ${VIP}:80 -r ${RS}:80 -b
 
 ./ipvsadm --add-laddr -z ${LIP} -t ${VIP}:80 -F dpdk0
 $
