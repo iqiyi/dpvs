@@ -17,18 +17,22 @@ jobs:
     runs-on: self-hosted
     env:
       PKG_CONFIG_PATH: /data/dpdk/dpdklib/lib64/pkgconfig
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-    - uses: actions/checkout@v2
-    - name: make
+    - name: Checkout Code
+      uses: actions/checkout@v3
+    - name: build
       run: make -j
       
   build-all:
     runs-on: self-hosted
     env:
       PKG_CONFIG_PATH: /data/dpdk/dpdklib/lib64/pkgconfig
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-    - uses: actions/checkout@v2
-    - name: config
+    - name: Checkout Code
+      uses: actions/checkout@v3
+    - name: Config
       run: sed -i 's/=n$/=y/' config.mk
-    - name: make
+    - name: build
       run: make -j
