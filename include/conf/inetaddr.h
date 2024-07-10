@@ -100,4 +100,17 @@ struct inet_addr_front {
 };
 #endif /* CONFIG_DPVS_AGENT */
 
+struct inet_maddr_entry {
+    char             ifname[IFNAMSIZ];
+    union inet_addr  maddr;
+    int              af;
+    uint32_t         flags;
+    uint32_t         refcnt;
+} __attribute__((__packed__));
+
+struct inet_maddr_array {
+    int                      nmaddr;
+    struct inet_maddr_entry  maddrs[0];
+} __attribute__((__packed__));
+
 #endif /* __DPVS_INETADDR_CONF_H__ */

@@ -23,6 +23,7 @@
  */
 #include "netif.h"
 #include "netif_addr.h"
+#include "conf/netif_addr.h"
 #include "kni.h"
 
 int __netif_hw_addr_add(struct netif_hw_addr_list *list,
@@ -279,16 +280,8 @@ int netif_mc_dump(struct netif_port *dev, uint16_t filter_flags,
     return err;
 }
 
-/* only used in __netif_mc_dump_all */
-struct netif_hw_addr_entry {
-    struct rte_ether_addr   addr;
-    uint32_t                refcnt;
-    uint16_t                flags;
-    uint16_t                sync_cnt;
-};
-
 static int __netif_mc_dump_all(struct netif_port *dev, uint16_t filter_flags,
-        struct netif_hw_addr_entry *addrs, size_t *naddr)
+        struct netif_hw_addr_entry *addrs, int *naddr)
 {
     struct netif_hw_addr *ha;
     int off = 0;
@@ -297,7 +290,7 @@ static int __netif_mc_dump_all(struct netif_port *dev, uint16_t filter_flags,
         return EDPVS_NOROOM;
 
     list_for_each_entry(ha, &dev->mc.addrs, list) {
-        rte_ether_addr_copy(&ha->addr, &addrs[off].addr);
+        eth_addr_dump(&ha->addr, addrs[off].addr, sizeof(addrs[off].addr));
         addrs[off].refcnt = rte_atomic32_read(&ha->refcnt);
         addrs[off].flags = ha->flags;
         addrs[off].sync_cnt = ha->sync_cnt;
@@ -312,7 +305,7 @@ int __netif_mc_print(struct netif_port *dev,
                      char *buf, int *len, int *pnaddr)
 {
     struct netif_hw_addr_entry addrs[NETIF_MAX_HWADDR];
-    size_t naddr = NELEMS(addrs);
+    int naddr = NELEMS(addrs);
     int err, i;
     int strlen = 0;
 
@@ -322,10 +315,8 @@ int __netif_mc_print(struct netif_port *dev,
 
     for (i = 0; i < naddr && *len > strlen; i++) {
         err = snprintf(buf + strlen, *len - strlen,
-                "        link %02x:%02x:%02x:%02x:%02x:%02x %srefcnt %d, synced %d\n",
-                addrs[i].addr.addr_bytes[0], addrs[i].addr.addr_bytes[1],
-                addrs[i].addr.addr_bytes[2], addrs[i].addr.addr_bytes[3],
-                addrs[i].addr.addr_bytes[4], addrs[i].addr.addr_bytes[5],
+                "        link %s %srefcnt %d, synced %d\n",
+                addrs[i].addr,
                 addrs[i].flags & HW_ADDR_F_FROM_KNI ? "(kni) ": "",
                 addrs[i].refcnt, addrs[i].sync_cnt);
         if (err < 0) {
@@ -343,6 +334,33 @@ errout:
     *len = 0;
     *pnaddr = 0;
     buf[0] = '\0';
+    return err;
+}
+
+int netif_get_multicast_addrs(struct netif_port *dev, void **out, size_t *outlen)
+{
+    int err;
+    size_t len;
+    struct netif_hw_addr_array *array;
+
+    rte_rwlock_read_lock(&dev->dev_lock);
+    len = sizeof(*array) + dev->mc.count * sizeof(struct netif_hw_addr_entry);
+    array = rte_zmalloc(NULL, len, RTE_CACHE_LINE_SIZE);
+    if (unlikely(!array)) {
+        err = EDPVS_NOMEM;
+    } else {
+        array->count = dev->mc.count;
+        err = __netif_mc_dump_all(dev, 0, array->entries, &array->count);
+    }
+    rte_rwlock_read_unlock(&dev->dev_lock);
+
+    if (err != EDPVS_OK) {
+        *out = NULL;
+        *outlen = 0;
+    } else {
+        *out = array;
+        *outlen = len;
+    }
     return err;
 }
 

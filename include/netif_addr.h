@@ -24,9 +24,7 @@
 #ifndef __DPVS_NETIF_ADDR_H__
 #define __DPVS_NETIF_ADDR_H__
 
-enum {
-    HW_ADDR_F_FROM_KNI   = 1,   // from linux kni device in local layer
-};
+#include "conf/netif_addr.h"
 
 struct netif_hw_addr {
     struct list_head        list;
@@ -55,6 +53,7 @@ int netif_mc_add(struct netif_port *dev, const struct rte_ether_addr *addr);
 int netif_mc_del(struct netif_port *dev, const struct rte_ether_addr *addr);
 void netif_mc_flush(struct netif_port *dev);
 void netif_mc_init(struct netif_port *dev);
+
 int __netif_mc_dump(struct netif_port *dev, uint16_t filter_flags,
         struct rte_ether_addr *addrs, size_t *naddr);
 int netif_mc_dump(struct netif_port *dev, uint16_t filter_flags,
@@ -73,6 +72,8 @@ int __netif_mc_sync_multiple(struct netif_port *to, struct netif_port *from, int
 int netif_mc_sync_multiple(struct netif_port *to, struct netif_port *from, int sync_cnt);
 int __netif_mc_unsync_multiple(struct netif_port *to, struct netif_port *from, int sync_cnt);
 int netif_mc_unsync_multiple(struct netif_port *to, struct netif_port *from, int sync_cnt);
+
+int netif_get_multicast_addrs(struct netif_port *dev, void **out, size_t *outlen);
 
 static inline int eth_addr_equal(const struct rte_ether_addr *addr1,
                                  const struct rte_ether_addr *addr2)

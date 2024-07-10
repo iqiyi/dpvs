@@ -34,7 +34,7 @@
 #include "conf/common.h"
 #include "dpdk.h"
 #include "netif.h"
-#include "netif_addr.h"
+#include "conf/netif_addr.h"
 #include "ctrl.h"
 #include "kni.h"
 #include "vlan.h"

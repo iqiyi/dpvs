@@ -101,8 +101,10 @@ static inline int get_netif_port_list(void)
     if (g_nic_list)
         free(g_nic_list);
     g_nic_list = calloc(1, len);
-    if (!g_nic_list)
+    if (!g_nic_list) {
+        dpvs_sockopt_msg_free((void *)p_port_list);
         return EDPVS_NOMEM;
+    }
 
     memcpy(g_nic_list, p_port_list, len);
 
@@ -501,6 +503,7 @@ static int dump_bond_status(char *name, int namelen)
             p_get->link_up_prop_delay);
     if (p_get->slave_nb > NETIF_MAX_BOND_SLAVES) {
         printf("too many slaves: %d\n", p_get->slave_nb);
+        dpvs_sockopt_msg_free(p_get);
         return EDPVS_INVAL;
     }
     for (i = 0; i < p_get->slave_nb; i++) {
@@ -514,6 +517,7 @@ static int dump_bond_status(char *name, int namelen)
     }
     printf("\n");
 
+    dpvs_sockopt_msg_free(p_get);
     return EDPVS_OK;
 }
 
