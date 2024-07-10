@@ -91,6 +91,7 @@ static inline void imc_hash(struct inet_ifmcaddr *imc, struct inet_device *idev)
 {
     list_add(&imc->d_list, &idev->this_ifm_list);
     ++imc->refcnt;
+    ++idev->this_ifm_cnt;
 }
 
 static inline void imc_unhash(struct inet_ifmcaddr *imc)
@@ -99,6 +100,7 @@ static inline void imc_unhash(struct inet_ifmcaddr *imc)
 
     list_del(&imc->d_list);
     --imc->refcnt;
+    --imc->idev->this_ifm_cnt;
 }
 
 static struct inet_ifmcaddr *imc_lookup(int af, const struct inet_device *idev,
@@ -1833,6 +1835,39 @@ errout:
     return err;
 }
 
+static int ifmaddr_fill_entries(struct inet_device *idev, struct inet_maddr_array **parray, int *plen)
+{
+    lcoreid_t cid;
+    int ifm_cnt, len, off;
+    struct inet_ifmcaddr *ifm;
+    struct inet_maddr_array *array;
+
+    cid = rte_lcore_id();
+    ifm_cnt = idev->ifm_cnt[cid];
+
+    len = sizeof(struct inet_maddr_array) + ifm_cnt * sizeof(struct inet_maddr_entry);
+    array = rte_calloc(NULL, 1, len, RTE_CACHE_LINE_SIZE);
+    if (unlikely(!array))
+        return EDPVS_NOMEM;
+
+    off = 0;
+    list_for_each_entry(ifm, &idev->ifm_list[cid], d_list) {
+        strncpy(array->maddrs[off].ifname, ifm->idev->dev->name,
+                sizeof(array->maddrs[off].ifname) - 1);
+        array->maddrs[off].maddr  = ifm->addr;
+        array->maddrs[off].af     = ifm->af;
+        array->maddrs[off].flags  = ifm->flags;
+        array->maddrs[off].refcnt = ifm->refcnt;
+        if (++off >= ifm_cnt)
+            break;
+    }
+    array->nmaddr = off;
+
+    *parray = array;
+    *plen   = len;
+    return EDPVS_OK;
+}
+
 static int ifa_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
 {
     struct netif_port *dev;
@@ -1967,60 +2002,92 @@ static int ifa_sockopt_get(sockoptid_t opt, const void *conf, size_t size,
     int err, len = 0;
     struct netif_port *dev;
     struct inet_device *idev = NULL;
+
     struct inet_addr_data_array *array = NULL;
     const struct inet_addr_param *param = conf;
 
-    if (!conf || size < sizeof(struct inet_addr_param) || !out || !outsize)
+    struct inet_maddr_array *marray = NULL;
+    const char *ifname = conf;
+
+    if (!conf || !out || !outsize)
         return EDPVS_INVAL;
 
-    if (opt != SOCKOPT_GET_IFADDR_SHOW)
-        return EDPVS_NOTSUPP;
+    switch (opt) {
+    case SOCKOPT_GET_IFADDR_SHOW:
+        if (size < sizeof(struct inet_addr_param) || param->ifa_ops != INET_ADDR_GET)
+            return EDPVS_INVAL;
 
-    if (param->ifa_ops != INET_ADDR_GET)
-        return EDPVS_INVAL;
+        if (param->ifa_entry.af != AF_INET &&
+            param->ifa_entry.af != AF_INET6 &&
+            param->ifa_entry.af != AF_UNSPEC)
+            return EDPVS_NOTSUPP;
 
-    if (param->ifa_entry.af != AF_INET &&
-        param->ifa_entry.af != AF_INET6 &&
-        param->ifa_entry.af != AF_UNSPEC)
-        return EDPVS_NOTSUPP;
-
-    if (strlen(param->ifa_entry.ifname)) {
-        dev = netif_port_get_by_name(param->ifa_entry.ifname);
-        if (!dev) {
-            RTE_LOG(WARNING, IFA, "%s: no such device: %s\n",
-                    __func__, param->ifa_entry.ifname);
-            return EDPVS_NOTEXIST;
+        if (strlen(param->ifa_entry.ifname)) {
+            dev = netif_port_get_by_name(param->ifa_entry.ifname);
+            if (!dev) {
+                RTE_LOG(WARNING, IFA, "%s: no such device: %s\n",
+                        __func__, param->ifa_entry.ifname);
+                return EDPVS_NOTEXIST;
+            }
+            idev = dev_get_idev(dev);
+            if (!idev)
+                return EDPVS_RESOURCE;
         }
 
+        if (param->ifa_ops_flags & IFA_F_OPS_VERBOSE)
+            err = ifaddr_get_verbose(idev, &array, &len);
+        else if (param->ifa_ops_flags & IFA_F_OPS_STATS)
+            err = ifaddr_get_stats(idev, &array, &len);
+        else
+            err = ifaddr_get_basic(idev, &array, &len);
+
+        if (err != EDPVS_OK) {
+            RTE_LOG(WARNING, IFA, "%s: fail to get inet addresses -- %s!\n",
+                    __func__, dpvs_strerror(err));
+            return err;
+        }
+
+        if (idev)
+            idev_put(idev);
+
+        if (array) {
+            array->ops = INET_ADDR_GET;
+            array->ops_flags = param->ifa_ops_flags;
+        }
+
+        *out = array;
+        *outsize = len;
+        break;
+    case SOCKOPT_GET_IFMADDR_SHOW:
+        if (!size || strlen(ifname) == 0)
+            return EDPVS_INVAL;
+
+        dev = netif_port_get_by_name(ifname);
+        if (!dev) {
+            RTE_LOG(WARNING, IFA, "%s: no such device: %s\n", __func__, ifname);
+            return EDPVS_NOTEXIST;
+        }
         idev = dev_get_idev(dev);
         if (!idev)
             return EDPVS_RESOURCE;
-    }
 
-    if (param->ifa_ops_flags & IFA_F_OPS_VERBOSE)
-        err = ifaddr_get_verbose(idev, &array, &len);
-    else if (param->ifa_ops_flags & IFA_F_OPS_STATS)
-        err = ifaddr_get_stats(idev, &array, &len);
-    else
-        err = ifaddr_get_basic(idev, &array, &len);
+        err = ifmaddr_fill_entries(idev, &marray, &len);
+        if (err != EDPVS_OK) {
+            RTE_LOG(WARNING, IFA, "%s: fail to get inet maddresses -- %s!\n",
+                    __func__, dpvs_strerror(err));
+            return err;
+        }
 
-    if (err != EDPVS_OK) {
-        RTE_LOG(WARNING, IFA, "%s: fail to get inet addresses -- %s!\n",
-                __func__, dpvs_strerror(err));
-        return err;
-    }
-
-    if (idev)
         idev_put(idev);
 
-    if (array) {
-        array->ops = INET_ADDR_GET;
-        array->ops_flags = param->ifa_ops_flags;
+        *out = marray;
+        *outsize = len;
+        break;
+    default:
+        *out = NULL;
+        *outsize = 0;
+        return EDPVS_NOTSUPP;
     }
-
-    *out = array;
-    *outsize = len;
-
     return EDPVS_OK;
 }
 
@@ -2067,7 +2134,7 @@ static struct dpvs_sockopts ifa_sockopts = {
     .set_opt_max    = SOCKOPT_SET_IFADDR_FLUSH,
     .set            = ifa_sockopt_set,
     .get_opt_min    = SOCKOPT_GET_IFADDR_SHOW,
-    .get_opt_max    = SOCKOPT_GET_IFADDR_SHOW,
+    .get_opt_max    = SOCKOPT_GET_IFMADDR_SHOW,
     .get            = ifa_sockopt_get,
 };
 

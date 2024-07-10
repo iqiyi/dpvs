@@ -28,6 +28,7 @@
 #include "conf/common.h"
 #include "netif.h"
 #include "netif_addr.h"
+#include "conf/netif_addr.h"
 #include "vlan.h"
 #include "ctrl.h"
 #include "list.h"
@@ -5179,6 +5180,15 @@ static int netif_sockopt_get(sockoptid_t opt, const void *in, size_t inlen,
             if (!port)
                 return EDPVS_NOTEXIST;
             ret = get_bond_status(port, out, outlen);
+            break;
+        case SOCKOPT_NETIF_GET_MADDR:
+            if (!in)
+                return EDPVS_INVAL;
+            name = (char *)in;
+            port = netif_port_get_by_name(name);
+            if (!port)
+                return EDPVS_NOTEXIST;
+            ret = netif_get_multicast_addrs(port, out, outlen);
             break;
         default:
             RTE_LOG(WARNING, NETIF,
