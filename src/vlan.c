@@ -241,6 +241,7 @@ int vlan_add_dev(struct netif_port *real_dev, const char *ifname,
     dev->flag &= ~NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
+    dev->flag &= ~NETIF_PORT_FLAG_LLDP;
     dev->type = PORT_TYPE_VLAN;
     rte_ether_addr_copy(&real_dev->addr, &dev->addr);
 

@@ -204,6 +204,7 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     dev->flag &= ~NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
+    dev->flag &= ~NETIF_PORT_FLAG_LLDP;
 
     err = netif_port_register(dev);
     if (err != EDPVS_OK) {

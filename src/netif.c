@@ -161,14 +161,30 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 /* function declarations */
 static void kni_lcore_loop(void *dummy);
 
-static inline bool is_physical_port(portid_t pid)
+bool is_physical_port(portid_t pid)
 {
     return pid >= phy_pid_base && pid < phy_pid_end;
 }
 
-static inline bool is_bond_port(portid_t pid)
+bool is_bond_port(portid_t pid)
 {
     return pid >= bond_pid_base && pid < bond_pid_end;
+}
+
+void netif_physical_port_range(portid_t *start, portid_t *end)
+{
+    if (start)
+        *start = phy_pid_base;
+    if (end)
+        *end = phy_pid_end;
+}
+
+void netif_bond_port_range(portid_t *start, portid_t *end)
+{
+    if (start)
+        *start = bond_pid_base;
+    if (end)
+        *end = bond_pid_end;
 }
 
 bool is_lcore_id_valid(lcoreid_t cid)
@@ -2536,6 +2552,10 @@ void lcore_process_packets(struct rte_mbuf **mbufs, lcoreid_t cid, uint16_t coun
             lcore_stats[cid].dropped++;
             continue;
         }
+
+        /* some protocols like LLDP may still like the originated port */
+        MBUF_USERDATA(mbuf, portid_t, MBUF_FIELD_ORIGIN_PORT) = mbuf->port;
+
         if (dev->type == PORT_TYPE_BOND_SLAVE) {
             dev = dev->bond->slave.master;
             mbuf->port = dev->id;
@@ -3448,6 +3468,10 @@ static inline void setup_dev_of_flags(struct netif_port *port)
     }
     if (port->dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM)
         port->flag |= NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD;
+
+    /* enable lldp on physical port */
+    if (is_physical_port(port->id))
+        port->flag |= NETIF_PORT_FLAG_LLDP;
 }
 
 /* TODO: refactor it with netif_alloc */
@@ -4832,6 +4856,8 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
         get->ol_tx_tcp_csum = 1;
     if (port->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD)
         get->ol_tx_udp_csum = 1;
+    if (port->flag & NETIF_PORT_FLAG_LLDP)
+        get->lldp = 1;
 
     *out = get;
     *out_len = sizeof(netif_nic_basic_get_t);
@@ -5316,6 +5342,11 @@ static int set_port(struct netif_port *port, const netif_nic_set_t *port_cfg)
         port->flag |= NETIF_PORT_FLAG_TC_INGRESS;
     else if (port_cfg->tc_ingress_off)
         port->flag &= (~NETIF_PORT_FLAG_TC_INGRESS);
+
+    if (port_cfg->lldp_on)
+        port->flag |= NETIF_PORT_FLAG_LLDP;
+    else if (port_cfg->lldp_off)
+        port->flag &= (~NETIF_PORT_FLAG_LLDP);
 
     return EDPVS_OK;
 }

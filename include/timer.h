@@ -17,6 +17,7 @@
  */
 #ifndef __DPVS_TIMER_H__
 #define __DPVS_TIMER_H__
+#include <stdint.h>
 #include <sys/time.h>
 #include "list.h"
 

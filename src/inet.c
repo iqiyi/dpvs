@@ -28,6 +28,7 @@
 #include "icmp.h"
 #include "icmp6.h"
 #include "inetaddr.h"
+#include "lldp.h"
 
 #define INET
 #define RTE_LOGTYPE_INET RTE_LOGTYPE_USER1
@@ -99,6 +100,8 @@ int inet_init(void)
         return err;
     if ((err = inet_addr_init()) != 0)
         return err;
+    if ((err = dpvs_lldp_init()) != 0)
+        return err;
 
     return EDPVS_OK;
 }
@@ -107,6 +110,8 @@ int inet_term(void)
 {
     int err;
 
+    if ((err = dpvs_lldp_term()) != 0)
+        return err;
     if ((err = inet_addr_term()) != 0)
         return err;
     if ((err = icmpv6_term()) != 0)

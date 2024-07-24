@@ -17,6 +17,7 @@ global_defs {
     ! log_async_mode    off
     ! kni               on
     ! pdump             off
+    lldp                on
 }
 
 ! netif config

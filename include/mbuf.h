@@ -61,6 +61,7 @@ typedef void * mbuf_userdata_field_route_t;
 typedef enum {
     MBUF_FIELD_PROTO = 0,
     MBUF_FIELD_ROUTE,
+    MBUF_FIELD_ORIGIN_PORT,
 } mbuf_usedata_field_t;
 
 /**
