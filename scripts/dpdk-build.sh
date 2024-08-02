@@ -5,7 +5,7 @@
 build_options="-Denable_kmods=true"
 debug_options="-Dbuildtype=debug -Dc_args=-DRTE_MALLOC_DEBUG"
 
-dpdkver=20.11.1                             # default dpdk version (use stable version)
+dpdkver=20.11.10                            # default dpdk version (use stable version)
 tarball=dpdk-${dpdkver}.tar.xz
 srcdir=dpdk-stable-$dpdkver
 
@@ -23,29 +23,16 @@ function help()
     echo -e "\033[31m    -p    specify the dpdk patch directory, default $(pwd)/patch/dpdk-stable-$dpdkver\033[0m"
 }
 
-function getfullpath()
-{
-     local dir=$(dirname $1)
-     local base=$(basename $1)
-     if test -d ${dir}; then
-         pushd ${dir} >/dev/null 2>&1
-         echo ${PWD}/${base}
-         popd >/dev/null 2>&1
-         return 0
-     fi
-     return 1
-}
-
 function set_work_directory()
 {
     [ ! -d $1 ] && return 1
-    workdir=$(getfullpath $1)/dpdk
+    workdir=$(realpath $1)/dpdk
 }
 
 function set_patch_directory()
 {
     [ ! -d $1 ] && return 1
-    patchdir=$(getfullpath $1)
+    patchdir=$(realpath $1)
 }
 
 ## parse args

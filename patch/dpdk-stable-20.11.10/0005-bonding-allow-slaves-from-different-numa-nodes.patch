@@ -1,0 +1,50 @@
+From 30c3918317ea30a7586f2c081a6623c4574dade9 Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@iqiyi.com>
+Date: Wed, 4 Aug 2021 15:16:04 +0800
+Subject: [PATCH 5/7] bonding: allow slaves from different numa nodes
+
+Note the patch may have a negative influnce on performance.
+It's not a good practice to bonding slaves across numa nodes.
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 0c9a1df..371c888 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1780,7 +1780,14 @@ struct bwg_slave {
+ 
+ 		errval = rte_eth_rx_queue_setup(slave_eth_dev->data->port_id, q_id,
+ 				bd_rx_q->nb_rx_desc,
+-				rte_eth_dev_socket_id(slave_eth_dev->data->port_id),
++				// In spite of performance problem, bonding slaves had better to support
++				// slaves from different numa nodes. Considering that numa node on which
++				// the resources of bonding port is allocated from is specified by
++				// rte_eth_bond_create() at bonding creation, the slave's queue_setup
++				// would fail if specified with the slave's numa node id that is different
++				// from the one of the bonding port. See rte_eth_dma_zone_reserve() for
++				// details.
++				SOCKET_ID_ANY,
+ 				&(bd_rx_q->rx_conf), bd_rx_q->mb_pool);
+ 		if (errval != 0) {
+ 			RTE_BOND_LOG(ERR,
+@@ -1796,7 +1803,14 @@ struct bwg_slave {
+ 
+ 		errval = rte_eth_tx_queue_setup(slave_eth_dev->data->port_id, q_id,
+ 				bd_tx_q->nb_tx_desc,
+-				rte_eth_dev_socket_id(slave_eth_dev->data->port_id),
++				// In spite of performance problem, bonding slaves had better to support
++				// slaves from different numa nodes. Considering that numa node on which
++				// the resources of bonding port is allocated from is specified by
++				// rte_eth_bond_create() at bonding creation, the slave's queue_setup
++				// would fail if specified with the slave's numa node id that is different
++				// from the one of the bonding port. See rte_eth_dma_zone_reserve() for
++				// details.
++				SOCKET_ID_ANY,
+ 				&bd_tx_q->tx_conf);
+ 		if (errval != 0) {
+ 			RTE_BOND_LOG(ERR,
+-- 
+1.8.3.1
+
