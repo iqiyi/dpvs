@@ -209,6 +209,11 @@ int mbuf_init(void)
             .size = sizeof(mbuf_userdata_field_route_t),
             .align = 8,
         },
+        [ MBUF_FIELD_ORIGIN_PORT ] = {
+            .name = "origin_port",
+            .size = sizeof(portid_t),
+            .align = 2,
+        },
     };
 
     for (i = 0; i < NELEMS(rte_mbuf_userdata_fields); i++) {

@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <linux/if_ether.h>
 
 typedef uint32_t sockoptid_t;
@@ -142,6 +143,7 @@ int linux_get_link_status(const char *ifname, int *if_flags, char *if_flags_str,
 int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN]);
 int linux_hw_mc_add(const char *ifname, const uint8_t hwma[ETH_ALEN]);
 int linux_hw_mc_del(const char *ifname, const uint8_t hwma[ETH_ALEN]);
+int linux_ifname2index(const char *ifname);
 
 /* read "n" bytes from a descriptor */
 ssize_t readn(int fd, void *vptr, size_t n);
@@ -165,5 +167,41 @@ static inline char *strlwr(char *str) {
         *s = tolower(*s);
     return str;
 }
+
+/* convert hexadecimal string to binary sequence, return the converted binary length
+ * note: buflen should be half in size of len at least */
+int hexstr2binary(const char *hexstr, size_t len, uint8_t *buf, size_t buflen);
+
+/* convert binary sequence to hexadecimal string, return the converted string length
+ * note: buflen should be twice in size of len at least */
+int binary2hexstr(const uint8_t *hex, size_t len, char *buf, size_t buflen);
+
+/* convert binary sequence to printable or hexadecimal string, return the converted string length
+ * note: buflen should be triple in size of len in the worst case */
+int binary2print(const uint8_t *hex, size_t len, char *buf, size_t buflen);
+
+/* get prefix from network mask */
+int mask2prefix(const struct sockaddr *addr);
+
+/* get host addresses and corresponding interfaces
+ *
+ * Loopback addresses, ipv6 link local addresses, and addresses on linked-down
+ * or not-running interface are ignored. If multiple addresses matched, return
+ * the address of the least prefix length.
+ *
+ * Params:
+ *   @ifname: preferred interface where to get host address, can be NULL
+ *   @result4: store ipv4 address found, can be NULL
+ *   @result6: store ipv6 address found, can be NULL
+ *   @ifname4: interface name of ipv4 address, can be NULL
+ *   @ifname6: interface name of ipv6 address, can be NULL
+ * Return:
+ *   1: only ipv4 address found
+ *   2: only ipv6 address found
+ *   3: both ipv4 and ipv6 address found
+ *   dpvs error code: error occurred
+ * */
+int get_host_addr(const char *ifname, struct sockaddr_storage *result4,
+        struct sockaddr_storage *result6, char *ifname4, char *ifname6);
 
 #endif /* __DPVS_COMMON_H__ */

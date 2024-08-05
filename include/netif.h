@@ -48,6 +48,7 @@ enum {
     NETIF_PORT_FLAG_TC_EGRESS               = (0x1<<10),
     NETIF_PORT_FLAG_TC_INGRESS              = (0x1<<11),
     NETIF_PORT_FLAG_NO_ARP                  = (0x1<<12),
+    NETIF_PORT_FLAG_LLDP                    = (0x1<<13),
 };
 
 /* max tx/rx queue number for each nic */
@@ -262,11 +263,15 @@ int netif_unregister_pkt(struct pkt_type *pt);
 
 /**************************** port API ******************************/
 struct netif_port* netif_port_get(portid_t id);
+/* get netif by name, fail return NULL */
+struct netif_port* netif_port_get_by_name(const char *name);
+bool is_physical_port(portid_t pid);
+bool is_bond_port(portid_t pid);
+void netif_physical_port_range(portid_t *start, portid_t *end);
+void netif_bond_port_range(portid_t *start, portid_t *end);
 /* port_conf can be NULL for default port configure */
 int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *len);
 int netif_print_port_queue_conf(portid_t pid, char *buf, int *len);
-/* get netif by name, fail return NULL */
-struct netif_port* netif_port_get_by_name(const char *name);
 // function only for init or termination //
 int netif_port_conf_get(struct netif_port *port, struct rte_eth_conf *eth_conf);
 int netif_port_conf_set(struct netif_port *port, const struct rte_eth_conf *conf);
