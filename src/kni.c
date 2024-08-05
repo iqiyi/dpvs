@@ -34,7 +34,7 @@
 #include "conf/common.h"
 #include "dpdk.h"
 #include "netif.h"
-#include "netif_addr.h"
+#include "conf/netif_addr.h"
 #include "ctrl.h"
 #include "kni.h"
 #include "vlan.h"
@@ -108,7 +108,7 @@ static int kni_mc_list_cmp_set(struct netif_port *dev,
     rte_rwlock_write_lock(&dev->dev_lock);
 
     naddr_old = NELEMS(addrs_old);
-    err = __netif_mc_dump(dev, addrs_old, &naddr_old);
+    err = __netif_mc_dump(dev, HW_ADDR_F_FROM_KNI, addrs_old, &naddr_old);
     if (err != EDPVS_OK) {
         RTE_LOG(ERR, Kni, "%s: fail to get current mc list\n", __func__);
         goto out;
@@ -162,14 +162,14 @@ static int kni_mc_list_cmp_set(struct netif_port *dev,
             /* nothing */
             break;
         case 1:
-            err = __netif_mc_add(dev, &chg_lst.addrs[i]);
+            err = __netif_hw_addr_add(&dev->mc, &chg_lst.addrs[i], HW_ADDR_F_FROM_KNI);
 
             RTE_LOG(INFO, Kni, "%s: add mc addr: %s %s %s\n", __func__,
                     eth_addr_dump(&chg_lst.addrs[i], mac, sizeof(mac)),
                     dev->name, dpvs_strerror(err));
             break;
         case 2:
-            err = __netif_mc_del(dev, &chg_lst.addrs[i]);
+            err = __netif_hw_addr_del(&dev->mc, &chg_lst.addrs[i], HW_ADDR_F_FROM_KNI);
 
             RTE_LOG(INFO, Kni, "%s: del mc addr: %s %s %s\n", __func__,
                     eth_addr_dump(&chg_lst.addrs[i], mac, sizeof(mac)),
@@ -246,7 +246,7 @@ static int kni_rtnl_check(void *arg)
 {
     struct netif_port *dev = arg;
     int fd = dev->kni.kni_rtnl_fd;
-    int n, i;
+    int n, i, link_flags = 0;
     char buf[4096];
     struct nlmsghdr *nlh = (struct nlmsghdr *)buf;
     bool update = false;
@@ -284,6 +284,14 @@ static int kni_rtnl_check(void *arg)
     /* note we should not update kni mac list for every event ! */
     if (update) {
         RTE_LOG(DEBUG, Kni, "%d events received!\n", i);
+        if (EDPVS_OK != linux_get_link_status(dev->kni.name, &link_flags, NULL, 0)) {
+            RTE_LOG(ERR, Kni, "%s：undetermined kni link status\n", dev->kni.name);
+            return DTIMER_OK;
+        }
+        if (!(link_flags & IFF_UP)) {
+            RTE_LOG(DEBUG, Kni, "skip link down kni device %s\n", dev->kni.name);
+            return DTIMER_OK;
+        }
         if (kni_update_maddr(dev) == EDPVS_OK)
             RTE_LOG(DEBUG, Kni, "update maddr of %s OK!\n", dev->name);
         else
