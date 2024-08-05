@@ -580,6 +580,7 @@ static int lldp_on_change_ttl(const struct lldp_entry *e)
 {
     struct lldp_port *port = e->port;
     uint16_t ttl;
+    const void *ptr;
 
     /* Lifespan of local lldp caches is not decided by ttl. Actually, they are
      * updated periodically in every DPVS_LLDP_UPDATE_INTERVAL second. If not updated
@@ -588,7 +589,8 @@ static int lldp_on_change_ttl(const struct lldp_entry *e)
     if (port->neigh == DPVS_LLDP_NODE_LOCAL)
         return EDPVS_OK;
 
-    ttl = rte_be_to_cpu_16(*((uint16_t *)e->value));
+    ptr = &e->value[0];
+    ttl = rte_be_to_cpu_16(*((uint16_t *)ptr));
     if (ttl != port->timeout) {
         RTE_LOG(INFO, LLDP, "%s: update neigh lldp ttl %u -> %u\n", __func__, port->timeout, ttl);
         port->timeout = ttl;
@@ -762,11 +764,14 @@ static int lldp_dump_sys_cap(const struct lldp_entry *e, char *buf, size_t len)
     uint16_t capacities, enables;
     int pos = 0;
     char tbuf[256];
+    const void *ptr;
 
     if (e->len != 4)
         return EDPVS_INVPKT;
-    capacities = rte_be_to_cpu_16(*((uint16_t *)&e->value[0]));
-    enables = rte_be_to_cpu_16(*((uint16_t *)&e->value[2]));
+    ptr = &e->value[0];
+    capacities = rte_be_to_cpu_16(*((uint16_t *)ptr));
+    ptr = &e->value[2];
+    enables = rte_be_to_cpu_16(*((uint16_t *)ptr));
 
     lldp_dump_snprintf(tbuf, pos, "System Capabilities TLV (%d)\n", e->type.type);
 
@@ -832,6 +837,7 @@ static int lldp_local_pdu_mng_addr(const struct netif_port *dev, uint32_t subtyp
     uint8_t *ptr;
     struct sockaddr_storage addr;
     char ifname[IFNAMSIZ];
+    uint16_t typlen;
 
     ptr = tbuf + 2;
     *(ptr + 1) = subtype;
@@ -884,7 +890,8 @@ static int lldp_local_pdu_mng_addr(const struct netif_port *dev, uint32_t subtyp
     ptr += 4;           /* OID String Length */
     *ptr++ = 0;
 
-    *((uint16_t *)tbuf) = DPVS_LLDP_TL(LLDP_TYPE_MNG_ADDR, ptr - tbuf - 2);
+    typlen = DPVS_LLDP_TL(LLDP_TYPE_MNG_ADDR, ptr - tbuf - 2);
+    rte_memcpy(tbuf, &typlen, 2);
 
     if (ptr - tbuf > len)
         rte_memcpy(buf, tbuf, len);
@@ -1625,8 +1632,9 @@ static int lldp_rcv_msg_cb(struct dpvs_msg *msg)
     portid_t pid, start, end;
     struct netif_port *dev;
     struct rte_mbuf *mbuf;
+    void *msgdata = msg->data;
 
-    mbuf = *(struct rte_mbuf **)(msg->data);
+    mbuf = *(struct rte_mbuf **)msgdata;
 
     pid = mbuf->port;
     netif_bond_port_range(&start, &end);
