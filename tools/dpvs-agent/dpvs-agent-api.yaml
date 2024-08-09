@@ -166,16 +166,16 @@ parameters:
     in: path
     type: string
     required: true
-  ipset-object:
-    name: object
-    in: path
-    type: string
-    required: true
   ipset-param:
     name: ipsetParam
     in: body
     schema:
-      "$ref": "#/definitions/IpsetParam"
+      $ref: "#/definitions/IpsetInfo"
+  ipset-cell:
+    name: ipsetCell
+    in: body
+    schema:
+      $ref: "#/definitions/IpsetCell"
 definitions:
   NodeServiceSnapshot:
     type: object
@@ -657,17 +657,32 @@ definitions:
       Match:
         "$ref": "#/definitions/MatchSpec"
   IpsetOption:
-    description: IpsetOption mirrors include/conf/ipset.h::ipset_option.
+    description: IpsetOption defines common options for ipset operations.
     type: object
+    properties:
+      NoMatch:
+        description: >
+          Nomatch excludes a small element range from an ipset,
+          which is mainly used by network-cidr based ipset.
+        type: boolean
+        default: false
+      Force:
+        description: >
+          When add members to ipset with Force set, the already existing members
+          are replaced sliently instead of emitting an EDPVS_EXIST error; When delete
+          non-existent memebers from ipset, the DPSVS_NOTEXIST error is ignored.
+        type: boolean
+        default: false
+  IpsetCreationOption:
+    description: >
+      IpsetCreationOption contains all available options required
+      in creating an ipset.
     properties:
       Family:
         type: string
         enum:
-          - inet
-          - inet6
-      NoMatch:
-        type: boolean
-        default: false
+          - ipv4
+          - ipv6
       Comment:
         type: boolean
         default: false
@@ -677,61 +692,82 @@ definitions:
       HashMaxElem:
         type: integer
         format: uint32
-  InetAddrRange:
-    description: IpsetAddrRange mirrors include/conf/inet.h::inet_addr_range.
+      Range:
+        description: |
+          vaild format: ipv4-ipv4, ipv4/pfx, ipv6/pfx, port-port
+        type: string
+  IpsetType:
+    type: string
+    enum:
+      - bitmap:ip
+      - bitmap:ip,mac
+      - bitmap:port
+      - hash:ip
+      - hash:net
+      - hash:ip,port
+      - hash:net,port
+      - hash:net,port,iface
+      - hash:ip,port,ip
+      - hash:ip,port,net
+      - hash:net,port,net
+      - hash:net,port,net,port
+  IpsetMember:
+    description: IpsetMember represents a specific entry in ipset.
     type: object
+    required:
+      - Entry
     properties:
-      AddrMin:
+      Entry:
+        description: |
+          type specific entry data, for example
+          * 192.168.1.0/29 (bitmap:ip)
+          * 192.168.88.0/24,tcp:8080-8082 (hash:net)
+          * 2001::1,8080-8082,2002::aaaa:bbbb:ccc0:0/108 (hash:ip,port,net)
         type: string
-        pattern: '^(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:[a-fA-F0-9:]+)$'
-      AddrMax:
-        type: string
-        pattern: '^(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:[a-fA-F0-9:]+)$'
-      PortMin:
-        type: integer
-        minimum: 0
-        maximum: 65535
-      PortMax:
-        type: integer
-        minimum: 0
-        maximum: 65535
-  IpsetParam:
-    description: IpsetParam mirrors include/conf/ipset.h::ipset_param.
-    type: object
-    properties:
-      Type:
-        type: string
-        enum:
-          - bitmap:ip
-          - bitmap:ip,mac
-          - bitmap:port
-          - hash:ip
-          - hash:net
-          - hash:ip,port
-          - hash:net,port
-          - hash:net,port,iface
-          - hash:ip,port,ip
-          - hash:ip,port,net
-          - hash:net,port,net
-          - hash:net,port,net,port
-      Name:
-        type: string
-        minLength: 1
-        maxLength: 32   # IPSET_MAXNAMELEN = 32
       Comment:
         type: string
         minLength: 1
         maxLength: 32   # IPSET_MAXCOMLEN = 32
+      Options:
+        $ref: "#/definitions/IpsetOption"
+  IpsetCell:
+    description: IpsetCell represents an indivisible granularity of ipset member.
+    type: object
+    required:
+      - Type
+      - Member
+    properties:
+      Type:
+        $ref: "#/definitions/IpsetType"
+      Member:
+        $ref: "#/definitions/IpsetMember"
+  IpsetInfo:
+    description: >
+      IpsetInfo contains all parameters and information for ipset operations.
+    type: object
+    required:
+      - Type
+      - Name
+    properties:
+      Type:
+        type: string
+        $ref: "#/definitions/IpsetType"
+      Name:
+        type: string
+        minLength: 1
+        maxLength: 32   # IPSET_MAXNAMELEN = 32
       Opcode:
+        description: opertaion type code
         type: integer
+        format: uint16
         enum:
-          - 0
           - 1
           - 2
           - 3
           - 4
           - 5
           - 6
+          - 7
         x-enum-varnames:
           - Add
           - Del
@@ -740,142 +776,14 @@ definitions:
           - Destroy
           - Flush
           - List
-      Options:
-        $ref: '#/definitions/IpsetOption'
-      Flag:
-        type: integer
-        format: uint16
-      Proto:
-        type: string
-        enum:
-          - tcp
-          - udp
-          - icmp
-          - icmp6
-      Cidr:
-        type: integer
-        format: uint8
-        maximum: 16
-      Range:
-        $ref: '#/definitions/InetAddrRange'
-      Mac:
-        type: string
-        pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
-      Iface:
-        type: string
-        minLength: 1
-        maxLength: 16   # IFNAMSIZ = 16
-      Cidr2:
-        type: integer
-        format: uint8
-        maximum: 65535
-      Range2:
-        $ref: '#/definitions/InetAddrRange'
-  IpsetMember:
-    description: IpsetMember mirrors include/conf/ipset.h::ipset_member.
-    type: object
-    properties:
-      Comment:
-        type: string
-        minLength: 1
-        maxLength: 32   # IPSET_MAXCOMLEN = 32
-      Addr:
-        type: string
-        pattern: '^(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:[a-fA-F0-9:]+)$'
-      Cidr:
-        type: integer
-        format: uint8
-        maximum: 16
-      Proto:
-        type: string
-        enum:
-          - tcp
-          - udp
-          - icmp
-          - icmp6
-      Port:
-        type: integer
-        minimum: 0
-        maximum: 65535
-      Mac:
-        type: string
-        pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
-      Iface:
-        type: string
-        minLength: 1
-        maxLength: 16   # IFNAMSIZ = 16
-      NoMatch:
-        type: boolean
-        default: false
-      Addr2:
-        type: string
-        pattern: '^(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:[a-fA-F0-9:]+)$'
-      Cidr2:
-        type: integer
-        format: uint8
-        maximum: 16
-      Port2:
-        type: integer
-        minimum: 0
-        maximum: 65535
-  IpsetInfo:
-    description: IpsetInfo mirrors include/conf/ipset.h::ipset_info.
-    type: object
-    properties:
-      Type:
-        type: string
-        enum:
-          - bitmap:ip
-          - bitmap:ip,mac
-          - bitmap:port
-          - hash:ip
-          - hash:net
-          - hash:ip,port
-          - hash:net,port
-          - hash:net,port,iface
-          - hash:ip,port,ip
-          - hash:ip,port,net
-          - hash:net,port,net
-          - hash:net,port,net,port
-      Name:
-        type: string
-        minLength: 1
-        maxLength: 32   # IPSET_MAXNAMELEN = 32
-      Comment:
-        type: boolean
-        default: false
-      BitmapRange:
-        $ref: '#/definitions/InetAddrRange'
-      BitmapCidr:
-        type: integer
-        format: uint8
-        maximum: 16
-      HashSize:
-        type: integer
-        format: int32
-      HashMaxElem:
-        type: integer
-        format: int32
-      Af:
-        type: string
-        enum:
-          - inet
-          - inet6
-      Size:
-        type: integer
-        format: uint64
+      CreationOptions:
+        $ref: '#/definitions/IpsetCreationOption'
       Entries:
-        type: integer
-        format: int32
-      References:
-        type: integer
-        format: int32
-      Members:
         type: array
         items:
-          "$ref": "#/definitions/IpsetMember"
+          $ref: "#/definitions/IpsetMember"
   IpsetInfoArray:
-    description: IpsetInfoArray mirrors include/conf/ipset.h::ipset_info_array.
+    description: IpsetInfoArray contains an array of ipset.
     type: object
     properties:
       Count:
@@ -884,7 +792,7 @@ definitions:
       Infos:
         type: array
         items:
-          "$ref": "#/definitions/IpsetInfo"
+          $ref: "#/definitions/IpsetInfo"
 paths:
   /device:
     get:
@@ -1717,16 +1625,23 @@ paths:
       summary: "Get all the ipsets and members."
       tags:
         - "ipset"
+      operationId: GetAll
       responses:
         '200':
           description: Success
           schema:
             $ref: "#/definitions/IpsetInfoArray"
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
   /ipset/{name}:
     get:
       summary: "Get a specific ipset and its members."
       tags:
         - "ipset"
+      operationId: Get
       parameters:
         - "$ref": "#/parameters/ipset-name"
       responses:
@@ -1738,10 +1653,16 @@ paths:
           description: Ipset not found
           schema:
             type: string
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
     put:
       summary: "Create an ipset named {name}."
       tags:
         - "ipset"
+      operationId: Create
       parameters:
         - $ref: "#/parameters/ipset-name"
         - $ref: "#/parameters/ipset-param"
@@ -1771,6 +1692,7 @@ paths:
       summary: "Delete the ipset named {name}."
       tags:
         - "ipset"
+      operationId: Destroy
       parameters:
         - $ref: "#/parameters/ipset-name"
       responses:
@@ -1787,27 +1709,27 @@ paths:
           x-go-name: Failure
           schema:
             type: string
-  /ipset/{name}/{object}:
-    get:
+  /ipset/{name}/cell:
+    post:
       summary: "Check if an object in the ipset."
       tags:
         - "ipset"
+      operationId: IsIn
       parameters:
         - $ref: "#/parameters/ipset-name"
-        - $ref: "#/parameters/ipset-object"
+        - $ref: "#/parameters/ipset-cell"
       responses:
         '200':
           description: Succeed
           schema:
             type: object
+            required:
+              - Result
             properties:
               Result:
                 type: boolean
               Message:
                 type: string
-                enum:
-                  - Match
-                  - MisMatch
         '400':
           description: Invalid ipset parameter
           schema:
@@ -1823,9 +1745,10 @@ paths:
             type: string
   /ipset/{name}/member:
     post:
-      summary: "Add a member to the ipset."
+      summary: "Add members to the ipset."
       tags:
         - "ipset"
+      operationId: AddMember
       parameters:
         - $ref: "#/parameters/ipset-name"
         - $ref: "#/parameters/ipset-param"
@@ -1852,9 +1775,10 @@ paths:
           schema:
             type: string
     delete:
-      summary: "Delete a member from the ipset."
+      summary: "Delete members from the ipset."
       tags:
         - "ipset"
+      operationId: DelMember
       parameters:
         - $ref: "#/parameters/ipset-name"
         - $ref: "#/parameters/ipset-param"
@@ -1880,6 +1804,7 @@ paths:
       summary: "Reset the whole ipset members."
       tags:
         - "ipset"
+      operationId: ReplaceMember
       parameters:
         - $ref: "#/parameters/ipset-name"
         - $ref: "#/parameters/ipset-param"
