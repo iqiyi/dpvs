@@ -20,6 +20,7 @@ import (
 	"github.com/go-openapi/swag"
 
 	"github.com/dpvs-agent/restapi/operations/device"
+	"github.com/dpvs-agent/restapi/operations/ipset"
 	"github.com/dpvs-agent/restapi/operations/virtualserver"
 )
 
@@ -45,6 +46,15 @@ func NewDpvsAgentAPI(spec *loads.Document) *DpvsAgentAPI {
 
 		JSONProducer: runtime.JSONProducer(),
 
+		IpsetAddMemberHandler: ipset.AddMemberHandlerFunc(func(params ipset.AddMemberParams) middleware.Responder {
+			return middleware.NotImplemented("operation ipset.AddMember has not yet been implemented")
+		}),
+		IpsetCreateHandler: ipset.CreateHandlerFunc(func(params ipset.CreateParams) middleware.Responder {
+			return middleware.NotImplemented("operation ipset.Create has not yet been implemented")
+		}),
+		IpsetDelMemberHandler: ipset.DelMemberHandlerFunc(func(params ipset.DelMemberParams) middleware.Responder {
+			return middleware.NotImplemented("operation ipset.DelMember has not yet been implemented")
+		}),
 		DeviceDeleteDeviceNameAddrHandler: device.DeleteDeviceNameAddrHandlerFunc(func(params device.DeleteDeviceNameAddrParams) middleware.Responder {
 			return middleware.NotImplemented("operation device.DeleteDeviceNameAddr has not yet been implemented")
 		}),
@@ -74,6 +84,15 @@ func NewDpvsAgentAPI(spec *loads.Document) *DpvsAgentAPI {
 		}),
 		VirtualserverDeleteVsVipPortRsHandler: virtualserver.DeleteVsVipPortRsHandlerFunc(func(params virtualserver.DeleteVsVipPortRsParams) middleware.Responder {
 			return middleware.NotImplemented("operation virtualserver.DeleteVsVipPortRs has not yet been implemented")
+		}),
+		IpsetDestroyHandler: ipset.DestroyHandlerFunc(func(params ipset.DestroyParams) middleware.Responder {
+			return middleware.NotImplemented("operation ipset.Destroy has not yet been implemented")
+		}),
+		IpsetGetHandler: ipset.GetHandlerFunc(func(params ipset.GetParams) middleware.Responder {
+			return middleware.NotImplemented("operation ipset.Get has not yet been implemented")
+		}),
+		IpsetGetAllHandler: ipset.GetAllHandlerFunc(func(params ipset.GetAllParams) middleware.Responder {
+			return middleware.NotImplemented("operation ipset.GetAll has not yet been implemented")
 		}),
 		DeviceGetDeviceHandler: device.GetDeviceHandlerFunc(func(params device.GetDeviceParams) middleware.Responder {
 			return middleware.NotImplemented("operation device.GetDevice has not yet been implemented")
@@ -113,6 +132,9 @@ func NewDpvsAgentAPI(spec *loads.Document) *DpvsAgentAPI {
 		}),
 		VirtualserverGetVsVipPortRsHandler: virtualserver.GetVsVipPortRsHandlerFunc(func(params virtualserver.GetVsVipPortRsParams) middleware.Responder {
 			return middleware.NotImplemented("operation virtualserver.GetVsVipPortRs has not yet been implemented")
+		}),
+		IpsetIsInHandler: ipset.IsInHandlerFunc(func(params ipset.IsInParams) middleware.Responder {
+			return middleware.NotImplemented("operation ipset.IsIn has not yet been implemented")
 		}),
 		VirtualserverPostVsVipPortAllowHandler: virtualserver.PostVsVipPortAllowHandlerFunc(func(params virtualserver.PostVsVipPortAllowParams) middleware.Responder {
 			return middleware.NotImplemented("operation virtualserver.PostVsVipPortAllow has not yet been implemented")
@@ -159,6 +181,9 @@ func NewDpvsAgentAPI(spec *loads.Document) *DpvsAgentAPI {
 		VirtualserverPutVsVipPortRsHealthHandler: virtualserver.PutVsVipPortRsHealthHandlerFunc(func(params virtualserver.PutVsVipPortRsHealthParams) middleware.Responder {
 			return middleware.NotImplemented("operation virtualserver.PutVsVipPortRsHealth has not yet been implemented")
 		}),
+		IpsetReplaceMemberHandler: ipset.ReplaceMemberHandlerFunc(func(params ipset.ReplaceMemberParams) middleware.Responder {
+			return middleware.NotImplemented("operation ipset.ReplaceMember has not yet been implemented")
+		}),
 	}
 }
 
@@ -195,6 +220,12 @@ type DpvsAgentAPI struct {
 	//   - application/json
 	JSONProducer runtime.Producer
 
+	// IpsetAddMemberHandler sets the operation handler for the add member operation
+	IpsetAddMemberHandler ipset.AddMemberHandler
+	// IpsetCreateHandler sets the operation handler for the create operation
+	IpsetCreateHandler ipset.CreateHandler
+	// IpsetDelMemberHandler sets the operation handler for the del member operation
+	IpsetDelMemberHandler ipset.DelMemberHandler
 	// DeviceDeleteDeviceNameAddrHandler sets the operation handler for the delete device name addr operation
 	DeviceDeleteDeviceNameAddrHandler device.DeleteDeviceNameAddrHandler
 	// DeviceDeleteDeviceNameNetlinkHandler sets the operation handler for the delete device name netlink operation
@@ -215,6 +246,12 @@ type DpvsAgentAPI struct {
 	VirtualserverDeleteVsVipPortLaddrHandler virtualserver.DeleteVsVipPortLaddrHandler
 	// VirtualserverDeleteVsVipPortRsHandler sets the operation handler for the delete vs vip port rs operation
 	VirtualserverDeleteVsVipPortRsHandler virtualserver.DeleteVsVipPortRsHandler
+	// IpsetDestroyHandler sets the operation handler for the destroy operation
+	IpsetDestroyHandler ipset.DestroyHandler
+	// IpsetGetHandler sets the operation handler for the get operation
+	IpsetGetHandler ipset.GetHandler
+	// IpsetGetAllHandler sets the operation handler for the get all operation
+	IpsetGetAllHandler ipset.GetAllHandler
 	// DeviceGetDeviceHandler sets the operation handler for the get device operation
 	DeviceGetDeviceHandler device.GetDeviceHandler
 	// DeviceGetDeviceNameAddrHandler sets the operation handler for the get device name addr operation
@@ -241,6 +278,8 @@ type DpvsAgentAPI struct {
 	VirtualserverGetVsVipPortLaddrHandler virtualserver.GetVsVipPortLaddrHandler
 	// VirtualserverGetVsVipPortRsHandler sets the operation handler for the get vs vip port rs operation
 	VirtualserverGetVsVipPortRsHandler virtualserver.GetVsVipPortRsHandler
+	// IpsetIsInHandler sets the operation handler for the is in operation
+	IpsetIsInHandler ipset.IsInHandler
 	// VirtualserverPostVsVipPortAllowHandler sets the operation handler for the post vs vip port allow operation
 	VirtualserverPostVsVipPortAllowHandler virtualserver.PostVsVipPortAllowHandler
 	// VirtualserverPostVsVipPortDenyHandler sets the operation handler for the post vs vip port deny operation
@@ -271,6 +310,8 @@ type DpvsAgentAPI struct {
 	VirtualserverPutVsVipPortRsHandler virtualserver.PutVsVipPortRsHandler
 	// VirtualserverPutVsVipPortRsHealthHandler sets the operation handler for the put vs vip port rs health operation
 	VirtualserverPutVsVipPortRsHealthHandler virtualserver.PutVsVipPortRsHealthHandler
+	// IpsetReplaceMemberHandler sets the operation handler for the replace member operation
+	IpsetReplaceMemberHandler ipset.ReplaceMemberHandler
 
 	// ServeError is called when an error is received, there is a default handler
 	// but you can set your own with this
@@ -348,6 +389,15 @@ func (o *DpvsAgentAPI) Validate() error {
 		unregistered = append(unregistered, "JSONProducer")
 	}
 
+	if o.IpsetAddMemberHandler == nil {
+		unregistered = append(unregistered, "ipset.AddMemberHandler")
+	}
+	if o.IpsetCreateHandler == nil {
+		unregistered = append(unregistered, "ipset.CreateHandler")
+	}
+	if o.IpsetDelMemberHandler == nil {
+		unregistered = append(unregistered, "ipset.DelMemberHandler")
+	}
 	if o.DeviceDeleteDeviceNameAddrHandler == nil {
 		unregistered = append(unregistered, "device.DeleteDeviceNameAddrHandler")
 	}
@@ -377,6 +427,15 @@ func (o *DpvsAgentAPI) Validate() error {
 	}
 	if o.VirtualserverDeleteVsVipPortRsHandler == nil {
 		unregistered = append(unregistered, "virtualserver.DeleteVsVipPortRsHandler")
+	}
+	if o.IpsetDestroyHandler == nil {
+		unregistered = append(unregistered, "ipset.DestroyHandler")
+	}
+	if o.IpsetGetHandler == nil {
+		unregistered = append(unregistered, "ipset.GetHandler")
+	}
+	if o.IpsetGetAllHandler == nil {
+		unregistered = append(unregistered, "ipset.GetAllHandler")
 	}
 	if o.DeviceGetDeviceHandler == nil {
 		unregistered = append(unregistered, "device.GetDeviceHandler")
@@ -416,6 +475,9 @@ func (o *DpvsAgentAPI) Validate() error {
 	}
 	if o.VirtualserverGetVsVipPortRsHandler == nil {
 		unregistered = append(unregistered, "virtualserver.GetVsVipPortRsHandler")
+	}
+	if o.IpsetIsInHandler == nil {
+		unregistered = append(unregistered, "ipset.IsInHandler")
 	}
 	if o.VirtualserverPostVsVipPortAllowHandler == nil {
 		unregistered = append(unregistered, "virtualserver.PostVsVipPortAllowHandler")
@@ -461,6 +523,9 @@ func (o *DpvsAgentAPI) Validate() error {
 	}
 	if o.VirtualserverPutVsVipPortRsHealthHandler == nil {
 		unregistered = append(unregistered, "virtualserver.PutVsVipPortRsHealthHandler")
+	}
+	if o.IpsetReplaceMemberHandler == nil {
+		unregistered = append(unregistered, "ipset.ReplaceMemberHandler")
 	}
 
 	if len(unregistered) > 0 {
@@ -550,6 +615,18 @@ func (o *DpvsAgentAPI) initHandlerCache() {
 		o.handlers = make(map[string]map[string]http.Handler)
 	}
 
+	if o.handlers["POST"] == nil {
+		o.handlers["POST"] = make(map[string]http.Handler)
+	}
+	o.handlers["POST"]["/ipset/{name}/member"] = ipset.NewAddMember(o.context, o.IpsetAddMemberHandler)
+	if o.handlers["PUT"] == nil {
+		o.handlers["PUT"] = make(map[string]http.Handler)
+	}
+	o.handlers["PUT"]["/ipset/{name}"] = ipset.NewCreate(o.context, o.IpsetCreateHandler)
+	if o.handlers["DELETE"] == nil {
+		o.handlers["DELETE"] = make(map[string]http.Handler)
+	}
+	o.handlers["DELETE"]["/ipset/{name}/member"] = ipset.NewDelMember(o.context, o.IpsetDelMemberHandler)
 	if o.handlers["DELETE"] == nil {
 		o.handlers["DELETE"] = make(map[string]http.Handler)
 	}
@@ -590,6 +667,18 @@ func (o *DpvsAgentAPI) initHandlerCache() {
 		o.handlers["DELETE"] = make(map[string]http.Handler)
 	}
 	o.handlers["DELETE"]["/vs/{VipPort}/rs"] = virtualserver.NewDeleteVsVipPortRs(o.context, o.VirtualserverDeleteVsVipPortRsHandler)
+	if o.handlers["DELETE"] == nil {
+		o.handlers["DELETE"] = make(map[string]http.Handler)
+	}
+	o.handlers["DELETE"]["/ipset/{name}"] = ipset.NewDestroy(o.context, o.IpsetDestroyHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/ipset/{name}"] = ipset.NewGet(o.context, o.IpsetGetHandler)
+	if o.handlers["GET"] == nil {
+		o.handlers["GET"] = make(map[string]http.Handler)
+	}
+	o.handlers["GET"]["/ipset"] = ipset.NewGetAll(o.context, o.IpsetGetAllHandler)
 	if o.handlers["GET"] == nil {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
@@ -642,6 +731,10 @@ func (o *DpvsAgentAPI) initHandlerCache() {
 		o.handlers["GET"] = make(map[string]http.Handler)
 	}
 	o.handlers["GET"]["/vs/{VipPort}/rs"] = virtualserver.NewGetVsVipPortRs(o.context, o.VirtualserverGetVsVipPortRsHandler)
+	if o.handlers["POST"] == nil {
+		o.handlers["POST"] = make(map[string]http.Handler)
+	}
+	o.handlers["POST"]["/ipset/{name}/cell"] = ipset.NewIsIn(o.context, o.IpsetIsInHandler)
 	if o.handlers["POST"] == nil {
 		o.handlers["POST"] = make(map[string]http.Handler)
 	}
@@ -702,6 +795,10 @@ func (o *DpvsAgentAPI) initHandlerCache() {
 		o.handlers["PUT"] = make(map[string]http.Handler)
 	}
 	o.handlers["PUT"]["/vs/{VipPort}/rs/health"] = virtualserver.NewPutVsVipPortRsHealth(o.context, o.VirtualserverPutVsVipPortRsHealthHandler)
+	if o.handlers["PUT"] == nil {
+		o.handlers["PUT"] = make(map[string]http.Handler)
+	}
+	o.handlers["PUT"]["/ipset/{name}/member"] = ipset.NewReplaceMember(o.context, o.IpsetReplaceMemberHandler)
 }
 
 // Serve creates a http handler to serve the API over HTTP

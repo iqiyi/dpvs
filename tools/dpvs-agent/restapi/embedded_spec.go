@@ -268,7 +268,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device",
+        "summary": "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device\n",
         "parameters": [
           {
             "$ref": "#/parameters/snapshot"
@@ -299,7 +299,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device",
+        "summary": "ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device\n",
         "parameters": [
           {
             "$ref": "#/parameters/device-name"
@@ -360,7 +360,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "dpip link set ${nic-name} [forward2kni,link,promisc,tc-ingress,tc-egress] [on/up,off/down]",
+        "summary": "dpip link set ${nic-name} [forward2kni,link,promisc,tc-ingress,tc-egress] [on/up,off/down]\n",
         "parameters": [
           {
             "$ref": "#/parameters/device-name"
@@ -562,6 +562,335 @@ func init() {
             "schema": {
               "type": "string"
             }
+          }
+        }
+      }
+    },
+    "/ipset": {
+      "get": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Get all the ipsets and members.",
+        "operationId": "GetAll",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/IpsetInfoArray"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
+    },
+    "/ipset/{name}": {
+      "get": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Get a specific ipset and its members.",
+        "operationId": "Get",
+        "parameters": [
+          {
+            "$ref": "#/parameters/ipset-name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/IpsetInfo"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Create an ipset named {name}.",
+        "operationId": "Create",
+        "parameters": [
+          {
+            "$ref": "#/parameters/ipset-name"
+          },
+          {
+            "$ref": "#/parameters/ipset-param"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Replaced",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "201": {
+            "description": "Created",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Delete the ipset named {name}.",
+        "operationId": "Destroy",
+        "parameters": [
+          {
+            "$ref": "#/parameters/ipset-name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
+    },
+    "/ipset/{name}/cell": {
+      "post": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Check if an object in the ipset.",
+        "operationId": "IsIn",
+        "parameters": [
+          {
+            "$ref": "#/parameters/ipset-name"
+          },
+          {
+            "$ref": "#/parameters/ipset-cell"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succeed",
+            "schema": {
+              "type": "object",
+              "required": [
+                "Result"
+              ],
+              "properties": {
+                "Message": {
+                  "type": "string"
+                },
+                "Result": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
+    },
+    "/ipset/{name}/member": {
+      "put": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Reset the whole ipset members.",
+        "operationId": "ReplaceMember",
+        "parameters": [
+          {
+            "$ref": "#/parameters/ipset-name"
+          },
+          {
+            "$ref": "#/parameters/ipset-param"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succeed",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Add members to the ipset.",
+        "operationId": "AddMember",
+        "parameters": [
+          {
+            "$ref": "#/parameters/ipset-name"
+          },
+          {
+            "$ref": "#/parameters/ipset-param"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existed",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "201": {
+            "description": "Created",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Delete members from the ipset.",
+        "operationId": "DelMember",
+        "parameters": [
+          {
+            "$ref": "#/parameters/ipset-name"
+          },
+          {
+            "$ref": "#/parameters/ipset-param"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succeed",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
           }
         }
       }
@@ -1386,7 +1715,7 @@ func init() {
             "description": "Success"
           },
           "270": {
-            "description": "the rss-config parameter is outdated, update nothing and return the latest rs info",
+            "description": "the rss-config parameter is outdated, update nothing and return the latest rs info\n",
             "schema": {
               "$ref": "#/definitions/VirtualServerSpecExpand"
             },
@@ -1487,6 +1816,171 @@ func init() {
           "type": "string"
         }
       }
+    },
+    "IpsetCell": {
+      "description": "IpsetCell represents an indivisible granularity of ipset member.",
+      "type": "object",
+      "required": [
+        "Type",
+        "Member"
+      ],
+      "properties": {
+        "Member": {
+          "$ref": "#/definitions/IpsetMember"
+        },
+        "Type": {
+          "$ref": "#/definitions/IpsetType"
+        }
+      }
+    },
+    "IpsetCreationOption": {
+      "description": "IpsetCreationOption contains all available options required in creating an ipset.\n",
+      "properties": {
+        "Comment": {
+          "type": "boolean",
+          "default": false
+        },
+        "Family": {
+          "type": "string",
+          "enum": [
+            "ipv4",
+            "ipv6"
+          ]
+        },
+        "HashMaxElem": {
+          "type": "integer",
+          "format": "uint32"
+        },
+        "HashSize": {
+          "type": "integer",
+          "format": "uint32"
+        },
+        "Range": {
+          "description": "vaild format: ipv4-ipv4, ipv4/pfx, ipv6/pfx, port-port\n",
+          "type": "string"
+        }
+      }
+    },
+    "IpsetInfo": {
+      "description": "IpsetInfo contains all parameters and information for ipset operations.\n",
+      "type": "object",
+      "required": [
+        "Type",
+        "Name"
+      ],
+      "properties": {
+        "CreationOptions": {
+          "$ref": "#/definitions/IpsetCreationOption"
+        },
+        "Entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IpsetMember"
+          }
+        },
+        "Name": {
+          "type": "string",
+          "maxLength": 32,
+          "minLength": 1
+        },
+        "Opcode": {
+          "description": "opertaion type code",
+          "type": "integer",
+          "format": "uint16",
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "x-enum-varnames": [
+            "Add",
+            "Del",
+            "Test",
+            "Create",
+            "Destroy",
+            "Flush",
+            "List"
+          ]
+        },
+        "Type": {
+          "type": "string",
+          "$ref": "#/definitions/IpsetType"
+        }
+      }
+    },
+    "IpsetInfoArray": {
+      "description": "IpsetInfoArray contains an array of ipset.",
+      "type": "object",
+      "properties": {
+        "Count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "Infos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IpsetInfo"
+          }
+        }
+      }
+    },
+    "IpsetMember": {
+      "description": "IpsetMember represents a specific entry in ipset.",
+      "type": "object",
+      "required": [
+        "Entry"
+      ],
+      "properties": {
+        "Comment": {
+          "type": "string",
+          "maxLength": 32,
+          "minLength": 1
+        },
+        "Entry": {
+          "description": "type specific entry data, for example\n* 192.168.1.0/29 (bitmap:ip)\n* 192.168.88.0/24,tcp:8080-8082 (hash:net)\n* 2001::1,8080-8082,2002::aaaa:bbbb:ccc0:0/108 (hash:ip,port,net)\n",
+          "type": "string"
+        },
+        "Options": {
+          "$ref": "#/definitions/IpsetOption"
+        }
+      }
+    },
+    "IpsetOption": {
+      "description": "IpsetOption defines common options for ipset operations.",
+      "type": "object",
+      "properties": {
+        "Force": {
+          "description": "When add members to ipset with Force set, the already existing members are replaced sliently instead of emitting an EDPVS_EXIST error; When delete non-existent memebers from ipset, the DPSVS_NOTEXIST error is ignored.\n",
+          "type": "boolean",
+          "default": false
+        },
+        "NoMatch": {
+          "description": "Nomatch excludes a small element range from an ipset, which is mainly used by network-cidr based ipset.\n",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "IpsetType": {
+      "type": "string",
+      "enum": [
+        "bitmap:ip",
+        "bitmap:ip,mac",
+        "bitmap:port",
+        "hash:ip",
+        "hash:net",
+        "hash:ip,port",
+        "hash:net,port",
+        "hash:net,port,iface",
+        "hash:ip,port,ip",
+        "hash:ip,port,net",
+        "hash:net,port,net",
+        "hash:net,port,net,port"
+      ]
     },
     "LocalAddressExpandList": {
       "properties": {
@@ -2138,6 +2632,26 @@ func init() {
       "name": "healthcheck",
       "in": "query"
     },
+    "ipset-cell": {
+      "name": "ipsetCell",
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/IpsetCell"
+      }
+    },
+    "ipset-name": {
+      "type": "string",
+      "name": "name",
+      "in": "path",
+      "required": true
+    },
+    "ipset-param": {
+      "name": "ipsetParam",
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/IpsetInfo"
+      }
+    },
     "laddr-config": {
       "name": "spec",
       "in": "body",
@@ -2277,6 +2791,10 @@ func init() {
     {
       "description": "arp",
       "name": "arp"
+    },
+    {
+      "description": "ipset",
+      "name": "ipset"
     }
   ]
 }`))
@@ -2584,7 +3102,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device",
+        "summary": "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device\n",
         "parameters": [
           {
             "type": "boolean",
@@ -2625,7 +3143,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device",
+        "summary": "ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device\n",
         "parameters": [
           {
             "type": "string",
@@ -2702,7 +3220,7 @@ func init() {
         "tags": [
           "device"
         ],
-        "summary": "dpip link set ${nic-name} [forward2kni,link,promisc,tc-ingress,tc-egress] [on/up,off/down]",
+        "summary": "dpip link set ${nic-name} [forward2kni,link,promisc,tc-ingress,tc-egress] [on/up,off/down]\n",
         "parameters": [
           {
             "type": "string",
@@ -2967,6 +3485,376 @@ func init() {
             "schema": {
               "type": "string"
             }
+          }
+        }
+      }
+    },
+    "/ipset": {
+      "get": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Get all the ipsets and members.",
+        "operationId": "GetAll",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/IpsetInfoArray"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
+    },
+    "/ipset/{name}": {
+      "get": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Get a specific ipset and its members.",
+        "operationId": "Get",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "$ref": "#/definitions/IpsetInfo"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Create an ipset named {name}.",
+        "operationId": "Create",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "ipsetParam",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/IpsetInfo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Replaced",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "201": {
+            "description": "Created",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Delete the ipset named {name}.",
+        "operationId": "Destroy",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
+    },
+    "/ipset/{name}/cell": {
+      "post": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Check if an object in the ipset.",
+        "operationId": "IsIn",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "ipsetCell",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/IpsetCell"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succeed",
+            "schema": {
+              "type": "object",
+              "required": [
+                "Result"
+              ],
+              "properties": {
+                "Message": {
+                  "type": "string"
+                },
+                "Result": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      }
+    },
+    "/ipset/{name}/member": {
+      "put": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Reset the whole ipset members.",
+        "operationId": "ReplaceMember",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "ipsetParam",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/IpsetInfo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succeed",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Add members to the ipset.",
+        "operationId": "AddMember",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "ipsetParam",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/IpsetInfo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existed",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "201": {
+            "description": "Created",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ipset"
+        ],
+        "summary": "Delete members from the ipset.",
+        "operationId": "DelMember",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "ipsetParam",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/IpsetInfo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succeed",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Invalid ipset parameter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "404": {
+            "description": "Ipset not found",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "500": {
+            "description": "Service not available",
+            "schema": {
+              "type": "string"
+            },
+            "x-go-name": "Failure"
           }
         }
       }
@@ -3942,7 +4830,7 @@ func init() {
             "description": "Success"
           },
           "270": {
-            "description": "the rss-config parameter is outdated, update nothing and return the latest rs info",
+            "description": "the rss-config parameter is outdated, update nothing and return the latest rs info\n",
             "schema": {
               "$ref": "#/definitions/VirtualServerSpecExpand"
             },
@@ -4043,6 +4931,171 @@ func init() {
           "type": "string"
         }
       }
+    },
+    "IpsetCell": {
+      "description": "IpsetCell represents an indivisible granularity of ipset member.",
+      "type": "object",
+      "required": [
+        "Type",
+        "Member"
+      ],
+      "properties": {
+        "Member": {
+          "$ref": "#/definitions/IpsetMember"
+        },
+        "Type": {
+          "$ref": "#/definitions/IpsetType"
+        }
+      }
+    },
+    "IpsetCreationOption": {
+      "description": "IpsetCreationOption contains all available options required in creating an ipset.\n",
+      "properties": {
+        "Comment": {
+          "type": "boolean",
+          "default": false
+        },
+        "Family": {
+          "type": "string",
+          "enum": [
+            "ipv4",
+            "ipv6"
+          ]
+        },
+        "HashMaxElem": {
+          "type": "integer",
+          "format": "uint32"
+        },
+        "HashSize": {
+          "type": "integer",
+          "format": "uint32"
+        },
+        "Range": {
+          "description": "vaild format: ipv4-ipv4, ipv4/pfx, ipv6/pfx, port-port\n",
+          "type": "string"
+        }
+      }
+    },
+    "IpsetInfo": {
+      "description": "IpsetInfo contains all parameters and information for ipset operations.\n",
+      "type": "object",
+      "required": [
+        "Type",
+        "Name"
+      ],
+      "properties": {
+        "CreationOptions": {
+          "$ref": "#/definitions/IpsetCreationOption"
+        },
+        "Entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IpsetMember"
+          }
+        },
+        "Name": {
+          "type": "string",
+          "maxLength": 32,
+          "minLength": 1
+        },
+        "Opcode": {
+          "description": "opertaion type code",
+          "type": "integer",
+          "format": "uint16",
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "x-enum-varnames": [
+            "Add",
+            "Del",
+            "Test",
+            "Create",
+            "Destroy",
+            "Flush",
+            "List"
+          ]
+        },
+        "Type": {
+          "type": "string",
+          "$ref": "#/definitions/IpsetType"
+        }
+      }
+    },
+    "IpsetInfoArray": {
+      "description": "IpsetInfoArray contains an array of ipset.",
+      "type": "object",
+      "properties": {
+        "Count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "Infos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IpsetInfo"
+          }
+        }
+      }
+    },
+    "IpsetMember": {
+      "description": "IpsetMember represents a specific entry in ipset.",
+      "type": "object",
+      "required": [
+        "Entry"
+      ],
+      "properties": {
+        "Comment": {
+          "type": "string",
+          "maxLength": 32,
+          "minLength": 1
+        },
+        "Entry": {
+          "description": "type specific entry data, for example\n* 192.168.1.0/29 (bitmap:ip)\n* 192.168.88.0/24,tcp:8080-8082 (hash:net)\n* 2001::1,8080-8082,2002::aaaa:bbbb:ccc0:0/108 (hash:ip,port,net)\n",
+          "type": "string"
+        },
+        "Options": {
+          "$ref": "#/definitions/IpsetOption"
+        }
+      }
+    },
+    "IpsetOption": {
+      "description": "IpsetOption defines common options for ipset operations.",
+      "type": "object",
+      "properties": {
+        "Force": {
+          "description": "When add members to ipset with Force set, the already existing members are replaced sliently instead of emitting an EDPVS_EXIST error; When delete non-existent memebers from ipset, the DPSVS_NOTEXIST error is ignored.\n",
+          "type": "boolean",
+          "default": false
+        },
+        "NoMatch": {
+          "description": "Nomatch excludes a small element range from an ipset, which is mainly used by network-cidr based ipset.\n",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "IpsetType": {
+      "type": "string",
+      "enum": [
+        "bitmap:ip",
+        "bitmap:ip,mac",
+        "bitmap:port",
+        "hash:ip",
+        "hash:net",
+        "hash:ip,port",
+        "hash:net,port",
+        "hash:net,port,iface",
+        "hash:ip,port,ip",
+        "hash:ip,port,net",
+        "hash:net,port,net",
+        "hash:net,port,net,port"
+      ]
     },
     "LocalAddressExpandList": {
       "properties": {
@@ -4694,6 +5747,26 @@ func init() {
       "name": "healthcheck",
       "in": "query"
     },
+    "ipset-cell": {
+      "name": "ipsetCell",
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/IpsetCell"
+      }
+    },
+    "ipset-name": {
+      "type": "string",
+      "name": "name",
+      "in": "path",
+      "required": true
+    },
+    "ipset-param": {
+      "name": "ipsetParam",
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/IpsetInfo"
+      }
+    },
     "laddr-config": {
       "name": "spec",
       "in": "body",
@@ -4833,6 +5906,10 @@ func init() {
     {
       "description": "arp",
       "name": "arp"
+    },
+    {
+      "description": "ipset",
+      "name": "ipset"
     }
   ]
 }`))
