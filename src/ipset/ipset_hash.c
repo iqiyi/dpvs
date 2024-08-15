@@ -160,6 +160,8 @@ hash_del(struct ipset *set, void *value, uint16_t flag)
             return EDPVS_OK;
         }
     }
+    if (flag & IPSET_F_FORCE)
+        return EDPVS_OK;
     return EDPVS_NOTEXIST;
 }
 
@@ -245,7 +247,11 @@ hash_test(struct ipset *set, void *value, uint16_t flag)
     return 0;
 }
 
-ipset_adtfn hash_adtfn[IPSET_ADT_MAX] = { hash_add, hash_del, hash_test };
+ipset_adtfn hash_adtfn[IPSET_ADT_MAX] = {
+    [ IPSET_OP_ADD ] = hash_add,
+    [ IPSET_OP_DEL ] = hash_del,
+    [ IPSET_OP_TEST ] = hash_test
+};
 
 void
 hash_flush(struct ipset *set)

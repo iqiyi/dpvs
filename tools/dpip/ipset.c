@@ -147,7 +147,7 @@ static int
 addr_arg_parse(char *arg, struct inet_addr_range *range, uint8_t *cidr)
 {
     char *ip1, *ip2, *sep;
-    int *af = &param.option.family;
+    uint8_t *af = &param.option.family;
 
     /* ip/cidr */
     if (cidr && (sep = strstr(arg, "/"))) {

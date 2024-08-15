@@ -31,9 +31,6 @@ import (
 	"github.com/dpvs-agent/pkg/ipc/pool"
 )
 
-/* derived from: include/conf/ipset.h */
-const IPSET_MAXNAMELEN = 32
-
 /*
 derived from:
   - include/conf/blklst.h

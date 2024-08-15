@@ -28,6 +28,7 @@ import (
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 
 	"github.com/dpvs-agent/cmd/device"
+	"github.com/dpvs-agent/cmd/ipset"
 	"github.com/dpvs-agent/cmd/ipvs"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/settings"
@@ -187,6 +188,8 @@ func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
 
 	logger := hclog.Default().Named("main")
 
+	//////////////////////////////////// ipvs ///////////////////////////////////////////
+
 	// delete
 	restAPI.VirtualserverDeleteVsVipPortHandler = ipvs.NewDelVsItem(cp, logger)
 	restAPI.VirtualserverDeleteVsVipPortLaddrHandler = ipvs.NewDelVsLaddr(cp, logger)
@@ -210,6 +213,8 @@ func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
 	// post
 	restAPI.VirtualserverPostVsVipPortRsHandler = ipvs.NewPostVsRs(cp, logger)
 
+	//////////////////////////////////// device ///////////////////////////////////////////
+
 	// get
 	// restAPI.DeviceGetDeviceNameAddrHandler
 	// restAPI.DeviceGetDeviceNameRouteHandler
@@ -229,6 +234,24 @@ func (agent *DpvsAgentServer) instantiateAPI(restAPI *operations.DpvsAgentAPI) {
 	restAPI.DeviceDeleteDeviceNameRouteHandler = device.NewDelDeviceRoute(cp, logger)
 	restAPI.DeviceDeleteDeviceNameVlanHandler = device.NewDelDeviceVlan(cp, logger)
 	restAPI.DeviceDeleteDeviceNameNetlinkAddrHandler = device.NewDelDeviceNetlinkAddr(cp, logger)
+
+	//////////////////////////////////// ipset ///////////////////////////////////////////
+
+	// GET
+	restAPI.IpsetGetHandler = ipset.NewIpsetGet(cp, logger)
+	restAPI.IpsetGetAllHandler = ipset.NewIpsetGetAll(cp, logger)
+
+	// POST
+	restAPI.IpsetIsInHandler = ipset.NewIpsetIsIn(cp, logger)
+	restAPI.IpsetAddMemberHandler = ipset.NewIpsetAddMember(cp, logger)
+
+	// PUT
+	restAPI.IpsetCreateHandler = ipset.NewIpsetCreate(cp, logger)
+	restAPI.IpsetReplaceMemberHandler = ipset.NewIpsetReplaceMember(cp, logger)
+
+	// DELETE
+	restAPI.IpsetDestroyHandler = ipset.NewIpsetDestroy(cp, logger)
+	restAPI.IpsetDelMemberHandler = ipset.NewIpsetDelMember(cp, logger)
 
 	switch strings.ToLower(agent.InitMode) {
 	case "network":
