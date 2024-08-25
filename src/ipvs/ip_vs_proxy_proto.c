@@ -423,7 +423,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
     void *rt;
     int ppdoff, ppdatalen, room, mtu;
     int oaf;
-    char ppv1buf[108], tbuf1[64], tbuf2[64];
+    char ppv1buf[120], tbuf1[INET6_ADDRSTRLEN], tbuf2[INET6_ADDRSTRLEN];
     struct proxy_hdr_v2 *pphv2;
 
     assert(ppinfo && conn && mbuf && l4hdr);
