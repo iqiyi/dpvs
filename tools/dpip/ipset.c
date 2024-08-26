@@ -1103,7 +1103,7 @@ ipset_info_dump(struct ipset_info *info, bool sort)
         struct ipset_member *members = (struct ipset_member*)info->members;
         sort_compare_func sort_compare = types[type].sort_compare;
 
-        for (i = 0; i < info->entries - 1; i++) {
+        for (i = 0; i + 1 < info->entries; i++) {
             min = i;
             for (j = i + 1; j < info->entries; j++) {
                 if (sort_compare(info->af, &members[min], &members[j]) > 0)
