@@ -284,14 +284,14 @@ hash_ipportip_create(struct ipset *set, struct ipset_param *param)
 {
     hash_create(set, param);
 
-    if (param->option.family == AF_INET) {
-        set->dsize = sizeof(elem4_t);
-        set->hash_len = offsetof(elem4_t, comment);
-        set->variant = &hash_ipportip_variant4;
-    } else {
+    if (param->option.family == AF_INET6) {
         set->dsize = sizeof(elem6_t);
         set->hash_len = offsetof(elem6_t, comment);
         set->variant = &hash_ipportip_variant6;
+    } else {
+        set->dsize = sizeof(elem4_t);
+        set->hash_len = offsetof(elem4_t, comment);
+        set->variant = &hash_ipportip_variant4;
     }
 
     return EDPVS_OK;

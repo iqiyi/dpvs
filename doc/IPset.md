@@ -459,7 +459,7 @@ bin/dpip: invalid parameter
 The hash:ip,port,net set type uses a hash table to store IP address, port number and IP network address triples. Both IPv4 and IPv6 address are supported. The IP address of the IP and net should be of the same family. When adding/deleting entries, ranges are allowed but is transformed to specific host IP and port entries when stored into hash table for the "ip" and "port" segments. IPv4 supports both IP range and IP CIDR, while IPv6 supports IP CIDR only. Network address with zero prefix size is not supported, and is interpreted as host prefix size, i.e., 32 for IPv4 and 128 for IPv6. Option "nomatch" can be used to set exceptions to the set when add/deleting entries. If a test is matched against with a "nomatch" entry, then the result would end with false. The port number is interpreted together with a protocol. Supported protocols include TCP, UDP, ICMP, and ICMPv6, any other protocols are interpreted as unspec type with a protocol number of zero.
 
 ```bash
-# ./bin/dpip ipset create bar hash:ip,port,net
+# ./bin/dpip ipset -6 create bar hash:ip,port,net
 # ./bin/dpip ipset add bar 2001::1,8080-8082,2002::/64
 # ./bin/dpip ipset add bar 2001::1,8080-8082,2002::aaaa:bbbb:ccc0:0/108 nomatch
 # ./bin/dpip ipset -v list bar

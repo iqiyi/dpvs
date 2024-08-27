@@ -125,7 +125,7 @@ ipset_help(void)
                     "    MAC       := 6 bytes MAC address string literal\n"
                     "    PORT      := \"[{ tcp | udp | icmp | icmp6 }:]port1[-port2]\"\n"
                     "    OPTIONS   := { comment | range NET | hashsize NUM | maxelem NUM }\n"
-                    "    ADTOPTS   := { comment STRING | unmatch (for add only) }\n"
+                    "    ADTOPTS   := { comment STRING | nomatch (for add only) }\n"
                     "    flag      := { -F(--force) | { -4 | -6 } | -v }\n"
                     "Examples:\n"
                     "    dpip ipset create foo bitmap:ip range 192.168.0.0/16 comment\n"
