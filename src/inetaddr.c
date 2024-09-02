@@ -238,10 +238,12 @@ static int __idev_add_mcast_init(void *args)
     struct inet_device *idev;
     union inet_addr all_nodes, all_routers;
     struct rte_ether_addr eaddr_nodes, eaddr_routers;
-    bool is_master = (rte_lcore_id() == g_master_lcore_id);
-
+    lcoreid_t cid = rte_lcore_id();
+    bool is_master = (cid == g_master_lcore_id);
     struct netif_port *dev = (struct netif_port *) args;
 
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
     idev = dev_get_idev(dev);
 
     memset(&eaddr_nodes, 0, sizeof(eaddr_nodes));
@@ -1952,7 +1954,7 @@ static int ifa_sockopt_agent_get(sockoptid_t opt, const void *conf, size_t size,
     struct inet_device *idev = NULL;
     struct inet_addr_front *array = NULL;
     const struct inet_addr_entry *entry = conf;
-    int len;
+    int len = 0;
     int err;
 
     if (entry->af != AF_INET && entry->af != AF_INET6 && entry->af != AF_UNSPEC) {

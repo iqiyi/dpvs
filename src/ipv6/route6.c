@@ -135,10 +135,14 @@ static int rt6_setup_lcore(void *arg)
     int err;
     bool global;
     struct timeval tv;
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
 
     tv.tv_sec = g_rt6_recycle_time,
     tv.tv_usec = 0,
-    global = (rte_lcore_id() == rte_get_main_lcore());
+    global = (cid == rte_get_main_lcore());
 
     INIT_LIST_HEAD(&this_rt6_dustbin.routes);
     err = dpvs_timer_sched_period(&this_rt6_dustbin.tm, &tv, rt6_recycle, NULL, global);
@@ -151,6 +155,9 @@ static int rt6_setup_lcore(void *arg)
 static int rt6_destroy_lcore(void *arg)
 {
     struct route6 *rt6, *next;
+
+    if (rte_lcore_id() >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
 
     list_for_each_entry_safe(rt6, next, &this_rt6_dustbin.routes, hnode) {
         if (rte_atomic32_read(&rt6->refcnt) <= 1) { /* need judge refcnt here? */

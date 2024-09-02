@@ -522,15 +522,20 @@ static struct dpvs_sockopts whtlst_sockopts = {
 static int whtlst_lcore_init(void *args)
 {
     int i;
+    lcoreid_t cid = rte_lcore_id();
 
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
     this_num_whtlsts = 0;
     this_num_whtlsts_ipset = 0;
 
-    this_whtlst_tab = rte_malloc(NULL, sizeof(struct list_head) *
-            DPVS_WHTLST_TAB_SIZE, RTE_CACHE_LINE_SIZE);
+    this_whtlst_tab = rte_malloc(NULL,
+                        sizeof(struct list_head) * DPVS_WHTLST_TAB_SIZE,
+                        RTE_CACHE_LINE_SIZE);
     if (!this_whtlst_tab)
         return EDPVS_NOMEM;
     for (i = 0; i < DPVS_WHTLST_TAB_SIZE; i++)
@@ -550,7 +555,12 @@ static int whtlst_lcore_init(void *args)
 
 static int whtlst_lcore_term(void *args)
 {
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
        return EDPVS_DISABLED;
 
     dp_vs_whtlst_flush_all();

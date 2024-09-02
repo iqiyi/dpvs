@@ -459,15 +459,20 @@ static struct dpvs_sockopts blklst_sockopts = {
 static int blklst_lcore_init(void *args)
 {
     int i;
+    lcoreid_t cid = rte_lcore_id();
 
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
     this_num_blklsts = 0;
     this_num_blklsts_ipset = 0;
 
-    this_blklst_tab = rte_malloc(NULL, sizeof(struct list_head) *
-            DPVS_BLKLST_TAB_SIZE, RTE_CACHE_LINE_SIZE);
+    this_blklst_tab = rte_malloc(NULL,
+            sizeof(struct list_head) * DPVS_BLKLST_TAB_SIZE,
+            RTE_CACHE_LINE_SIZE);
     if (!this_blklst_tab)
         return EDPVS_NOMEM;
     for (i = 0; i < DPVS_BLKLST_TAB_SIZE; i++)
@@ -487,7 +492,12 @@ static int blklst_lcore_init(void *args)
 
 static int blklst_lcore_term(void *args)
 {
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
        return EDPVS_DISABLED;
 
     dp_vs_blklst_flush_all();

@@ -1192,11 +1192,15 @@ static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn)
 static int conn_init_lcore(void *arg)
 {
     int i;
+    lcoreid_t cid = rte_lcore_id();
 
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_IDLE;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
-    if (!netif_lcore_is_fwd_worker(rte_lcore_id()))
+    if (!netif_lcore_is_fwd_worker(cid))
         return EDPVS_IDLE;
 
     this_conn_tbl = rte_malloc(NULL,
@@ -1218,7 +1222,12 @@ static int conn_init_lcore(void *arg)
 
 static int conn_term_lcore(void *arg)
 {
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_IDLE;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
     if (this_conn_tbl) {
