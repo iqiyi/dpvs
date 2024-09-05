@@ -171,7 +171,8 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     if (!strlen(params.ifname))
         snprintf(params.ifname, IFNAMSIZ, "%s%%d", ops->kind);
 
-    dev = netif_alloc(ops->priv_size, params.ifname, 1, 1, ops->setup);
+    dev = netif_alloc(NETIF_PORT_ID_INVALID, ops->priv_size, params.ifname,
+            1, 1, ops->setup);
     if (!dev)
         return NULL;
 

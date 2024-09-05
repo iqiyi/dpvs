@@ -228,8 +228,8 @@ int vlan_add_dev(struct netif_port *real_dev, const char *ifname,
     }
 
     /* allocate and register netif device */
-    dev = netif_alloc(sizeof(struct vlan_dev_priv), name_buf,
-            real_dev->nrxq, real_dev->ntxq, vlan_setup);
+    dev = netif_alloc(NETIF_PORT_ID_INVALID, sizeof(struct vlan_dev_priv),
+            name_buf, real_dev->nrxq, real_dev->ntxq, vlan_setup);
     if (!dev) {
         err = EDPVS_NOMEM;
         goto out;

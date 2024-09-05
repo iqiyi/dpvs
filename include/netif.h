@@ -72,7 +72,7 @@ enum {
 
 #define NETIF_ALIGN                 32
 
-#define NETIF_PORT_ID_INVALID       0xFF
+#define NETIF_PORT_ID_INVALID       NETIF_MAX_PORTS
 #define NETIF_PORT_ID_ALL           NETIF_PORT_ID_INVALID
 
 #define NETIF_LCORE_ID_INVALID      0xFF
@@ -283,7 +283,7 @@ int netif_get_promisc(struct netif_port *dev, bool *promisc);
 int netif_get_allmulticast(struct netif_port *dev, bool *allmulticast);
 int netif_get_stats(struct netif_port *dev, struct rte_eth_stats *stats);
 int netif_get_xstats(struct netif_port *dev, netif_nic_xstats_get_t **xstats);
-struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
+struct netif_port *netif_alloc(portid_t id, size_t priv_size, const char *namefmt,
                                unsigned int nrxq, unsigned int ntxq,
                                void (*setup)(struct netif_port *));
 portid_t netif_port_count(void);
