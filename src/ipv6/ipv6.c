@@ -46,8 +46,12 @@ static rte_rwlock_t inet6_prot_lock;
 /*
  * IPv6 configures with default values.
  */
-static bool conf_ipv6_forwarding = false;
-static bool conf_ipv6_disable = false;
+static struct ipv6_config ip6_configs;
+
+const struct ipv6_config *ip6_config_get(void)
+{
+    return &ip6_configs;
+};
 
 /*
  * IPv6 statistics
@@ -115,13 +119,13 @@ static void ip6_conf_forward(vector_t tokens)
     assert(str);
 
     if (strcasecmp(str, "on") == 0)
-        conf_ipv6_forwarding = true;
+        ip6_configs.forwarding = 1;
     else if (strcasecmp(str, "off") == 0)
-        conf_ipv6_forwarding = false;
+        ip6_configs.forwarding = 0;
     else
         RTE_LOG(WARNING, IPV6, "invalid ipv6:forwarding %s\n", str);
 
-    RTE_LOG(INFO, IPV6, "ipv6:forwarding = %s\n", conf_ipv6_forwarding ? "on" : "off");
+    RTE_LOG(INFO, IPV6, "ipv6:forwarding = %s\n", ip6_configs.forwarding ? "on" : "off");
 
     FREE_PTR(str);
 }
@@ -133,13 +137,13 @@ static void ip6_conf_disable(vector_t tokens)
     assert(str);
 
     if (strcasecmp(str, "on") == 0)
-        conf_ipv6_disable = true;
+        ip6_configs.disable = 1;
     else if (strcasecmp(str, "off") == 0)
-        conf_ipv6_disable = false;
+        ip6_configs.disable = 0;
     else
         RTE_LOG(WARNING, IPV6, "invalid ipv6:disable %s\n", str);
 
-    RTE_LOG(INFO, IPV6, "ipv6:disable = %s\n", conf_ipv6_disable ? "on" : "off");
+    RTE_LOG(INFO, IPV6, "ipv6: %s\n", ip6_configs.disable ? "disabled" : "enabled");
 
     FREE_PTR(str);
 }
@@ -371,7 +375,7 @@ int ip6_output(struct rte_mbuf *mbuf)
     mbuf->port = dev->id;
 
     iftraf_pkt_out(AF_INET6, mbuf, dev);
-    if (unlikely(conf_ipv6_disable)) {
+    if (unlikely(ip6_configs.disable)) {
         IP6_INC_STATS(outdiscards);
         if (rt)
             route6_put(rt);
@@ -411,7 +415,7 @@ static int ip6_forward(struct rte_mbuf *mbuf)
     int addrtype;
     uint32_t mtu;
 
-    if (!conf_ipv6_forwarding)
+    if (!ip6_configs.forwarding)
         goto error;
 
     if (mbuf->packet_type != ETH_PKT_HOST)
@@ -539,7 +543,7 @@ static int ip6_rcv(struct rte_mbuf *mbuf, struct netif_port *dev)
     IP6_UPD_PO_STATS(in, mbuf->pkt_len);
     iftraf_pkt_in(AF_INET6, mbuf, dev);
 
-    if (unlikely(conf_ipv6_disable)) {
+    if (unlikely(ip6_configs.disable)) {
         IP6_INC_STATS(indiscards);
         goto drop;
     }
@@ -815,8 +819,8 @@ void ipv6_keyword_value_init(void)
         /* KW_TYPE_INIT keyword */
     }
     /* KW_TYPE NORMAL keyword */
-    conf_ipv6_forwarding = false;
-    conf_ipv6_disable = false;
+    ip6_configs.forwarding = 0;
+    ip6_configs.disable = 0;
 
     route6_keyword_value_init();
 }

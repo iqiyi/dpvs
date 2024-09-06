@@ -26,6 +26,11 @@
 #include "dpdk.h"
 #include "list.h"
 
+
+enum {
+    IDEV_F_NO_IPV6  = 0x00000001
+};
+
 struct inet_device {
     struct netif_port   *dev;
     struct list_head    ifa_list[DPVS_MAX_LCORE];   /* inet_ifaddr list */
@@ -33,6 +38,7 @@ struct inet_device {
     uint32_t            ifa_cnt[DPVS_MAX_LCORE];
     uint32_t            ifm_cnt[DPVS_MAX_LCORE];
     rte_atomic32_t      refcnt;                     /* not used yet */
+    uint32_t            flags;                      /* IDEV_F_XXX */
 #define this_ifa_list   ifa_list[rte_lcore_id()]
 #define this_ifm_list   ifm_list[rte_lcore_id()]
 #define this_ifa_cnt    ifa_cnt[rte_lcore_id()]
@@ -119,7 +125,7 @@ bool inet_chk_mcast_addr(int af, struct netif_port *dev,
 
 void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa);
 
-int idev_add_mcast_init(struct netif_port *dev);
+int idev_addr_init(struct inet_device *idev);
 
 int inet_addr_init(void);
 int inet_addr_term(void);

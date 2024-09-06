@@ -24,6 +24,7 @@
 #include "sa_pool.h"
 #include "ndisc.h"
 #include "route.h"
+#include "ipv6.h"
 #include "route6.h"
 #include "inetaddr.h"
 #include "conf/inetaddr.h"
@@ -232,19 +233,13 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add, bool is_master)
 }
 
 /* add ipv6 multicast address after port start */
-static int __idev_add_mcast_init(void *args)
+static int __idev_inet6_mcast_init(struct netif_port *dev)
 {
     int err;
-    struct inet_device *idev;
     union inet_addr all_nodes, all_routers;
     struct rte_ether_addr eaddr_nodes, eaddr_routers;
-    lcoreid_t cid = rte_lcore_id();
-    bool is_master = (cid == g_master_lcore_id);
-    struct netif_port *dev = (struct netif_port *) args;
-
-    if (cid >= DPVS_MAX_LCORE)
-        return EDPVS_OK;
-    idev = dev_get_idev(dev);
+    struct inet_device *idev = dev_get_idev(dev);
+    bool is_master = (rte_lcore_id() == g_master_lcore_id);
 
     memset(&eaddr_nodes, 0, sizeof(eaddr_nodes));
     memset(&eaddr_routers, 0, sizeof(eaddr_routers));
@@ -290,16 +285,54 @@ errout:
     return err;
 }
 
-int idev_add_mcast_init(struct netif_port *dev)
+static int __idev_addr_init(void *args)
+{
+    struct inet_device *idev = args;
+    assert(idev != NULL && idev->dev != NULL);
+
+    if (rte_lcore_id() >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    return __idev_inet6_mcast_init(idev->dev);
+}
+
+int idev_addr_init(struct inet_device *idev)
 {
     int err;
     lcoreid_t cid;
+    struct dpvs_msg *msg;
 
-    rte_eal_mp_remote_launch(__idev_add_mcast_init, dev, CALL_MAIN);
-    RTE_LCORE_FOREACH_WORKER(cid) {
-        err = rte_eal_wait_lcore(cid);
-        if (unlikely(err < 0))
+    // only ipv6 needs address initialization now
+    if (ip6_config_get()->disable || (idev->flags & IDEV_F_NO_IPV6))
+        return EDPVS_OK;
+
+    if (rte_lcore_id() != rte_get_main_lcore())
+        return EDPVS_NOTSUPP;
+
+    // do it on master lcore
+    err =  __idev_addr_init(idev);
+    if (err != EDPVS_OK)
+        return err;
+
+    // do it on slave lcores
+    if (dpvs_state_get() == DPVS_STATE_NORMAL) {
+        msg = msg_make(MSG_TYPE_IFA_IDEVINIT, ifa_msg_seq(), DPVS_MSG_MULTICAST,
+                rte_lcore_id(), sizeof(idev), &idev);
+        if (unlikely(!msg))
+            return EDPVS_NOMEM;
+        err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+        if (err != EDPVS_OK) {
+            msg_destroy(&msg);
             return err;
+        }
+        msg_destroy(&msg);
+    } else {
+        rte_eal_mp_remote_launch(__idev_addr_init, idev, SKIP_MAIN);
+        RTE_LCORE_FOREACH_WORKER(cid) {
+            err = rte_eal_wait_lcore(cid);
+            if (unlikely(err < 0))
+                return err;
+        }
     }
 
     return EDPVS_OK;
@@ -1346,6 +1379,17 @@ static int ifa_msg_sync_cb(struct dpvs_msg *msg)
     return EDPVS_OK;
 }
 
+static int ifa_msg_idevinit_cb(struct dpvs_msg *msg)
+{
+    struct inet_device *idev;
+
+    if (unlikely(!msg || msg->len != sizeof(idev)))
+        return EDPVS_INVAL;
+    idev = *((struct inet_device **)(msg->data));
+
+    return __idev_addr_init(idev);
+}
+
 static int __inet_addr_add(const struct ifaddr_action *param)
 {
     int err;
@@ -2115,6 +2159,13 @@ static struct dpvs_msg_type ifa_msg_types[] = {
         //.cid              = rte_get_main_lcore(),
         .unicast_msg_cb     = ifa_msg_sync_cb,
         .multicast_msg_cb   = NULL
+    },
+    {
+        .type               = MSG_TYPE_IFA_IDEVINIT,
+        .prio               = MSG_PRIO_NORM,
+        .mode               = DPVS_MSG_MULTICAST,
+        .unicast_msg_cb     = ifa_msg_idevinit_cb,
+        .multicast_msg_cb   = NULL,
     }
 };
 

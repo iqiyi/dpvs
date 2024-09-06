@@ -75,6 +75,17 @@ static int alloc_vlan_info(struct netif_port *dev)
     return EDPVS_OK;
 }
 
+static int vlan_dev_init(struct netif_port *dev)
+{
+    int err;
+
+    err = idev_addr_init(dev->in_ptr);
+    if (err != EDPVS_OK)
+        return err;
+
+    return EDPVS_OK;
+}
+
 static int vlan_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     struct vlan_dev_priv *vlan = netif_priv(dev);
@@ -171,6 +182,7 @@ static int vlan_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
 }
 
 static struct netif_ops vlan_netif_ops = {
+    .op_init             = vlan_dev_init,
     .op_xmit             = vlan_xmit,
     .op_set_mc_list      = vlan_set_mc_list,
     .op_get_queue        = vlan_get_queue,

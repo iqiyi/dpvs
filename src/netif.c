@@ -4013,9 +4013,9 @@ int netif_port_start(struct netif_port *port)
     if (port->netif_ops->op_update_addr)
         port->netif_ops->op_update_addr(port);
 
-    /* add in6_addr multicast address */
-    if ((ret = idev_add_mcast_init(port)) != EDPVS_OK) {
-        RTE_LOG(WARNING, NETIF, "%s: idev_add_mcast_init failed -- %d(%s)\n",
+    /* ipv6 default addresses initialization */
+    if ((ret = idev_addr_init(port->in_ptr)) != EDPVS_OK) {
+        RTE_LOG(WARNING, NETIF, "%s: idev_addr_init failed -- %d(%s)\n",
                 __func__, ret, dpvs_strerror(ret));
         return ret;
     }
@@ -4053,7 +4053,7 @@ int netif_port_register(struct netif_port *port)
 {
     struct netif_port *cur;
     int hash, nhash;
-    int err = EDPVS_OK;
+    int err;
 
     if (unlikely(NULL == port))
         return EDPVS_INVAL;
@@ -4076,10 +4076,15 @@ int netif_port_register(struct netif_port *port)
     list_add_tail(&port->nlist, &port_ntab[nhash]);
     g_nports++;
 
-    if (port->netif_ops->op_init)
+    if (port->netif_ops->op_init) {
         err = port->netif_ops->op_init(port);
+        if (err != EDPVS_OK) {
+            netif_port_unregister(port);
+            return err;
+        }
+    }
 
-    return err;
+    return EDPVS_OK;
 }
 
 int netif_port_unregister(struct netif_port *port)

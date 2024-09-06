@@ -33,6 +33,13 @@
 #define IPV6
 #define RTE_LOGTYPE_IPV6    RTE_LOGTYPE_USER1
 
+struct ipv6_config {
+    unsigned disable:1;
+    unsigned forwarding:1;
+};
+
+const struct ipv6_config *ip6_config_get(void);
+
 /*
  * helper functions
  */

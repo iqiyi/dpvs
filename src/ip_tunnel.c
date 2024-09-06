@@ -207,6 +207,8 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     dev->flag &= ~NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_LLDP;
 
+    dev->in_ptr->flags |= IDEV_F_NO_IPV6;
+
     err = netif_port_register(dev);
     if (err != EDPVS_OK) {
         netif_free(dev);
@@ -896,6 +898,26 @@ int ip_tunnel_pull_header(struct rte_mbuf *mbuf, int hlen, __be16 in_proto)
         mbuf->vlan_tci = 0;
         mbuf->ol_flags &= (~PKT_RX_VLAN_STRIPPED);
     }
+
+    return EDPVS_OK;
+}
+
+int ip_tunnel_dev_init(struct netif_port *dev)
+{
+    int err;
+    struct ip_tunnel *tnl = netif_priv(dev);
+
+    err = idev_addr_init(tnl->dev->in_ptr);
+    if (err != EDPVS_OK)
+        return err;
+
+    return EDPVS_OK;
+}
+
+int ip_tunnel_set_mc_list(struct netif_port *dev)
+{
+    // IP tunnel devices need no hw multicast address,
+    // and should always return success
 
     return EDPVS_OK;
 }
