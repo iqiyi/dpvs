@@ -4164,6 +4164,7 @@ static int relate_bonding_device(void)
             }
             sport->type = PORT_TYPE_BOND_SLAVE;
             sport->bond->slave.master = mport;
+            sport->in_ptr->flags |= IDEV_F_NO_ROUTE;
         }
         mport->bond->master.slave_nb = i;
     }

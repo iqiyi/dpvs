@@ -906,11 +906,15 @@ int ip_tunnel_dev_init(struct netif_port *dev)
 {
     int err;
     struct ip_tunnel *tnl = netif_priv(dev);
+    struct inet_device *idev = dev_get_idev(tnl->dev);
 
-    err = idev_addr_init(tnl->dev->in_ptr);
-    if (err != EDPVS_OK)
+    err = idev_addr_init(idev);
+    if (err != EDPVS_OK) {
+        idev_put(idev);
         return err;
+    }
 
+    idev_put(idev);
     return EDPVS_OK;
 }
 

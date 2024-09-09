@@ -78,11 +78,15 @@ static int alloc_vlan_info(struct netif_port *dev)
 static int vlan_dev_init(struct netif_port *dev)
 {
     int err;
+    struct inet_device *idev = dev_get_idev(dev);
 
-    err = idev_addr_init(dev->in_ptr);
-    if (err != EDPVS_OK)
+    err = idev_addr_init(idev);
+    if (err != EDPVS_OK) {
+        idev_put(idev);
         return err;
+    }
 
+    idev_put(idev);
     return EDPVS_OK;
 }
 

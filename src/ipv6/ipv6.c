@@ -112,7 +112,7 @@ static void ip6_prot_init(void)
     rte_rwlock_write_unlock(&inet6_prot_lock);
 }
 
-static void ip6_conf_forward(vector_t tokens)
+static void ip6_forwarding_handler(vector_t tokens)
 {
     char *str = set_value(tokens);
 
@@ -130,7 +130,7 @@ static void ip6_conf_forward(vector_t tokens)
     FREE_PTR(str);
 }
 
-static void ip6_conf_disable(vector_t tokens)
+static void ip6_disable_handler(vector_t tokens)
 {
     char *str = set_value(tokens);
 
@@ -143,9 +143,76 @@ static void ip6_conf_disable(vector_t tokens)
     else
         RTE_LOG(WARNING, IPV6, "invalid ipv6:disable %s\n", str);
 
-    RTE_LOG(INFO, IPV6, "ipv6: %s\n", ip6_configs.disable ? "disabled" : "enabled");
+    RTE_LOG(INFO, IPV6, "ipv6:disable=%s\n", ip6_configs.disable ? "disabled" : "enabled");
 
     FREE_PTR(str);
+}
+
+static void ip6_addr_gen_mode_handler(vector_t tokens)
+{
+    char *str = set_value(tokens);
+
+    assert(str);
+
+    if (!strcasecmp(str, "eui64"))
+        ip6_configs.addr_gen_mode = IP6_ADDR_GEN_MODE_EUI64;
+    else if (!strcasecmp(str, "none"))
+        ip6_configs.addr_gen_mode = IP6_ADDR_GEN_MODE_NONE;
+    else if (!strcasecmp(str, "stable-privacy"))
+        ip6_configs.addr_gen_mode = IP6_ADDR_GEN_MODE_STABLE_PRIVACY;
+    else if (!strcasecmp(str, "random"))
+        ip6_configs.addr_gen_mode = IP6_ADDR_GEN_MODE_RANDOM;
+    else
+        RTE_LOG(WARNING, IPV6, "invalid ipv6:addr_gen_mode:%s\n", str);
+
+    RTE_LOG(INFO, IPV6, "ipv6:addr_gen_mode=%s\n", str);
+
+    FREE_PTR(str);
+}
+
+static void ip6_stable_secret_handler(vector_t tokens)
+{
+    bool valid = true;
+    size_t i, len;
+    char *str = set_value(tokens);
+
+    assert(str);
+    len = strlen(str);
+    if (len < 32) {
+        valid = false;
+    } else {
+        for (i = 0; i < 32; i++) {
+            if (!isxdigit(str[i])) {
+                valid = false;
+                break;
+            }
+        }
+    }
+    if (!valid) {
+        RTE_LOG(WARNING, IPV6, "invalid ipv6:stable_secret %s, "
+                "a 128-bit hexadecimal string required\n", str);
+        FREE_PTR(str);
+        return;
+    }
+
+    if (hexstr2binary(str, 32, (uint8_t *)(&ip6_configs.secret_stable.secret), 16) == 16)
+        ip6_configs.secret_stable.initialized  = true;
+    else
+        RTE_LOG(WARNING, IPV6, "fail to tranlate ipv6:stable_secret %s into binary\n", str);
+    RTE_LOG(INFO, IPV6, "ipv6:stable_secret configured");
+
+    FREE_PTR(str);
+}
+
+static inline void ip6_gen_mode_random_init(void)
+{
+    const char hex_chars[] = "0123456789abcdef";
+    char *buf = (char *)(&ip6_configs.secret_random.secret);
+    int i;
+
+    for (i = 0; i < 16; i++)
+        buf[i] = hex_chars[random() % 16];
+    ip6_configs.secret_random.initialized = true;
 }
 
 /* refer linux:ip6_input_finish() */
@@ -660,6 +727,8 @@ int ipv6_init(void)
     /* htons, cpu_to_be16 not work when struct initialization :( */
     ip6_pkt_type.type = htons(RTE_ETHER_TYPE_IPV6);
 
+    ip6_gen_mode_random_init();
+
     err = netif_register_pkt(&ip6_pkt_type);
     if (err)
         goto reg_pkt_err;
@@ -821,6 +890,8 @@ void ipv6_keyword_value_init(void)
     /* KW_TYPE NORMAL keyword */
     ip6_configs.forwarding = 0;
     ip6_configs.disable = 0;
+    ip6_configs.addr_gen_mode = IP6_ADDR_GEN_MODE_EUI64;
+    ip6_configs.secret_stable.initialized = false;
 
     route6_keyword_value_init();
 }
@@ -828,8 +899,10 @@ void ipv6_keyword_value_init(void)
 void install_ipv6_keywords(void)
 {
     install_keyword_root("ipv6_defs", NULL);
-    install_keyword("forwarding", ip6_conf_forward, KW_TYPE_NORMAL);
-    install_keyword("disable", ip6_conf_disable, KW_TYPE_NORMAL);
+    install_keyword("forwarding", ip6_forwarding_handler, KW_TYPE_NORMAL);
+    install_keyword("disable", ip6_disable_handler, KW_TYPE_NORMAL);
+    install_keyword("addr_gen_mode", ip6_addr_gen_mode_handler, KW_TYPE_NORMAL);
+    install_keyword("stable_secret", ip6_stable_secret_handler, KW_TYPE_NORMAL);
 
     install_route6_keywords();
 }

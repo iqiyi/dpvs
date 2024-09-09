@@ -28,7 +28,8 @@
 
 
 enum {
-    IDEV_F_NO_IPV6  = 0x00000001
+    IDEV_F_NO_IPV6  = 0x00000001,
+    IDEV_F_NO_ROUTE = 0x00000002,
 };
 
 struct inet_device {
@@ -125,7 +126,12 @@ bool inet_chk_mcast_addr(int af, struct netif_port *dev,
 
 void inet_ifaddr_dad_failure(struct inet_ifaddr *ifa);
 
+struct inet_device *dev_get_idev(const struct netif_port *dev);
+
+void idev_put(struct inet_device *idev);
+
 int idev_addr_init(struct inet_device *idev);
+
 
 int inet_addr_init(void);
 int inet_addr_term(void);
