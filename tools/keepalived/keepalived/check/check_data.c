@@ -106,8 +106,10 @@ free_whtlst_group(void *data)
     FREE_PTR(whtlst_group->gname);
     free_list(&whtlst_group->addr_ip);
     free_list(&whtlst_group->range);
+    free_list(&whtlst_group->ipset);
     FREE(whtlst_group);
 }
+
 static void
 dump_whtlst_group(FILE *fp, const void *data)
 {
@@ -116,18 +118,23 @@ dump_whtlst_group(FILE *fp, const void *data)
     conf_write(fp, " whitelist IP address group = %s", whtlst_group->gname);
     dump_list(fp, whtlst_group->addr_ip);
     dump_list(fp, whtlst_group->range);
+    dump_list(fp, whtlst_group->ipset);
 }
+
 static void
 free_whtlst_entry(void *data)
 {
     FREE(data);
 }
+
 static void
 dump_whtlst_entry(FILE *fp, const void *data)
 {
     const whtlst_addr_entry *whtlst_entry = data;
 
-    if (whtlst_entry->range)
+    if (!strncmp(whtlst_entry->ipset, "ipset:", sizeof("ipset:") - 1))
+        conf_write(fp, "   IPSET = %s", whtlst_entry->ipset);
+    else if (whtlst_entry->range)
         conf_write(fp, "   IP Range = %s-%d"
                 , inet_sockaddrtos(&whtlst_entry->addr)
                 , whtlst_entry->range);
@@ -135,6 +142,7 @@ dump_whtlst_entry(FILE *fp, const void *data)
         conf_write(fp, "   IP = %s"
                 , inet_sockaddrtos(&whtlst_entry->addr));
 }
+
 void
 alloc_whtlst_group(char *gname)
 {
@@ -146,21 +154,33 @@ alloc_whtlst_group(char *gname)
     memcpy(new->gname, gname, size);
     new->addr_ip = alloc_list(free_whtlst_entry, dump_whtlst_entry);
     new->range = alloc_list(free_whtlst_entry, dump_whtlst_entry);
+    new->ipset = alloc_list(free_whtlst_entry, dump_whtlst_entry);
 
     list_add(check_data->whtlst_group, new);
 }
+
 void
 alloc_whtlst_entry(const vector_t *strvec)
 {
     whtlst_addr_group *whtlst_group = LIST_TAIL_DATA(check_data->whtlst_group);
     whtlst_addr_entry *new;
+    const char *str_entry;
 
     new = (whtlst_addr_entry *) MALLOC(sizeof (whtlst_addr_entry));
+    if (!new)
+        return;
+    str_entry = strvec_slot(strvec, 0);
 
-    inet_stor(vector_slot(strvec, 0), &new->range);
+    if (!strncmp(str_entry, "ipset:", sizeof("ipset:") - 1)) {
+        strncpy(new->ipset, &str_entry[sizeof("ipset:")-1], sizeof(new->ipset) - 1);
+        list_add(whtlst_group->ipset, new);
+        return;
+    }
+
+    inet_stor(str_entry, &new->range);
     if (new->range == UINT32_MAX)
         new->range = 0;
-    inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
+    inet_stosockaddr(str_entry, NULL, &new->addr);
 
     if (!new->range)
         list_add(whtlst_group->addr_ip, new);
@@ -257,7 +277,6 @@ alloc_vsg_entry(const vector_t *strvec)
     unsigned fwmark;
 
     new = (virtual_server_group_entry_t *) MALLOC(sizeof(virtual_server_group_entry_t));
-   
     if (!strcmp(strvec_slot(strvec, 0), "fwmark")) {
         if (!read_unsigned_strvec(strvec, 1, &fwmark, 0, UINT32_MAX, true)) {
             report_config_error(CONFIG_GENERAL_ERROR, "(%s): fwmark '%s' must be in [0, %u] - ignoring", vsg->gname, strvec_slot(strvec, 1), UINT32_MAX);
@@ -508,8 +527,11 @@ dump_vs(FILE *fp, const void *data)
 	if (vs->blklst_addr_gname)
 		conf_write(fp, "   BLACK_LIST GROUP = %s", vs->blklst_addr_gname);
 
+	if (vs->whtlst_addr_gname)
+		conf_write(fp, "   WHITE_LIST GROUP = %s", vs->whtlst_addr_gname);
+
 	if (vs->vip_bind_dev)
-		conf_write(fp, "   vip_bind_dev = %s", vs->blklst_addr_gname);
+		conf_write(fp, "   vip_bind_dev = %s", vs->vip_bind_dev);
 
 	conf_write(fp, " SYN proxy is %s", vs->syn_proxy ? "ON" : "OFF");
 	conf_write(fp, " expire_quiescent_conn is %s", vs->expire_quiescent_conn ? "ON" : "OFF");
@@ -560,8 +582,7 @@ alloc_vs(const char *param1, const char *param2)
 		new->vfwmark = fwmark;
 	}
 	else if (!strcmp(param1, "match")) {
-		new->forwarding_method = IP_VS_CONN_F_SNAT; 
-
+		new->forwarding_method = IP_VS_CONN_F_SNAT;
 	} else {
 		/* Don't pass a zero for port number to inet_stosockaddr. This was added in v2.0.7
 		 * to support legacy configuration since previously having no port wasn't allowed. */
@@ -622,8 +643,8 @@ alloc_vs(const char *param1, const char *param2)
 }
 
 /*local address group facility functions*/
-static void 
-free_laddr_group(void *data) 
+static void
+free_laddr_group(void *data)
 {
     local_addr_group *laddr_group = (local_addr_group*)data;
     FREE_PTR(laddr_group->gname);
@@ -708,6 +729,7 @@ free_blklst_group(void *data)
 	FREE_PTR(blklst_group->gname);
 	free_list(&blklst_group->addr_ip);
 	free_list(&blklst_group->range);
+	free_list(&blklst_group->ipset);
 	FREE(blklst_group);
 }
 
@@ -719,6 +741,7 @@ dump_blklst_group(FILE *fp, const void *data)
 	conf_write(fp, " blacllist IP address group = %s", blklst_group->gname);
 	dump_list(fp, blklst_group->addr_ip);
 	dump_list(fp, blklst_group->range);
+	dump_list(fp, blklst_group->ipset);
 }
 
 static void
@@ -732,7 +755,9 @@ dump_blklst_entry(FILE *fp, const void *data)
 {
 	const blklst_addr_entry *blklst_entry = data;
 
-	if (blklst_entry->range)
+	if (!strncmp(blklst_entry->ipset, "ipset:", sizeof("ipset:") - 1))
+	    conf_write(fp, "   IPSET = %s", blklst_entry->ipset);
+	else if (blklst_entry->range)
 	    conf_write(fp, "   IP Range = %s-%d"
 			, inet_sockaddrtos(&blklst_entry->addr)
 			, blklst_entry->range);
@@ -752,6 +777,7 @@ alloc_blklst_group(char *gname)
 	memcpy(new->gname, gname, size);
 	new->addr_ip = alloc_list(free_blklst_entry, dump_blklst_entry);
 	new->range = alloc_list(free_blklst_entry, dump_blklst_entry);
+	new->ipset = alloc_list(free_blklst_entry, dump_blklst_entry);
 
 	list_add(check_data->blklst_group, new);
 }
@@ -761,14 +787,24 @@ alloc_blklst_entry(const vector_t *strvec)
 {
 	blklst_addr_group *blklst_group = LIST_TAIL_DATA(check_data->blklst_group);
 	blklst_addr_entry *new;
+	const char *str_entry;
 
 	new = (blklst_addr_entry *) MALLOC(sizeof (blklst_addr_entry));
+	if (!new)
+		return;
+	str_entry = strvec_slot(strvec, 0);
 
-	inet_stor(vector_slot(strvec, 0), &new->range);
+	if (!strncmp(str_entry, "ipset:", sizeof("ipset:") - 1)) {
+		strncpy(new->ipset, &str_entry[sizeof("ipset:")-1], sizeof(new->ipset) - 1);
+		list_add(blklst_group->ipset, new);
+		return;
+	}
+
+	inet_stor(str_entry, &new->range);
 	/* If no range specified, new->range == UINT32_MAX */
 	if (new->range == UINT32_MAX)
 		new->range = 0;
-	inet_stosockaddr(vector_slot(strvec, 0), NULL, &new->addr);
+	inet_stosockaddr(str_entry, NULL, &new->addr);
 
 	if (!new->range)
 		list_add(blklst_group->addr_ip, new);
@@ -1052,7 +1088,7 @@ alloc_check_data(void)
 #endif
 	new->laddr_group = alloc_list(free_laddr_group, dump_laddr_group);
 	new->blklst_group = alloc_list(free_blklst_group, dump_blklst_group);
-    new->whtlst_group = alloc_list(free_whtlst_group, dump_whtlst_group);
+	new->whtlst_group = alloc_list(free_whtlst_group, dump_whtlst_group);
 	new->tunnel_group = alloc_list(free_tunnel_group, dump_tunnel_group);
 
 	return new;
@@ -1070,6 +1106,7 @@ free_check_data(check_data_t *data)
 #endif
 	free_list(&data->laddr_group);
 	free_list(&data->blklst_group);
+	free_list(&data->whtlst_group);
 	free_list(&data->tunnel_group);
 	FREE(data);
 }
@@ -1089,6 +1126,8 @@ dump_check_data(FILE *fp, check_data_t *data)
 			dump_list(fp, data->laddr_group);
 		if (!LIST_ISEMPTY(data->blklst_group))
 			dump_list(fp, data->blklst_group);
+		if (!LIST_ISEMPTY(data->whtlst_group))
+			dump_list(fp, data->whtlst_group);
 		if (!LIST_ISEMPTY(data->vs_group))
 			dump_list(fp, data->vs_group);
 		dump_list(fp, data->vs);

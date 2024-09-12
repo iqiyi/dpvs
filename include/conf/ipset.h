@@ -32,7 +32,7 @@
 #define IPSET_F_FORCE   0x0001
 
 enum ipset_op {
-    IPSET_OP_ADD,
+    IPSET_OP_ADD = 1,
     IPSET_OP_DEL,
     IPSET_OP_TEST,
     IPSET_OP_CREATE,
@@ -43,34 +43,36 @@ enum ipset_op {
 };
 
 struct ipset_option {
-    int family;
     union {
         struct {
-            bool comment;
-            int hashsize;
-            int maxelem;
-        } create;
+            int32_t hashsize;
+            uint32_t maxelem;
+            uint8_t comment;
+        } __attribute__((__packed__)) create;
         struct {
-            bool nomatch;
-        } add;
+            char padding[8];
+            uint8_t nomatch;
+        } __attribute__((__packed__)) add;
     };
-};
+    uint8_t family;
+} __attribute__((__packed__));
 
 struct ipset_param {
     char                        type[IPSET_MAXNAMELEN];
     char                        name[IPSET_MAXNAMELEN];
     char                        comment[IPSET_MAXCOMLEN];
-    int                         opcode;
-    struct ipset_option         option;
+    uint16_t                    opcode;
     uint16_t                    flag;
+    struct ipset_option         option;
 
     uint8_t                     proto;
     uint8_t                     cidr;
     struct inet_addr_range      range;   /* port in host byteorder */
-    uint8_t                     mac[6];
     char                        iface[IFNAMSIZ];
+    uint8_t                     mac[6];
 
     /* for type with 2 nets */
+    uint8_t                     padding;
     uint8_t                     cidr2;
     struct inet_addr_range      range2;
     //uint8_t                     mac[2];
@@ -83,43 +85,48 @@ struct ipset_member {
     uint8_t                     cidr;
     uint8_t                     proto;
     uint16_t                    port;
-    uint8_t                     mac[6];
     char                        iface[IFNAMSIZ];
-    bool                        nomatch;
+    uint8_t                     mac[6];
+    uint8_t                     nomatch;
     
     /* second net */
-    union inet_addr             addr2;
     uint8_t                     cidr2;
     uint16_t                    port2;
+    uint8_t                     padding[2];
+    union inet_addr             addr2;
 };
 
 struct ipset_info {
     char name[IPSET_MAXNAMELEN];
     char type[IPSET_MAXNAMELEN];
-    bool comment;
+    uint8_t comment;
+
+    uint8_t af;
+    uint8_t padding[2];
 
     union {
         struct ipset_bitmap_header {
-            struct inet_addr_range range;
             uint8_t cidr;
+            uint8_t padding[3];
+            struct inet_addr_range range;
         } bitmap;
         struct ipset_hash_header {
-            int hashsize;
-            int maxelem;
+            uint8_t padding[4]; // aligned for dpvs-agent
+            int32_t hashsize;
+            uint32_t maxelem;
         } hash;
     };
 
-    int af;
-    size_t size;
-    int entries;
-    int references;
+    uint32_t size;
+    uint32_t entries;
+    uint32_t references;
 
     void *members;
 };
 
 struct ipset_info_array {
-    int                   nipset;
-    struct ipset_info     infos[0];
+    uint32_t            nipset;
+    struct ipset_info   infos[0];
 } __attribute__((__packed__));
 
 #endif /* __DPVS_IPSET_CONF_H__ */

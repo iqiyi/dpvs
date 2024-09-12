@@ -132,6 +132,7 @@ typedef struct _local_addr_group {
 typedef struct _blklst_addr_entry {
 	struct sockaddr_storage addr;
 	uint32_t range;
+	char ipset[IPSET_MAXNAMELEN];
 } blklst_addr_entry;
 
 
@@ -139,18 +140,21 @@ typedef struct _blklst_addr_group {
 	char *gname;
 	list addr_ip;
 	list range;
+	list ipset;
 } blklst_addr_group;
 
 /* whitelist ip group*/
 typedef struct _whtlst_addr_entry {
     struct sockaddr_storage addr;
     uint32_t range;
+    char ipset[IPSET_MAXNAMELEN];
 } whtlst_addr_entry;
 
 typedef struct _whtlst_addr_group {
     char *gname;
     list addr_ip;
     list range;
+    list ipset;
 } whtlst_addr_group;
 
 typedef struct _tunnel_entry {

@@ -24,6 +24,7 @@
 
 #include "inet.h"
 #include "conf/sockopts.h"
+#include "conf/ipset.h"
 
 struct dp_vs_blklst_entry {
     union inet_addr addr;
@@ -31,15 +32,14 @@ struct dp_vs_blklst_entry {
 
 typedef struct dp_vs_blklst_conf {
     /* identify service */
-    union inet_addr     blklst;
     union inet_addr     vaddr;
-    int                 af;
-    uint32_t            fwmark;
     uint16_t            vport;
     uint8_t             proto;
-    uint8_t             padding;
+    uint8_t             af;
 
-    /* for set */
+    /* subject and ipset are mutual exclusive */
+    union inet_addr     subject;
+    char                ipset[IPSET_MAXNAMELEN];
 } dpvs_blklst_t;
 
 struct dp_vs_blklst_conf_array {

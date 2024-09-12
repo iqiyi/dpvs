@@ -19,6 +19,9 @@ type CertAuthSpec struct {
 
 	// addr
 	Addr string `json:"addr,omitempty"`
+
+	// ipset
+	Ipset string `json:"ipset,omitempty"`
 }
 
 // Validate validates this cert auth spec

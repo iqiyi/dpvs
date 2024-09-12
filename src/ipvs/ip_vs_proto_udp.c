@@ -235,14 +235,14 @@ udp_conn_lookup(struct dp_vs_proto *proto,
     if (unlikely(!uh))
         return NULL;
 
-    if (dp_vs_blklst_lookup(iph->af, iph->proto, &iph->daddr,
-                uh->dst_port, &iph->saddr)) {
+    if (dp_vs_blklst_filtered(iph->af, iph->proto, &iph->daddr,
+                uh->dst_port, &iph->saddr, mbuf)) {
         *drop = true;
         return NULL;
     }
 
-    if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr,
-							uh->dst_port, &iph->saddr)) {
+    if (dp_vs_whtlst_filtered(iph->af, iph->proto, &iph->daddr,
+                uh->dst_port, &iph->saddr, mbuf)) {
         *drop = true;
         return NULL;
     }
