@@ -33,6 +33,29 @@
 #define IPV6
 #define RTE_LOGTYPE_IPV6    RTE_LOGTYPE_USER1
 
+enum ip6_addr_gen_mode {
+    IP6_ADDR_GEN_MODE_EUI64 = 1,
+    IP6_ADDR_GEN_MODE_NONE,
+    IP6_ADDR_GEN_MODE_STABLE_PRIVACY,
+    IP6_ADDR_GEN_MODE_RANDOM,
+    IP6_ADDR_GFN_MODE_MAX = 64,
+};
+
+struct ipv6_stable_secret {
+    bool initialized;
+    struct in6_addr secret;
+};
+
+struct ipv6_config {
+    unsigned disable:1;
+    unsigned forwarding:1;
+    unsigned addr_gen_mode:6;
+    struct ipv6_stable_secret secret_stable;
+    struct ipv6_stable_secret secret_random;
+};
+
+const struct ipv6_config *ip6_config_get(void);
+
 /*
  * helper functions
  */

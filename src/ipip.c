@@ -46,7 +46,9 @@ static int ipip_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 }
 
 static struct netif_ops ipip_dev_ops = {
+    .op_init             = ip_tunnel_dev_init,
     .op_xmit             = ipip_xmit,
+    .op_set_mc_list      = ip_tunnel_set_mc_list,
     .op_get_link         = ip_tunnel_get_link,
     .op_get_stats        = ip_tunnel_get_stats,
     .op_get_promisc      = ip_tunnel_get_promisc,

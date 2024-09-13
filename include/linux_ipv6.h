@@ -492,6 +492,19 @@ static inline int ipv6_saddr_preferred(int type)
     return 0;
 }
 
+static inline bool ipv6_reserved_interfaceid(const struct in6_addr *addr)
+{
+    if ((addr->s6_addr32[2] | addr->s6_addr32[3]) == 0)
+        return true;
+    if (addr->s6_addr32[2] == htonl(0x02005eff) &&
+                ((addr->s6_addr32[3] & htonl(0xfe000000)) == htonl(0xfe000000)))
+        return true;
+    if (addr->s6_addr32[2] == htonl(0xfdffffff) &&
+            ((addr->s6_addr32[3] & htonl(0xffffff80)) == htonl(0xffffff80)))
+        return true;
+    return false;
+}
+
 #ifdef __DPVS__
 /*functions below were edited from addrconf.c*/
 

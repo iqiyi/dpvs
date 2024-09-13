@@ -75,6 +75,21 @@ static int alloc_vlan_info(struct netif_port *dev)
     return EDPVS_OK;
 }
 
+static int vlan_dev_init(struct netif_port *dev)
+{
+    int err;
+    struct inet_device *idev = dev_get_idev(dev);
+
+    err = idev_addr_init(idev);
+    if (err != EDPVS_OK) {
+        idev_put(idev);
+        return err;
+    }
+
+    idev_put(idev);
+    return EDPVS_OK;
+}
+
 static int vlan_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
     struct vlan_dev_priv *vlan = netif_priv(dev);
@@ -171,6 +186,7 @@ static int vlan_get_stats(struct netif_port *dev, struct rte_eth_stats *stats)
 }
 
 static struct netif_ops vlan_netif_ops = {
+    .op_init             = vlan_dev_init,
     .op_xmit             = vlan_xmit,
     .op_set_mc_list      = vlan_set_mc_list,
     .op_get_queue        = vlan_get_queue,
@@ -228,8 +244,8 @@ int vlan_add_dev(struct netif_port *real_dev, const char *ifname,
     }
 
     /* allocate and register netif device */
-    dev = netif_alloc(sizeof(struct vlan_dev_priv), name_buf,
-            real_dev->nrxq, real_dev->ntxq, vlan_setup);
+    dev = netif_alloc(NETIF_PORT_ID_INVALID, sizeof(struct vlan_dev_priv),
+            name_buf, real_dev->nrxq, real_dev->ntxq, vlan_setup);
     if (!dev) {
         err = EDPVS_NOMEM;
         goto out;

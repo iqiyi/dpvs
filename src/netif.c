@@ -2766,8 +2766,6 @@ static inline void netif_lcore_cleanup(void)
     }
 }
 
-/********************************************** kni *************************************************/
-
 /* always update bond port macaddr and its KNI macaddr together */
 static int update_bond_macaddr(struct netif_port *port)
 {
@@ -2798,6 +2796,8 @@ static inline void free_mbufs(struct rte_mbuf **pkts, unsigned num)
         pkts[i] = NULL;
     }
 }
+
+/********************************************** kni *************************************************/
 
 void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
@@ -3224,7 +3224,7 @@ portid_t netif_port_count(void)
     return port_id_end;
 }
 
-struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
+struct netif_port *netif_alloc(portid_t id, size_t priv_size, const char *namefmt,
                                unsigned int nrxq, unsigned int ntxq,
                                void (*setup)(struct netif_port *))
 {
@@ -3247,13 +3247,17 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
         return NULL;
     }
 
-    dev->id = netif_port_id_alloc();
+    if (id != NETIF_PORT_ID_INVALID && !netif_port_get(id))
+        dev->id = id;
+    else
+        dev->id = netif_port_id_alloc();
 
     if (strstr(namefmt, "%d"))
         snprintf(dev->name, sizeof(dev->name), namefmt, dev->id);
     else
         snprintf(dev->name, sizeof(dev->name), "%s", namefmt);
 
+    rte_rwlock_init(&dev->dev_lock);
     dev->socket = SOCKET_ID_ANY;
     dev->hw_header_len = sizeof(struct rte_ether_hdr); /* default */
 
@@ -3277,7 +3281,6 @@ struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
     if (dev->mtu == 0)
         dev->mtu = ETH_DATA_LEN;
 
-    rte_rwlock_init(&dev->dev_lock);
     netif_mc_init(dev);
 
     dev->in_ptr = rte_zmalloc(NULL, sizeof(struct inet_device), RTE_CACHE_LINE_SIZE);
@@ -3472,79 +3475,6 @@ static inline void setup_dev_of_flags(struct netif_port *port)
     /* enable lldp on physical port */
     if (is_physical_port(port->id))
         port->flag |= NETIF_PORT_FLAG_LLDP;
-}
-
-/* TODO: refactor it with netif_alloc */
-static struct netif_port* netif_rte_port_alloc(portid_t id, int nrxq,
-        int ntxq, const struct rte_eth_conf *conf)
-{
-    int ii;
-    struct netif_port *port;
-
-    port = rte_zmalloc("port", sizeof(struct netif_port) +
-            sizeof(union netif_bond), RTE_CACHE_LINE_SIZE);
-    if (!port) {
-        RTE_LOG(ERR, NETIF, "%s: no memory\n", __func__);
-        return NULL;
-    }
-
-    port->id = id;
-    port->bond = (union netif_bond *)(port + 1);
-    if (is_physical_port(id)) {
-        port->type = PORT_TYPE_GENERAL; /* update later in netif_rte_port_alloc */
-        port->netif_ops = &dpdk_netif_ops;
-    } else if (is_bond_port(id)) {
-        port->type = PORT_TYPE_BOND_MASTER;
-        port->netif_ops = &bond_netif_ops;
-    } else {
-        RTE_LOG(ERR, NETIF, "%s: invalid port id: %d\n", __func__, id);
-        rte_free(port);
-        return NULL;
-    }
-
-    if (port_name_alloc(id, port->name, sizeof(port->name)) != EDPVS_OK) {
-        RTE_LOG(ERR, NETIF, "%s: fail to get port name for port%d\n",
-                __func__, id);
-        rte_free(port);
-        return NULL;
-    }
-
-    port->nrxq = nrxq; // update after port_rx_queues_get();
-    port->ntxq = ntxq; // update after port_tx_queues_get();
-    port->socket = rte_eth_dev_socket_id(id);
-    port->hw_header_len = sizeof(struct rte_ether_hdr);
-    if (port->socket == SOCKET_ID_ANY)
-        port->socket = rte_socket_id();
-    port->mbuf_pool = pktmbuf_pool[port->socket];
-    rte_eth_macaddr_get((uint8_t)id, &port->addr); // bonding mac is zero here
-    rte_eth_dev_get_mtu((uint8_t)id, &port->mtu);
-    rte_eth_dev_info_get((uint8_t)id, &port->dev_info);
-    port->dev_conf = *conf;
-    rte_rwlock_init(&port->dev_lock);
-    netif_mc_init(port);
-
-    setup_dev_of_flags(port);
-
-    port->in_ptr = rte_zmalloc(NULL, sizeof(struct inet_device), RTE_CACHE_LINE_SIZE);
-    if (!port->in_ptr) {
-        RTE_LOG(ERR, NETIF, "%s: no memory\n", __func__);
-        rte_free(port);
-        return NULL;
-    }
-    port->in_ptr->dev = port;
-
-    for (ii = 0; ii < DPVS_MAX_LCORE; ii++) {
-        INIT_LIST_HEAD(&port->in_ptr->ifa_list[ii]);
-        INIT_LIST_HEAD(&port->in_ptr->ifm_list[ii]);
-    }
-
-    if (tc_init_dev(port) != EDPVS_OK) {
-        RTE_LOG(ERR, NETIF, "%s: fail to init TC\n", __func__);
-        rte_free(port);
-        return NULL;
-    }
-
-    return port;
 }
 
 struct netif_port* netif_port_get(portid_t id)
@@ -4083,9 +4013,9 @@ int netif_port_start(struct netif_port *port)
     if (port->netif_ops->op_update_addr)
         port->netif_ops->op_update_addr(port);
 
-    /* add in6_addr multicast address */
-    if ((ret = idev_add_mcast_init(port)) != EDPVS_OK) {
-        RTE_LOG(WARNING, NETIF, "%s: idev_add_mcast_init failed -- %d(%s)\n",
+    /* ipv6 default addresses initialization */
+    if ((ret = idev_addr_init(port->in_ptr)) != EDPVS_OK) {
+        RTE_LOG(WARNING, NETIF, "%s: idev_addr_init failed -- %d(%s)\n",
                 __func__, ret, dpvs_strerror(ret));
         return ret;
     }
@@ -4123,7 +4053,7 @@ int netif_port_register(struct netif_port *port)
 {
     struct netif_port *cur;
     int hash, nhash;
-    int err = EDPVS_OK;
+    int err;
 
     if (unlikely(NULL == port))
         return EDPVS_INVAL;
@@ -4146,10 +4076,15 @@ int netif_port_register(struct netif_port *port)
     list_add_tail(&port->nlist, &port_ntab[nhash]);
     g_nports++;
 
-    if (port->netif_ops->op_init)
+    if (port->netif_ops->op_init) {
         err = port->netif_ops->op_init(port);
+        if (err != EDPVS_OK) {
+            netif_port_unregister(port);
+            return err;
+        }
+    }
 
-    return err;
+    return EDPVS_OK;
 }
 
 int netif_port_unregister(struct netif_port *port)
@@ -4229,6 +4164,7 @@ static int relate_bonding_device(void)
             }
             sport->type = PORT_TYPE_BOND_SLAVE;
             sport->bond->slave.master = mport;
+            sport->in_ptr->flags |= IDEV_F_NO_ROUTE;
         }
         mport->bond->master.slave_nb = i;
     }
@@ -4336,14 +4272,42 @@ static char *find_conf_kni_name(portid_t id)
     return NULL;
 }
 
+static void dpdk_port_setup(struct netif_port *dev)
+{
+    dev->type      = PORT_TYPE_GENERAL;
+    dev->netif_ops = &dpdk_netif_ops;
+    dev->socket    = rte_eth_dev_socket_id(dev->id);
+    dev->dev_conf  = default_port_conf;
+    dev->bond      = (union netif_bond *)(dev + 1);
+
+    rte_eth_macaddr_get(dev->id, &dev->addr);
+    rte_eth_dev_get_mtu(dev->id, &dev->mtu);
+    rte_eth_dev_info_get(dev->id, &dev->dev_info);
+    setup_dev_of_flags(dev);
+}
+
+static void bond_port_setup(struct netif_port *dev)
+{
+    dev->type      = PORT_TYPE_BOND_MASTER;
+    dev->netif_ops = &bond_netif_ops;
+    dev->socket    = rte_eth_dev_socket_id(dev->id);
+    dev->dev_conf  = default_port_conf;
+    dev->bond      = (union netif_bond *)(dev + 1);
+
+    rte_eth_macaddr_get(dev->id, &dev->addr);
+    rte_eth_dev_get_mtu(dev->id, &dev->mtu);
+    rte_eth_dev_info_get(dev->id, &dev->dev_info);
+    setup_dev_of_flags(dev);
+}
+
 /* Allocate and register all DPDK ports available */
 static void netif_port_init(void)
 {
     int nports, nports_cfg;
     portid_t pid;
     struct netif_port *port;
-    struct rte_eth_conf this_eth_conf;
     char *kni_name;
+    char ifname[IFNAMSIZ];
 
     nports = dpvs_rte_eth_dev_count();
     if (nports <= 0)
@@ -4358,17 +4322,23 @@ static void netif_port_init(void)
     port_tab_init();
     port_ntab_init();
 
-    this_eth_conf = default_port_conf;
-
     kni_init();
 
     for (pid = 0; pid < nports; pid++) {
+        if (port_name_alloc(pid, ifname, sizeof(ifname)) != EDPVS_OK)
+            rte_exit(EXIT_FAILURE, "Port name allocation failed, exiting...\n");
+
         /* queue number will be filled on device start */
-        port = netif_rte_port_alloc(pid, 0, 0, &this_eth_conf);
+        port = NULL;
+        if (is_physical_port(pid))
+            port = netif_alloc(pid, sizeof(union netif_bond), ifname, 0, 0, dpdk_port_setup);
+        else if (is_bond_port(pid))
+            port = netif_alloc(pid, sizeof(union netif_bond), ifname, 0, 0, bond_port_setup);
         if (!port)
-            rte_exit(EXIT_FAILURE, "Port allocate fail, exiting...\n");
+            rte_exit(EXIT_FAILURE, "Port allocation failed, exiting...\n");
+
         if (netif_port_register(port) < 0)
-            rte_exit(EXIT_FAILURE, "Port register fail, exiting...\n");
+            rte_exit(EXIT_FAILURE, "Port registration failed, exiting...\n");
     }
 
     if (relate_bonding_device() < 0)
@@ -4490,7 +4460,7 @@ int netif_vdevs_add(void)
                     __func__, bond_cfg->name, bond_cfg->mode, bond_cfg->numa_node);
             return EDPVS_CALLBACKFAIL;
         }
-        bond_cfg->port_id = ret; /* relate port_id with port_name, used by netif_rte_port_alloc */
+        bond_cfg->port_id = ret; /* relate port_id with port_name, used by port_name_alloc */
         RTE_LOG(INFO, NETIF, "created bondig device %s: mode=%d, primary=%s, numa_node=%d\n",
                 bond_cfg->name, bond_cfg->mode, bond_cfg->primary, bond_cfg->numa_node);
 

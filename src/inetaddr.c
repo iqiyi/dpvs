@@ -16,6 +16,7 @@
  *
  */
 #include <assert.h>
+#include <openssl/sha.h>
 #include "dpdk.h"
 #include "ctrl.h"
 #include "netif.h"
@@ -24,6 +25,7 @@
 #include "sa_pool.h"
 #include "ndisc.h"
 #include "route.h"
+#include "ipv6.h"
 #include "route6.h"
 #include "inetaddr.h"
 #include "conf/inetaddr.h"
@@ -75,14 +77,14 @@ static uint32_t ifa_msg_seq(void)
     return counter++;
 }
 
-static inline struct inet_device *dev_get_idev(const struct netif_port *dev)
+struct inet_device *dev_get_idev(const struct netif_port *dev)
 {
     assert(dev && dev->in_ptr);
     rte_atomic32_inc(&dev->in_ptr->refcnt);
     return dev->in_ptr;
 }
 
-static inline void idev_put(struct inet_device *idev)
+void idev_put(struct inet_device *idev)
 {
     rte_atomic32_dec(&idev->refcnt);
 }
@@ -232,17 +234,12 @@ static int ifa_add_del_mcast(struct inet_ifaddr *ifa, bool add, bool is_master)
 }
 
 /* add ipv6 multicast address after port start */
-static int __idev_add_mcast_init(void *args)
+static int __idev_inet6_mcast_init(struct inet_device *idev)
 {
     int err;
-    struct inet_device *idev;
     union inet_addr all_nodes, all_routers;
     struct rte_ether_addr eaddr_nodes, eaddr_routers;
     bool is_master = (rte_lcore_id() == g_master_lcore_id);
-
-    struct netif_port *dev = (struct netif_port *) args;
-
-    idev = dev_get_idev(dev);
 
     memset(&eaddr_nodes, 0, sizeof(eaddr_nodes));
     memset(&eaddr_routers, 0, sizeof(eaddr_routers));
@@ -273,7 +270,6 @@ static int __idev_add_mcast_init(void *args)
             goto free_idev_routers;
     }
 
-    idev_put(idev);
     return EDPVS_OK;
 
 free_idev_routers:
@@ -284,20 +280,171 @@ free_netif_nodes:
 free_idev_nodes:
     idev_mc_del(AF_INET6, idev, &all_nodes);
 errout:
-    idev_put(idev);
     return err;
 }
 
-int idev_add_mcast_init(struct netif_port *dev)
+static int inet6_addr_gen_eui64(struct inet_device *idev, struct in6_addr *addr)
+{
+    unsigned char hwaddr[6];
+    unsigned char *eui = &addr->s6_addr[8];
+
+    rte_memcpy(hwaddr, &idev->dev->addr, 6);
+    eui[0] = hwaddr[0] ^ 0x02;
+    eui[1] = hwaddr[1];
+    eui[2] = hwaddr[2];
+    eui[3] = 0xFF;
+    eui[4] = 0xFE;
+    eui[5] = hwaddr[3];
+    eui[6] = hwaddr[4];
+    eui[7] = hwaddr[5];
+
+    return EDPVS_OK;
+}
+
+static int inet6_addr_gen_stable(struct in6_addr secret, struct inet_device *idev, struct in6_addr *addr)
+{
+#define MAX_RETRY   8
+    struct in6_addr temp;
+    union {
+        unsigned char data[SHA256_DIGEST_LENGTH];
+        uint32_t data_word[2];
+    } md;
+    struct {
+        struct in6_addr secret;
+        uint32_t prefix[2];
+        struct rte_ether_addr hwaddr;
+        uint8_t dad_count;
+    } __rte_packed data;
+    uint8_t dad_count = 0;
+
+    memset(&data, 0, sizeof(data));
+    data.secret = secret;
+    data.prefix[0] = addr->s6_addr32[0];
+    data.prefix[1] = addr->s6_addr32[1];
+    data.hwaddr = idev->dev->addr;
+    while (1) {
+        data.dad_count = dad_count++;
+        memset(&md, 0, sizeof(md));
+        SHA512((const unsigned char*)&data, sizeof(data), md.data);
+        temp = *addr;
+        temp.s6_addr32[2] = md.data_word[0];
+        temp.s6_addr32[3] = md.data_word[1];
+        if (!ipv6_reserved_interfaceid(&temp))
+            break;
+        if (dad_count >= MAX_RETRY)
+            return EDPVS_RESOURCE;
+    }
+
+    *addr = temp;
+    return EDPVS_OK;
+}
+
+static int inet6_link_local_addr_gen(struct inet_device *idev, struct in6_addr *addr)
+{
+    const struct ipv6_config *ip6cfg = ip6_config_get();
+
+    ipv6_addr_set(addr, htonl(0xFE800000), 0, 0, 0);
+    switch (ip6cfg->addr_gen_mode) {
+        case IP6_ADDR_GEN_MODE_EUI64:
+            return inet6_addr_gen_eui64(idev, addr);
+        case IP6_ADDR_GEN_MODE_NONE:
+            return EDPVS_DISABLED;
+        case IP6_ADDR_GEN_MODE_STABLE_PRIVACY:
+            if (ip6cfg->secret_stable.initialized)
+                return inet6_addr_gen_stable(ip6cfg->secret_stable.secret, idev, addr);
+            // fallthrough
+        case IP6_ADDR_GEN_MODE_RANDOM:
+            return inet6_addr_gen_stable(ip6cfg->secret_random.secret, idev, addr);
+        default:
+            return EDPVS_NOTSUPP;
+    }
+
+    return EDPVS_OK;
+}
+
+static int ifa_entry_add(const struct ifaddr_action *param);
+static int __inet6_link_local_addr_config(struct inet_device *idev, const struct in6_addr *addr)
+{
+    struct ifaddr_action param;
+
+    memset(&param, 0, sizeof(param));
+    fill_ifaddr_action(AF_INET6, idev->dev, (union inet_addr *)addr, 64, NULL,
+                       0, 0, IFA_SCOPE_LINK, IFA_F_LINKLOCAL, INET_ADDR_ADD, &param);
+    return ifa_entry_add(&param);
+}
+
+struct idev_addr_init_args {
+    struct inet_device *idev;
+    struct in6_addr link_local_addr;
+};
+
+static int __idev_addr_init(void *args)
 {
     int err;
-    lcoreid_t cid;
+    struct idev_addr_init_args *param = args;
 
-    rte_eal_mp_remote_launch(__idev_add_mcast_init, dev, CALL_MAIN);
-    RTE_LCORE_FOREACH_WORKER(cid) {
-        err = rte_eal_wait_lcore(cid);
-        if (unlikely(err < 0))
+    assert(param && param->idev && param->idev->dev);
+
+    if (rte_lcore_id() >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    err = __inet6_link_local_addr_config(param->idev, &param->link_local_addr);
+    if (err != EDPVS_OK)
+        return err;
+
+    return __idev_inet6_mcast_init(param->idev);
+}
+
+int idev_addr_init(struct inet_device *idev)
+{
+    int err;
+    lcoreid_t cid, tcid;
+    struct dpvs_msg *msg;
+    struct idev_addr_init_args args;
+
+    // only ipv6 needs address initialization now
+    if (ip6_config_get()->disable || (idev->flags & IDEV_F_NO_IPV6))
+        return EDPVS_OK;
+
+    if (idev->flags & IDEV_F_NO_ROUTE)
+        return EDPVS_OK;
+
+    cid = rte_lcore_id();
+    if (cid != rte_get_main_lcore())
+        return EDPVS_NOTSUPP;
+
+    args.idev = idev;
+    err = inet6_link_local_addr_gen(idev, &args.link_local_addr);
+    if (err != EDPVS_OK) {
+        if (EDPVS_DISABLED == err)
+            return EDPVS_OK;
+        return err;
+    }
+
+    // do it on master lcore
+    err =  __idev_addr_init(&args);
+    if (err != EDPVS_OK)
+        return err;
+
+    // do it on slave lcores
+    if (dpvs_state_get() == DPVS_STATE_NORMAL) {
+        msg = msg_make(MSG_TYPE_IFA_IDEVINIT, ifa_msg_seq(), DPVS_MSG_MULTICAST,
+                cid, sizeof(args), &args);
+        if (unlikely(!msg))
+            return EDPVS_NOMEM;
+        err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
+        if (err != EDPVS_OK) {
+            msg_destroy(&msg);
             return err;
+        }
+        msg_destroy(&msg);
+    } else {
+        rte_eal_mp_remote_launch(__idev_addr_init, &args, SKIP_MAIN);
+        RTE_LCORE_FOREACH_WORKER(tcid) {
+            err = rte_eal_wait_lcore(tcid);
+            if (unlikely(err < 0))
+                return err;
+        }
     }
 
     return EDPVS_OK;
@@ -1344,6 +1491,17 @@ static int ifa_msg_sync_cb(struct dpvs_msg *msg)
     return EDPVS_OK;
 }
 
+static int ifa_msg_idevinit_cb(struct dpvs_msg *msg)
+{
+    struct idev_addr_init_args *param;
+
+    if (unlikely(!msg || msg->len != sizeof(*param)))
+        return EDPVS_INVAL;
+    param = (struct idev_addr_init_args *)(msg->data);
+
+    return __idev_addr_init(param);
+}
+
 static int __inet_addr_add(const struct ifaddr_action *param)
 {
     int err;
@@ -1952,7 +2110,7 @@ static int ifa_sockopt_agent_get(sockoptid_t opt, const void *conf, size_t size,
     struct inet_device *idev = NULL;
     struct inet_addr_front *array = NULL;
     const struct inet_addr_entry *entry = conf;
-    int len;
+    int len = 0;
     int err;
 
     if (entry->af != AF_INET && entry->af != AF_INET6 && entry->af != AF_UNSPEC) {
@@ -2113,6 +2271,13 @@ static struct dpvs_msg_type ifa_msg_types[] = {
         //.cid              = rte_get_main_lcore(),
         .unicast_msg_cb     = ifa_msg_sync_cb,
         .multicast_msg_cb   = NULL
+    },
+    {
+        .type               = MSG_TYPE_IFA_IDEVINIT,
+        .prio               = MSG_PRIO_NORM,
+        .mode               = DPVS_MSG_MULTICAST,
+        .unicast_msg_cb     = ifa_msg_idevinit_cb,
+        .multicast_msg_cb   = NULL,
     }
 };
 

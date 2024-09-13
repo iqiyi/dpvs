@@ -188,6 +188,9 @@ static int dpvs_job_loop(void *arg)
         thres_time = BIG_LOOP_THRESH_MASTER;
 #endif
 
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
     /* skip irrelative job loops */
     if (role == LCORE_ROLE_MAX)
         return EDPVS_INVAL;

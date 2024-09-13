@@ -227,6 +227,9 @@ ipset_flush_lcore(void *arg)
     int i;
     struct ipset *set;
 
+    if (rte_lcore_id() >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
     for (i = 0; i < IPSETS_TBL_SIZE; i++) {
         list_for_each_entry(set, &this_ipsets_tbl[i], list)
             set->type->destroy(set);
@@ -244,8 +247,12 @@ static int
 ipset_lcore_init(void *arg)
 {
     int i;
+    lcoreid_t cid = rte_lcore_id();
 
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
     this_ipsets_tbl = rte_zmalloc(NULL, 
