@@ -314,7 +314,7 @@ static int inet6_addr_gen_stable(struct in6_addr secret, struct inet_device *ide
         uint32_t prefix[2];
         struct rte_ether_addr hwaddr;
         uint8_t dad_count;
-    } __rte_packed data;
+    } data;
     uint8_t dad_count = 0;
 
     memset(&data, 0, sizeof(data));

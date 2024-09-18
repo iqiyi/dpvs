@@ -26,23 +26,20 @@ If dpdk has installed already, please ensure the libdpdk.pc file could be found 
 You may fix the problem by setting LIBDPDKPC_PATH (in file src/dpdk.mk) to the path of libdpdk.pc file explicitly
 endef
 
-# It's noted that pkg-config version 0.29.2 is recommended,
+# It's noted that pkg-config version 0.29.2+ is recommended,
 # pkg-config 0.27.1 would mess up the ld flags when linking dpvs.
-PKGCONFIG_VERSION=$(shell pkg-config pkg-config --version)
-ifneq "v$(PKGCONFIG_VERSION)" "v0.29.2"
-$(warning "The pkg-config version is $(PKGCONFIG_VERSION) but 0.29.2 is recommended.")
+PKGCONFIG_VERSION=$(shell pkg-config --version)
 ifeq "v$(PKGCONFIG_VERSION)" "v0.27.1"
-$(error "pkg-config version $(PKGCONFIG_VERSION) isn't supported by dpvs, please use 0.29.2 instead.")
-endif
+$(error "pkg-config version $(PKGCONFIG_VERSION) isn't supported, require 0.29.2+")
 endif
 
-ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
-CFLAGS += -DALLOW_EXPERIMENTAL_API $(shell pkg-config --cflags libdpdk)
-LIBS += $(shell pkg-config --static --libs libdpdk)
-else
 ifneq ($(wildcard $(LIBDPDKPC_PATH)),)
 CFLAGS += -DALLOW_EXPERIMENTAL_API $(shell PKG_CONFIG_PATH=$(LIBDPDKPC_PATH) pkg-config --cflags libdpdk)
 LIBS += $(shell PKG_CONFIG_PATH=$(LIBDPDKPC_PATH) pkg-config --static --libs libdpdk)
+else
+ifeq ($(shell pkg-config --exists libdpdk && echo 0),0)
+CFLAGS += -DALLOW_EXPERIMENTAL_API $(shell pkg-config --cflags libdpdk)
+LIBS += $(shell pkg-config --static --libs libdpdk)
 else
 $(error $(PKG_CONFIG_ERR_MSG))
 endif

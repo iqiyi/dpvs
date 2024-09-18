@@ -474,7 +474,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
     int c, parse;
     poptContext context;
     char *optarg= NULL;
-    int intarg = NULL;
+    int intarg = 0;
     struct poptOption options_table[] = {
         { "add-service", 'A', POPT_ARG_NONE, NULL, 'A', NULL, NULL },
         { "edit-service", 'E', POPT_ARG_NONE, NULL, 'E', NULL, NULL },
@@ -1566,9 +1566,11 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
                 dpvs_svc->af = ip_af;
             }
         } else if (strcmp(key, "iif") == 0) {
-            snprintf(dpvs_svc->match.iifname, sizeof(dpvs_svc->match.iifname), "%s", val);
+            strncpy(dpvs_svc->match.iifname, val, sizeof(dpvs_svc->match.iifname) - 1);
+            dpvs_svc->match.iifname[sizeof(dpvs_svc->match.iifname) - 1] = '\0';
         } else if (strcmp(key, "oif") == 0) {
-            snprintf(dpvs_svc->match.oifname, sizeof(dpvs_svc->match.oifname), "%s", val);
+            strncpy(dpvs_svc->match.oifname, val, sizeof(dpvs_svc->match.oifname) - 1);
+            dpvs_svc->match.oifname[sizeof(dpvs_svc->match.oifname) - 1] = '\0';
         } else {
             return -1;
         }

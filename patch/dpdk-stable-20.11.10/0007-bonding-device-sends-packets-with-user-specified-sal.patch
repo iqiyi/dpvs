@@ -1,0 +1,92 @@
+From 69849e246e15f3e202e539809cefd18fe7083575 Mon Sep 17 00:00:00 2001
+From: yuwenchao <yuwenchao@qiyi.com>
+Date: Tue, 30 Jul 2024 15:39:28 +0800
+Subject: [PATCH 7/7] bonding device sends packets with user specified salve
+ port
+
+The outgoing slave port is specified in mbuf field "hash.txadapter.reserved2".
+Support the following 3 bonding mode:
+- mode 0: round robin
+- mode 2: balance
+- mode 4: 8023ad
+
+Signed-off-by: yuwenchao <yuwenchao@qiyi.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 26 ++++++++++++++++++++++++--
+ lib/librte_mbuf/rte_mbuf.h             |  2 ++
+ 2 files changed, 26 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index f770f50..3c93365 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -587,6 +587,22 @@ struct client_stats_t {
+ 	return nb_recv_pkts;
+ }
+ 
++static inline int
++bond_ethdev_populate_slave_by_user(const struct rte_mbuf *mbuf, const uint16_t *slaves,
++		int num_slave)
++{
++	uint16_t i, pid = mbuf->hash.txadapter.reserved2;
++
++	if (likely(pid == RTE_MBUF_PORT_INVALID))
++		return -1;
++
++	for (i = 0; i < num_slave; i++) {
++		if (slaves[i] == pid)
++			return i;
++	}
++	return -1;
++}
++
+ static uint16_t
+ bond_ethdev_tx_burst_round_robin(void *queue, struct rte_mbuf **bufs,
+ 		uint16_t nb_pkts)
+@@ -619,7 +635,9 @@ struct client_stats_t {
+ 
+ 	/* Populate slaves mbuf with which packets are to be sent on it  */
+ 	for (i = 0; i < nb_pkts; i++) {
+-		cslave_idx = (slave_idx + i) % num_of_slaves;
++		cslave_idx = bond_ethdev_populate_slave_by_user(bufs[i], slaves, num_of_slaves);
++		if (likely(cslave_idx < 0))
++			cslave_idx = (slave_idx + i) % num_of_slaves;
+ 		slave_bufs[cslave_idx][(slave_nb_pkts[cslave_idx])++] = bufs[i];
+ 	}
+ 
+@@ -1176,7 +1194,11 @@ struct bwg_slave {
+ 
+ 	for (i = 0; i < nb_bufs; i++) {
+ 		/* Populate slave mbuf arrays with mbufs for that slave. */
+-		uint16_t slave_idx = bufs_slave_port_idxs[i];
++		int slave_idx;
++
++		slave_idx = bond_ethdev_populate_slave_by_user(bufs[i], slave_port_ids, slave_count);
++		if (likely(slave_idx < 0))
++			slave_idx = bufs_slave_port_idxs[i];
+ 
+ 		slave_bufs[slave_idx][slave_nb_bufs[slave_idx]++] = bufs[i];
+ 	}
+diff --git a/lib/librte_mbuf/rte_mbuf.h b/lib/librte_mbuf/rte_mbuf.h
+index d079462..d6072ea 100644
+--- a/lib/librte_mbuf/rte_mbuf.h
++++ b/lib/librte_mbuf/rte_mbuf.h
+@@ -589,6 +589,7 @@ static inline struct rte_mbuf *rte_mbuf_raw_alloc(struct rte_mempool *mp)
+ 
+ 	if (rte_mempool_get(mp, (void **)&m) < 0)
+ 		return NULL;
++	m->hash.txadapter.reserved2 = RTE_MBUF_PORT_INVALID;
+ 	__rte_mbuf_raw_sanity_check(m);
+ 	return m;
+ }
+@@ -864,6 +865,7 @@ static inline void rte_pktmbuf_reset(struct rte_mbuf *m)
+ 	m->vlan_tci_outer = 0;
+ 	m->nb_segs = 1;
+ 	m->port = RTE_MBUF_PORT_INVALID;
++	m->hash.txadapter.reserved2 = RTE_MBUF_PORT_INVALID;
+ 
+ 	m->ol_flags &= EXT_ATTACHED_MBUF;
+ 	m->packet_type = 0;
+-- 
+1.8.3.1
+

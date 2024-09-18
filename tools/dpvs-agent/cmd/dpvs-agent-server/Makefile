@@ -1,7 +1,7 @@
 TARGET := dpvs-agent
 
 GO ?= go
-LD_FLAGS = -ldflags="-s -w"
+LD_FLAGS = -ldflags="-s -w -X main.buildVersion=$(git rev-parse --short HEAD)"
 GO_BUILD = CGO_ENABLED=0 $(GO) build $(LD_FLAGS)
 GO_CLEAN = $(GO) clean
 INSTALL = install

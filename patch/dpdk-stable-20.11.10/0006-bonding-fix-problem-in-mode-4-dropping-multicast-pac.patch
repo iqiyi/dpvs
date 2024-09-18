@@ -1,0 +1,79 @@
+From 2d3c711e48d4f09200096348be1286eec10301f6 Mon Sep 17 00:00:00 2001
+From: yuwenchao <yuwenchao@qiyi.com>
+Date: Fri, 2 Aug 2024 13:32:36 +0800
+Subject: [PATCH 6/7] bonding: fix problem in mode 4 dropping multicast packets
+
+Signed-off-by: yuwenchao <yuwenchao@qiyi.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 38 +++++++++++++++++++++-------------
+ 1 file changed, 24 insertions(+), 14 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 371c888..f770f50 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -309,7 +309,6 @@
+ 
+ 	uint8_t collecting;  /* current slave collecting status */
+ 	const uint8_t promisc = rte_eth_promiscuous_get(internals->port_id);
+-	const uint8_t allmulti = rte_eth_allmulticast_get(internals->port_id);
+ 	uint8_t subtype;
+ 	uint16_t i;
+ 	uint16_t j;
+@@ -352,20 +351,28 @@
+ 			 * - bonding interface is not in promiscuous mode and
+ 			 *   packet address isn't in mac_addrs array:
+ 			 *   - packet is unicast,
+-			 *   - packet is multicast and bonding interface
+-			 *     is not in allmulti,
++			 *
++			 * Notes:
++			 *   Multicast packets, such as OSPF protocol packets, should not
++			 *   be dropped, instead they must deliver to DPVS application.
+ 			 */
+-			if (unlikely(
+-				(!dedicated_rxq &&
+-				 is_lacp_packets(hdr->ether_type, subtype,
+-						 bufs[j])) ||
+-				!collecting ||
+-				(!promisc &&
+-				 !is_bond_mac_addr(&hdr->d_addr, bond_mac,
+-						   BOND_MAX_MAC_ADDRS) &&
+-				 (rte_is_unicast_ether_addr(&hdr->d_addr) ||
+-				  !allmulti)))) {
++			if (unlikely((is_lacp_packets(hdr->ether_type, subtype, bufs[j]))
++						|| !collecting
++						|| (!promisc && !is_bond_mac_addr(&hdr->d_addr, bond_mac,
++								BOND_MAX_MAC_ADDRS)
++							&& (rte_is_unicast_ether_addr(&hdr->d_addr))))) {
+ 				if (hdr->ether_type == ether_type_slow_be) {
++					if (dedicated_rxq) {
++						/* Error! Lacp packets should never appear here if
++						 * dedicated queue enabled. This can be caused by
++						 * a lack of support for ethertype rte_flow. Just
++						 * issue a warning rather than dropping the packets
++						 * so that the lacp state machine can work properly.
++						 * */
++						 RTE_BOND_LOG(WARNING, "receive lacp packets from queue %d "
++								 "of port %d when dedicated queue enabled",
++								 bd_rx_q->queue_id, slaves[idx]);
++					}
+ 					bond_mode_8023ad_handle_slow_pkt(
+ 					    internals, slaves[idx], bufs[j]);
+ 				} else
+@@ -1288,8 +1295,11 @@ struct bwg_slave {
+ 					slave_port_ids[i];
+ 	}
+ 
+-	if (unlikely(dist_slave_count < 1))
++	if (unlikely(dist_slave_count < 1)) {
++		RTE_BOND_LOG(WARNING, "no distributing slaves on bonding port %d",
++				internals->port_id);
+ 		return 0;
++	}
+ 
+ 	return tx_burst_balance(queue, bufs, nb_bufs, dist_slave_port_ids,
+ 				dist_slave_count);
+-- 
+1.8.3.1
+

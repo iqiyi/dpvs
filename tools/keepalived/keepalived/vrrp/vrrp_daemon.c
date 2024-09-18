@@ -21,6 +21,7 @@
  */
 
 #include "config.h"
+#include "sockopt.h"
 
 #ifdef _HAVE_SCHED_RT_
 #include <sched.h>
