@@ -1,6 +1,6 @@
 #!/bin/sh
 # program: dpvs
-# Sep 13, 2024 #
+# Sep 19, 2024 #
 ##
 # Features
 # - dpvs: Support QUIC/HTTP3, add nginx patches and facilitating code snippets for use of quic.
@@ -22,6 +22,7 @@
 # - dpvs: Fix segmentation fault problem when running on machines whose cpu number is over DPVS_MAX_LCORE.
 # - dpvs: Refactor netif_rte_port_alloc with netif_alloc.
 # - dpvs: Fix prolems in IPv6 all-nodes and all-routers address initialization.
+# - dpvs: Fix memory corruption problem when retrieving nic's xstats.
 # - tools: Fix concurrency racing problem when dpvs-agent and healthcheck changing rs simultaneously.
 # - tools: Fix healthchech bad icmp checksum problem ocasionally appeared in udp and udpping checkers.
 # - tools: Fix keepalived quorum up script not excuted problem when old rs removed and new ones added in a reload.
