@@ -9,9 +9,8 @@ dpdkver=20.11.10                            # default dpdk version (use stable v
 tarball=dpdk-${dpdkver}.tar.xz
 srcdir=dpdk-stable-$dpdkver
 
-workdir=$(pwd)/dpdk                         # default work directory
-patchdir=$(pwd)/patch/dpdk-stable-$dpdkver  # default dpdk patch directory
-
+workdir=""
+patchdir=""
 
 function help()
 {
@@ -21,6 +20,13 @@ function help()
     echo -e "\033[31m    -d    build dpdk libary with debug info\033[0m"
     echo -e "\033[31m    -w    specify the work directory prefix, default $(pwd)\033[0m"
     echo -e "\033[31m    -p    specify the dpdk patch directory, default $(pwd)/patch/dpdk-stable-$dpdkver\033[0m"
+}
+
+function set_dpdk_version()
+{
+    dpdkver=$1
+    tarball=dpdk-${dpdkver}.tar.xz
+    srcdir=dpdk-stable-$dpdkver
 }
 
 function set_work_directory()
@@ -38,13 +44,16 @@ function set_patch_directory()
 ## parse args
 while getopts "hw:p:dv:" OPT; do
     case $OPT in
-        v) dpdkver=$OPTARG;;
+        v) set_dpdk_version $OPTARG;;
         w) set_work_directory $OPTARG ;;
         p) set_patch_directory $OPTARG;;
         d) build_options="${build_options} ${debug_options}";;
         ?) help && exit 1;;
     esac
 done
+
+[ -z "$workdir" ] && workdir=$(pwd)/dpdk				# use default work directory
+[ -z "$patchdir" ] && patchdir=$(pwd)/patch/dpdk-stable-$dpdkver  	# use default dpdk patch directory
 
 [ ! -d $workdir ] && mkdir $workdir
 echo -e "\033[32mwork directory: $workdir\033[0m"

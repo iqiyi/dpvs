@@ -3371,7 +3371,7 @@ static int netif_op_get_xstats(struct netif_port *dev, netif_nic_xstats_get_t **
     if (nentries < 0)
         return EDPVS_DPDKAPIFAIL;
 
-    get = rte_calloc("xstats_get", 1, nentries * sizeof(struct netif_nic_xstats_entry), 0);
+    get = rte_calloc("xstats_get", 1, sizeof(*get) + nentries * sizeof(struct netif_nic_xstats_entry), 0);
     if (unlikely(!get))
         return EDPVS_NOMEM;
     xstats = rte_calloc("xstats", 1, nentries * sizeof(struct rte_eth_xstat), 0);
