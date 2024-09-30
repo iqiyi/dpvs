@@ -298,6 +298,12 @@ int route6_del(const struct in6_addr *dest, int plen, uint32_t flags,
     return __route6_add_del(dest, plen, flags, gw, dev, src, mtu, false);
 }
 
+int route6_flush(const struct netif_port *port)
+{
+    // TODO
+    return EDPVS_OK;
+}
+
 static int rt6_msg_process_cb(struct dpvs_msg *msg)
 {
     struct dp_vs_route6_conf *cf;

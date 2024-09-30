@@ -59,7 +59,7 @@ int route_init(void);
 
 int route_term(void);
 
-int route_flush(void);
+int route_flush(const struct netif_port *port);
 
 static inline void route4_put(struct route_entry *route)
 {
