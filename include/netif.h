@@ -169,12 +169,34 @@ typedef enum {
     PORT_TYPE_INVAL,
 } port_type_t;
 
+#ifdef CONFIG_KNI_VIRTIO_USER
+struct virtio_kni {
+    struct netif_port *master;  // master netif port of this kni
+    portid_t dpdk_pid;          // dpdk virtio-user port id
+
+    // virtio-user driver params:
+    // refer to `virtio_user_pmd_probe` for details.
+    uint16_t queues;
+    int queue_size;
+    char *path;
+    char dpdk_portname[IFNAMSIZ];
+    char ifname[IFNAMSIZ];      // normally the same as netif_kni::name
+
+    struct rte_eth_conf eth_conf;
+};
+#endif
+
 struct netif_kni {
     char                    name[IFNAMSIZ];
+#ifdef CONFIG_KNI_VIRTIO_USER
+    struct virtio_kni  *kni;
+#else
     struct rte_kni          *kni;
+#endif
     struct rte_ether_addr   addr;
     struct dpvs_timer       kni_rtnl_timer;
     int                     kni_rtnl_fd;
+    uint8_t                 flags;          // supported: NETIF_PORT_FLAG_RUNNING
     struct rte_ring         *rx_ring;
     struct list_head        kni_flows;
 } __rte_cache_aligned;

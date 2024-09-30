@@ -47,6 +47,213 @@
 #define KNI_RX_RING_ELEMS       2048
 bool g_kni_enabled = true;
 
+
+#ifdef CONFIG_KNI_VIRTIO_USER
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+// TODO: let the params configurable
+static uint16_t virtio_queues = 1;
+static int virtio_queue_size = 1024;
+static char vhost_dev_path[PATH_MAX] = "/dev/vhost-net";
+
+static inline const char *kni_get_name(const struct netif_kni *kni)
+{
+    return kni->kni->ifname;
+}
+
+static struct virtio_kni* virtio_kni_alloc(struct netif_port *dev, const char *ifname)
+{
+    int err;
+    portid_t pid;
+    struct virtio_kni *kni = NULL;
+    char portargs[1024];
+    char portname[RTE_ETH_NAME_MAX_LEN];
+
+    kni = rte_zmalloc("virtio_kni", sizeof(*kni), RTE_CACHE_LINE_SIZE);
+    if (unlikely(!kni))
+        return NULL;
+
+    kni->master = dev;
+    kni->queues = virtio_queues;
+    kni->queue_size = virtio_queue_size;
+    kni->path = rte_malloc("virtio_kni", strlen(vhost_dev_path) + 1, RTE_CACHE_LINE_SIZE);
+    if (unlikely(!kni->path))
+        goto errout;
+    strcpy(kni->path, vhost_dev_path);
+    err = snprintf(kni->dpdk_portname, sizeof(kni->dpdk_portname), "virtio_user%u", dev->id);
+    if (unlikely(err > sizeof(kni->dpdk_portname))) {
+        RTE_LOG(ERR, Kni, "%s: no enough room for dpdk_portname, expect %d\n", __func__, err);
+        goto errout;
+    }
+    if (ifname)
+        strncpy(kni->ifname, ifname, sizeof(kni->ifname) - 1);
+    else
+        snprintf(kni->ifname, sizeof(kni->ifname), "%s.kni", dev->name);
+
+    // Refer to drivers/net/virtio/virtio_user_ethdev.c:virtio_user_driver for all supported args.
+    // FIXME: Arg `speed` has no effects so that the virtio_kni port speed is always 10Mbps.
+    err = snprintf(portargs, sizeof(portargs), "path=%s,queues=%u,queue_size=%u,iface=%s,"
+            "speed=10000,mac=" RTE_ETHER_ADDR_PRT_FMT, kni->path, kni->queues, kni->queue_size,
+            kni->ifname, RTE_ETHER_ADDR_BYTES(&dev->addr));
+    if (unlikely(err > sizeof(portargs))) {
+        RTE_LOG(ERR, Kni, "%s: no enough room for portargs, expect %d\n", __func__, err);
+        goto errout;
+    }
+
+    err = rte_eal_hotplug_add("vdev", kni->dpdk_portname, portargs);
+    if (err < 0) {
+        RTE_LOG(ERR, Kni, "%s: virtio_kni hotplug_add failed: %d\n", __func__, err);
+        goto errout;
+    }
+
+    RTE_ETH_FOREACH_DEV(pid) {
+        rte_eth_dev_get_name_by_port(pid, portname);
+        if (!strncmp(portname, kni->dpdk_portname, sizeof(kni->dpdk_portname))) {
+            kni->dpdk_pid = pid;
+            return kni;
+        }
+    }
+    RTE_LOG(ERR, Kni, "%s: virtio_kni port id not found: ifname=%s, dpdk portname=%s\n",
+            __func__, kni->ifname, kni->dpdk_portname);
+
+errout:
+    if (kni->path)
+        rte_free(kni->path);
+    if (kni)
+        rte_free(kni);
+    return NULL;
+}
+
+static void virtio_kni_free(struct virtio_kni **pkni)
+{
+    int err;
+    struct virtio_kni *kni = *pkni;
+
+    err = rte_eal_hotplug_remove("vdev", kni->dpdk_portname);
+    if (err < 0)
+        RTE_LOG(WARNING, Kni, "%s: virtio_kni hotplug_remove failed: %d\n", __func__, err);
+
+    rte_free(kni->path);
+    rte_free(kni);
+
+    *pkni = NULL;
+}
+
+static struct rte_eth_conf virtio_kni_eth_conf = {
+    .rxmode = {
+        .mq_mode        = ETH_MQ_RX_NONE,
+        .max_rx_pkt_len = ETHER_MAX_LEN,
+        .split_hdr_size = 0,
+        .offloads       = DEV_RX_OFFLOAD_IPV4_CKSUM
+                            | DEV_TX_OFFLOAD_TCP_CKSUM
+                            | DEV_TX_OFFLOAD_UDP_CKSUM,
+    },
+    .rx_adv_conf = {
+        .rss_conf = {
+            .rss_hf = ETH_RSS_IP | ETH_RSS_TCP | ETH_RSS_UDP,
+        },
+    },
+    .txmode = {
+        .mq_mode    = ETH_MQ_TX_NONE,
+        .offloads   = DEV_TX_OFFLOAD_MBUF_FAST_FREE,
+    },
+};
+
+static int virtio_kni_start(struct virtio_kni *kni)
+{
+    uint16_t q;
+    int err;
+    struct rte_eth_dev_info dev_info;
+    struct rte_ether_addr macaddr;
+    char strmac1[32], strmac2[32];
+
+    rte_memcpy(&kni->eth_conf, &virtio_kni_eth_conf, sizeof(kni->eth_conf));
+
+    err = rte_eth_dev_info_get(kni->dpdk_pid, &dev_info);
+    if (err == EDPVS_OK) {
+        kni->eth_conf.rx_adv_conf.rss_conf.rss_hf &= dev_info.flow_type_rss_offloads;
+        kni->eth_conf.rxmode.offloads &= dev_info.rx_offload_capa;
+        kni->eth_conf.txmode.offloads &= dev_info.tx_offload_capa;
+    } else {
+        RTE_LOG(WARNING, Kni, "%s: rte_eth_dev_info_get(%s) failed: %d\n", __func__,
+                kni->ifname, err);
+    }
+
+    err = rte_eth_dev_configure(kni->dpdk_pid, kni->queues, kni->queues, &kni->eth_conf);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, Kni, "%s: failed to config %s: %d\n", __func__, kni->ifname, err);
+        return EDPVS_DPDKAPIFAIL;
+    }
+
+    for (q = 0; q < kni->queues; q++) {
+        err = rte_eth_rx_queue_setup(kni->dpdk_pid, q, kni->queue_size,
+                kni->master->socket, NULL, pktmbuf_pool[kni->master->socket]);
+        if (err != EDPVS_OK) {
+            RTE_LOG(ERR, Kni, "%s: failed to configure %s's queue %u: %d\n", __func__,
+                    kni->ifname, q, err);
+            return EDPVS_DPDKAPIFAIL;
+        }
+    }
+
+    for (q = 0; q < kni->queues; q++) {
+        err = rte_eth_tx_queue_setup(kni->dpdk_pid, q, kni->queue_size, kni->master->socket, NULL);
+        if (err != EDPVS_OK) {
+            RTE_LOG(ERR, Kni, "%s: failed to configure %s's queue %u: %d\n", __func__,
+                    kni->ifname, q, err);
+            return EDPVS_DPDKAPIFAIL;
+        }
+    }
+
+    err = rte_eth_dev_start(kni->dpdk_pid);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, Kni, "%s: failed to start %s: %d\n", __func__, kni->ifname, err);
+        return EDPVS_DPDKAPIFAIL;
+    }
+
+    rte_eth_macaddr_get(kni->dpdk_pid, &macaddr);
+    if (!eth_addr_equal(&macaddr, &kni->master->kni.addr)) {
+        RTE_LOG(INFO, Kni, "%s: update %s mac addr: %s->%s\n", __func__, kni->ifname,
+                eth_addr_dump(&kni->master->kni.addr, strmac1, sizeof(strmac1)),
+                eth_addr_dump(&macaddr, strmac2, sizeof(strmac2)));
+        kni->master->kni.addr = macaddr;
+    }
+
+    RTE_LOG(INFO, Kni, "%s: %s started success\n", __func__, kni->ifname);
+    return EDPVS_OK;
+}
+
+static int virtio_kni_stop(struct virtio_kni *kni)
+{
+    int err;
+
+    err = rte_eth_dev_stop(kni->dpdk_pid);
+    if (err != EDPVS_OK) {
+        if (err == EBUSY) {
+            RTE_LOG(WARNING, Kni, "%s: %s is busy, retry later ...\n", __func__, kni->ifname);
+            return EDPVS_BUSY;
+        }
+        RTE_LOG(ERR, Kni, "%s: failed to stop %s: %d\n", __func__, kni->ifname, err);
+    }
+
+    err = rte_eth_dev_close(kni->dpdk_pid);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, Kni, "%s: failed to close %s: %d\n", __func__, kni->ifname, err);
+        return EDPVS_DPDKAPIFAIL;
+    }
+
+    RTE_LOG(INFO, Kni, "%s: %s stopped success\n", __func__, kni->ifname);
+    return EDPVS_OK;
+}
+
+#else // !CONFIG_KNI_VIRTIO_USER
+static inline const char *kni_get_name(const struct netif_kni *kni)
+{
+    return rte_kni_get_name(kni->kni);
+}
+
 static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
                           struct rte_kni_conf *conf)
 {
@@ -90,6 +297,7 @@ static void kni_fill_conf(const struct netif_port *dev, const char *ifname,
 
     return;
 }
+#endif // CONFIG_KNI_VIRTIO_USER
 
 static int kni_mc_list_cmp_set(struct netif_port *dev,
                                struct rte_ether_addr *addrs, size_t naddr)
@@ -207,8 +415,7 @@ static int kni_update_maddr(struct netif_port *dev)
         return EDPVS_SYSCALL;
     }
 
-    RTE_LOG(DEBUG, Kni, "%s: set mcast to %s\n", __func__,
-            rte_kni_get_name(dev->kni.kni));
+    RTE_LOG(DEBUG, Kni, "%s: set mcast for %s\n", __func__, kni_get_name(&dev->kni));
 
     n_ma = 0;
     while (n_ma < NELEMS(ma_list) && fgets(line, sizeof(line), fp)) {
@@ -218,7 +425,7 @@ static int kni_update_maddr(struct netif_port *dev)
                    &st, hexa) != 5)
             continue;
 
-        if (strcmp(ifname, rte_kni_get_name(dev->kni.kni)) != 0)
+        if (strcmp(ifname, kni_get_name(&dev->kni)) != 0)
             continue;
 
         sscanf(hexa, "%02x%02x%02x%02x%02x%02x",
@@ -269,7 +476,14 @@ static int kni_rtnl_check(void *arg)
             break; /* closed */
 
         while (NLMSG_OK(nlh, n) && (nlh->nlmsg_type != NLMSG_DONE)) {
-            if (nlh->nlmsg_type == RTM_NEWADDR) {
+            if (nlh->nlmsg_type == RTM_NEWADDR
+#ifdef CONFIG_KNI_VIRTIO_USER
+                    // FIXME: How to support layer2 only maddress changes?
+                    || nlh->nlmsg_type == RTM_DELADDR
+                    || nlh->nlmsg_type == RTM_NEWLINK
+                    || nlh->nlmsg_type == RTM_DELLINK
+#endif
+                    ) {
                 update = true;
                 break; /* not need handle all messages, recv again. */
             }
@@ -314,7 +528,11 @@ static int kni_rtnl_init(struct netif_port *dev)
 
     memset(&snl, 0, sizeof(snl));
     snl.nl_family = AF_NETLINK;
+#ifdef CONFIG_KNI_VIRTIO_USER
+    snl.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR;
+#else
     snl.nl_groups = RTMGRP_NOTIFY;
+#endif
 
     if (bind(sockfd, (struct sockaddr *)&snl, sizeof(snl)) < 0)
         goto errout;
@@ -348,8 +566,12 @@ errout:
  */
 int kni_add_dev(struct netif_port *dev, const char *kniname)
 {
+#ifdef CONFIG_KNI_VIRTIO_USER
+    struct virtio_kni *kni;
+#else
     struct rte_kni_conf conf;
     struct rte_kni *kni;
+#endif
     int err;
     char ring_name[RTE_RING_NAMESIZE];
     struct rte_ring *rb;
@@ -369,45 +591,91 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
         return EDPVS_EXIST;
     }
 
+#ifdef CONFIG_KNI_VIRTIO_USER
+    kni = virtio_kni_alloc(dev, kniname);
+    if (!kni)
+        return EDPVS_RESOURCE;
+#else
     kni_fill_conf(dev, kniname, &conf);
-
     kni = rte_kni_alloc(pktmbuf_pool[dev->socket], &conf, NULL);
     if (!kni)
         return EDPVS_DPDKAPIFAIL;
+#endif
 
     err = kni_rtnl_init(dev);
     if (err != EDPVS_OK) {
+#ifdef CONFIG_KNI_VIRTIO_USER
+        virtio_kni_free(&kni);
+#else
         rte_kni_release(kni);
+#endif
         return err;
     }
 
-    snprintf(ring_name, sizeof(ring_name), "kni_rx_ring_%s",
-             conf.name);
+#ifdef CONFIG_KNI_VIRTIO_USER
+    snprintf(ring_name, sizeof(ring_name), "kni_rx_ring_%s", kni->ifname);
+#else
+    snprintf(ring_name, sizeof(ring_name), "kni_rx_ring_%s", conf.name);
+#endif
     rb = rte_ring_create(ring_name, KNI_RX_RING_ELEMS,
                          rte_socket_id(), RING_F_SC_DEQ);
     if (unlikely(!rb)) {
-        RTE_LOG(ERR, KNI, "[%s] Failed to create kni rx ring.\n", __func__);
+        RTE_LOG(ERR, KNI, "%s: failed to create kni rx ring\n", __func__);
+#ifdef CONFIG_KNI_VIRTIO_USER
+        virtio_kni_free(&dev->kni.kni);
+#else
         rte_kni_release(kni);
+#endif
         return EDPVS_DPDKAPIFAIL;
     }
 
-    snprintf(dev->kni.name, sizeof(dev->kni.name), "%s", conf.name);
-    dev->kni.addr = dev->addr;
-    dev->kni.kni = kni;
-    dev->kni.rx_ring = rb;
+#ifdef CONFIG_KNI_VIRTIO_USER
+    if ((err = virtio_kni_start(kni)) != EDPVS_OK) {
+        rte_ring_free(dev->kni.rx_ring);
+        dev->kni.rx_ring = NULL;
+        virtio_kni_free(&dev->kni.kni);
+        return err;
+    }
+#endif
+
     INIT_LIST_HEAD(&dev->kni.kni_flows);
+    dev->kni.addr = dev->addr;
+    dev->kni.rx_ring = rb;
+    dev->kni.kni = kni;
+    snprintf(dev->kni.name, sizeof(dev->kni.name), "%s", kni_get_name(&dev->kni));
+
+    dev->kni.flags |= NETIF_PORT_FLAG_RUNNING;
     return EDPVS_OK;
 }
 
 int kni_del_dev(struct netif_port *dev)
 {
+    int err;
+
     if (!g_kni_enabled)
         return EDPVS_OK;
 
     if (!kni_dev_exist(dev))
         return EDPVS_INVAL;
 
-    rte_kni_release(dev->kni.kni);
+    dev->kni.flags &= ~((uint16_t)NETIF_PORT_FLAG_RUNNING);
+
+#ifdef CONFIG_KNI_VIRTIO_USER
+    err = virtio_kni_stop(dev->kni.kni);
+    if (err != EDPVS_OK) {
+        // FIXME: retry when err is EDPVS_BUSY
+        RTE_LOG(ERR, Kni, "%s: failed to stop virtio kni %s: %d\n", __func__, dev->kni.name, err);
+        return err;
+    }
+    virtio_kni_free(&dev->kni.kni);
+#else
+    err = rte_kni_release(dev->kni.kni);
+    if (err != EDPVS_OK) {
+        RTE_LOG(ERR, Kni, "%s: failed to release kni %s: %d\n", __func__, dev->kni.name, err);
+        return err;
+    }
+#endif
+
     rte_ring_free(dev->kni.rx_ring);
     dev->kni.kni = NULL;
     dev->kni.rx_ring = NULL;
@@ -700,8 +968,10 @@ int kni_init(void)
     if (!g_kni_enabled)
         return EDPVS_OK;
 
+#ifndef CONFIG_KNI_VIRTIO_USER
     if (rte_kni_init(NETIF_MAX_KNI) < 0)
         rte_exit(EXIT_FAILURE, "rte_kni_init failed");
+#endif
 
     return EDPVS_OK;
 }

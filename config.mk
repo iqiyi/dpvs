@@ -8,6 +8,7 @@ export CONFIG_IXGEB_PMD=y
 export CONFIG_DPVS_LOG=y
 export CONFIG_PDUMP=y
 export CONFIG_ICMP_REDIRECT_CORE=n
+export CONFIG_KNI_VIRTIO_USER=n
 
 # debugging and logging
 export CONFIG_DEBUG=n

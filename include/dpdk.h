@@ -74,4 +74,16 @@ extern int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line
 #endif
 #endif
 
+#if RTE_VERSION < RTE_VERSION_NUM(21, 0, 0, 0)
+#define RTE_ETHER_ADDR_PRT_FMT     "%02X:%02X:%02X:%02X:%02X:%02X"
+#define RTE_ETHER_ADDR_BYTES(mac_addrs) ((mac_addrs)->addr_bytes[0]), \
+                     ((mac_addrs)->addr_bytes[1]), \
+                     ((mac_addrs)->addr_bytes[2]), \
+                     ((mac_addrs)->addr_bytes[3]), \
+                     ((mac_addrs)->addr_bytes[4]), \
+                     ((mac_addrs)->addr_bytes[5])
+
+#define RTE_ETHER_ADDR_FMT_SIZE         18
+#endif
+
 #endif /* __DPVS_DPDK_H__ */

@@ -42,7 +42,7 @@ static void flow_help(void)
             "    OPTS       := { KNI_IP_ADDRESS }\n"
             "Examples:\n"
             "    dpip flow add type kni dev dpdk0 192.168.88.12\n"
-            "    dpip flow get type kni dev dpdk0\n"
+            "    dpip flow show type kni dev dpdk0\n"
            );
 }
 
