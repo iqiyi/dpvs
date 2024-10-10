@@ -55,6 +55,7 @@ typedef struct _conn_opts {
 
 /* Prototypes defs */
 #ifdef _WITH_LVS_
+extern void set_buf(char *buf, size_t buf_len);
 extern enum connect_result
 socket_bind_connect(int, conn_opts_t *);
 #endif

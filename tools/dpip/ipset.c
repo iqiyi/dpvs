@@ -125,7 +125,7 @@ ipset_help(void)
                     "    MAC       := 6 bytes MAC address string literal\n"
                     "    PORT      := \"[{ tcp | udp | icmp | icmp6 }:]port1[-port2]\"\n"
                     "    OPTIONS   := { comment | range NET | hashsize NUM | maxelem NUM }\n"
-                    "    ADTOPTS   := { comment STRING | unmatch (for add only) }\n"
+                    "    ADTOPTS   := { comment STRING | nomatch (for add only) }\n"
                     "    flag      := { -F(--force) | { -4 | -6 } | -v }\n"
                     "Examples:\n"
                     "    dpip ipset create foo bitmap:ip range 192.168.0.0/16 comment\n"
@@ -147,7 +147,7 @@ static int
 addr_arg_parse(char *arg, struct inet_addr_range *range, uint8_t *cidr)
 {
     char *ip1, *ip2, *sep;
-    int *af = &param.option.family;
+    uint8_t *af = &param.option.family;
 
     /* ip/cidr */
     if (cidr && (sep = strstr(arg, "/"))) {
@@ -1081,7 +1081,11 @@ ipset_info_dump(struct ipset_info *info, bool sort)
     struct ipset_member *member;
     char header[HEADER_LEN], *members;
 
-    type = get_type_idx();
+    type = get_type_idx_from_type(info->type);
+    if (type < 0) {
+        fprintf(stderr, "unsupported ipset type %s\n", info->type);
+        return;
+    }
 
     /* header */
     types[type].dump_header(header, info);
@@ -1099,7 +1103,7 @@ ipset_info_dump(struct ipset_info *info, bool sort)
         struct ipset_member *members = (struct ipset_member*)info->members;
         sort_compare_func sort_compare = types[type].sort_compare;
 
-        for (i = 0; i < info->entries - 1; i++) {
+        for (i = 0; i + 1 < info->entries; i++) {
             min = i;
             for (j = i + 1; j < info->entries; j++) {
                 if (sort_compare(info->af, &members[min], &members[j]) > 0)

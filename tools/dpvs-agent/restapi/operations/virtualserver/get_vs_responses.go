@@ -57,3 +57,48 @@ func (o *GetVsOK) WriteResponse(rw http.ResponseWriter, producer runtime.Produce
 		}
 	}
 }
+
+// GetVsNoContentCode is the HTTP code returned for type GetVsNoContent
+const GetVsNoContentCode int = 204
+
+/*
+GetVsNoContent No Content
+
+swagger:response getVsNoContent
+*/
+type GetVsNoContent struct {
+
+	/*
+	  In: Body
+	*/
+	Payload *models.VirtualServerList `json:"body,omitempty"`
+}
+
+// NewGetVsNoContent creates GetVsNoContent with default headers values
+func NewGetVsNoContent() *GetVsNoContent {
+
+	return &GetVsNoContent{}
+}
+
+// WithPayload adds the payload to the get vs no content response
+func (o *GetVsNoContent) WithPayload(payload *models.VirtualServerList) *GetVsNoContent {
+	o.Payload = payload
+	return o
+}
+
+// SetPayload sets the payload to the get vs no content response
+func (o *GetVsNoContent) SetPayload(payload *models.VirtualServerList) {
+	o.Payload = payload
+}
+
+// WriteResponse to the client
+func (o *GetVsNoContent) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
+
+	rw.WriteHeader(204)
+	if o.Payload != nil {
+		payload := o.Payload
+		if err := producer.Produce(rw, payload); err != nil {
+			panic(err) // let the recovery middleware deal with this
+		}
+	}
+}

@@ -1,0 +1,59 @@
+From 3263fcc900f9e97cf777cb1ad2d84408f6fe7bcf Mon Sep 17 00:00:00 2001
+From: huangyichen <huangyichen@iqiyi.com>
+Date: Thu, 1 Jul 2021 21:24:47 +0800
+Subject: [PATCH 3/7] debug: enable dpdk eal memory debug
+
+The patch is used for memory debug. To use the patch, configure meson with option
+-Dc_args="-DRTE_MALLOC_DEBUG" when building dpdk. For example,
+
+meson -Dc_args="-DRTE_MALLOC_DEBUG" -Dbuildtype=debug -Dprefix=$(pwd)/dpdklib dpdkbuild
+ninja -C dpdkbuild
+---
+ lib/librte_eal/common/rte_malloc.c  |  4 ++++
+ lib/librte_eal/include/rte_malloc.h | 15 +++++++++++++++
+ 2 files changed, 19 insertions(+)
+
+diff --git a/lib/librte_eal/common/rte_malloc.c b/lib/librte_eal/common/rte_malloc.c
+index 684af4e..cc7ebb6 100644
+--- a/lib/librte_eal/common/rte_malloc.c
++++ b/lib/librte_eal/common/rte_malloc.c
+@@ -30,6 +30,10 @@
+ #include "eal_memcfg.h"
+ #include "eal_private.h"
+ 
++int rte_memmory_ok(void *addr)
++{
++	return malloc_elem_cookies_ok(RTE_PTR_SUB(addr, MALLOC_ELEM_HEADER_LEN));
++}
+ 
+ /* Free the memory space back to heap */
+ static void
+diff --git a/lib/librte_eal/include/rte_malloc.h b/lib/librte_eal/include/rte_malloc.h
+index c8da894..3756d0d 100644
+--- a/lib/librte_eal/include/rte_malloc.h
++++ b/lib/librte_eal/include/rte_malloc.h
+@@ -248,6 +248,21 @@ struct rte_malloc_socket_stats {
+ 	__rte_alloc_size(2, 3);
+ 
+ /**
++ * Check the header/tailer cookies of memory pointed to by the provided pointer.
++ *
++ * This pointer must have been returned by a previous call to
++ * rte_malloc(), rte_zmalloc(), rte_calloc() or rte_realloc().
++ *
++ * @param ptr
++ *   The pointer to memory to be checked.
++ * @return
++ *   - true if the header/tailer cookies are OK.
++ *   - Otherwise, false.
++ */
++int
++rte_memmory_ok(void *ptr);
++
++/**
+  * Frees the memory space pointed to by the provided pointer.
+  *
+  * This pointer must have been returned by a previous call to
+-- 
+1.8.3.1
+

@@ -171,7 +171,8 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     if (!strlen(params.ifname))
         snprintf(params.ifname, IFNAMSIZ, "%s%%d", ops->kind);
 
-    dev = netif_alloc(ops->priv_size, params.ifname, 1, 1, ops->setup);
+    dev = netif_alloc(NETIF_PORT_ID_INVALID, ops->priv_size, params.ifname,
+            1, 1, ops->setup);
     if (!dev)
         return NULL;
 
@@ -204,6 +205,9 @@ static struct netif_port *tunnel_create(struct ip_tunnel_tab *tab,
     dev->flag &= ~NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD;
     dev->flag &= ~NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
+    dev->flag &= ~NETIF_PORT_FLAG_LLDP;
+
+    dev->in_ptr->flags |= IDEV_F_NO_IPV6;
 
     err = netif_port_register(dev);
     if (err != EDPVS_OK) {
@@ -894,6 +898,30 @@ int ip_tunnel_pull_header(struct rte_mbuf *mbuf, int hlen, __be16 in_proto)
         mbuf->vlan_tci = 0;
         mbuf->ol_flags &= (~PKT_RX_VLAN_STRIPPED);
     }
+
+    return EDPVS_OK;
+}
+
+int ip_tunnel_dev_init(struct netif_port *dev)
+{
+    int err;
+    struct ip_tunnel *tnl = netif_priv(dev);
+    struct inet_device *idev = dev_get_idev(tnl->dev);
+
+    err = idev_addr_init(idev);
+    if (err != EDPVS_OK) {
+        idev_put(idev);
+        return err;
+    }
+
+    idev_put(idev);
+    return EDPVS_OK;
+}
+
+int ip_tunnel_set_mc_list(struct netif_port *dev)
+{
+    // IP tunnel devices need no hw multicast address,
+    // and should always return success
 
     return EDPVS_OK;
 }

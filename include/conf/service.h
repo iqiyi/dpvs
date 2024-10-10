@@ -42,6 +42,7 @@
 #define IP_VS_SVC_F_SIP_HASH            0x0100              /* sip hash target */
 #define IP_VS_SVC_F_QID_HASH            0x0200              /* quic cid hash target */
 #define IP_VS_SVC_F_MATCH               0x0400              /* snat match */
+#define IP_VS_SVC_F_QUIC                0x0800              /* quic/h3 protocol */
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK   IP_VS_SVC_F_SCHED1  /* SH fallback */
 #define IP_VS_SVC_F_SCHED_SH_PORT       IP_VS_SVC_F_SCHED2  /* SH use port */
 
@@ -52,8 +53,9 @@
 #define DEST_HC_PASSIVE                 0x01
 #define DEST_HC_TCP                     0x02
 #define DEST_HC_UDP                     0x04
-#define DEST_HC_PING                    0x08
-#define DEST_HC_MASK_EXTERNAL           0x0e
+#define DEST_HC_SCTP                    0x08
+#define DEST_HC_PING                    0x10
+#define DEST_HC_MASK_EXTERNAL           0x1e
 
 /* defaults for dest passive health check */
 #define DEST_DOWN_NOTICE_DEFAULT        1

@@ -412,7 +412,12 @@ static int timer_term_schedler(struct timer_scheduler *sched)
 
 static int timer_lcore_init(void *arg)
 {
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
     return timer_init_schedler(&RTE_PER_LCORE(timer_sched), rte_lcore_id());
@@ -420,7 +425,12 @@ static int timer_lcore_init(void *arg)
 
 static int timer_lcore_term(void *arg)
 {
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
     return timer_term_schedler(&RTE_PER_LCORE(timer_sched));

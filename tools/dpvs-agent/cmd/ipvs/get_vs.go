@@ -18,6 +18,7 @@ import (
 	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
 
@@ -39,17 +40,27 @@ func NewGetVs(cp *pool.ConnPool, parentLogger hclog.Logger) *getVs {
 }
 
 func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
+	shareSnapshot := settings.ShareSnapshot()
+	if params.Healthcheck != nil && !*params.Healthcheck {
+		return apiVs.NewGetVsOK().WithPayload(shareSnapshot.GetModels(h.logger))
+	}
+
+	// if params.Snapshot != nil && *params.Snapshot {
+	//	shareSnapshot.DumpTo(settings.LocalConfigFile(), h.logger)
+	// }
+
 	front := types.NewVirtualServerFront()
 	vss, err := front.Get(h.connPool, h.logger)
 	if err != nil {
 		h.logger.Error("Get virtual server list failed.", "Error", err.Error())
-		// FIXME: Invalid
-		return apiVs.NewGetVsOK()
+		return apiVs.NewGetVsNoContent()
+	}
+
+	vsModels := models.VirtualServerList{
+		Items: make([]*models.VirtualServerSpecExpand, len(vss)),
 	}
 
 	h.logger.Info("Get all virtual server done.", "vss", vss)
-	vsModels := new(models.VirtualServerList)
-	vsModels.Items = make([]*models.VirtualServerSpecExpand, len(vss))
 	for i, vs := range vss {
 		front := types.NewRealServerFront()
 
@@ -81,5 +92,5 @@ func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
 		}
 	}
 
-	return apiVs.NewGetVsOK().WithPayload(vsModels)
+	return apiVs.NewGetVsOK().WithPayload(&vsModels)
 }

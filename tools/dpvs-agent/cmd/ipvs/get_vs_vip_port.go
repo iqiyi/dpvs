@@ -15,9 +15,12 @@
 package ipvs
 
 import (
+	"strings"
+
 	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
 
@@ -39,10 +42,33 @@ func NewGetVsVipPort(cp *pool.ConnPool, parentLogger hclog.Logger) *getVsVipPort
 }
 
 func (h *getVsVipPort) Handle(params apiVs.GetVsVipPortParams) middleware.Responder {
+	shareSnapshot := settings.ShareSnapshot()
+	if params.Healthcheck != nil && !*params.Healthcheck {
+		vsModel := shareSnapshot.ServiceGet(params.VipPort)
+		if vsModel != nil {
+			vsModels := new(models.VirtualServerList)
+			vsModels.Items = make([]*models.VirtualServerSpecExpand, 1)
+			vsModels.Items[0] = vsModel
+			return apiVs.NewGetVsVipPortOK().WithPayload(vsModels)
+		}
+	}
+
+	vaild := true
 	var vss []*types.VirtualServerSpec
 	spec := types.NewVirtualServerSpec()
 	err := spec.ParseVipPortProto(params.VipPort)
 	if err != nil {
+		vaild = false
+		if params.Healthcheck != nil && !*params.Healthcheck {
+			// invalid VipPort string
+			// respond full cache info
+			vsModels := shareSnapshot.GetModels(h.logger)
+			if len(vsModels.Items) != 0 {
+				return apiVs.NewGetVsVipPortOK().WithPayload(vsModels)
+			}
+			// read from dpvs memory
+		}
+
 		h.logger.Warn("Convert to virtual server failed. Get All virtual server.", "VipPort", params.VipPort, "Error", err.Error())
 		front := types.NewVirtualServerFront()
 		vss, err = front.Get(h.connPool, h.logger)
@@ -55,8 +81,9 @@ func (h *getVsVipPort) Handle(params apiVs.GetVsVipPortParams) middleware.Respon
 		return apiVs.NewGetVsVipPortNotFound()
 	}
 
-	vsModels := new(models.VirtualServerList)
-	vsModels.Items = make([]*models.VirtualServerSpecExpand, len(vss))
+	vsModels := &models.VirtualServerList{
+		Items: make([]*models.VirtualServerSpecExpand, len(vss)),
+	}
 
 	for i, vs := range vss {
 		front := types.NewRealServerFront()
@@ -76,16 +103,31 @@ func (h *getVsVipPort) Handle(params apiVs.GetVsVipPortParams) middleware.Respon
 
 		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", rss)
 
-		vsModels.Items[i] = vs.GetModel()
-		vsStats := (*types.ServerStats)(vsModels.Items[i].Stats)
-		vsModels.Items[i].RSs = new(models.RealServerExpandList)
-		vsModels.Items[i].RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
+		vsModel := vs.GetModel()
+		vsModels.Items[i] = vsModel
+		vsStats := (*types.ServerStats)(vsModel.Stats)
+		vsModel.RSs = new(models.RealServerExpandList)
+		vsModel.RSs.Items = make([]*models.RealServerSpecExpand, len(rss))
 
 		for j, rs := range rss {
 			rsModel := rs.GetModel()
 			rsStats := (*types.ServerStats)(rsModel.Stats)
-			vsModels.Items[i].RSs.Items[j] = rsModel
+			vsModel.RSs.Items[j] = rsModel
 			vsStats.Increase(rsStats)
+		}
+	}
+
+	if vaild {
+		targetModels := &models.VirtualServerList{
+			Items: make([]*models.VirtualServerSpecExpand, 1),
+		}
+
+		for _, vsModel := range vsModels.Items {
+			typesVsModel := (*types.VirtualServerSpecExpandModel)(vsModel)
+			if strings.EqualFold(spec.ID(), typesVsModel.ID()) {
+				targetModels.Items[0] = vsModel
+				return apiVs.NewGetVsVipPortOK().WithPayload(targetModels)
+			}
 		}
 	}
 

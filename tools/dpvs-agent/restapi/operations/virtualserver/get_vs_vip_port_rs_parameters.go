@@ -22,10 +22,13 @@ func NewGetVsVipPortRsParams() GetVsVipPortRsParams {
 	var (
 		// initialize parameters with default values
 
-		statsDefault = bool(false)
+		snapshotDefault = bool(true)
+		statsDefault    = bool(false)
 	)
 
 	return GetVsVipPortRsParams{
+		Snapshot: &snapshotDefault,
+
 		Stats: &statsDefault,
 	}
 }
@@ -44,6 +47,11 @@ type GetVsVipPortRsParams struct {
 	  In: path
 	*/
 	VipPort string
+	/*
+	  In: query
+	  Default: true
+	*/
+	Snapshot *bool
 	/*
 	  In: query
 	  Default: false
@@ -67,6 +75,11 @@ func (o *GetVsVipPortRsParams) BindRequest(r *http.Request, route *middleware.Ma
 		res = append(res, err)
 	}
 
+	qSnapshot, qhkSnapshot, _ := qs.GetOK("snapshot")
+	if err := o.bindSnapshot(qSnapshot, qhkSnapshot, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
 	qStats, qhkStats, _ := qs.GetOK("stats")
 	if err := o.bindStats(qStats, qhkStats, route.Formats); err != nil {
 		res = append(res, err)
@@ -87,6 +100,30 @@ func (o *GetVsVipPortRsParams) bindVipPort(rawData []string, hasKey bool, format
 	// Required: true
 	// Parameter is provided by construction from the route
 	o.VipPort = raw
+
+	return nil
+}
+
+// bindSnapshot binds and validates parameter Snapshot from query.
+func (o *GetVsVipPortRsParams) bindSnapshot(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+	// AllowEmptyValue: false
+
+	if raw == "" { // empty values pass all other validations
+		// Default values have been previously initialized by NewGetVsVipPortRsParams()
+		return nil
+	}
+
+	value, err := swag.ConvertBool(raw)
+	if err != nil {
+		return errors.InvalidType("snapshot", "query", "bool", raw)
+	}
+	o.Snapshot = &value
 
 	return nil
 }

@@ -19,6 +19,7 @@ global_defs {
     <init> log_async_pool_size  16383               <16383, 1023-unlimited>
     <init> pdump                off                 <off, on|off>
     <init> kni                  on                  <on, on|off>
+    lldp                        on                  <off, on|off>
 }
 
 ! netif config
@@ -193,6 +194,9 @@ ipv4_defs {
 ipv6_defs {
     disable                 off         <off, on/off>
     forwarding              off         <off, on/off>
+    addr_gen_mode           eui64       <eui64,none,stable-privacy,random>
+    stable_secret           ""          <128-bit hexadecimal string, used in stable-privacy mode >
+                                        <stable_secret can be produced by `uuidgen | sed 's/-//g'>
     route6 {
         <init> method       "hlist"     <"hlist"/"lpm">
         recycle_time        10          <10, 1-36000>

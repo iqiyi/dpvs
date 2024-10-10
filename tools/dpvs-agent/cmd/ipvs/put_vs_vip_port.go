@@ -17,9 +17,10 @@ package ipvs
 import (
 	"strings"
 
-	// "github.com/dpvs-agent/models"
+	"github.com/dpvs-agent/models"
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 	"golang.org/x/sys/unix"
 
 	apiVs "github.com/dpvs-agent/restapi/operations/virtualserver"
@@ -69,6 +70,10 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 			vs.SetFlagsExpireQuiescent()
 		}
 
+		if params.Spec.Quic != nil && *params.Spec.Quic {
+			vs.SetFlagsQuic()
+		}
+
 		if params.Spec.SynProxy != nil && *params.Spec.SynProxy {
 			vs.SetFlagsSynProxy()
 		}
@@ -85,22 +90,60 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 		}
 	}
 
+	shareSnapshot := settings.ShareSnapshot()
 	result := vs.Add(h.connPool, h.logger)
 	h.logger.Info("Add virtual server done.", "vs", vs, "result", result.String())
 	switch result {
 	case types.EDPVS_OK:
 		// return 201
+		shareSnapshot.ServiceAdd(vs)
 		h.logger.Info("Created new virtual server success.", "VipPort", params.VipPort)
 		return apiVs.NewPutVsVipPortCreated()
 	case types.EDPVS_EXIST:
 		h.logger.Info("The virtual server already exist! Try to update.", "VipPort", params.VipPort)
+
+		if shareSnapshot.ServiceLock(vs.ID()) {
+			defer shareSnapshot.ServiceUnlock(vs.ID())
+		}
+
 		reason := vs.Update(h.connPool, h.logger)
 		if reason != types.EDPVS_OK {
 			// return 461
 			h.logger.Error("Update virtual server failed.", "VipPort", params.VipPort, "reason", reason.String())
 			return apiVs.NewPutVsVipPortInvalidBackend()
 		}
+
+		newVsModel := vs.GetModel()
+		vsModel := shareSnapshot.ServiceGet(vs.ID())
+		if vsModel == nil {
+			newVsModel.RSs = &models.RealServerExpandList{
+				Items: make([]*models.RealServerSpecExpand, 0),
+			}
+			shareSnapshot.ServiceUpsert(newVsModel)
+			return apiVs.NewPutVsVipPortOK()
+		}
+
+		vsModel.Bps = newVsModel.Bps
+		vsModel.ConnTimeout = newVsModel.ConnTimeout
+		vsModel.LimitProportion = newVsModel.LimitProportion
+		vsModel.ExpireQuiescent = newVsModel.ExpireQuiescent
+		vsModel.Quic = newVsModel.Quic
+		vsModel.Fwmark = newVsModel.Fwmark
+		vsModel.SynProxy = newVsModel.SynProxy
+		vsModel.Match = newVsModel.Match
+		vsModel.SchedName = newVsModel.SchedName
+		vsModel.Timeout = newVsModel.Timeout
+		vsModel.Flags = newVsModel.Flags
+		if vsModel.RSs == nil {
+			vsModel.RSs = &models.RealServerExpandList{}
+		}
+
+		if vsModel.RSs.Items == nil {
+			vsModel.RSs.Items = make([]*models.RealServerSpecExpand, 0)
+		}
+
 		h.logger.Info("Update virtual server success.", "VipPort", params.VipPort)
+
 		// return 200
 		return apiVs.NewPutVsVipPortOK()
 	default:

@@ -32,7 +32,7 @@ bitmap_add(struct ipset *set, void *value, uint16_t flag)
 
     /* To avoid same IP, different MAC or other elements */
     if (ret || test_bit(e->id, map->members)) {
-        if (flag & IPSET_F_FORCE)    
+        if (flag & IPSET_F_FORCE)
             return EDPVS_OK;
         return EDPVS_EXIST;
     }
@@ -51,8 +51,11 @@ bitmap_del(struct ipset *set, void *value, uint16_t flag)
     if (e->id >= map->elements)
         return EDPVS_INVAL;
 
-    if (!do(del, value, map))
+    if (!do(del, value, map)) {
+        if (flag & IPSET_F_FORCE)
+            return EDPVS_OK;
         return EDPVS_NOTEXIST;
+    }
 
     set->elements--;
     return EDPVS_OK;
@@ -70,7 +73,11 @@ bitmap_test(struct ipset *set, void *value, uint16_t flag)
     return do(test, value, map, set->dsize);
 }
 
-ipset_adtfn bitmap_adtfn[IPSET_ADT_MAX] = { bitmap_add, bitmap_del, bitmap_test };
+ipset_adtfn bitmap_adtfn[IPSET_ADT_MAX] = {
+    [ IPSET_OP_ADD ] = bitmap_add,
+    [ IPSET_OP_DEL ] = bitmap_del,
+    [ IPSET_OP_TEST ] = bitmap_test
+};
 
 void
 bitmap_flush(struct ipset *set)

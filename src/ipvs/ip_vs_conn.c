@@ -30,6 +30,7 @@
 #include "ipvs/synproxy.h"
 #include "ipvs/proto_tcp.h"
 #include "ipvs/proto_udp.h"
+#include "ipvs/proto_sctp.h"
 #include "ipvs/proto_icmp.h"
 #include "parser/parser.h"
 #include "ctrl.h"
@@ -517,7 +518,9 @@ void dp_vs_conn_set_timeout(struct dp_vs_conn *conn, struct dp_vs_proto *pp)
 
     /* set proper timeout */
     if ((conn->proto == IPPROTO_TCP && conn->state == DPVS_TCP_S_ESTABLISHED)
-            || conn->proto == IPPROTO_UDP) {
+            || conn->proto == IPPROTO_UDP
+            || (conn->proto == IPPROTO_SCTP && 
+               conn->state == DPVS_SCTP_S_ESTABLISHED)) {
         conn_timeout = dp_vs_conn_get_timeout(conn);
 
         if (conn_timeout > 0) {
@@ -669,7 +672,7 @@ static int dp_vs_conn_expire(void *priv)
 
     /* refcnt == 1 means we are the only referer.
      * no one is using the conn and it's timed out. */
-    if (rte_atomic32_read(&conn->refcnt) == 1) {
+    if (rte_atomic32_sub_return(&conn->refcnt, 1) == 0) {
         dp_vs_conn_detach_timer(conn, false);
 
         /* I was controlled by someone */
@@ -684,8 +687,6 @@ static int dp_vs_conn_expire(void *priv)
         dp_vs_laddr_unbind(conn);
         dp_vs_conn_free_packets(conn);
 
-        rte_atomic32_dec(&conn->refcnt);
-
 #ifdef CONFIG_DPVS_IPVS_STATS_DEBUG
         conn_stats_dump("del conn", conn);
 #endif
@@ -696,16 +697,15 @@ static int dp_vs_conn_expire(void *priv)
         dp_vs_conn_free(conn);
 
         return DTIMER_STOP;
+    } else {
+        dp_vs_conn_hash(conn);
+
+        /* some one is using it when expire,
+         * try del it again later */
+        dp_vs_conn_refresh_timer(conn, false);
+
+        return DTIMER_OK;
     }
-
-    dp_vs_conn_hash(conn);
-
-    /* some one is using it when expire,
-     * try del it again later */
-    dp_vs_conn_refresh_timer(conn, false);
-
-    rte_atomic32_dec(&conn->refcnt);
-    return DTIMER_OK;
 }
 
 void dp_vs_conn_expire_now(struct dp_vs_conn *conn)
@@ -1192,11 +1192,15 @@ static void dp_vs_conn_put_nolock(struct dp_vs_conn *conn)
 static int conn_init_lcore(void *arg)
 {
     int i;
+    lcoreid_t cid = rte_lcore_id();
 
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_IDLE;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
-    if (!netif_lcore_is_fwd_worker(rte_lcore_id()))
+    if (!netif_lcore_is_fwd_worker(cid))
         return EDPVS_IDLE;
 
     this_conn_tbl = rte_malloc(NULL,
@@ -1218,12 +1222,16 @@ static int conn_init_lcore(void *arg)
 
 static int conn_term_lcore(void *arg)
 {
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_IDLE;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
-    conn_flush();
-
     if (this_conn_tbl) {
+        conn_flush();
         rte_free(this_conn_tbl);
         this_conn_tbl = NULL;
     }
@@ -1308,6 +1316,39 @@ static inline char* get_conn_state_name(uint16_t proto, uint16_t state)
                     break;
             }
             break;
+        case IPPROTO_SCTP:
+            switch (state) {
+            case DPVS_SCTP_S_NONE:
+                return "SCTP_NONE";
+            case DPVS_SCTP_S_INIT1:
+                return "SCTP_INIT1";
+            case DPVS_SCTP_S_INIT:
+                return "SCTP_INIT";
+            case DPVS_SCTP_S_COOKIE_SENT:
+                return "SCTP_COOKIE_SENT";
+            case DPVS_SCTP_S_COOKIE_REPLIED:
+                return "SCTP_COOKIE_REPLIED";
+            case DPVS_SCTP_S_COOKIE_WAIT:
+                return "SCTP_COOKIE_WAIT";
+            case DPVS_SCTP_S_COOKIE:
+                return "SCTP_COOKIE";
+            case DPVS_SCTP_S_COOKIE_ECHOED:
+                return "SCTP_COOKIE_ECHOED";
+            case DPVS_SCTP_S_ESTABLISHED:
+                return "SCTP_ESTABLISHED";
+            case DPVS_SCTP_S_SHUTDOWN_SENT:
+                return "SCTP_SHUTDOWN_SENT";
+            case DPVS_SCTP_S_SHUTDOWN_RECEIVED:
+                return "SCTP_SHUTDOWN_RECEIVED";
+            case DPVS_SCTP_S_SHUTDOWN_ACK_SENT:
+                return "SCTP_SHUTDOWN_ACK_SENT";
+            case DPVS_SCTP_S_REJECTED:
+                return "SCTP_REJECTED";
+            case DPVS_SCTP_S_CLOSED:
+                return "SCTP_CLOSED";
+            default:
+                return "SCTP_UNKNOWN";
+            }
         case IPPROTO_ICMP:
         case IPPROTO_ICMPV6:
             switch (state) {

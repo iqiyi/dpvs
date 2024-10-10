@@ -201,6 +201,7 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_IPV6_STATS                 16
 #define MSG_TYPE_ROUTE6                     17
 #define MSG_TYPE_NEIGH_GET                  18
+#define MSG_TYPE_LLDP_RECV                  19
 #define MSG_TYPE_IFA_GET                    22
 #define MSG_TYPE_IFA_SET                    23
 #define MSG_TYPE_IFA_SYNC                   24
@@ -213,6 +214,7 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_IPSET_SET                  40
 #define MSG_TYPE_DEST_CHECK_NOTIFY_MASTER   41
 #define MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES   42
+#define MSG_TYPE_IFA_IDEVINIT               43
 #define MSG_TYPE_IPVS_RANGE_START           100
 
 /* for svc per_core, refer to service.h*/

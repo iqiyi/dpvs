@@ -14,8 +14,8 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/vishvananda/netlink v1.1.0
-	golang.org/x/net v0.10.0
-	golang.org/x/sys v0.8.0
+	golang.org/x/net v0.17.0
+	golang.org/x/sys v0.13.0
 )
 
 require (

@@ -22,6 +22,7 @@
 #include "list.h"
 #include "dpdk.h"
 #include "inetaddr.h"
+#include "netif_addr.h"
 #include "global_data.h"
 #include "timer.h"
 #include "tc/tc.h"
@@ -47,6 +48,7 @@ enum {
     NETIF_PORT_FLAG_TC_EGRESS               = (0x1<<10),
     NETIF_PORT_FLAG_TC_INGRESS              = (0x1<<11),
     NETIF_PORT_FLAG_NO_ARP                  = (0x1<<12),
+    NETIF_PORT_FLAG_LLDP                    = (0x1<<13),
 };
 
 /* max tx/rx queue number for each nic */
@@ -70,7 +72,7 @@ enum {
 
 #define NETIF_ALIGN                 32
 
-#define NETIF_PORT_ID_INVALID       0xFF
+#define NETIF_PORT_ID_INVALID       NETIF_MAX_PORTS
 #define NETIF_PORT_ID_ALL           NETIF_PORT_ID_INVALID
 
 #define NETIF_LCORE_ID_INVALID      0xFF
@@ -205,31 +207,6 @@ struct netif_ops {
     int (*op_get_xstats)(struct netif_port *dev, netif_nic_xstats_get_t **xstats);
 };
 
-struct netif_hw_addr {
-    struct list_head        list;
-    struct rte_ether_addr   addr;
-    rte_atomic32_t          refcnt;
-    /*
-     * - sync only once!
-     *
-     *   for HA in upper dev, no matter how many times it's added,
-     *   only sync once to lower (when sync_cnt is zero).
-     *
-     *   and HA (upper)'s refcnt++, to mark lower dev own's it.
-     *
-     * - when to unsync?
-     *
-     *   when del if HA (upper dev)'s refcnt is 1 and syn_cnt is not zero.
-     *   means lower dev is the only owner and need be unsync.
-     */
-    int                     sync_cnt;
-};
-
-struct netif_hw_addr_list {
-    struct list_head        addrs;
-    int                     count;
-};
-
 struct netif_port {
     char                    name[IFNAMSIZ];  /* device name */
     portid_t                id;                         /* device id */
@@ -286,25 +263,27 @@ int netif_unregister_pkt(struct pkt_type *pt);
 
 /**************************** port API ******************************/
 struct netif_port* netif_port_get(portid_t id);
+/* get netif by name, fail return NULL */
+struct netif_port* netif_port_get_by_name(const char *name);
+bool is_physical_port(portid_t pid);
+bool is_bond_port(portid_t pid);
+void netif_physical_port_range(portid_t *start, portid_t *end);
+void netif_bond_port_range(portid_t *start, portid_t *end);
 /* port_conf can be NULL for default port configure */
 int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *len);
 int netif_print_port_queue_conf(portid_t pid, char *buf, int *len);
-/* get netif by name, fail return NULL */
-struct netif_port* netif_port_get_by_name(const char *name);
 // function only for init or termination //
 int netif_port_conf_get(struct netif_port *port, struct rte_eth_conf *eth_conf);
 int netif_port_conf_set(struct netif_port *port, const struct rte_eth_conf *conf);
 int netif_port_start(struct netif_port *port); // start nic and wait until up
 int netif_port_stop(struct netif_port *port); // stop nic
-int netif_set_mc_list(struct netif_port *port);
-int __netif_set_mc_list(struct netif_port *port);
 int netif_get_queue(struct netif_port *port, lcoreid_t id, queueid_t *qid);
 int netif_get_link(struct netif_port *dev, struct rte_eth_link *link);
 int netif_get_promisc(struct netif_port *dev, bool *promisc);
 int netif_get_allmulticast(struct netif_port *dev, bool *allmulticast);
 int netif_get_stats(struct netif_port *dev, struct rte_eth_stats *stats);
 int netif_get_xstats(struct netif_port *dev, netif_nic_xstats_get_t **xstats);
-struct netif_port *netif_alloc(size_t priv_size, const char *namefmt,
+struct netif_port *netif_alloc(portid_t id, size_t priv_size, const char *namefmt,
                                unsigned int nrxq, unsigned int ntxq,
                                void (*setup)(struct netif_port *));
 portid_t netif_port_count(void);

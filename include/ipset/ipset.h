@@ -30,7 +30,7 @@
 #define IPSET
 #define RTE_LOGTYPE_IPSET       RTE_LOGTYPE_USER1
 
-#define IPSET_ADT_MAX   3
+#define IPSET_ADT_MAX           IPSET_OP_MAX
 
 struct ipset;
 

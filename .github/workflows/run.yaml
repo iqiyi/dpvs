@@ -17,11 +17,13 @@ jobs:
     runs-on: self-hosted
     env:
       PKG_CONFIG_PATH: /data/dpdk/dpdklib/lib64/pkgconfig
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-    - uses: actions/checkout@v2
-    - name: make
+    - name: Checkout Code
+      uses: actions/checkout@v3
+    - name: Build
       run: make -j
-    - name: install
+    - name: Install
       run: make install
-    - name: run-dpvs
+    - name: Run DPVS
       run: sudo dpvsci $(pwd)/bin/dpvs

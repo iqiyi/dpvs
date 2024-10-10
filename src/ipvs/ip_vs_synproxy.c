@@ -16,6 +16,9 @@
  *
  */
 #include <assert.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <openssl/md5.h>
@@ -117,15 +120,35 @@ static int second_timer_expire(void *priv)
 }
 #endif
 
+static int generate_random_key(void *key, unsigned length)
+{
+    int fd;
+    int ret;
+
+    fd = open("/dev/urandom", O_RDONLY);
+    if (fd < 0) {
+        return -1;
+    }
+    ret = read(fd, key, length);
+    close(fd);
+
+    if (ret != (signed)length) {
+        return -1;
+    }
+    return 0;
+}
+
 int dp_vs_synproxy_init(void)
 {
     int i;
     char ack_mbufpool_name[32];
     struct timeval tv;
 
-    for (i = 0; i < MD5_LBLOCK; i++) {
-        g_net_secret[0][i] = (uint32_t)random();
-        g_net_secret[1][i] = (uint32_t)random();
+    if (generate_random_key(g_net_secret, sizeof(g_net_secret))) {
+        for (i = 0; i < MD5_LBLOCK; i++) {
+            g_net_secret[0][i] = (uint32_t)random();
+            g_net_secret[1][i] = (uint32_t)random();
+        }
     }
 
     rte_atomic32_set(&g_minute_count, (uint32_t)random());
@@ -735,13 +758,14 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         }
 
         /* drop packet from blacklist */
-        if (dp_vs_blklst_lookup(iph->af, iph->proto, &iph->daddr,
-                    th->dest, &iph->saddr)) {
+        if (dp_vs_blklst_filtered(iph->af, iph->proto, &iph->daddr,
+                    th->dest, &iph->saddr, mbuf)) {
             goto syn_rcv_out;
         }
 
         /* drop packet if not in whitelist */
-        if (!dp_vs_whtlst_allow(iph->af, iph->proto, &iph->daddr, th->dest, &iph->saddr)) {
+        if (dp_vs_whtlst_filtered(iph->af, iph->proto, &iph->daddr,
+                    th->dest, &iph->saddr, mbuf)) {
             goto syn_rcv_out;
         }
     } else {

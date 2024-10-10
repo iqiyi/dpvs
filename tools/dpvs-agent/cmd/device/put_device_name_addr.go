@@ -17,6 +17,7 @@ package device
 import (
 	"github.com/dpvs-agent/pkg/ipc/pool"
 	"github.com/dpvs-agent/pkg/ipc/types"
+	"github.com/dpvs-agent/pkg/settings"
 
 	apiDevice "github.com/dpvs-agent/restapi/operations/device"
 
@@ -52,6 +53,12 @@ func (h *putDeviceAddr) Handle(params apiDevice.PutDeviceNameAddrParams) middlew
 	if params.Sapool != nil && *params.Sapool {
 		addr.SetFlags("sapool")
 	}
+
+	if params.Snapshot != nil && *params.Snapshot {
+		AnnouncePort := settings.ShareSnapshot().NodeSpec.AnnouncePort
+		AnnouncePort.Dpvs = params.Name
+	}
+
 	// addr.SetValidLft(prarms.Spec.ValidLft)
 	// addr.SetPreferedLft(prarms.Spec.ValidLft)
 

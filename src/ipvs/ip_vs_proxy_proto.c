@@ -423,7 +423,7 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
     void *rt;
     int ppdoff, ppdatalen, room, mtu;
     int oaf;
-    char ppv1buf[108], tbuf1[64], tbuf2[64];
+    char ppv1buf[108], tbuf1[INET6_ADDRSTRLEN], tbuf2[INET6_ADDRSTRLEN];
     struct proxy_hdr_v2 *pphv2;
 
     assert(ppinfo && conn && mbuf && l4hdr);
@@ -484,8 +484,10 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
                 if (unlikely(NULL == inet_ntop(AF_INET, &ppinfo->addr.ip4.dst_addr,
                                 tbuf2, sizeof(tbuf2))))
                     return EDPVS_INVAL;
-                sprintf(ppv1buf, "PROXY TCP4 %s %s %d %d\r\n", tbuf1, tbuf2,
-                        ntohs(ppinfo->addr.ip4.src_port), ntohs(ppinfo->addr.ip4.dst_port));
+                if (unlikely(snprintf(ppv1buf, sizeof(ppv1buf), "PROXY TCP4 %s %s %d %d\r\n",
+                            tbuf1, tbuf2, ntohs(ppinfo->addr.ip4.src_port),
+                            ntohs(ppinfo->addr.ip4.dst_port)) > sizeof(ppv1buf)))
+                    return EDPVS_INVAL;
                 break;
             case AF_INET6:
                 if (unlikely(NULL == inet_ntop(AF_INET6, ppinfo->addr.ip6.src_addr,
@@ -494,8 +496,10 @@ int proxy_proto_insert(struct proxy_info *ppinfo, struct dp_vs_conn *conn,
                 if (unlikely(NULL == inet_ntop(AF_INET6, ppinfo->addr.ip6.dst_addr,
                                 tbuf2, sizeof(tbuf2))))
                     return EDPVS_INVAL;
-                sprintf(ppv1buf, "PROXY TCP6 %s %s %d %d\r\n", tbuf1, tbuf2,
-                        ntohs(ppinfo->addr.ip6.src_port), ntohs(ppinfo->addr.ip6.dst_port));
+                if (unlikely(snprintf(ppv1buf, sizeof(ppv1buf), "PROXY TCP6 %s %s %d %d\r\n",
+                                tbuf1, tbuf2, ntohs(ppinfo->addr.ip6.src_port),
+                                ntohs(ppinfo->addr.ip6.dst_port)) > sizeof(ppv1buf)))
+                    return EDPVS_INVAL;
                 break;
             default:
                 return EDPVS_NOTSUPP;

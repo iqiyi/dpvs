@@ -287,10 +287,10 @@ hash_netportnet_create(struct ipset *set, struct ipset_param *param)
     set->dsize = sizeof(elem_t);
     set->hash_len = offsetof(elem_t, comment);
 
-    if (param->option.family == AF_INET)
-        set->variant = &hash_netportnet_variant4;
-    else
+    if (param->option.family == AF_INET6)
         set->variant = &hash_netportnet_variant6;
+    else
+        set->variant = &hash_netportnet_variant4;
 
     return EDPVS_OK;
 }

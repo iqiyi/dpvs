@@ -671,8 +671,12 @@ static struct dpvs_sockopts route_sockopts = {
 static int route_lcore_init(void *arg)
 {
     int i;
+    lcoreid_t cid = rte_lcore_id();
 
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
     for (i = 0; i < LOCAL_ROUTE_TAB_SIZE; i++)
@@ -684,7 +688,12 @@ static int route_lcore_init(void *arg)
 
 static int route_lcore_term(void *arg)
 {
-    if (!rte_lcore_is_enabled(rte_lcore_id()))
+    lcoreid_t cid = rte_lcore_id();
+
+    if (cid >= DPVS_MAX_LCORE)
+        return EDPVS_OK;
+
+    if (!rte_lcore_is_enabled(cid))
         return EDPVS_DISABLED;
 
     return route_lcore_flush();

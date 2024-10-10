@@ -132,6 +132,7 @@ typedef struct _local_addr_group {
 typedef struct _blklst_addr_entry {
 	struct sockaddr_storage addr;
 	uint32_t range;
+	char ipset[IPSET_MAXNAMELEN];
 } blklst_addr_entry;
 
 
@@ -139,18 +140,21 @@ typedef struct _blklst_addr_group {
 	char *gname;
 	list addr_ip;
 	list range;
+	list ipset;
 } blklst_addr_group;
 
 /* whitelist ip group*/
 typedef struct _whtlst_addr_entry {
     struct sockaddr_storage addr;
     uint32_t range;
+    char ipset[IPSET_MAXNAMELEN];
 } whtlst_addr_entry;
 
 typedef struct _whtlst_addr_group {
     char *gname;
     list addr_ip;
     list range;
+    list ipset;
 } whtlst_addr_group;
 
 typedef struct _tunnel_entry {
@@ -236,6 +240,7 @@ typedef struct _virtual_server {
 							 * the service from IPVS topology. */
 	bool				syn_proxy;
 	bool				expire_quiescent_conn;
+	bool				quic;
 	unsigned int			connection_to;	/* connection time-out */
 	unsigned long			delay_loop;	/* Interval between running checker */
 	unsigned long			warmup;		/* max random timeout to start checker */
@@ -314,6 +319,7 @@ static inline bool quorum_equal(const notify_script_t *quorum1,
                          (X)->hash_target             == (Y)->hash_target               &&\
                          (X)->syn_proxy               == (Y)->syn_proxy                 &&\
                          (X)->expire_quiescent_conn   == (Y)->expire_quiescent_conn     &&\
+                         (X)->quic                    == (Y)->quic                      &&\
                          quorum_equal((X)->notify_quorum_up, (Y)->notify_quorum_up)     &&\
                          quorum_equal((X)->notify_quorum_down, (Y)->notify_quorum_down) &&\
                          !strcmp((X)->sched, (Y)->sched)                                &&\

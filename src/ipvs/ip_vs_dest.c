@@ -74,6 +74,10 @@ static void __dp_vs_dest_update(struct dp_vs_service *svc,
     int conn_flags;
 
     rte_atomic16_set(&dest->weight, udest->weight);
+    if (udest->flags & DPVS_DEST_F_INHIBITED)
+        dp_vs_dest_set_inhibited(dest);
+    else
+        dp_vs_dest_clear_inhibited(dest);
     conn_flags = udest->conn_flags | DPVS_CONN_F_INACTIVE;
     dest->fwdmode = udest->fwdmode;
     rte_atomic16_set(&dest->conn_flags, conn_flags);
@@ -394,7 +398,7 @@ static void dest_inhibit_logging(const struct dp_vs_dest *dest, const char *msg)
         RTE_LOG(INFO, SERVICE, "[cid %02d, %s, svc %s:%d, rs %s:%d, weight %d, inhibited %s,"
                 " down_notice_recvd %d, inhibit_duration %ds, origin_weight %d] %s\n",
                 cid,
-                dest->proto == IPPROTO_TCP ? "tcp" : "udp",
+                dest->proto == IPPROTO_TCP ? "tcp" : IPPROTO_UDP ? "udp" : "sctp",
                 inet_ntop(dest->svc->af, &dest->svc->addr, str_vaddr, sizeof(str_vaddr)) ? str_vaddr : "::",
                 ntohs(dest->svc->port),
                 inet_ntop(dest->af, &dest->addr, str_daddr, sizeof(str_daddr)) ? str_daddr : "::",
@@ -409,7 +413,7 @@ static void dest_inhibit_logging(const struct dp_vs_dest *dest, const char *msg)
     } else {
         RTE_LOG(DEBUG, SERVICE, "[cid %02d, %s, svc %s:%d, rs %s:%d, weight %d, inhibited %s, warm_up_count %d] %s\n",
                 cid,
-                dest->proto == IPPROTO_TCP ? "tcp" : "udp",
+                dest->proto == IPPROTO_TCP ? "tcp" : IPPROTO_UDP ? "udp" : "sctp",
                 inet_ntop(dest->svc->af, &dest->svc->addr, str_vaddr, sizeof(str_vaddr)) ? str_vaddr : "::",
                 ntohs(dest->svc->port),
                 inet_ntop(dest->af, &dest->addr, str_daddr, sizeof(str_daddr)) ? str_daddr : "::",

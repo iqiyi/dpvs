@@ -37,7 +37,7 @@ func TestPingChecker(t *testing.T) {
 	for _, target := range ping_targets {
 		checker := NewPingChecker()
 		id := Id(target.IP.String())
-		config := NewCheckerConfig(&id, checker,
+		config := NewCheckerConfig(&id, 0, checker,
 			&target, StateUnknown, 0,
 			3*time.Second, 1*time.Second, 3)
 		result := checker.Check(target, config.Timeout)

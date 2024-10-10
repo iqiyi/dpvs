@@ -70,6 +70,10 @@ type VirtualServerSpecExpand struct {
 	// Enum: [0 1 2 17 18]
 	ProxyProto uint8 `json:"ProxyProto,omitempty"`
 
+	// quic
+	// Enum: [true false]
+	Quic string `json:"Quic,omitempty"`
+
 	// r ss
 	RSs *RealServerExpandList `json:"RSs,omitempty"`
 
@@ -86,6 +90,9 @@ type VirtualServerSpecExpand struct {
 
 	// timeout
 	Timeout uint32 `json:"Timeout,omitempty"`
+
+	// version
+	Version string `json:"Version,omitempty"`
 }
 
 // Validate validates this virtual server spec expand
@@ -105,6 +112,10 @@ func (m *VirtualServerSpecExpand) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateProxyProto(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateQuic(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -239,6 +250,48 @@ func (m *VirtualServerSpecExpand) validateProxyProto(formats strfmt.Registry) er
 
 	// value enum
 	if err := m.validateProxyProtoEnum("ProxyProto", "body", m.ProxyProto); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var virtualServerSpecExpandTypeQuicPropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["true","false"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		virtualServerSpecExpandTypeQuicPropEnum = append(virtualServerSpecExpandTypeQuicPropEnum, v)
+	}
+}
+
+const (
+
+	// VirtualServerSpecExpandQuicTrue captures enum value "true"
+	VirtualServerSpecExpandQuicTrue string = "true"
+
+	// VirtualServerSpecExpandQuicFalse captures enum value "false"
+	VirtualServerSpecExpandQuicFalse string = "false"
+)
+
+// prop value enum
+func (m *VirtualServerSpecExpand) validateQuicEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, virtualServerSpecExpandTypeQuicPropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *VirtualServerSpecExpand) validateQuic(formats strfmt.Registry) error {
+	if swag.IsZero(m.Quic) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateQuicEnum("Quic", "body", m.Quic); err != nil {
 		return err
 	}
 

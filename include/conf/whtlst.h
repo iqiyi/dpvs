@@ -23,21 +23,22 @@
 #define __DPVS_WHTLST_CONF_H__
 #include "inet.h"
 #include "conf/sockopts.h"
+#include "conf/ipset.h"
+
 struct dp_vs_whtlst_entry {
     union inet_addr addr;
 };
 
 typedef struct dp_vs_whtlst_conf {
     /* identify service */
-    union inet_addr     whtlst;
     union inet_addr     vaddr;
-    int                 af;
-    uint32_t            fwmark;
     uint16_t            vport;
     uint8_t             proto;
-    uint8_t             padding;
+    uint8_t             af;
 
-    /* for set */
+    /* subject and ipset are mutual exclusive */
+    union inet_addr     subject;
+    char                ipset[IPSET_MAXNAMELEN];
 } dpvs_whtlst_t;
 
 struct dp_vs_whtlst_conf_array {

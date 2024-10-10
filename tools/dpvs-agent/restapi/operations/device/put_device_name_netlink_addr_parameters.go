@@ -12,17 +12,25 @@ import (
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/swag"
 	"github.com/go-openapi/validate"
 
 	"github.com/dpvs-agent/models"
 )
 
 // NewPutDeviceNameNetlinkAddrParams creates a new PutDeviceNameNetlinkAddrParams object
-//
-// There are no default values defined in the spec.
+// with the default values initialized.
 func NewPutDeviceNameNetlinkAddrParams() PutDeviceNameNetlinkAddrParams {
 
-	return PutDeviceNameNetlinkAddrParams{}
+	var (
+		// initialize parameters with default values
+
+		snapshotDefault = bool(true)
+	)
+
+	return PutDeviceNameNetlinkAddrParams{
+		Snapshot: &snapshotDefault,
+	}
 }
 
 // PutDeviceNameNetlinkAddrParams contains all the bound params for the put device name netlink addr operation
@@ -40,6 +48,11 @@ type PutDeviceNameNetlinkAddrParams struct {
 	*/
 	Name string
 	/*
+	  In: query
+	  Default: true
+	*/
+	Snapshot *bool
+	/*
 	  In: body
 	*/
 	Spec *models.InetAddrSpec
@@ -54,8 +67,15 @@ func (o *PutDeviceNameNetlinkAddrParams) BindRequest(r *http.Request, route *mid
 
 	o.HTTPRequest = r
 
+	qs := runtime.Values(r.URL.Query())
+
 	rName, rhkName, _ := route.Params.GetOK("name")
 	if err := o.bindName(rName, rhkName, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
+	qSnapshot, qhkSnapshot, _ := qs.GetOK("snapshot")
+	if err := o.bindSnapshot(qSnapshot, qhkSnapshot, route.Formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -96,6 +116,30 @@ func (o *PutDeviceNameNetlinkAddrParams) bindName(rawData []string, hasKey bool,
 	// Required: true
 	// Parameter is provided by construction from the route
 	o.Name = raw
+
+	return nil
+}
+
+// bindSnapshot binds and validates parameter Snapshot from query.
+func (o *PutDeviceNameNetlinkAddrParams) bindSnapshot(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+	// AllowEmptyValue: false
+
+	if raw == "" { // empty values pass all other validations
+		// Default values have been previously initialized by NewPutDeviceNameNetlinkAddrParams()
+		return nil
+	}
+
+	value, err := swag.ConvertBool(raw)
+	if err != nil {
+		return errors.InvalidType("snapshot", "query", "bool", raw)
+	}
+	o.Snapshot = &value
 
 	return nil
 }

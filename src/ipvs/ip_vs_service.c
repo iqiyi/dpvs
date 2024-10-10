@@ -913,7 +913,8 @@ static int dp_vs_service_set(sockoptid_t opt, const void *user, size_t len)
     }
 
     if (usvc.proto != IPPROTO_TCP && usvc.proto != IPPROTO_UDP &&
-        usvc.proto != IPPROTO_ICMP && usvc.proto != IPPROTO_ICMPV6) {
+        usvc.proto != IPPROTO_SCTP && usvc.proto != IPPROTO_ICMP &&
+        usvc.proto != IPPROTO_ICMPV6) {
         RTE_LOG(ERR, SERVICE, "%s: protocol not support.\n", __func__);
         return EDPVS_INVAL;
     }

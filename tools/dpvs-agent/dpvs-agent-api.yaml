@@ -11,33 +11,35 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+---
 swagger: "2.0"
-info: 
+info:
   description: "dpvs agent api"
   version: "1.0.0"
   title: "dpvs agent"
 host: "petstore.swagger.io"
 basePath: "/v2"
 tags:
-- name: "virtualserver"
-  description: "virtualserver"
-- name: "route"
-  description: "route"
-- name: "laddr"
-  description: "laddr"
-- name: "tunnel"
-  description: "tunnel"
-- name: "inetaddr"
-  description: "inet addr"
-- name: "white_list"
-  description: "white list"
-- name: "black_list"
-  description: "black list"
-- name: "arp"
-  description: "arp"
+  - name: "virtualserver"
+    description: "virtualserver"
+  - name: "route"
+    description: "route"
+  - name: "laddr"
+    description: "laddr"
+  - name: "tunnel"
+    description: "tunnel"
+  - name: "inetaddr"
+    description: "inet addr"
+  - name: "white_list"
+    description: "white list"
+  - name: "black_list"
+    description: "black list"
+  - name: "arp"
+    description: "arp"
+  - name: "ipset"
+    description: "ipset"
 schemes:
-- "http"
+  - "http"
 parameters:
   service-id:
     name: VipPort
@@ -100,6 +102,12 @@ parameters:
     type: boolean
     default: false
     required: false
+  snapshot:
+    name: snapshot
+    in: query
+    type: boolean
+    default: true
+    required: false
   stats:
     name: stats
     in: query
@@ -123,9 +131,9 @@ parameters:
     in: query
     type: string
     enum:
-    - unset
-    - on
-    - off
+      - unset
+      - on
+      - off
     default: unset
     required: false
   link:
@@ -133,9 +141,9 @@ parameters:
     in: query
     type: string
     enum:
-    - unset
-    - up
-    - down
+      - unset
+      - up
+      - down
     default: unset
     required: false
   forward2kni:
@@ -143,15 +151,58 @@ parameters:
     in: query
     type: string
     enum:
-    - unset
-    - on
-    - off
+      - unset
+      - on
+      - off
     default: unset
     required: false
+  version:
+    name: version
+    in: query
+    type: string
+    required: true
+  ipset-name:
+    name: name
+    in: path
+    type: string
+    required: true
+  ipset-param:
+    name: ipsetParam
+    in: body
+    schema:
+      $ref: "#/definitions/IpsetInfo"
+  ipset-cell:
+    name: ipsetCell
+    in: body
+    schema:
+      $ref: "#/definitions/IpsetCell"
 definitions:
+  NodeServiceSnapshot:
+    type: object
+    properties:
+      NodeSpec:
+        "$ref": "#/definitions/DpvsNodeSpec"
+      Services:
+        "$ref": "#/definitions/VirtualServerList"
+  DpvsNodeSpec:
+    type: object
+    properties:
+      AnnouncePort:
+        "$ref": "#/definitions/VsAnnouncePort"
+      Laddrs:
+        "$ref": "#/definitions/LocalAddressExpandList"
+  VsAnnouncePort:
+    type: object
+    properties:
+      switch:
+        type: string
+      dpvs:
+        type: string
   CertAuthSpec:
     properties:
       addr:
+        type: string
+      ipset:
         type: string
   InetAddrSpec:
     properties:
@@ -249,7 +300,7 @@ definitions:
     properties:
       Spec:
         "$ref": "#/definitions/RealServerSpecTiny"
-      Stats:  
+      Stats:
         "$ref": "#/definitions/ServerStats"
   RealServerSpecTiny:
     type: object
@@ -292,9 +343,6 @@ definitions:
         "$ref": "#/definitions/NicDeviceDetail"
       stats:
         "$ref": "#/definitions/NicDeviceStats"
-      #extra:
-      #  "$ref": "#/definitions/NicDeviceStats"
-  #NicDeviceExtra: padding
   NicDeviceDetail:
     type: object
     properties:
@@ -407,10 +455,10 @@ definitions:
         type: string
         description: State the component is in
         enum:
-        - Ok
-        - Warning
-        - Failure
-        - Disabled
+          - Ok
+          - Warning
+          - Failure
+          - Disabled
       msg:
         type: string
         description: Human readable status/error/warning message
@@ -450,7 +498,7 @@ definitions:
   AddrRange:
     type: "object"
     properties:
-      Start: 
+      Start:
         type: "string"
       End:
         type: "string"
@@ -472,7 +520,8 @@ definitions:
       - tcp
       - udp
       - ping
-
+      - udpping
+      - http
   VirtualServerList:
     type: object
     properties:
@@ -522,6 +571,11 @@ definitions:
         enum:
           - "true"
           - "false"
+      Quic:
+        type: "string"
+        enum:
+          - "true"
+          - "false"
       Timeout:
         type: "integer"
         format: "uint32"
@@ -538,6 +592,8 @@ definitions:
         type: "integer"
         format: "uint32"
       Addr:
+        type: "string"
+      Version:
         type: "string"
       SchedName:
         type: "string"
@@ -559,22 +615,16 @@ definitions:
   VirtualServerSpecTiny:
     type: "object"
     properties:
-      #Af:
-      #  type: "integer"
-      #  format: "uint16"
-      #Port:
-      #  type: "integer"
-      #  format: "uint16"
       Fwmark:
         type: "integer"
         format: "uint32"
-      #Flags:
-      #  type: "integer"
-      #  format: "uint32"
       SynProxy:
         type: "boolean"
         default: false
       ExpireQuiescent:
+        type: "boolean"
+        default: false
+      Quic:
         type: "boolean"
         default: false
       Timeout:
@@ -583,17 +633,12 @@ definitions:
       ConnTimeout:
         type: "integer"
         format: "uint32"
-      #Netmask:
-      #  type: "integer"
-      #  format: "uint32"
       Bps:
         type: "integer"
         format: "uint32"
       LimitProportion:
         type: "integer"
         format: "uint32"
-      #Addr:
-      #  type: "string"
       ProxyProtocol:
         type: "string"
         enum:
@@ -611,11 +656,148 @@ definitions:
           - conhash
       Match:
         "$ref": "#/definitions/MatchSpec"
+  IpsetOption:
+    description: IpsetOption defines common options for ipset operations.
+    type: object
+    properties:
+      NoMatch:
+        description: >
+          Nomatch excludes a small element range from an ipset,
+          which is mainly used by network-cidr based ipset.
+        type: boolean
+        default: false
+      Force:
+        description: >
+          When add members to ipset with Force set, the already existing members
+          are replaced sliently instead of emitting an EDPVS_EXIST error; When delete
+          non-existent memebers from ipset, the DPSVS_NOTEXIST error is ignored.
+        type: boolean
+        default: false
+  IpsetCreationOption:
+    description: >
+      IpsetCreationOption contains all available options required
+      in creating an ipset.
+    properties:
+      Family:
+        type: string
+        enum:
+          - ipv4
+          - ipv6
+      Comment:
+        type: boolean
+        default: false
+      HashSize:
+        type: integer
+        format: uint32
+      HashMaxElem:
+        type: integer
+        format: uint32
+      Range:
+        description: |
+          vaild format: ipv4-ipv4, ipv4/pfx, ipv6/pfx, port-port
+        type: string
+  IpsetType:
+    type: string
+    enum:
+      - bitmap:ip
+      - bitmap:ip,mac
+      - bitmap:port
+      - hash:ip
+      - hash:net
+      - hash:ip,port
+      - hash:net,port
+      - hash:net,port,iface
+      - hash:ip,port,ip
+      - hash:ip,port,net
+      - hash:net,port,net
+      - hash:net,port,net,port
+  IpsetMember:
+    description: IpsetMember represents a specific entry in ipset.
+    type: object
+    required:
+      - Entry
+    properties:
+      Entry:
+        description: |
+          type specific entry data, for example
+          * 192.168.1.0/29 (bitmap:ip)
+          * 192.168.88.0/24,tcp:8080-8082 (hash:net)
+          * 2001::1,8080-8082,2002::aaaa:bbbb:ccc0:0/108 (hash:ip,port,net)
+        type: string
+      Comment:
+        type: string
+        minLength: 1
+        maxLength: 32   # IPSET_MAXCOMLEN = 32
+      Options:
+        $ref: "#/definitions/IpsetOption"
+  IpsetCell:
+    description: IpsetCell represents an indivisible granularity of ipset member.
+    type: object
+    required:
+      - Type
+      - Member
+    properties:
+      Type:
+        $ref: "#/definitions/IpsetType"
+      Member:
+        $ref: "#/definitions/IpsetMember"
+  IpsetInfo:
+    description: >
+      IpsetInfo contains all parameters and information for ipset operations.
+    type: object
+    required:
+      - Type
+      - Name
+    properties:
+      Type:
+        type: string
+        $ref: "#/definitions/IpsetType"
+      Name:
+        type: string
+        minLength: 1
+        maxLength: 32   # IPSET_MAXNAMELEN = 32
+      Opcode:
+        description: opertaion type code
+        type: integer
+        format: uint16
+        enum:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+        x-enum-varnames:
+          - Add
+          - Del
+          - Test
+          - Create
+          - Destroy
+          - Flush
+          - List
+      CreationOptions:
+        $ref: '#/definitions/IpsetCreationOption'
+      Entries:
+        type: array
+        items:
+          $ref: "#/definitions/IpsetMember"
+  IpsetInfoArray:
+    description: IpsetInfoArray contains an array of ipset.
+    type: object
+    properties:
+      Count:
+        type: integer
+        format: int32
+      Infos:
+        type: array
+        items:
+          $ref: "#/definitions/IpsetInfo"
 paths:
   /device:
     get:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/stats"
       summary: "display all net device list"
@@ -625,10 +807,9 @@ paths:
           schema:
             type: string
   /device/{name}/addr:
-    #description: dpip addr add 192.168.88.16/32 dev dpdk0.102
     get:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/stats"
         - "$ref": "#/parameters/verbose"
@@ -645,8 +826,9 @@ paths:
             type: string
     put:
       tags:
-      - "device"
+        - "device"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/sapool"
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/device-addr"
@@ -666,7 +848,7 @@ paths:
             type: string
     delete:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/sapool"
         - "$ref": "#/parameters/device-name"
@@ -682,10 +864,9 @@ paths:
           schema:
             type: string
   /device/{name}/route:
-    #description: dpip route add 192.168.88.16/32 dev dpdk0.102 scope kni_host
     get:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/stats"
         - "$ref": "#/parameters/device-name"
@@ -701,7 +882,7 @@ paths:
             type: string
     put:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/route-config"
@@ -721,7 +902,7 @@ paths:
             type: string
     delete:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/route-config"
@@ -738,7 +919,7 @@ paths:
   /device/{name}/netlink:
     get:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/stats"
@@ -754,7 +935,7 @@ paths:
             type: string
     put:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
       summary: "ip link set ${name} up"
@@ -769,7 +950,7 @@ paths:
             type: string
     delete:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
       summary: "ip link set ${name} down"
@@ -785,7 +966,7 @@ paths:
   /device/{name}/netlink/addr:
     get:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/stats"
@@ -801,11 +982,13 @@ paths:
             type: string
     put:
       tags:
-      - "device"
+        - "device"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/device-addr"
-      summary: "ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device"
+      summary: |
+        ip addr add 10.0.0.1/32 dev eth0: Set ip cird to linux net device
       responses:
         '200':
           description: Success
@@ -817,11 +1000,12 @@ paths:
             type: string
     delete:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/device-addr"
-      summary: "ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device"
+      summary: |
+        ip addr del 10.0.0.1/32 dev eth0: Delete ip cird fron linux net device
       responses:
         '200':
           description: Success
@@ -831,12 +1015,10 @@ paths:
           description: Not Found
           schema:
             type: string
-  #/device/{name}/cpu
   /device/{name}/nic:
-    #description: dpip link show 
     get:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/verbose"
@@ -846,21 +1028,22 @@ paths:
         '200':
           description: Success
           schema:
-            #type: string
-            "$ref":  "#/definitions/NicDeviceSpecList"
+            "$ref": "#/definitions/NicDeviceSpecList"
         '500':
           description: Failure
           schema:
             type: string
     put:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/forward2kni"
         - "$ref": "#/parameters/link"
         - "$ref": "#/parameters/promisc"
-      summary: "dpip link set ${nic-name} [forward2kni,link,promisc,tc-ingress,tc-egress] [on/up,off/down]"
+      summary: >
+        dpip link set ${nic-name}
+        [forward2kni,link,promisc,tc-ingress,tc-egress] [on/up,off/down]
       responses:
         '200':
           description: Success
@@ -871,10 +1054,9 @@ paths:
           schema:
             type: string
   /device/{name}/vlan:
-    #description: dpip vlan add dpdk0.102 link dpdk0 id 102
     get:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/stats"
@@ -890,7 +1072,7 @@ paths:
             type: string
     put:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
         - "$ref": "#/parameters/vlan-config"
@@ -906,7 +1088,7 @@ paths:
             type: string
     delete:
       tags:
-      - "device"
+        - "device"
       parameters:
         - "$ref": "#/parameters/device-name"
       summary: "delete special net device"
@@ -922,22 +1104,29 @@ paths:
   /vs:
     get:
       tags:
-      - "virtualserver"
+        - "virtualserver"
       parameters:
         - "$ref": "#/parameters/stats"
+        - "$ref": "#/parameters/snapshot"
+        - "$ref": "#/parameters/healthcheck"
       summary: "display all vip:port:proto and rsip:port list"
       responses:
         '200':
           description: Success
           schema:
             "$ref": "#/definitions/VirtualServerList"
-          #  items:
-          #    "$ref": "#/definitions/VirtualServer"
+        '204':
+          description: No Content
+          x-go-name: NoContent
+          schema:
+            "$ref": "#/definitions/VirtualServerList"
   /vs/{VipPort}:
     get:
       tags:
-      - "virtualserver"
+        - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/snapshot"
+        - "$ref": "#/parameters/healthcheck"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/stats"
       summary: "get a specific virtual server"
@@ -945,11 +1134,9 @@ paths:
         '200':
           description: Success
           schema:
-          #  type: string
-          #  items:
             "$ref": "#/definitions/VirtualServerList"
         '404':
-          description: Service not found  
+          description: Service not found
           schema:
             type: string
     delete:
@@ -977,6 +1164,7 @@ paths:
       tags:
         - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/vs-config"
       responses:
@@ -992,7 +1180,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1006,9 +1194,9 @@ paths:
   /vs/{VipPort}/laddr:
     get:
       tags:
-      - "virtualserver"
+        - "virtualserver"
       parameters:
-        #- "$ref": "#/parameters/realserver-id"
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/stats"
       responses:
@@ -1016,17 +1204,15 @@ paths:
           description: Success
           schema:
             "$ref": "#/definitions/LocalAddressExpandList"
-            #type: string
-            #items:
-            #  "$ref": "#/definitions/VirtualServer"
         '404':
           description: Service not found
           schema:
             type: string
     put:
       tags:
-      - "virtualserver"
+        - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/laddr-config"
       responses:
@@ -1042,7 +1228,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1055,7 +1241,7 @@ paths:
             "$ref": "#/definitions/Error"
     delete:
       tags:
-      - "virtualserver"
+        - "virtualserver"
       parameters:
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/laddr-config"
@@ -1068,7 +1254,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1079,12 +1265,46 @@ paths:
           x-go-name: Failure
           schema:
             "$ref": "#/definitions/Error"
+  /vs/{VipPort}/rs/health:
+    put:
+      summary: "dpvs healthcheck update rs weight"
+      tags:
+        - "virtualserver"
+      parameters:
+        - "$ref": "#/parameters/version"
+        - "$ref": "#/parameters/service-id"
+        - "$ref": "#/parameters/rss-config"
+      responses:
+        '200':
+          description: Success
+        '270':
+          description: >
+            the rss-config parameter is outdated,
+            update nothing and return the latest rs info
+          x-go-name: Unexpected
+          schema:
+            "$ref": "#/definitions/VirtualServerSpecExpand"
+        '460':
+          description: Invalid frontend in service configuration
+          x-go-name: InvalidFrontend
+          schema:
+            "$ref": "#/definitions/Error"
+        '461':
+          description: Invalid backend in service configuration
+          x-go-name: InvalidBackend
+          schema:
+            "$ref": "#/definitions/Error"
+        '500':
+          description: Service deletion failed
+          x-go-name: Failure
+          schema:
+            "$ref": "#/definitions/Error"
   /vs/{VipPort}/rs:
     get:
       tags:
-      - "virtualserver"
+        - "virtualserver"
       parameters:
-        #- "$ref": "#/parameters/realserver-id"
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/stats"
       responses:
@@ -1092,10 +1312,8 @@ paths:
           description: Success
           schema:
             type: string
-            #items:
-            #  "$ref": "#/definitions/VirtualServer"
         '404':
-          description: Service not found  
+          description: Service not found
           schema:
             type: string
     delete:
@@ -1116,7 +1334,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1134,7 +1352,6 @@ paths:
       parameters:
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/rss-config"
-        - "$ref": "#/parameters/healthcheck"
       responses:
         '200':
           description: Success
@@ -1148,7 +1365,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1164,6 +1381,7 @@ paths:
       tags:
         - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/rss-config"
       responses:
@@ -1179,7 +1397,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1193,19 +1411,16 @@ paths:
   /vs/{VipPort}/deny:
     get:
       tags:
-      - "virtualserver"
+        - "virtualserver"
       parameters:
-        #- "$ref": "#/parameters/realserver-id"
         - "$ref": "#/parameters/service-id"
       responses:
         '200':
           description: Success
           schema:
             type: string
-            #items:
-            #  "$ref": "#/definitions/VirtualServer"
         '404':
-          description: Service not found  
+          description: Service not found
           schema:
             type: string
     delete:
@@ -1226,7 +1441,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1257,7 +1472,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1288,7 +1503,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1302,19 +1517,16 @@ paths:
   /vs/{VipPort}/allow:
     get:
       tags:
-      - "virtualserver"
+        - "virtualserver"
       parameters:
-        #- "$ref": "#/parameters/realserver-id"
         - "$ref": "#/parameters/service-id"
       responses:
         '200':
           description: Success
           schema:
             type: string
-            #items:
-            #  "$ref": "#/definitions/VirtualServer"
         '404':
-          description: Service not found  
+          description: Service not found
           schema:
             type: string
     delete:
@@ -1335,7 +1547,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1366,7 +1578,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1397,7 +1609,7 @@ paths:
           description: Invalid frontend in service configuration
           x-go-name: InvalidFrontend
           schema:
-            "$ref": "#/definitions/Error" 
+            "$ref": "#/definitions/Error"
         '461':
           description: Invalid backend in service configuration
           x-go-name: InvalidBackend
@@ -1408,3 +1620,209 @@ paths:
           x-go-name: Failure
           schema:
             "$ref": "#/definitions/Error"
+  /ipset:
+    get:
+      summary: "Get all the ipsets and members."
+      tags:
+        - "ipset"
+      operationId: GetAll
+      responses:
+        '200':
+          description: Success
+          schema:
+            $ref: "#/definitions/IpsetInfoArray"
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
+  /ipset/{name}:
+    get:
+      summary: "Get a specific ipset and its members."
+      tags:
+        - "ipset"
+      operationId: Get
+      parameters:
+        - "$ref": "#/parameters/ipset-name"
+      responses:
+        '200':
+          description: Success
+          schema:
+            $ref: "#/definitions/IpsetInfo"
+        '404':
+          description: Ipset not found
+          schema:
+            type: string
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
+    put:
+      summary: "Create an ipset named {name}."
+      tags:
+        - "ipset"
+      operationId: Create
+      parameters:
+        - $ref: "#/parameters/ipset-name"
+        - $ref: "#/parameters/ipset-param"
+      responses:
+        '200':
+          description: Replaced
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '400':
+          description: Invalid ipset parameter
+          schema:
+            type: string
+        '404':
+          description: Ipset not found
+          schema:
+            type: string
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
+    delete:
+      summary: "Delete the ipset named {name}."
+      tags:
+        - "ipset"
+      operationId: Destroy
+      parameters:
+        - $ref: "#/parameters/ipset-name"
+      responses:
+        '200':
+          description: Deleted
+          schema:
+            type: string
+        '404':
+          description: Ipset not found
+          schema:
+            type: string
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
+  /ipset/{name}/cell:
+    post:
+      summary: "Check if an object in the ipset."
+      tags:
+        - "ipset"
+      operationId: IsIn
+      parameters:
+        - $ref: "#/parameters/ipset-name"
+        - $ref: "#/parameters/ipset-cell"
+      responses:
+        '200':
+          description: Succeed
+          schema:
+            type: object
+            required:
+              - Result
+            properties:
+              Result:
+                type: boolean
+              Message:
+                type: string
+        '400':
+          description: Invalid ipset parameter
+          schema:
+            type: string
+        '404':
+          description: Ipset not found
+          schema:
+            type: string
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
+  /ipset/{name}/member:
+    post:
+      summary: "Add members to the ipset."
+      tags:
+        - "ipset"
+      operationId: AddMember
+      parameters:
+        - $ref: "#/parameters/ipset-name"
+        - $ref: "#/parameters/ipset-param"
+      responses:
+        '200':
+          description: Existed
+          schema:
+            type: string
+        '201':
+          description: Created
+          schema:
+            type: string
+        '400':
+          description: Invalid ipset parameter
+          schema:
+            type: string
+        '404':
+          description: Ipset not found
+          schema:
+            type: string
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
+    delete:
+      summary: "Delete members from the ipset."
+      tags:
+        - "ipset"
+      operationId: DelMember
+      parameters:
+        - $ref: "#/parameters/ipset-name"
+        - $ref: "#/parameters/ipset-param"
+      responses:
+        '200':
+          description: Succeed
+          schema:
+            type: string
+        '400':
+          description: Invalid ipset parameter
+          schema:
+            type: string
+        '404':
+          description: Ipset not found
+          schema:
+            type: string
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string
+    put:
+      summary: "Reset the whole ipset members."
+      tags:
+        - "ipset"
+      operationId: ReplaceMember
+      parameters:
+        - $ref: "#/parameters/ipset-name"
+        - $ref: "#/parameters/ipset-param"
+      responses:
+        '200':
+          description: Succeed
+          schema:
+            type: string
+        '400':
+          description: Invalid ipset parameter
+          schema:
+            type: string
+        '404':
+          description: Ipset not found
+          schema:
+            type: string
+        '500':
+          description: Service not available
+          x-go-name: Failure
+          schema:
+            type: string

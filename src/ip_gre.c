@@ -233,12 +233,13 @@ static int gre_dev_init(struct netif_port *dev)
 
     tnl->hlen = gre_calc_hlen(tnl->params.o_flags);
 
-    return EDPVS_OK;
+    return ip_tunnel_dev_init(dev);
 }
 
 static struct netif_ops gre_dev_ops = {
     .op_init             = gre_dev_init,
     .op_xmit             = gre_xmit,
+    .op_set_mc_list      = ip_tunnel_set_mc_list,
     .op_get_link         = ip_tunnel_get_link,
     .op_get_stats        = ip_tunnel_get_stats,
     .op_get_promisc      = ip_tunnel_get_promisc,

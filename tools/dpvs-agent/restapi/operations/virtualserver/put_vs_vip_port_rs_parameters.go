@@ -12,25 +12,17 @@ import (
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/strfmt"
-	"github.com/go-openapi/swag"
 	"github.com/go-openapi/validate"
 
 	"github.com/dpvs-agent/models"
 )
 
 // NewPutVsVipPortRsParams creates a new PutVsVipPortRsParams object
-// with the default values initialized.
+//
+// There are no default values defined in the spec.
 func NewPutVsVipPortRsParams() PutVsVipPortRsParams {
 
-	var (
-		// initialize parameters with default values
-
-		healthcheckDefault = bool(false)
-	)
-
-	return PutVsVipPortRsParams{
-		Healthcheck: &healthcheckDefault,
-	}
+	return PutVsVipPortRsParams{}
 }
 
 // PutVsVipPortRsParams contains all the bound params for the put vs vip port rs operation
@@ -48,11 +40,6 @@ type PutVsVipPortRsParams struct {
 	*/
 	VipPort string
 	/*
-	  In: query
-	  Default: false
-	*/
-	Healthcheck *bool
-	/*
 	  In: body
 	*/
 	Rss *models.RealServerTinyList
@@ -67,15 +54,8 @@ func (o *PutVsVipPortRsParams) BindRequest(r *http.Request, route *middleware.Ma
 
 	o.HTTPRequest = r
 
-	qs := runtime.Values(r.URL.Query())
-
 	rVipPort, rhkVipPort, _ := route.Params.GetOK("VipPort")
 	if err := o.bindVipPort(rVipPort, rhkVipPort, route.Formats); err != nil {
-		res = append(res, err)
-	}
-
-	qHealthcheck, qhkHealthcheck, _ := qs.GetOK("healthcheck")
-	if err := o.bindHealthcheck(qHealthcheck, qhkHealthcheck, route.Formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -116,30 +96,6 @@ func (o *PutVsVipPortRsParams) bindVipPort(rawData []string, hasKey bool, format
 	// Required: true
 	// Parameter is provided by construction from the route
 	o.VipPort = raw
-
-	return nil
-}
-
-// bindHealthcheck binds and validates parameter Healthcheck from query.
-func (o *PutVsVipPortRsParams) bindHealthcheck(rawData []string, hasKey bool, formats strfmt.Registry) error {
-	var raw string
-	if len(rawData) > 0 {
-		raw = rawData[len(rawData)-1]
-	}
-
-	// Required: false
-	// AllowEmptyValue: false
-
-	if raw == "" { // empty values pass all other validations
-		// Default values have been previously initialized by NewPutVsVipPortRsParams()
-		return nil
-	}
-
-	value, err := swag.ConvertBool(raw)
-	if err != nil {
-		return errors.InvalidType("healthcheck", "query", "bool", raw)
-	}
-	o.Healthcheck = &value
 
 	return nil
 }

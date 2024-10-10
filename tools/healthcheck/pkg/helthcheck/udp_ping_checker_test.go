@@ -39,7 +39,7 @@ func TestUDPPingChecker(t *testing.T) {
 	for _, target := range udpping_targets {
 		checker := NewUDPPingChecker("", "", 0)
 		id := Id(target.String())
-		config := NewCheckerConfig(&id, checker,
+		config := NewCheckerConfig(&id, 0, checker,
 			&target, StateUnknown, 0,
 			3*time.Second, 2*time.Second, 3)
 		result := checker.Check(target, config.Timeout)

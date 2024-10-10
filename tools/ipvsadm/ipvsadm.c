@@ -329,6 +329,7 @@ enum {
     TAG_SORT,
     TAG_NO_SORT,
     TAG_PERSISTENCE_ENGINE,
+    TAG_SCTP_SERVICE,
     TAG_SOCKPAIR,
     TAG_HASH_TARGET,
     TAG_CPU,
@@ -336,6 +337,7 @@ enum {
     TAG_DEST_CHECK,
     TAG_CONN_TIMEOUT,
     TAG_PROXY_PROTOCOL,
+    TAG_QUIC,
 };
 
 /* various parsing helpers & parsing functions */
@@ -432,6 +434,8 @@ static int parse_dest_check(const char *optarg, struct dest_check_configs *conf)
         conf->types |= DEST_HC_TCP;
     } else if (!strcmp(optarg, "udp")) {
         conf->types |= DEST_HC_UDP;
+    } else if (!strcmp(optarg, "sctp")) {
+        conf->types |= DEST_HC_SCTP;
     } else if (!strcmp(optarg, "ping")) {
         conf->types |= DEST_HC_PING;
     } else if (!strcmp(optarg, "default")) {
@@ -470,7 +474,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
     int c, parse;
     poptContext context;
     char *optarg= NULL;
-    int intarg = NULL;
+    int intarg = 0;
     struct poptOption options_table[] = {
         { "add-service", 'A', POPT_ARG_NONE, NULL, 'A', NULL, NULL },
         { "edit-service", 'E', POPT_ARG_NONE, NULL, 'E', NULL, NULL },
@@ -504,6 +508,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             NULL, NULL },
         { "udp-service", 'u', POPT_ARG_STRING, &optarg, 'u',
             NULL, NULL },
+        { "sctp-service", '\0', POPT_ARG_STRING, &optarg,
+            TAG_SCTP_SERVICE, NULL, NULL },
         { "icmp-service", 'q', POPT_ARG_STRING, &optarg, 'q',
             NULL, NULL },
         { "icmpv6-service", '1', POPT_ARG_STRING, &optarg, '1',
@@ -562,6 +568,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
         { "dest-check", '\0', POPT_ARG_STRING, &optarg, TAG_DEST_CHECK, NULL, NULL},
         { "conn-timeout", '\0', POPT_ARG_INT, &intarg, TAG_CONN_TIMEOUT, NULL, NULL},
         { "proxy-protocol", '\0', POPT_ARG_STRING, &optarg, TAG_PROXY_PROTOCOL, NULL, NULL},
+        { "quic", '\0', POPT_ARG_NONE, NULL, TAG_QUIC, NULL, NULL},
         { NULL, 0, 0, NULL, 0, NULL, NULL }
     };
 
@@ -668,11 +675,14 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
             case 'u':
             case 'q':
             case '1':
+            case TAG_SCTP_SERVICE:
                 set_option(options, OPT_SERVICE);
                 if (c == 't') {
                     ce->dpvs_svc.proto = IPPROTO_TCP;
                 } else if (c == 'u') {
                     ce->dpvs_svc.proto = IPPROTO_UDP;
+                } else if (c == TAG_SCTP_SERVICE) {
+                    ce->dpvs_svc.proto = IPPROTO_SCTP;
                 } else if (c == 'q') {
                     ce->dpvs_svc.proto = IPPROTO_ICMP;
                 } else if (c == '1') { /*a~Z is out. ipvsadm is really not friendly here*/
@@ -892,29 +902,37 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 {
                     dpvs_service_compat_t  dpvs_svc;
                     set_option(options,OPT_BLKLST_ADDRESS);
-                    parse = parse_service(optarg,
-                            &dpvs_svc);
-                    if (!(parse & SERVICE_ADDR))
-                        fail(2, "illegal blacklist address");
-
-                    ce->dpvs_blklst.af     = dpvs_svc.af;
-                    ce->dpvs_blklst.blklst = dpvs_svc.addr;
+                    if (!strncmp(optarg, "ipset:", strlen("ipset:"))) {
+                        strncpy(ce->dpvs_blklst.ipset, &optarg[strlen("ipset:")],
+                                sizeof(ce->dpvs_blklst.ipset) - 1);
+                    } else {
+                        parse = parse_service(optarg, &dpvs_svc);
+                        if (parse & SERVICE_ADDR) {
+                            ce->dpvs_blklst.af      = dpvs_svc.af;
+                            ce->dpvs_blklst.subject = dpvs_svc.addr;
+                        } else {
+                            fail(2, "illegal blacklist entry format, require [ IP | ipset:NAME ]");
+                        }
+                    }
                     break;
-
                 }
             case '2':
                 {
                     dpvs_service_compat_t  dpvs_svc;
                     set_option(options,OPT_WHTLST_ADDRESS);
-                    parse = parse_service(optarg,
-                            &dpvs_svc);
-                    if (!(parse & SERVICE_ADDR))
-                        fail(2, "illegal whitelist address");
-
-                    ce->dpvs_whtlst.af     = dpvs_svc.af;
-                    ce->dpvs_whtlst.whtlst = dpvs_svc.addr;
+                    if (!strncmp(optarg, "ipset:", strlen("ipset:"))) {
+                        strncpy(ce->dpvs_whtlst.ipset, &optarg[strlen("ipset:")],
+                                sizeof(ce->dpvs_whtlst.ipset) - 1);
+                    } else {
+                        parse = parse_service(optarg, &dpvs_svc);
+                        if (parse & SERVICE_ADDR) {
+                            ce->dpvs_whtlst.af      = dpvs_svc.af;
+                            ce->dpvs_whtlst.subject = dpvs_svc.addr;
+                        } else {
+                            fail(2, "illegal whitelist entry format, require [ IP | ipset:NAME ]");
+                        }
+                    }
                     break;
-
                 }
             case 'F':
                 set_option(options, OPT_IFNAME);
@@ -966,6 +984,11 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
                 {
                     set_option(options, OPT_EXPIRE_QUIESCENT_CONN);
                     ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_EXPIRE_QUIESCENT;
+                    break;
+                }
+            case TAG_QUIC:
+                {
+                    ce->dpvs_svc.flags = ce->dpvs_svc.flags | IP_VS_SVC_F_QUIC;
                     break;
                 }
             case TAG_DEST_CHECK:
@@ -1379,7 +1402,7 @@ parse_service(char *buf, dpvs_service_compat_t *dpvs_svc)
 /*
  * Get sockpair from the arguments.
  * sockpair := PROTO:SIP:SPORT:TIP:TPORT
- * PROTO := [tcp|udp]
+ * PROTO := [tcp|udp|sctp]
  * SIP,TIP := dotted-decimal ip address or square-blacketed ip6 address
  * SPORT,TPORT := range(0, 65535)
  */
@@ -1402,6 +1425,8 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
         proto = IPPROTO_TCP;
     else if (strncmp(pos, "udp", 3) == 0)
         proto = IPPROTO_UDP;
+    else if (strncmp(pos, "sctp", 4) == 0)
+        proto = IPPROTO_SCTP;
     else
         return 0;
 
@@ -1474,7 +1499,7 @@ parse_sockpair(char *buf, ipvs_sockpair_t *sockpair)
 /*
  * comma separated parameters list, all fields is used to match packets.
  *
- *   proto      := tcp | udp | icmp |icmpv6
+ *   proto      := tcp | udp | sctp | icmp |icmpv6
  *   src-range  := RANGE
  *   dst-range  := RANGE
  *   iif        := IFNAME
@@ -1510,6 +1535,8 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
                 dpvs_svc->proto = IPPROTO_TCP;
             } else if (strcmp(val, "udp") == 0) {
                 dpvs_svc->proto = IPPROTO_UDP;
+            } else if (strcmp(val, "sctp") == 0) {
+                dpvs_svc->proto = IPPROTO_SCTP;
             } else if (strcmp(val, "icmp") == 0) {
                 dpvs_svc->proto = IPPROTO_ICMP;
             } else if (strcmp(val, "icmpv6") == 0) {
@@ -1539,9 +1566,11 @@ static int parse_match_snat(const char *buf, dpvs_service_compat_t *dpvs_svc)
                 dpvs_svc->af = ip_af;
             }
         } else if (strcmp(key, "iif") == 0) {
-            snprintf(dpvs_svc->match.iifname, sizeof(dpvs_svc->match.iifname), "%s", val);
+            strncpy(dpvs_svc->match.iifname, val, sizeof(dpvs_svc->match.iifname) - 1);
+            dpvs_svc->match.iifname[sizeof(dpvs_svc->match.iifname) - 1] = '\0';
         } else if (strcmp(key, "oif") == 0) {
-            snprintf(dpvs_svc->match.oifname, sizeof(dpvs_svc->match.oifname), "%s", val);
+            strncpy(dpvs_svc->match.oifname, val, sizeof(dpvs_svc->match.oifname) - 1);
+            dpvs_svc->match.oifname[sizeof(dpvs_svc->match.oifname) - 1] = '\0';
         } else {
             return -1;
         }
@@ -1663,12 +1692,12 @@ static void usage_exit(const char *program, const int exit_status)
             "  --add-laddr       -P        add local address\n"
             "  --del-laddr       -Q        del local address\n"
             "  --get-laddr       -G        get local address\n"
-            "  --add-blklst      -U        add blacklist address\n"
-            "  --del-blklst      -V        del blacklist address\n"
-            "  --get-blklst      -B        get blacklist address\n"
-            "  --add-whtlst      -O        add whitelist address\n"
-            "  --del-whtlst      -Y        del whitelist address\n"
-            "  --get-whtlst      -W        get whitelist address\n"
+            "  --add-blklst      -U        add blacklist address or ipset\n"
+            "  --del-blklst      -V        del blacklist address or ipset\n"
+            "  --get-blklst      -B        get blacklist address or ipset\n"
+            "  --add-whtlst      -O        add whitelist address or ipset\n"
+            "  --del-whtlst      -Y        del whitelist address or ipset\n"
+            "  --get-whtlst      -W        get whitelist address or ipset\n"
             "  --save            -S        save rules to stdout\n"
             "  --add-server      -a        add real server with options\n"
             "  --edit-server     -e        edit real server with options\n"
@@ -1685,6 +1714,7 @@ static void usage_exit(const char *program, const int exit_status)
             "Options:\n"
             "  --tcp-service  -t service-address   service-address is host[:port]\n"
             "  --udp-service  -u service-address   service-address is host[:port]\n"
+            "  --sctp-service    service-address   service-address is host[:port]\n"
             "  --icmp-service -q service-address   service-address is host[:port]\n"
             "  --icmpv6-service -1 service-address   service-address is host[:port]\n"
             "  --fwmark-service  -f fwmark         fwmark is an integer greater than zero\n"
@@ -1728,12 +1758,13 @@ static void usage_exit(const char *program, const int exit_status)
             "  --cpu          cpu_index            specifi cpu (lcore) index to show, 0 for master worker\n"
             "  --expire-quiescent                  expire the quiescent connections timely whose realserver went down\n"
             "  --dest-check   CHECK_CONF           config health check, inhibit scheduling to failed backends\n"
-            "                                      CHECK_CONF:=disable|default(passive)|DETAIL(passive)|tcp|udp|ping, DETAIL:=UPDOWN|DOWNONLY\n"
+            "                                      CHECK_CONF:=disable|default(passive)|DETAIL(passive)|tcp|udp|sctp|ping, DETAIL:=UPDOWN|DOWNONLY\n"
             "                                      UPDOWN:=down_retry,up_confirm,down_wait,inhibit_min-inhibit_max, for example, the default is 1,1,3s,5-3600s\n"
             "                                      DOWNONLY:=down_retry,down_wait, for example, --dest-check=1,3s\n"
             "  --laddr        -z local-ip          local IP\n"
-            "  --blklst       -k blacklist-ip      blacklist IP for specific service\n"
-            "  --whtlst       -2 whitelist-ip      whitelist IP for specific service\n",
+            "  --blklst       -k blacklist-ip      specify blacklist ip address or ipset(format: \"ipset:NAME\")\n"
+            "  --whtlst       -2 whitelist-ip      specify whitelist ip address or ipset(format: \"ipset:NAME\")\n"
+            "  --quic                              itef quic protocol service\n",
         DEF_SCHED);
 
     exit(exit_status);
@@ -1786,6 +1817,8 @@ static void print_conn_entry(const ipvs_conn_entry_t *conn_entry,
         snprintf(proto_str, sizeof(proto_str), "%s", "tcp");
     else if (conn_entry->proto == IPPROTO_UDP)
         snprintf(proto_str, sizeof(proto_str), "%s", "udp");
+    else if (conn_entry->proto == IPPROTO_SCTP)
+        snprintf(proto_str, sizeof(proto_str), "%s", "sctp");
     else if (conn_entry->proto == IPPROTO_ICMP)
         snprintf(proto_str, sizeof(proto_str), "%s", "icmp");
     else if (conn_entry->proto == IPPROTO_ICMPV6)
@@ -2034,6 +2067,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
                 proto = "-t";
             else if (se->proto == IPPROTO_UDP)
                 proto = "-u";
+            else if (se->proto == IPPROTO_SCTP)
+                proto = "--sctp-service";
             else
                 proto = "-q";
 
@@ -2043,6 +2078,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
                 proto = "TCP";
             else if (se->proto == IPPROTO_UDP)
                 proto = "UDP";
+            else if (se->proto == IPPROTO_SCTP)
+                proto = "SCTP";
             else if (se->proto == IPPROTO_ICMP)
                 proto = "ICMP";
             else
@@ -2063,6 +2100,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             proto = "tcp";
         else if (se->proto == IPPROTO_UDP)
             proto = "udp";
+        else if (se->proto == IPPROTO_SCTP)
+            proto = "sctp";
         else if (se->proto == IPPROTO_ICMP)
             proto = "icmp";
         else
@@ -2175,6 +2214,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
             printf(" pp%s", proxy_protocol_str(se->proxy_protocol));
         if (se->flags & IP_VS_SVC_F_EXPIRE_QUIESCENT)
             printf(" expire-quiescent");
+        if (se->flags & IP_VS_SVC_F_QUIC && se->proto == IPPROTO_UDP)
+            printf(" quic");
         if (se->check_conf.types) {
             printf(" dest-check");
             if (dest_check_passive(&se->check_conf)) {
@@ -2203,6 +2244,8 @@ print_service_entry(dpvs_service_compat_t *se, unsigned int format)
                     strcat(buf, "tcp,");
                 if (se->check_conf.types & DEST_HC_UDP)
                     strcat(buf, "udp,");
+                if (se->check_conf.types & DEST_HC_SCTP)
+                    strcat(buf, "sctp,");
                 if (se->check_conf.types & DEST_HC_PING)
                     strcat(buf, "ping,");
                 *strrchr(buf, ',') = '\0';
@@ -2390,17 +2433,16 @@ static int list_all_laddrs(lcoreid_t index)
 
 static void list_blklsts_print_title(void)
 {
-    printf("%-20s %-8s %-20s\n",
-            "VIP:VPORT" ,
+    printf("%-8s %-30s %-30s\n",
             "PROTO" ,
+            "VIP:VPORT" ,
             "BLACKLIST");
 }
 
-static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
+static void print_service_and_blklsts(const struct dp_vs_blklst_conf *blklst)
 {
-    char vip[64], bip[64], port[8], proto[8];
-    const char *pattern = (blklst->af == AF_INET ?
-            "%s:%-8s %-8s %-20s\n" : "[%s]:%-8s %-8s %-20s\n");
+    char subject[64], vip[64], vport[8], proto[8], vip_port[64];
+    const char *pattern = "%-8s %-30s %-30s\n";
 
     switch (blklst->proto) {
         case IPPROTO_TCP:
@@ -2408,6 +2450,9 @@ static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
             break;
         case IPPROTO_UDP:
             snprintf(proto, sizeof(proto), "%s", "UDP");
+            break;
+        case IPPROTO_SCTP:
+            snprintf(proto, sizeof(proto), "%s", "SCTP");
             break;
         case IPPROTO_ICMP:
             snprintf(proto, sizeof(proto), "%s", "ICMP");
@@ -2419,10 +2464,19 @@ static void print_service_and_blklsts(struct dp_vs_blklst_conf *blklst)
             break;
     }
 
-    snprintf(port, sizeof(port), "%u", ntohs(blklst->vport));
+    snprintf(vport, sizeof(vport), "%u", ntohs(blklst->vport));
+    inet_ntop(blklst->af, (const void *)&blklst->vaddr, vip, sizeof(vip));
+    if (blklst->af == AF_INET6)
+        snprintf(vip_port, sizeof(vip_port), "[%s]:%s", vip, vport);
+    else
+        snprintf(vip_port, sizeof(vip_port), "%s:%s", vip, vport);
 
-    printf(pattern, inet_ntop(blklst->af, (const void *)&blklst->vaddr, vip, sizeof(vip)),
-            port, proto, inet_ntop(blklst->af, (const void *)&blklst->blklst, bip, sizeof(bip)));
+    if (blklst->ipset[0] == '\0')
+        inet_ntop(blklst->af, (const void *)&blklst->subject, subject, sizeof(subject));
+    else
+        snprintf(subject, sizeof(subject), "ipset:%s", blklst->ipset);
+
+    printf(pattern, proto, vip_port, subject);
 }
 
 static bool inet_addr_equal(int af, const union inet_addr *a1, const union inet_addr *a2)
@@ -2437,9 +2491,20 @@ static bool inet_addr_equal(int af, const union inet_addr *a1, const union inet_
     }
 }
 
-static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint16_t protocol)
+static inline void __list_blklst(int af, const union inet_addr *addr, uint16_t port,
+        uint16_t protocol, const struct dp_vs_blklst_conf_array *cfarr)
 {
     int i;
+    for (i = 0; i < cfarr->naddr; i++) {
+        if (inet_addr_equal(af, addr, (const union inet_addr *) &cfarr->blklsts[i].vaddr) &&
+                port == cfarr->blklsts[i].vport && protocol == cfarr->blklsts[i].proto) {
+            print_service_and_blklsts(&cfarr->blklsts[i]);
+        }
+    }
+}
+
+static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint16_t protocol)
+{
     struct dp_vs_blklst_conf_array *get;
 
     if (!(get = dpvs_get_blklsts())) {
@@ -2447,21 +2512,17 @@ static int list_blklst(int af, const union inet_addr *addr, uint16_t port, uint1
         return -1;
     }
 
-    for (i = 0; i < get->naddr; i++) {
-        if (inet_addr_equal(af, addr,(const union inet_addr *) &get->blklsts[i].vaddr) &&
-                port == get->blklsts[i].vport && protocol == get->blklsts[i].proto) {
-            print_service_and_blklsts(&get->blklsts[i]);
-        }
-    }
-    free(get);
+    __list_blklst(af, addr, port, protocol, get);
 
+    free(get);
     return 0;
 }
 
 static int list_all_blklsts(void)
 {
     int i;
-    dpvs_services_front_t* table;
+    dpvs_services_front_t *table;
+    struct dp_vs_blklst_conf_array *barray;
 
     table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
@@ -2477,12 +2538,18 @@ static int list_all_blklsts(void)
         exit(1);
     }
 
-    list_blklsts_print_title();
-    for (i = 0; i < table->count; i++) {
-        list_blklst(table->entrytable[i].af, &table->entrytable[i].addr,
-                table->entrytable[i].port, table->entrytable[i].proto);
+    if(!(barray = dpvs_get_blklsts())) {
+        fprintf(stderr, "%s\n", ipvs_strerror(errno));
+        exit(1);
     }
 
+    list_blklsts_print_title();
+    for (i = 0; i < table->count; i++) {
+        __list_blklst(table->entrytable[i].af, &table->entrytable[i].addr,
+                table->entrytable[i].port, table->entrytable[i].proto, barray);
+    }
+
+    free(barray);
     free(table);
 
     return 0;
@@ -2490,17 +2557,16 @@ static int list_all_blklsts(void)
 
 static void list_whtlsts_print_title(void)
 {
-    printf("%-20s %-8s %-20s\n" ,
-            "VIP:VPORT" ,
+    printf("%-8s %-30s %-30s\n" ,
             "PROTO" ,
+            "VIP:VPORT" ,
             "WHITELIST");
 }
 
-static void print_service_and_whtlsts(struct dp_vs_whtlst_conf *whtlst)
+static void print_service_and_whtlsts(const struct dp_vs_whtlst_conf *whtlst)
 {
-    char vip[64], bip[64], port[8], proto[8];
-    const char *pattern = (whtlst->af == AF_INET ?
-            "%s:%-8s %-8s %-20s\n" : "[%s]:%-8s %-8s %-20s\n");
+    char subject[64], vip[64], vport[8], proto[8], vip_port[64];
+    const char *pattern = "%-8s %-30s %-30s\n";
 
     switch (whtlst->proto) {
         case IPPROTO_TCP:
@@ -2508,6 +2574,9 @@ static void print_service_and_whtlsts(struct dp_vs_whtlst_conf *whtlst)
             break;
         case IPPROTO_UDP:
             snprintf(proto, sizeof(proto), "%s", "UDP");
+            break;
+        case IPPROTO_SCTP:
+            snprintf(proto, sizeof(proto), "%s", "SCTP");
             break;
         case IPPROTO_ICMP:
             snprintf(proto, sizeof(proto), "%s", "ICMP");
@@ -2519,15 +2588,35 @@ static void print_service_and_whtlsts(struct dp_vs_whtlst_conf *whtlst)
             break;
     }
 
-    snprintf(port, sizeof(port), "%u", ntohs(whtlst->vport));
+    snprintf(vport, sizeof(vport), "%u", ntohs(whtlst->vport));
+    inet_ntop(whtlst->af, (const void *)&whtlst->vaddr, vip, sizeof(vip));
+    if (whtlst->af == AF_INET6)
+        snprintf(vip_port, sizeof(vip_port), "[%s]:%s", vip, vport);
+    else
+        snprintf(vip_port, sizeof(vip_port), "%s:%s", vip, vport);
 
-    printf(pattern, inet_ntop(whtlst->af, (const void *)&whtlst->vaddr, vip, sizeof(vip)),
-            port, proto, inet_ntop(whtlst->af, (const void *)&whtlst->whtlst, bip, sizeof(bip)));
+    if (whtlst->ipset[0] == '\0')
+        inet_ntop(whtlst->af, (const void *)&whtlst->subject, subject, sizeof(subject));
+    else
+        snprintf(subject, sizeof(subject), "ipset:%s", whtlst->ipset);
+
+    printf(pattern, proto, vip_port, subject);
+}
+
+static inline void __list_whtlst(int af, const union inet_addr *addr, uint16_t port,
+        uint16_t protocol, const struct dp_vs_whtlst_conf_array *cfarr)
+{
+    int i;
+    for (i = 0; i < cfarr->naddr; i++) {
+        if (inet_addr_equal(af, addr,(const union inet_addr *) &cfarr->whtlsts[i].vaddr) &&
+                port == cfarr->whtlsts[i].vport && protocol == cfarr->whtlsts[i].proto) {
+            print_service_and_whtlsts(&cfarr->whtlsts[i]);
+        }
+    }
 }
 
 static int list_whtlst(int af, const union inet_addr *addr, uint16_t port, uint16_t protocol)
 {
-    int i;
     struct dp_vs_whtlst_conf_array *get;
 
     if (!(get = dpvs_get_whtlsts())) {
@@ -2535,22 +2624,17 @@ static int list_whtlst(int af, const union inet_addr *addr, uint16_t port, uint1
         return -1;
     }
 
-    for (i = 0; i < get->naddr; i++) {
-        if (inet_addr_equal(af, addr,(const union inet_addr *) &get->whtlsts[i].vaddr) &&
-                port == get->whtlsts[i].vport && protocol == get->whtlsts[i].proto) {
-            print_service_and_whtlsts(&get->whtlsts[i]);
-        }
-    }
+    __list_whtlst(af, addr, port, protocol, get);
 
     free(get);
-
     return 0;
 }
 
 static int list_all_whtlsts(void)
 {
-    dpvs_services_front_t* table;
     int i;
+    dpvs_services_front_t *table;
+    struct dp_vs_whtlst_conf_array *warray;
 
     table = (dpvs_services_front_t*)malloc(sizeof(dpvs_services_front_t)+sizeof(dpvs_service_compat_t)*g_ipvs_info.num_services);
     if (!table) {
@@ -2566,12 +2650,18 @@ static int list_all_whtlsts(void)
         exit(1);
     }
 
-    list_whtlsts_print_title();
-    for (i = 0; i < table->count; i++) {
-        list_whtlst(table->entrytable[i].af, &table->entrytable[i].addr,
-                table->entrytable[i].port, table->entrytable[i].proto);
+    if (!(warray = dpvs_get_whtlsts())) {
+        fprintf(stderr, "%s\n", ipvs_strerror(errno));
+        exit(1);
     }
 
+    list_whtlsts_print_title();
+    for (i = 0; i < table->count; i++) {
+        __list_whtlst(table->entrytable[i].af, &table->entrytable[i].addr,
+                table->entrytable[i].port, table->entrytable[i].proto, warray);
+    }
+
+    free(warray);
     free(table);
 
     return 0;
@@ -2706,6 +2796,9 @@ int service_to_port(const char *name, unsigned short proto)
     else if (proto == IPPROTO_UDP
             && (service = getservbyname(name, "udp")) != NULL)
         return ntohs((unsigned short) service->s_port);
+    else if (proto == IPPROTO_SCTP
+            && (service = getservbyname(name, "sctp")) != NULL)
+        return ntohs((unsigned short) service->s_port);
     else if (proto == IPPROTO_ICMP
             && (service = getservbyname(name, "icmp")) != NULL)
         return ntohs((unsigned short) service->s_port);
@@ -2726,6 +2819,9 @@ static char * port_to_service(unsigned short port, unsigned short proto)
         return service->s_name;
     else if (proto == IPPROTO_UDP &&
             (service = getservbyport(htons(port), "udp")) != NULL)
+        return service->s_name;
+    else if (proto == IPPROTO_SCTP &&
+            (service = getservbyport(htons(port), "sctp")) != NULL)
         return service->s_name;
     else if (proto == IPPROTO_ICMP &&
             (service = getservbyport(htons(port), "icmp")) != NULL)

@@ -31,6 +31,7 @@ func (vs *VirtualServerSpec) GetModel() *models.VirtualServerSpecExpand {
 		Fwmark:          vs.GetFwmark(),
 		SynProxy:        "false",
 		ExpireQuiescent: "false",
+		Quic:            "false",
 		SchedName:       vs.GetSchedName(),
 		Timeout:         vs.GetTimeout(),
 		Match:           vs.match.GetModel(),
@@ -47,6 +48,11 @@ func (vs *VirtualServerSpec) GetModel() *models.VirtualServerSpecExpand {
 	if (vs.GetFlags() & DPVS_SVC_F_EXPIRE_QUIESCENT) != 0 {
 		modelVs.ExpireQuiescent = "true"
 		flags += "ExpireQuiescent|"
+	}
+
+	if (vs.GetFlags() & DPVS_SVC_F_QUIC) != 0 {
+		modelVs.Quic = "true"
+		flags += "Quic|"
 	}
 
 	if (vs.GetFlags() & DPVS_SVC_F_QID_HASH) != 0 {

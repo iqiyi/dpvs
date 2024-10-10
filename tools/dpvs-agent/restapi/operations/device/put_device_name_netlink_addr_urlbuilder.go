@@ -10,11 +10,15 @@ import (
 	"net/url"
 	golangswaggerpaths "path"
 	"strings"
+
+	"github.com/go-openapi/swag"
 )
 
 // PutDeviceNameNetlinkAddrURL generates an URL for the put device name netlink addr operation
 type PutDeviceNameNetlinkAddrURL struct {
 	Name string
+
+	Snapshot *bool
 
 	_basePath string
 	// avoid unkeyed usage
@@ -54,6 +58,18 @@ func (o *PutDeviceNameNetlinkAddrURL) Build() (*url.URL, error) {
 		_basePath = "/v2"
 	}
 	_result.Path = golangswaggerpaths.Join(_basePath, _path)
+
+	qs := make(url.Values)
+
+	var snapshotQ string
+	if o.Snapshot != nil {
+		snapshotQ = swag.FormatBool(*o.Snapshot)
+	}
+	if snapshotQ != "" {
+		qs.Set("snapshot", snapshotQ)
+	}
+
+	_result.RawQuery = qs.Encode()
 
 	return &_result, nil
 }

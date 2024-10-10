@@ -25,11 +25,14 @@ func NewPutDeviceNameAddrParams() PutDeviceNameAddrParams {
 	var (
 		// initialize parameters with default values
 
-		sapoolDefault = bool(false)
+		sapoolDefault   = bool(false)
+		snapshotDefault = bool(true)
 	)
 
 	return PutDeviceNameAddrParams{
 		Sapool: &sapoolDefault,
+
+		Snapshot: &snapshotDefault,
 	}
 }
 
@@ -52,6 +55,11 @@ type PutDeviceNameAddrParams struct {
 	  Default: false
 	*/
 	Sapool *bool
+	/*
+	  In: query
+	  Default: true
+	*/
+	Snapshot *bool
 	/*
 	  In: body
 	*/
@@ -76,6 +84,11 @@ func (o *PutDeviceNameAddrParams) BindRequest(r *http.Request, route *middleware
 
 	qSapool, qhkSapool, _ := qs.GetOK("sapool")
 	if err := o.bindSapool(qSapool, qhkSapool, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
+	qSnapshot, qhkSnapshot, _ := qs.GetOK("snapshot")
+	if err := o.bindSnapshot(qSnapshot, qhkSnapshot, route.Formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -140,6 +153,30 @@ func (o *PutDeviceNameAddrParams) bindSapool(rawData []string, hasKey bool, form
 		return errors.InvalidType("sapool", "query", "bool", raw)
 	}
 	o.Sapool = &value
+
+	return nil
+}
+
+// bindSnapshot binds and validates parameter Snapshot from query.
+func (o *PutDeviceNameAddrParams) bindSnapshot(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+	// AllowEmptyValue: false
+
+	if raw == "" { // empty values pass all other validations
+		// Default values have been previously initialized by NewPutDeviceNameAddrParams()
+		return nil
+	}
+
+	value, err := swag.ConvertBool(raw)
+	if err != nil {
+		return errors.InvalidType("snapshot", "query", "bool", raw)
+	}
+	o.Snapshot = &value
 
 	return nil
 }

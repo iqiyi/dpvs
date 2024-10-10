@@ -293,23 +293,16 @@ int dpvs_del_laddr(dpvs_service_compat_t *svc, dpvs_laddr_table_t *laddr)
     dpvs_fill_ipaddr_conf(0, 0, laddr, &param);
     dpvs_setsockopt(SOCKOPT_SET_IFADDR_DEL, &param, sizeof(struct inet_addr_param));
 
-    return dpvs_setsockopt(SOCKOPT_SET_LADDR_DEL, laddr, sizeof(laddr));
+    return dpvs_setsockopt(SOCKOPT_SET_LADDR_DEL, laddr, sizeof(dpvs_laddr_table_t));
 }
 
 /*for black list*/
 static void dpvs_fill_blklst_conf(dpvs_service_compat_t *svc, dpvs_blklst_t *blklst)
 {
-    blklst->af        = svc->af;
-    blklst->proto     = svc->proto;
-    blklst->vport     = svc->port;
-    blklst->fwmark    = svc->fwmark;
-    if (svc->af == AF_INET) {
-        blklst->vaddr.in = svc->addr.in;
-    } else {
-        blklst->vaddr.in6 = svc->addr.in6;
-    }
-
-    return;
+    blklst->af    = svc->af;
+    blklst->proto = svc->proto;
+    blklst->vport = svc->port;
+    blklst->vaddr = svc->addr;
 }
 
 int dpvs_add_blklst(dpvs_service_compat_t* svc, dpvs_blklst_t *blklst)
@@ -336,14 +329,7 @@ static void dpvs_fill_whtlst_conf(dpvs_service_compat_t *svc, dpvs_whtlst_t *wht
     whtlst->af        = svc->af;
     whtlst->proto     = svc->proto;
     whtlst->vport     = svc->port;
-    whtlst->fwmark    = svc->fwmark;
-    if (svc->af == AF_INET) {
-        whtlst->vaddr.in = svc->addr.in;
-    } else {
-        whtlst->vaddr.in6 = svc->addr.in6;
-    }
-
-    return;
+    whtlst->vaddr     = svc->addr;
 }
 
 int dpvs_add_whtlst(dpvs_service_compat_t* svc, dpvs_whtlst_t *whtlst)

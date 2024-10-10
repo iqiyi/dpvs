@@ -34,6 +34,7 @@ enum {
 
 /* leverage IFA_F_XXX in linux/if_addr.h*/
 #define IFA_F_SAPOOL        0x10000 /* if address with sockaddr pool */
+#define IFA_F_LINKLOCAL     0x20000 /* ipv6 link-local address */
 
 /* ifa command flags */
 #define IFA_F_OPS_VERBOSE   0x0001
@@ -99,5 +100,18 @@ struct inet_addr_front {
     int data[0];
 };
 #endif /* CONFIG_DPVS_AGENT */
+
+struct inet_maddr_entry {
+    char             ifname[IFNAMSIZ];
+    union inet_addr  maddr;
+    int              af;
+    uint32_t         flags;
+    uint32_t         refcnt;
+} __attribute__((__packed__));
+
+struct inet_maddr_array {
+    int                      nmaddr;
+    struct inet_maddr_entry  maddrs[0];
+} __attribute__((__packed__));
 
 #endif /* __DPVS_INETADDR_CONF_H__ */

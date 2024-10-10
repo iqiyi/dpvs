@@ -1024,6 +1024,12 @@ clear_diff_rs(virtual_server_t *old_vs, virtual_server_t *new_vs, list old_check
 		}
 	}
 	clear_service_rs(old_vs, rs_to_remove, false);
+
+	//keep new_vs quorum_state_up same with old_vs
+	if (old_vs->quorum_state_up != new_vs->quorum_state_up) {
+		new_vs->quorum_state_up = old_vs->quorum_state_up;
+	}
+
 	free_list(&rs_to_remove);
 }
 
@@ -1165,7 +1171,8 @@ blklst_entry_exist(blklst_addr_entry *blklst_entry, list l)
 
 	LIST_FOREACH(l, entry, e) {
 		if (sockstorage_equal(&entry->addr, &blklst_entry->addr) &&
-					entry->range == blklst_entry->range)
+					entry->range == blklst_entry->range &&
+					!strncmp(entry->ipset, blklst_entry->ipset, sizeof(entry->ipset)))
 			return 1;
 	}
 	return 0;
@@ -1228,24 +1235,26 @@ clear_diff_blklst(virtual_server_t * old_vs, virtual_server_t * new_vs)
 	if (!old)
 		return 1;
 
+	if (new_vs->blklst_addr_gname)
+		new = ipvs_get_blklst_group_by_name(new_vs->blklst_addr_gname,
+				check_data->blklst_group);
+
 	/* if new_vs has no blacklist group, delete all blklst address from old_vs */ 
-	if (!new_vs->blklst_addr_gname) {
+	if (!new) {
 		if (!clear_all_blklst_entry(old->addr_ip, old_vs))
 			return 0;
 		if (!clear_all_blklst_entry(old->range, old_vs))
 			return 0;
+		if (!clear_all_blklst_entry(old->ipset, old_vs))
+			return 0;
 		return 1;
 	}
-	else
-		/* Fetch new_vs blacklist address group */
-	    new = ipvs_get_blklst_group_by_name(new_vs->blklst_addr_gname,
-								check_data->blklst_group);
-	if (!new)
-		return 1;
 
 	if (!clear_diff_blklst_entry(old->addr_ip, new->addr_ip, old_vs))
 		return 0;
 	if (!clear_diff_blklst_entry(old->range, new->range, old_vs))
+		return 0;
+	if (!clear_diff_blklst_entry(old->ipset, new->ipset, old_vs))
 		return 0;
 
 	return 1;
@@ -1261,8 +1270,9 @@ whtlst_entry_exist(whtlst_addr_entry *whtlst_entry, list l)
     for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
         entry = ELEMENT_DATA(e);
         if (sockstorage_equal(&entry->addr, &whtlst_entry->addr) &&
-            entry->range == whtlst_entry->range)
-            return 1;
+				entry->range == whtlst_entry->range &&
+				!strncmp(entry->ipset, whtlst_entry->ipset, sizeof(entry->ipset)))
+			return 1;
     }
     return 0;
 }
@@ -1321,28 +1331,30 @@ clear_diff_whtlst(virtual_server_t * old_vs, virtual_server_t * new_vs)
     	/* Fetch whitelist address group */
     	old = ipvs_get_whtlst_group_by_name(old_vs->whtlst_addr_gname,
                                 old_check_data->whtlst_group);
-
 	if (!old)
 		return 1;
+
+	if (new_vs->whtlst_addr_gname)
+	    new = ipvs_get_whtlst_group_by_name(new_vs->whtlst_addr_gname,
+				check_data->whtlst_group);
+
 	/* if new_vs has no whitelist group, delete all whtlst address from old_vs */ 
-	if (!new_vs->whtlst_addr_gname) {
+	if (!new) {
 		if (!clear_all_whtlst_entry(old->addr_ip, old_vs))
 			return 0;
 		if (!clear_all_whtlst_entry(old->range, old_vs))
 			return 0;
+		if (!clear_all_whtlst_entry(old->ipset, old_vs))
+			return 0;
 		return 1;
 	}
-	else
-		/* Fetch new_vs whitelist address group */
-	    new = ipvs_get_whtlst_group_by_name(new_vs->whtlst_addr_gname,
-								check_data->whtlst_group);
 
-	if (!new)
-		return 1;
     if (!clear_diff_whtlst_entry(old->addr_ip, new->addr_ip, old_vs))
         return 0;
     if (!clear_diff_whtlst_entry(old->range, new->range, old_vs))
         return 0;
+	if (!clear_diff_whtlst_entry(old->ipset, new->ipset, old_vs))
+		return 0;
 
     return 1;
 }
@@ -1394,6 +1406,7 @@ clear_diff_services(list old_checkers_queue)
 				vs->bps != new_vs->bps || vs->limit_proportion != new_vs->limit_proportion ||
 				vs->hash_target != new_vs->hash_target || vs->syn_proxy != new_vs->syn_proxy ||
 				vs->expire_quiescent_conn != new_vs->expire_quiescent_conn ||
+				vs->quic != new_vs->quic ||
 				strcmp(vs->srange, new_vs->srange) || strcmp(vs->drange, new_vs->drange) ||
 				strcmp(vs->iifname, new_vs->iifname) || strcmp(vs->oifname, new_vs->oifname)) {
 				ipvs_cmd(IP_VS_SO_SET_EDIT, new_vs, NULL);
