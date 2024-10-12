@@ -123,6 +123,10 @@ ifeq ($(CONFIG_DPVS_ICMP_DEBUG), y)
 CFLAGS += -D CONFIG_DPVS_ICMP_DEBUG
 endif
 
+ifeq ($(CONFIG_DPVS_ROUTE_DEBUG), y)
+CFLAGS += -D DPVS_ROUTE6_DEBUG
+endif
+
 GCC_MAJOR = $(shell echo __GNUC__ | $(CC) -E -x c - | tail -n 1)
 GCC_MINOR = $(shell echo __GNUC_MINOR__ | $(CC) -E -x c - | tail -n 1)
 GCC_VERSION = $(GCC_MAJOR)$(GCC_MINOR)

@@ -119,7 +119,7 @@ static int rt6_recycle(void *arg)
         }
     }
 
-    return EDPVS_OK;
+    return DTIMER_OK;
 }
 
 void route6_free(struct route6 *rt6)
@@ -149,6 +149,7 @@ static int rt6_setup_lcore(void *arg)
     if (err != EDPVS_OK)
         return err;
 
+    assert(g_rt6_method->rt6_setup_lcore != NULL);
     return g_rt6_method->rt6_setup_lcore(arg);
 }
 
@@ -166,16 +167,19 @@ static int rt6_destroy_lcore(void *arg)
         }
     }
 
+    assert(g_rt6_method->rt6_destroy_lcore != NULL);
     return g_rt6_method->rt6_destroy_lcore(arg);
 }
 
 struct route6 *route6_input(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
+    assert(g_rt6_method->rt6_input != NULL);
     return g_rt6_method->rt6_input(mbuf, fl6);
 }
 
 struct route6 *route6_output(const struct rte_mbuf *mbuf, struct flow6 *fl6)
 {
+    assert(g_rt6_method->rt6_output != NULL);
     return g_rt6_method->rt6_output(mbuf, fl6);
 }
 
@@ -197,25 +201,36 @@ int route6_put(struct route6 *rt)
 
 static struct route6 *rt6_get(const struct dp_vs_route6_conf *rt6_cfg)
 {
+    assert(g_rt6_method->rt6_get != NULL);
     return g_rt6_method->rt6_get(rt6_cfg);
 }
 
 static int rt6_add_lcore(const struct dp_vs_route6_conf *rt6_cfg)
 {
+    assert(g_rt6_method->rt6_add_lcore != NULL);
     return g_rt6_method->rt6_add_lcore(rt6_cfg);
 }
 
 static int rt6_del_lcore(const struct dp_vs_route6_conf *rt6_cfg)
 {
+    assert(g_rt6_method->rt6_del_lcore != NULL);
     return g_rt6_method->rt6_del_lcore(rt6_cfg);
 }
 
+static int rt6_flush_lcore(const struct dp_vs_route6_conf *rt6_cfg)
+{
+    if (!g_rt6_method->rt6_flush_lcore)
+        return EDPVS_NOTSUPP;
+    return g_rt6_method->rt6_flush_lcore(rt6_cfg);
+}
+
 /* called on master */
-static int rt6_add_del(const struct dp_vs_route6_conf *cf)
+static int rt6_add_del_flush(const struct dp_vs_route6_conf *cf)
 {
     int err;
     struct dpvs_msg *msg;
     lcoreid_t cid;
+    char opstr[8];
 
     cid = rte_lcore_id();
     assert(cid == rte_get_main_lcore());
@@ -223,21 +238,27 @@ static int rt6_add_del(const struct dp_vs_route6_conf *cf)
     /* for master */
     switch (cf->ops) {
         case RT6_OPS_ADD:
+            snprintf(opstr, sizeof(opstr), "%s", "add");
             if (rt6_get(cf) != NULL)
                 return EDPVS_EXIST;
             err = rt6_add_lcore(cf);
             break;
         case RT6_OPS_DEL:
+            snprintf(opstr, sizeof(opstr), "%s", "del");
             if (rt6_get(cf) == NULL)
                 return EDPVS_NOTEXIST;
             err = rt6_del_lcore(cf);
+            break;
+        case RT6_OPS_FLUSH:
+            snprintf(opstr, sizeof(opstr), "%s", "flush");
+            err = rt6_flush_lcore(cf);
             break;
         default:
             return EDPVS_INVAL;
     }
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, RT6, "%s: fail to add/del route on master -- %s!\n",
-                __func__, dpvs_strerror(err));
+        RTE_LOG(ERR, RT6, "%s: fail to %s route on master -- %s!\n",
+                __func__, opstr, dpvs_strerror(err));
         return err;
     }
 
@@ -245,15 +266,15 @@ static int rt6_add_del(const struct dp_vs_route6_conf *cf)
     msg = msg_make(MSG_TYPE_ROUTE6, rt6_msg_seq(), DPVS_MSG_MULTICAST, cid,
             sizeof(struct dp_vs_route6_conf), cf);
     if (unlikely(msg == NULL)) {
-        RTE_LOG(ERR, RT6, "%s: fail to add/del route on slaves -- %s\n",
-                __func__, dpvs_strerror(err));
+        RTE_LOG(ERR, RT6, "%s: fail to %s route on slaves -- msg_make failed\n",
+                __func__, opstr);
         return EDPVS_NOMEM;
     }
 
     err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK)
-        RTE_LOG(WARNING, RT6, "%s: multicast_msg_send failed -- %s\n",
-                __func__, dpvs_strerror(err));
+        RTE_LOG(WARNING, RT6, "%s: fail to %s route on slaves -- msg_send failed:%s\n",
+                __func__, opstr, dpvs_strerror(err));
     msg_destroy(&msg);
 
     return EDPVS_OK;
@@ -281,7 +302,7 @@ static int __route6_add_del(const struct in6_addr *dest, int plen, uint32_t flag
 
     rt6_zero_prefix_tail(&cf.dst);
 
-    return rt6_add_del(&cf);
+    return rt6_add_del_flush(&cf);
 }
 
 int route6_add(const struct in6_addr *dest, int plen, uint32_t flags,
@@ -298,10 +319,16 @@ int route6_del(const struct in6_addr *dest, int plen, uint32_t flags,
     return __route6_add_del(dest, plen, flags, gw, dev, src, mtu, false);
 }
 
-int route6_flush(const struct netif_port *port)
+int route6_flush(const struct netif_port *dev)
 {
-    // TODO
-    return EDPVS_OK;
+    struct dp_vs_route6_conf cf;
+
+    memset(&cf, 0, sizeof(cf));
+
+    cf.ops = RT6_OPS_FLUSH;
+    strncpy(cf.ifname, dev->name, sizeof(cf.ifname) - 1);
+
+    return rt6_add_del_flush(&cf);
 }
 
 static int rt6_msg_process_cb(struct dpvs_msg *msg)
@@ -323,6 +350,8 @@ static int rt6_msg_process_cb(struct dpvs_msg *msg)
             return rt6_add_lcore(cf);
         case RT6_OPS_DEL:
             return rt6_del_lcore(cf);
+        case RT6_OPS_FLUSH:
+            return rt6_flush_lcore(cf);
         default:
             RTE_LOG(WARNING, RT6, "%s: unsupported operation for route6 msg -- %d!\n",
                     __func__, cf->ops);
@@ -394,9 +423,9 @@ static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
             /*fallthrough*/
 #endif
         case SOCKOPT_SET_ROUTE6_ADD_DEL:
-            return rt6_add_del(&rt6_cfg);
+            /*fallthrough*/
         case SOCKOPT_SET_ROUTE6_FLUSH:
-            return EDPVS_NOTSUPP;
+            return rt6_add_del_flush(&rt6_cfg);
         default:
             return EDPVS_NOTSUPP;
     }
@@ -405,6 +434,7 @@ static int rt6_sockopt_set(sockoptid_t opt, const void *in, size_t inlen)
 static int rt6_sockopt_get(sockoptid_t opt, const void *in, size_t inlen,
         void **out, size_t *outlen)
 {
+    assert(g_rt6_method->rt6_dump != NULL);
     *out = g_rt6_method->rt6_dump(in, outlen);
     if (*out == NULL)
         *outlen = 0;

@@ -474,9 +474,15 @@ static int route_flush_msg_cb(struct dpvs_msg *msg)
 
 int route_flush(const struct netif_port *port)
 {
+    lcoreid_t cid = rte_lcore_id();
     int err;
     portid_t pid;
     struct dpvs_msg *msg;
+
+    if (cid != rte_get_main_lcore()) {
+        RTE_LOG(INFO, ROUTE, "%s must used on master lcore\n", __func__);
+        return EDPVS_NOTSUPP;
+    }
 
     // do it on master lcore
     route_lcore_flush(port);
@@ -487,7 +493,7 @@ int route_flush(const struct netif_port *port)
     else
         pid = NETIF_PORT_ID_INVALID;
     msg = msg_make(MSG_TYPE_ROUTE_FLUSH, route_msg_seq(), DPVS_MSG_MULTICAST,
-            rte_lcore_id(), sizeof(pid), &pid);
+            cid, sizeof(pid), &pid);
 
     err = multicast_msg_send(msg, DPVS_MSG_F_ASYNC, NULL);
     if (err != EDPVS_OK)
@@ -557,7 +563,7 @@ static int route_sockopt_set(sockoptid_t opt, const void *conf, size_t size)
     case SOCKOPT_SET_ROUTE_SET:
         return EDPVS_NOTSUPP;
     case SOCKOPT_SET_ROUTE_FLUSH:
-        return EDPVS_NOTSUPP;
+        return route_flush(dev);
     default:
         return EDPVS_NOTSUPP;
     }
