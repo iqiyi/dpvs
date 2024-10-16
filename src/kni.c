@@ -38,6 +38,7 @@
 #include "ctrl.h"
 #include "kni.h"
 #include "vlan.h"
+#include "linux_if.h"
 #include "conf/kni.h"
 #include "conf/sockopts.h"
 
@@ -71,6 +72,10 @@ static struct virtio_kni* virtio_kni_alloc(struct netif_port *dev, const char *i
     struct virtio_kni *kni = NULL;
     char portargs[1024];
     char portname[RTE_ETH_NAME_MAX_LEN];
+    struct {
+        struct ethtool_gfeatures hdr;
+        struct ethtool_get_features_block blocks[1];
+    } gfeatures;
 
     kni = rte_zmalloc("virtio_kni", sizeof(*kni), RTE_CACHE_LINE_SIZE);
     if (unlikely(!kni))
@@ -109,10 +114,24 @@ static struct virtio_kni* virtio_kni_alloc(struct netif_port *dev, const char *i
         goto errout;
     }
 
+    // TODO: Support tx-csum offload on virtio-user kni device.
+    if (linux_get_if_features(kni->ifname, 1, (struct ethtool_gfeatures *)&gfeatures) < 0)
+        RTE_LOG(WARNING, Kni, "linux_get_if_features(%s) failed\n", kni->ifname);
+    else if (gfeatures.blocks[0].requested & 0x1A
+        /* NETIF_F_IP_CSUM_BIT|NETIF_F_HW_CSUM_BIT|NETIF_F_IPV6_CSUM_BIT */)
+        RTE_LOG(INFO, Kni, "%s: tx-csum offload supported but to be disabled on %s!\n",
+                __func__, kni->ifname);
+
+    // Disable tx-csum offload, and delegate the task to device driver.
+    if (linux_set_tx_csum_offload(kni->ifname, 0) < 0)
+        RTE_LOG(WARNING, Kni, "failed to disable tx-csum offload on %s\n", kni->ifname);
+
     RTE_ETH_FOREACH_DEV(pid) {
         rte_eth_dev_get_name_by_port(pid, portname);
         if (!strncmp(portname, kni->dpdk_portname, sizeof(kni->dpdk_portname))) {
             kni->dpdk_pid = pid;
+            RTE_LOG(INFO, Kni, "%s: virtio_kni allocation succeed: ifname=%s, dpdk port %s, "
+                    "id %d\n", __func__, kni->ifname, kni->dpdk_portname, pid);
             return kni;
         }
     }
@@ -147,9 +166,7 @@ static struct rte_eth_conf virtio_kni_eth_conf = {
         .mq_mode        = ETH_MQ_RX_NONE,
         .max_rx_pkt_len = ETHER_MAX_LEN,
         .split_hdr_size = 0,
-        .offloads       = DEV_RX_OFFLOAD_IPV4_CKSUM
-                            | DEV_TX_OFFLOAD_TCP_CKSUM
-                            | DEV_TX_OFFLOAD_UDP_CKSUM,
+        .offloads       = DEV_RX_OFFLOAD_CHECKSUM | DEV_RX_OFFLOAD_TCP_LRO,
     },
     .rx_adv_conf = {
         .rss_conf = {
@@ -158,7 +175,10 @@ static struct rte_eth_conf virtio_kni_eth_conf = {
     },
     .txmode = {
         .mq_mode    = ETH_MQ_TX_NONE,
-        .offloads   = DEV_TX_OFFLOAD_MBUF_FAST_FREE,
+        .offloads   = DEV_TX_OFFLOAD_MBUF_FAST_FREE
+                        | DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_UDP_TSO
+                        | DEV_TX_OFFLOAD_IPV4_CKSUM | DEV_TX_OFFLOAD_TCP_CKSUM
+                        | DEV_TX_OFFLOAD_UDP_CKSUM | DEV_TX_OFFLOAD_SCTP_CKSUM,
     },
 };
 
@@ -566,15 +586,15 @@ errout:
  */
 int kni_add_dev(struct netif_port *dev, const char *kniname)
 {
+    int err;
+    struct rte_ring *rb;
 #ifdef CONFIG_KNI_VIRTIO_USER
     struct virtio_kni *kni;
 #else
-    struct rte_kni_conf conf;
     struct rte_kni *kni;
+    struct rte_kni_conf conf;
 #endif
-    int err;
     char ring_name[RTE_RING_NAMESIZE];
-    struct rte_ring *rb;
 
     if (!g_kni_enabled)
         return EDPVS_OK;

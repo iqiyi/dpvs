@@ -40,6 +40,7 @@
 #include "neigh.h"
 #include "scheduler.h"
 #include "netif_flow.h"
+#include "linux_if.h"
 
 #include <rte_arp.h>
 #include <netinet/in.h>
@@ -2819,11 +2820,11 @@ freepkt:
 static void kni_egress(struct netif_port *port)
 {
     unsigned i, npkts = 0;
-    struct rte_mbuf *kni_pkts_burst[NETIF_MAX_PKT_BURST];
 #ifdef CONFIG_KNI_VIRTIO_USER
-    struct virtio_kni *vrtio_kni = port->kni.kni;
     static unsigned seq = 0;
+    struct virtio_kni *vrtio_kni = port->kni.kni;
 #endif
+    struct rte_mbuf *kni_pkts_burst[NETIF_MAX_PKT_BURST];
 
     if (!kni_dev_running(port))
         return;
@@ -2839,6 +2840,14 @@ static void kni_egress(struct netif_port *port)
 #endif
 
     for (i = 0; i < npkts; i++) {
+#ifdef CONFIG_KNI_VIRTIO_USER
+        // DPVS is responsible for checksum calculation if tx-csum offload enabled on
+        // the kernel tap interface. DPVS can either do the checksum itself, or further
+        // offload the task to lower layer, i.e., the hardware nic. (Of course instead you
+        // can disable the tx-csum offload feature with `ethtool -K dpdk0.kni tx off` so
+        // that the task is done in tap driver software).
+        kni_tx_csum(kni_pkts_burst[i]);
+#endif
         if (unlikely(netif_xmit(kni_pkts_burst[i], port) != EDPVS_OK)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
             RTE_LOG(INFO, NETIF, "%s: fail to transmit kni packet", __func__);

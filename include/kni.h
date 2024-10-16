@@ -63,7 +63,13 @@ static inline bool kni_dev_running(const struct netif_port *dev)
     return kni_dev_exist(dev) && !!(dev->kni.flags & NETIF_PORT_FLAG_RUNNING);
 }
 
-#ifndef CONFIG_KNI_VIRTIO_USER
+#ifdef CONFIG_KNI_VIRTIO_USER
+static inline void kni_tx_csum(struct rte_mbuf *mbuf)
+{
+    // TODO:
+    // Support tx-csum offload on virtio-user kni device.
+}
+#else
 static inline void kni_handle_request(const struct netif_port *dev)
 {
     if (!kni_dev_exist(dev))

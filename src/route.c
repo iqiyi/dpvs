@@ -458,9 +458,10 @@ static int route_lcore_flush(const struct netif_port *port)
 
 static int route_flush_msg_cb(struct dpvs_msg *msg)
 {
-    portid_t pid = *((uint16_t *)msg->data);
+    portid_t pid;
     struct netif_port *port;
 
+    rte_memcpy(&pid, msg->data, sizeof(pid));
     if (pid == NETIF_PORT_ID_INVALID)
         return route_lcore_flush(NULL);
 

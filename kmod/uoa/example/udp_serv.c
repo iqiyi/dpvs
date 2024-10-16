@@ -31,8 +31,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
-/* for __u8, __be16, __be32, __u64 only */
-#include "common.h"
+#include <linux/types.h>
 
 /* for union inet_addr only */
 #include "uoa_extra.h"
