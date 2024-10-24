@@ -85,7 +85,7 @@ $ tar xf dpdk-20.11.10.tar.xz
 
 ### DPDK patchs
 
-There are some patches for DPDK to support extra features needed by DPVS. Apply them if needed. For example, there's a patch for DPDK `kni` driver for hardware multicast, apply it if you are to launch `ospfd` on `kni` device.
+There are some patches for DPDK to support extra features needed by DPVS. Apply them if needed. For example, there's a patch for DPDK `rte_kni` driver for hardware multicast, apply it if you want to use `rte_kni` as your management network for such exception data path as SSH, OSPF, BGP, etc.
 
 > Notes: It's assumed we are in DPVS root directory where you have installed dpdk-stable-20.11.10 source codes. Please note it's not mandatory, just for convenience.
 
@@ -146,7 +146,7 @@ Next, install kernel modules required by DPDK and DPVS.
 Depending on your NIC and system, NIC may require binding a DPDK-compitable driver, such as `vfio-pci`, `igb_uio`, or `uio_pci_generic`. Refer to [DPDK doc](https://doc.dpdk.org/guides/linux_gsg/linux_drivers.html) for more details. In this test, we use the linux standard UIO kernel module `uio_pci_generic`.
 
 * KNI kernel module: 
-KNI kernel module `rte_kni.ko` is required by DPVS as the exception data path which processes packets not dealt with in DPVS to kernel stack.
+KNI kernel module `rte_kni.ko` is required as a solution to the exception data path to handle all packets not processed in DPVS.
 
 ```bash
 $ modprobe uio_pci_generic
@@ -164,7 +164,8 @@ $ ./usertools/dpdk-devbind.py -b uio_pci_generic 0000:06:00.0
 > 2. `dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver like `ixgbe`. Use `lspci` or `ethtool -i eth0` to check the NIC's PCI bus-id. Please refer to [DPDK Doc:Binding and Unbinding Network Ports to/from the Kernel Modules](https://doc.dpdk.org/guides/linux_gsg/linux_drivers.html#binding-and-unbinding-network-ports-to-from-the-kernel-modules) for more details.
 > 3. NVIDIA/Mellanox NIC uses bifurcated driver which doesn't rely on UIO/VFIO driver, so not bind any DPDK driver kernel module, but [NVIDIA MLNX_OFED/EN](https://network.nvidia.com/products/infiniband-drivers/linux/mlnx_ofed/) is required. Refer to [Mellanox DPDK](https://enterprise-support.nvidia.com/s/article/mellanox-dpdk) for its PMD and [Compilation Prerequisites](https://doc.dpdk.org/guides/platform/mlx5.html#linux-prerequisites) for OFED installation.
 > 4. A kernel module parameter `carrier` has been added to `rte_kni.ko` since [DPDK v18.11](https://elixir.bootlin.com/dpdk/v18.11/source/kernel/linux/kni/kni_misc.c), and the default value for it is "off". We need to load `rte_kni.ko` with extra parameter `carrier=on` to make KNI devices work properly.
-> 5. Multiple DPVS instances can run on a single server if there are enough NICs or VFs within one NIC. Refer to [tutorial:Multiple Instances](https://github.com/iqiyi/dpvs/blob/devel/doc/tutorial.md#multi-instance) for details.
+> 5. Following the DPDK technical board decision and refinement, the KNI kernel module, library and PMD was removed from the DPDK 23.11 release (refer to [ABI and API Deprecation(DPDK 22.11)](https://doc.dpdk.org/guides-22.11/rel_notes/deprecation.html)). As a replacement solution, DPVS has supported [virtio-user as exception path](https://doc.dpdk.org/guides/howto/virtio_user_as_exception_path.html), which is default off now and can be enabled with `CONFIG_KNI_VIRTIO_USER` in config.mk.
+> 6. Multiple DPVS instances can run on a single server if there are enough NICs or VFs within one NIC. Refer to [tutorial:Multiple Instances](https://github.com/iqiyi/dpvs/blob/devel/doc/tutorial.md#multi-instance) for details.
 
 ## Build DPVS
 
