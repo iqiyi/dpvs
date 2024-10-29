@@ -2859,9 +2859,10 @@ static void kni_egress(struct netif_port *port)
 static void kni_egress_process(void)
 {
     struct netif_port *dev;
-    portid_t id;
+    portid_t id, total;
 
-    for (id = 0; id < g_nports; id++) {
+    total = netif_port_count();
+    for (id = 0; id < total; id++) {
         dev = netif_port_get(id);
         if (!dev)
             continue;
@@ -2881,14 +2882,15 @@ static void kni_ingress_process(void)
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     struct netif_port *dev;
     uint16_t i, pkt_total, pkt_sent;
-    portid_t id;
+    portid_t id, total;
     lcoreid_t cid = rte_lcore_id();
 #ifdef CONFIG_KNI_VIRTIO_USER
     struct virtio_kni *virtio_kni;
     static unsigned seq = 0;
 #endif
 
-    for (id = 0; id < g_nports; id++) {
+    total = netif_port_count();
+    for (id = 0; id < total; id++) {
         dev = netif_port_get(id);
         if (!dev || !kni_dev_running(dev))
             continue;
@@ -3246,6 +3248,17 @@ static inline int port_name_alloc(portid_t pid, char *pname, size_t buflen)
 
 static inline portid_t netif_port_id_alloc(void)
 {
+    // The netif_port_id_alloc ensures the relation `g_nports == port_id_end` always stands,
+    // which means all ids in range [0, port_id_end) are assgined to ports.
+    portid_t pid;
+
+    if (port_id_end > g_nports) {
+        for (pid = port_id_end - 1; pid != 0; pid--) {
+            if (netif_port_get(pid) == NULL)
+                return pid;
+        }
+    }
+
     return port_id_end++;
 }
 
