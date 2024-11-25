@@ -2497,7 +2497,7 @@ int netif_rcv_mbuf(struct netif_port *dev, lcoreid_t cid, struct rte_mbuf *mbuf,
 
     if (err == EDPVS_KNICONTINUE) {
         if (pkts_from_ring || forward2kni)
-            goto drop;
+            goto slient_free;
         if (unlikely(NULL == rte_pktmbuf_prepend(mbuf, (mbuf->data_off - data_off))))
             goto drop;
         kni_ingress(mbuf, dev);
@@ -2511,8 +2511,9 @@ done:
     return EDPVS_OK;
 
 drop:
-    rte_pktmbuf_free(mbuf);
     lcore_stats[cid].dropped++;
+slient_free:
+    rte_pktmbuf_free(mbuf);
     return EDPVS_DROP;
 }
 
