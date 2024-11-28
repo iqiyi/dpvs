@@ -14,9 +14,9 @@
 global_defs {
     log_level   WARNING
     ! log_file    /var/log/dpvs.log
-    ! log_async_mode    off
-    ! kni               on
-    ! pdump             off
+    ! <init> log_async_mode    off
+    ! <init> kni               on
+    ! <init> pdump             off
     lldp                on
 }
 
@@ -277,7 +277,7 @@ timer_defs {
 ! dpvs neighbor config
 neigh_defs {
     <init> unres_queue_length  128
-    <init> timeout             60
+    timeout             60
 }
 
 ! dpvs ipset config
@@ -323,7 +323,7 @@ ipvs_defs {
         <init> conn_pool_cache      256
         conn_init_timeout           3
         ! expire_quiescent_template
-        ! fast_xmit_close
+        ! <init> fast_xmit_close
         ! <init> redirect           off
     }
 
@@ -379,6 +379,6 @@ ipvs_defs {
 
 ! sa_pool config
 sa_pool {
-    pool_hash_size  16
-    flow_enable     on
+    <init> pool_hash_size  16
+    <init> flow_enable     on
 }
