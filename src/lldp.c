@@ -1453,8 +1453,8 @@ static int lldp_xmit(struct netif_port *dev, bool in_timer)
     ehdr = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf, sizeof(*ehdr));
     if (unlikely(!ptr))
         return EDPVS_NOROOM;
-    rte_memcpy(&ehdr->d_addr, &LLDP_ETHER_ADDR_DST, sizeof(ehdr->d_addr));
-    rte_memcpy(&ehdr->s_addr, &dev->addr, sizeof(ehdr->s_addr));
+    rte_memcpy(&ehdr->dst_addr, &LLDP_ETHER_ADDR_DST, sizeof(ehdr->dst_addr));
+    rte_memcpy(&ehdr->src_addr, &dev->addr, sizeof(ehdr->src_addr));
     ehdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_LLDP);
 
     if (dev->type == PORT_TYPE_BOND_SLAVE) {

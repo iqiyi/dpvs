@@ -329,7 +329,7 @@ int log_slave_init(void)
         return EDPVS_DISABLED;
 
     RTE_LCORE_FOREACH_WORKER(lcore_id) {
-        if (rte_eal_get_lcore_state(lcore_id) == FINISHED) {
+        if (rte_eal_get_lcore_state(lcore_id) == WAIT) {
             rte_eal_wait_lcore(lcore_id);
             dpvs_log_thread_lcore_set(lcore_id);
             break;

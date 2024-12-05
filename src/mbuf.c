@@ -28,10 +28,9 @@
 #include "ipv4.h"
 #include "sys_time.h"
 
-#define EMBUF
-#define RTE_LOGTYPE_EMBUF    RTE_LOGTYPE_USER1
+#define RTE_LOGTYPE_MBUF    RTE_LOGTYPE_USER1
 
-#define MBUF_DYNFIELDS_MAX   8
+#define MBUF_DYNFIELDS_MAX  8
 static int mbuf_dynfields_offset[MBUF_DYNFIELDS_MAX];
 
 void *mbuf_userdata(struct rte_mbuf *mbuf, mbuf_usedata_field_t field)
@@ -68,7 +67,7 @@ int mbuf_may_pull(struct rte_mbuf *mbuf, unsigned int len)
     /* different from skb, there's no way to expand mbuf's tail room,
      * because mbuf size is determined when init mbuf pool */
     if (rte_pktmbuf_tailroom(mbuf) < delta) {
-        RTE_LOG(ERR, EMBUF, "%s: no tail room.", __func__);
+        RTE_LOG(ERR, MBUF, "%s: no tail room.", __func__);
         return -1;
     }
 
@@ -121,7 +120,7 @@ void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m)
     mi->next = NULL;
     mi->pkt_len = mi->data_len;
     mi->nb_segs = 1;
-    mi->ol_flags = m->ol_flags & (~IND_ATTACHED_MBUF);
+    mi->ol_flags = m->ol_flags & (~RTE_MBUF_F_INDIRECT);
     mi->packet_type = m->packet_type;
     mbuf_userdata_reset(mi);
 
@@ -166,7 +165,7 @@ struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp)
 }
 
 #ifdef CONFIG_DPVS_MBUF_DEBUG
-inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf)
+void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf)
 {
     char stime[SYS_TIME_STR_LEN];
     char sbuf[64], dbuf[64];

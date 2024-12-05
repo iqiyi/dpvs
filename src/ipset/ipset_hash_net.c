@@ -195,9 +195,9 @@ hash_net_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
     memset(&e, 0, sizeof(e));
 
     if (dst_match)
-        memcpy(&e.ip, ip6hdr->dst_addr, sizeof(e.ip));
+        memcpy(&e.ip, &ip6hdr->dst_addr, sizeof(e.ip));
     else
-        memcpy(&e.ip, ip6hdr->src_addr, sizeof(e.ip));
+        memcpy(&e.ip, &ip6hdr->src_addr, sizeof(e.ip));
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);
 }

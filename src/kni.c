@@ -163,22 +163,21 @@ static void virtio_kni_free(struct virtio_kni **pkni)
 
 static struct rte_eth_conf virtio_kni_eth_conf = {
     .rxmode = {
-        .mq_mode        = ETH_MQ_RX_NONE,
-        .max_rx_pkt_len = ETHER_MAX_LEN,
-        .split_hdr_size = 0,
-        .offloads       = DEV_RX_OFFLOAD_CHECKSUM | DEV_RX_OFFLOAD_TCP_LRO,
+        .mq_mode    = RTE_ETH_MQ_RX_NONE,
+        .mtu        = RTE_ETHER_MTU,
+        .offloads   = RTE_ETH_RX_OFFLOAD_CHECKSUM | RTE_ETH_RX_OFFLOAD_TCP_LRO,
     },
     .rx_adv_conf = {
         .rss_conf = {
-            .rss_hf = ETH_RSS_IP | ETH_RSS_TCP | ETH_RSS_UDP,
+            .rss_hf = RTE_ETH_RSS_IP | RTE_ETH_RSS_TCP | RTE_ETH_RSS_UDP,
         },
     },
     .txmode = {
-        .mq_mode    = ETH_MQ_TX_NONE,
-        .offloads   = DEV_TX_OFFLOAD_MBUF_FAST_FREE
-                        | DEV_TX_OFFLOAD_TCP_TSO | DEV_TX_OFFLOAD_UDP_TSO
-                        | DEV_TX_OFFLOAD_IPV4_CKSUM | DEV_TX_OFFLOAD_TCP_CKSUM
-                        | DEV_TX_OFFLOAD_UDP_CKSUM | DEV_TX_OFFLOAD_SCTP_CKSUM,
+        .mq_mode    = RTE_ETH_MQ_TX_NONE,
+        .offloads   = RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE
+                        | RTE_ETH_TX_OFFLOAD_TCP_TSO | RTE_ETH_TX_OFFLOAD_UDP_TSO
+                        | RTE_ETH_TX_OFFLOAD_IPV4_CKSUM | RTE_ETH_TX_OFFLOAD_TCP_CKSUM
+                        | RTE_ETH_TX_OFFLOAD_UDP_CKSUM | RTE_ETH_TX_OFFLOAD_SCTP_CKSUM,
     },
 };
 

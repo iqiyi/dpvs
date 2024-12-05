@@ -158,10 +158,10 @@ bitmap_ipmac_test(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 
     if (dst_match) {
         e.id = ip_to_id(map, ntohl(ip4hdr->dst_addr));
-        e.mac = &ehdr->d_addr.addr_bytes[0];
+        e.mac = &ehdr->dst_addr.addr_bytes[0];
     } else {
         e.id = ip_to_id(map, ntohl(ip4hdr->src_addr));
-        e.mac = &ehdr->s_addr.addr_bytes[0];
+        e.mac = &ehdr->src_addr.addr_bytes[0];
     }
 
     return set->type->adtfn[IPSET_OP_TEST](set, &e, 0);

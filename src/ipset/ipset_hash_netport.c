@@ -240,11 +240,11 @@ hash_netport_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
     memset(&e, 0, sizeof(e));
     e.proto = proto;
     if (dst_match) {
-        memcpy(&e.ip, ip6hdr->dst_addr, sizeof(e.ip));
+        memcpy(&e.ip, &ip6hdr->dst_addr, sizeof(e.ip));
         if (l4hdr)
             e.port = l4hdr->dst_port;
     } else {
-        memcpy(&e.ip, ip6hdr->src_addr, sizeof(e.ip));
+        memcpy(&e.ip, &ip6hdr->src_addr, sizeof(e.ip));
         if (l4hdr)
             e.port = l4hdr->src_port;
     }

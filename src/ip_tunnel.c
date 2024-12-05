@@ -894,9 +894,9 @@ int ip_tunnel_pull_header(struct rte_mbuf *mbuf, int hlen, __be16 in_proto)
         return EDPVS_INVPKT;
 
     /* clean up vlan info, it should be cleared by vlan module. */
-    if (unlikely(mbuf->ol_flags & PKT_RX_VLAN_STRIPPED)) {
+    if (unlikely(mbuf->ol_flags & RTE_MBUF_F_RX_VLAN_STRIPPED)) {
         mbuf->vlan_tci = 0;
-        mbuf->ol_flags &= (~PKT_RX_VLAN_STRIPPED);
+        mbuf->ol_flags &= (~RTE_MBUF_F_RX_VLAN_STRIPPED);
     }
 
     return EDPVS_OK;

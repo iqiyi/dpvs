@@ -532,7 +532,7 @@ int ipv4_local_out(struct rte_mbuf *mbuf)
 
     iph->total_length = htons(mbuf->pkt_len);
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(iph);
