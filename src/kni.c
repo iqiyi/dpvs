@@ -640,7 +640,7 @@ int kni_add_dev(struct netif_port *dev, const char *kniname)
     rb = rte_ring_create(ring_name, KNI_RX_RING_ELEMS,
                          rte_socket_id(), RING_F_SC_DEQ);
     if (unlikely(!rb)) {
-        RTE_LOG(ERR, KNI, "%s: failed to create kni rx ring\n", __func__);
+        RTE_LOG(ERR, Kni, "%s: failed to create kni rx ring\n", __func__);
 #ifdef CONFIG_KNI_VIRTIO_USER
         virtio_kni_free(&dev->kni.kni);
 #else
@@ -757,13 +757,13 @@ static inline int kni_addr_flow_allowed(const struct netif_port *dev)
     if (dev->type != PORT_TYPE_GENERAL
             && dev->type != PORT_TYPE_VLAN
             && dev->type != PORT_TYPE_BOND_MASTER) {
-        RTE_LOG(WARNING, KNI, "%s: kni addr flow only supports physical (exclusive"
+        RTE_LOG(WARNING, Kni, "%s: kni addr flow only supports physical (exclusive"
                 " of bonding slaves), vlan, and bonding master devices\n", __func__);
         return EDPVS_NOTSUPP;
     }
 
     if (!check_kni_addr_flow_support(dev)) {
-        RTE_LOG(WARNING, KNI, "%s: %s (driver: %s) doesn't support kni address flow, steer kni "
+        RTE_LOG(WARNING, Kni, "%s: %s (driver: %s) doesn't support kni address flow, steer kni "
                 "traffic onto slave workers\n", __func__, dev->name, dev->dev_info.driver_name);
         return EDPVS_NOTSUPP;
     }
@@ -1005,7 +1005,7 @@ int kni_ctrl_init(void)
 
     err = sockopt_register(&kni_sockopts);
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, KNI, "%s: fail to register kni_sockopts -- %s\n",
+        RTE_LOG(ERR, Kni, "%s: fail to register kni_sockopts -- %s\n",
                 __func__, dpvs_strerror(err));
         return err;
     }
@@ -1022,7 +1022,7 @@ int kni_ctrl_term(void)
 
     err = sockopt_unregister(&kni_sockopts);
     if (err != EDPVS_OK) {
-        RTE_LOG(ERR, KNI, "%s: fail to unregister kni_sockopts -- %s\n",
+        RTE_LOG(ERR, Kni, "%s: fail to unregister kni_sockopts -- %s\n",
                 __func__, dpvs_strerror(err));
         return err;
     }
