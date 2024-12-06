@@ -53,12 +53,14 @@
 #include <rte_rwlock.h>
 #include <rte_timer.h>
 #include <rte_jhash.h>
-#include <rte_kni.h>
 #include <rte_ip_frag.h>
 #include <rte_eth_bond.h>
 #include <rte_eth_bond_8023ad.h>
 #include <rte_ethdev_driver.h>
 #include "mbuf.h"
+#ifndef CONFIG_KNI_VIRTIO_USER
+#include <rte_kni.h>
+#endif
 #ifdef CONFIG_DPVS_PDUMP
 #include <rte_pdump.h>
 #endif
@@ -72,6 +74,18 @@ extern int dpvs_log(uint32_t level, uint32_t logtype, const char *func, int line
     dpvs_log(RTE_LOG_ ## l,                   \
         RTE_LOGTYPE_ ## t,  __func__, __LINE__, # t ": " __VA_ARGS__)
 #endif
+#endif
+
+#if RTE_VERSION < RTE_VERSION_NUM(21, 0, 0, 0)
+#define RTE_ETHER_ADDR_PRT_FMT     "%02X:%02X:%02X:%02X:%02X:%02X"
+#define RTE_ETHER_ADDR_BYTES(mac_addrs) ((mac_addrs)->addr_bytes[0]), \
+                     ((mac_addrs)->addr_bytes[1]), \
+                     ((mac_addrs)->addr_bytes[2]), \
+                     ((mac_addrs)->addr_bytes[3]), \
+                     ((mac_addrs)->addr_bytes[4]), \
+                     ((mac_addrs)->addr_bytes[5])
+
+#define RTE_ETHER_ADDR_FMT_SIZE         18
 #endif
 
 #endif /* __DPVS_DPDK_H__ */

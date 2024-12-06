@@ -40,6 +40,7 @@
 #include "neigh.h"
 #include "scheduler.h"
 #include "netif_flow.h"
+#include "linux_if.h"
 
 #include <rte_arp.h>
 #include <netinet/in.h>
@@ -2802,7 +2803,7 @@ static inline void free_mbufs(struct rte_mbuf **pkts, unsigned num)
 
 void kni_ingress(struct rte_mbuf *mbuf, struct netif_port *dev)
 {
-    if (!kni_dev_exist(dev))
+    if (!kni_dev_running(dev))
         goto freepkt;
 
     // TODO: Use `rte_ring_enqueue_bulk` for better performance.
@@ -2819,19 +2820,35 @@ freepkt:
 
 static void kni_egress(struct netif_port *port)
 {
-    unsigned i, npkts;
+    unsigned i, npkts = 0;
+#ifdef CONFIG_KNI_VIRTIO_USER
+    static unsigned seq = 0;
+    struct virtio_kni *vrtio_kni = port->kni.kni;
+#endif
     struct rte_mbuf *kni_pkts_burst[NETIF_MAX_PKT_BURST];
 
-    if (!kni_dev_exist(port))
+    if (!kni_dev_running(port))
         return;
 
-    npkts = rte_kni_rx_burst(port->kni.kni, kni_pkts_burst, NETIF_MAX_PKT_BURST);
-    if (unlikely(npkts > NETIF_MAX_PKT_BURST)) {
-        RTE_LOG(WARNING, NETIF, "%s: fail to recieve pkts from kni\n", __func__);
-        return;
+#ifdef CONFIG_KNI_VIRTIO_USER
+    for (i = 0; i < vrtio_kni->queues && npkts < NETIF_MAX_PKT_BURST; i++) {
+        npkts += rte_eth_rx_burst(vrtio_kni->dpdk_pid, seq % vrtio_kni->queues,
+                &kni_pkts_burst[npkts], NETIF_MAX_PKT_BURST - npkts);
+        seq++;
     }
+#else
+    npkts = rte_kni_rx_burst(port->kni.kni, kni_pkts_burst, NETIF_MAX_PKT_BURST);
+#endif
 
     for (i = 0; i < npkts; i++) {
+#ifdef CONFIG_KNI_VIRTIO_USER
+        // DPVS is responsible for checksum calculation if tx-csum offload enabled on
+        // the kernel tap interface. DPVS can either do the checksum itself, or further
+        // offload the task to lower layer, i.e., the hardware nic. (Of course instead you
+        // can disable the tx-csum offload feature with `ethtool -K dpdk0.kni tx off` so
+        // that the task is done in tap driver software).
+        kni_tx_csum(kni_pkts_burst[i]);
+#endif
         if (unlikely(netif_xmit(kni_pkts_burst[i], port) != EDPVS_OK)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
             RTE_LOG(INFO, NETIF, "%s: fail to transmit kni packet", __func__);
@@ -2843,14 +2860,17 @@ static void kni_egress(struct netif_port *port)
 static void kni_egress_process(void)
 {
     struct netif_port *dev;
-    portid_t id;
+    portid_t id, total;
 
-    for (id = 0; id < g_nports; id++) {
+    total = netif_port_count();
+    for (id = 0; id < total; id++) {
         dev = netif_port_get(id);
-        if (!dev || !kni_dev_exist(dev))
+        if (!dev)
             continue;
 
+#ifndef CONFIG_KNI_VIRTIO_USER
         kni_handle_request(dev);
+#endif
         kni_egress(dev);
     }
 }
@@ -2863,12 +2883,17 @@ static void kni_ingress_process(void)
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
     struct netif_port *dev;
     uint16_t i, pkt_total, pkt_sent;
-    portid_t id;
+    portid_t id, total;
     lcoreid_t cid = rte_lcore_id();
+#ifdef CONFIG_KNI_VIRTIO_USER
+    struct virtio_kni *virtio_kni;
+    static unsigned seq = 0;
+#endif
 
-    for (id = 0; id < g_nports; id++) {
+    total = netif_port_count();
+    for (id = 0; id < total; id++) {
         dev = netif_port_get(id);
-        if (!dev || !kni_dev_exist(dev))
+        if (!dev || !kni_dev_running(dev))
             continue;
 
         pkt_total = rte_ring_dequeue_burst(dev->kni.rx_ring, (void**)mbufs,
@@ -2878,7 +2903,14 @@ static void kni_ingress_process(void)
         lcore_stats[cid].ipackets += pkt_total;
         for (i = 0; i < pkt_total; i++)
             lcore_stats[cid].ibytes += mbufs[i]->pkt_len;
+#ifdef CONFIG_KNI_VIRTIO_USER
+        virtio_kni = dev->kni.kni;
+        pkt_sent = rte_eth_tx_burst(virtio_kni->dpdk_pid, seq % virtio_kni->queues,
+                mbufs, pkt_total);
+        seq++;
+#else
         pkt_sent = rte_kni_tx_burst(dev->kni.kni, mbufs, pkt_total);
+#endif
 
         if (unlikely(pkt_sent < pkt_total)) {
 #ifdef CONFIG_DPVS_NETIF_DEBUG
@@ -2944,7 +2976,7 @@ static inline void kni_ingress_flow_xmit_vlan_trunk(struct netif_port *dev,
         qconf->mbufs[right] = mbuf;
 
         rdev = netif_port_get(mbuf->port);
-        if (unlikely(!rdev || !kni_dev_exist(rdev)))
+        if (unlikely(!rdev || !kni_dev_running(rdev)))
             rdev = dev;
         pkt_total = len - right;
         //pkt_sent = rte_kni_tx_burst(rdev->kni.kni, &qconf->mbufs[right], pkt_total);
@@ -3004,7 +3036,7 @@ static void kni_ingress_flow_process(void)
         pid = lcore_conf[lcore2index[cid]].pqs[i].id;
         assert(pid <= bond_pid_end);
         dev = netif_port_get(pid);
-        if (!dev || !kni_dev_exist(dev))
+        if (!dev || !kni_dev_running(dev))
             continue;
         for (j = 0; j < lcore_conf[lcore2index[cid]].pqs[i].nrxq; j++) {
             qconf = &lcore_conf[lcore2index[cid]].pqs[i].rxqs[j];
@@ -3217,6 +3249,17 @@ static inline int port_name_alloc(portid_t pid, char *pname, size_t buflen)
 
 static inline portid_t netif_port_id_alloc(void)
 {
+    // The netif_port_id_alloc ensures the relation `g_nports == port_id_end` always stands,
+    // which means all ids in range [0, port_id_end) are assgined to ports.
+    portid_t pid;
+
+    if (port_id_end > g_nports) {
+        for (pid = port_id_end - 1; pid != 0; pid--) {
+            if (netif_port_get(pid) == NULL)
+                return pid;
+        }
+    }
+
     return port_id_end++;
 }
 

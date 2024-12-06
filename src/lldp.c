@@ -25,6 +25,7 @@
 #include "netif.h"
 #include "netif_addr.h"
 #include "lldp.h"
+#include "linux_if.h"
 #include "conf/lldp.h"
 
 #define RTE_LOGTYPE_LLDP        RTE_LOGTYPE_USER1

@@ -215,6 +215,7 @@ int msg_dump(const struct dpvs_msg *msg, char *buf, int len);
 #define MSG_TYPE_DEST_CHECK_NOTIFY_MASTER   41
 #define MSG_TYPE_DEST_CHECK_NOTIFY_SLAVES   42
 #define MSG_TYPE_IFA_IDEVINIT               43
+#define MSG_TYPE_ROUTE_FLUSH                44
 #define MSG_TYPE_IPVS_RANGE_START           100
 
 /* for svc per_core, refer to service.h*/

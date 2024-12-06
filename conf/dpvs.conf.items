@@ -201,10 +201,9 @@ ipv6_defs {
         <init> method       "hlist"     <"hlist"/"lpm">
         recycle_time        10          <10, 1-36000>
         lpm {
-            <init> lpm6_max_rules       1024    <1024, 16-2147483647>
-            <init> lpm6_num_tbl8s       65536   <65536, 16-2147483647>
-            <init> rt6_array_size       65536   <65536, 16-2147483647>
-            <init> rt6_hash_bucket      256     <256, 2-2147483647>
+            <init> lpm6_max_rules       1024    <1024, 16-65536>
+            <init> lpm6_num_tbl8s       16384   <16384, 256-1048576>
+            <init> rt6_hash_bucket      256     <256, 16-65536>
         }
     }
 }

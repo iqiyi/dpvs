@@ -36,8 +36,7 @@ struct route6 {
     uint32_t            rt6_flags;  /* RTF_XXX */
 
     /* private members */
-    uint32_t            arr_idx;    /* lpm6 array index */
-    struct list_head    hnode;      /* hash list node */
+    struct list_head    hnode;          /* hash list node */
     rte_atomic32_t      refcnt;
 };
 
@@ -56,6 +55,9 @@ int route6_add(const struct in6_addr *dest, int plen, uint32_t flags,
 int route6_del(const struct in6_addr *dest, int plen, uint32_t flags,
                const struct in6_addr *gw, struct netif_port *dev,
                const struct in6_addr *src, uint32_t mtu);
+
+// Notes: Flush all routes if `port` is NULL.
+int route6_flush(const struct netif_port *dev);
 
 /* for route6_xxx.c only */
 void route6_free(struct route6*);
@@ -81,6 +83,7 @@ struct route6_method {
     uint32_t (*rt6_count)(void);
     int (*rt6_add_lcore)(const struct dp_vs_route6_conf *);
     int (*rt6_del_lcore)(const struct dp_vs_route6_conf *);
+    int (*rt6_flush_lcore)(const struct dp_vs_route6_conf *);
     struct route6* (*rt6_get)(const struct dp_vs_route6_conf *);
     struct route6* (*rt6_input)(const struct rte_mbuf *, struct flow6 *);
     struct route6* (*rt6_output)(const struct rte_mbuf *, struct flow6 *);

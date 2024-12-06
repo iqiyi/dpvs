@@ -30,6 +30,8 @@
 #include "netif_addr.h"
 #include "kni.h"
 #include "ctrl.h"
+#include "route.h"
+#include "route6.h"
 #include "vlan.h"
 #include "conf/vlan.h"
 
@@ -320,6 +322,30 @@ int vlan_del_dev(struct netif_port *real_dev, __be16 vlan_proto,
     if (!dev) {
         rte_rwlock_write_unlock(&vinfo->vlan_lock);
         return EDPVS_NOTEXIST;
+    }
+
+    err = inet_addr_flush(AF_INET, dev);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, VLAN, "%s: fail to flush IPv4 addresses on vlan %s: %s\n",
+                __func__, dev->name, dpvs_strerror(err));
+    }
+
+    err = route_flush(dev);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, VLAN, "%s: fail to flush IPv4 routes on vlan %s: %s\n",
+                __func__, dev->name, dpvs_strerror(err));
+    }
+
+    err = inet_addr_flush(AF_INET6, dev);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, VLAN, "%s: fail to flush IPv6 addresses on vlan %s: %s\n",
+                __func__, dev->name, dpvs_strerror(err));
+    }
+
+    err = route6_flush(dev);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, VLAN, "%s: fail to flush IPv6 routes on vlan %s: %s\n",
+                __func__, dev->name, dpvs_strerror(err));
     }
 
     err = kni_del_dev(dev);
