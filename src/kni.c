@@ -32,18 +32,15 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include "conf/common.h"
-#include "dpdk.h"
 #include "netif.h"
 #include "conf/netif_addr.h"
 #include "ctrl.h"
 #include "kni.h"
 #include "vlan.h"
-#include "linux_if.h"
 #include "conf/kni.h"
 #include "conf/sockopts.h"
 
 #define Kni /* KNI is defined */
-#define RTE_LOGTYPE_Kni     RTE_LOGTYPE_USER1
 
 #define KNI_RX_RING_ELEMS       2048
 bool g_kni_enabled = true;
@@ -72,10 +69,6 @@ static struct virtio_kni* virtio_kni_alloc(struct netif_port *dev, const char *i
     struct virtio_kni *kni = NULL;
     char portargs[1024];
     char portname[RTE_ETH_NAME_MAX_LEN];
-    struct {
-        struct ethtool_gfeatures hdr;
-        struct ethtool_get_features_block blocks[1];
-    } gfeatures;
 
     kni = rte_zmalloc("virtio_kni", sizeof(*kni), RTE_CACHE_LINE_SIZE);
     if (unlikely(!kni))
@@ -113,18 +106,6 @@ static struct virtio_kni* virtio_kni_alloc(struct netif_port *dev, const char *i
         RTE_LOG(ERR, Kni, "%s: virtio_kni hotplug_add failed: %d\n", __func__, err);
         goto errout;
     }
-
-    // TODO: Support tx-csum offload on virtio-user kni device.
-    if (linux_get_if_features(kni->ifname, 1, (struct ethtool_gfeatures *)&gfeatures) < 0)
-        RTE_LOG(WARNING, Kni, "linux_get_if_features(%s) failed\n", kni->ifname);
-    else if (gfeatures.blocks[0].requested & 0x1A
-        /* NETIF_F_IP_CSUM_BIT|NETIF_F_HW_CSUM_BIT|NETIF_F_IPV6_CSUM_BIT */)
-        RTE_LOG(INFO, Kni, "%s: tx-csum offload supported but to be disabled on %s!\n",
-                __func__, kni->ifname);
-
-    // Disable tx-csum offload, and delegate the task to device driver.
-    if (linux_set_tx_csum_offload(kni->ifname, 0) < 0)
-        RTE_LOG(WARNING, Kni, "failed to disable tx-csum offload on %s\n", kni->ifname);
 
     RTE_ETH_FOREACH_DEV(pid) {
         rte_eth_dev_get_name_by_port(pid, portname);
@@ -232,6 +213,8 @@ static int virtio_kni_start(struct virtio_kni *kni)
         RTE_LOG(ERR, Kni, "%s: failed to start %s: %d\n", __func__, kni->ifname, err);
         return EDPVS_DPDKAPIFAIL;
     }
+
+    disable_kni_tx_csum_offload(kni->ifname);
 
     rte_eth_macaddr_get(kni->dpdk_pid, &macaddr);
     if (!eth_addr_equal(&macaddr, &kni->master->kni.addr)) {

@@ -4069,6 +4069,15 @@ int netif_port_start(struct netif_port *port)
         RTE_LOG(WARNING, NETIF, "%s: %s update rss reta failed (cause: %s)\n",
                 __func__, port->name, dpvs_strerror(ret));
 
+    /* disable kni tx-csum offload feature
+     *
+     * Why we redo this while it's done in virtio_kni_start? We found in some systems,
+     * say linux 5.10.134, the tx-csum feature of virtio kni device gets re-enabled
+     * some moments later after virito_kni_start.
+     * */
+    if (kni_dev_exist(port))
+        disable_kni_tx_csum_offload(port->kni.name);
+
     return EDPVS_OK;
 }
 
