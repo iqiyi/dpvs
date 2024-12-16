@@ -1,0 +1,49 @@
+From c6c5e201b4c02eb4ca7f1592ac901223caea78a5 Mon Sep 17 00:00:00 2001
+From: ywc689 <ywc689@163.com>
+Date: Mon, 16 Dec 2024 14:39:15 +0800
+Subject: [PATCH 4/6] bonding: allow slaves from different numa nodes
+
+Signed-off-by: ywc689 <ywc689@163.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 91bf2c2..eebb8d2 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -1815,7 +1815,14 @@ member_start(struct rte_eth_dev *bonding_eth_dev,
+ 
+ 		errval = rte_eth_rx_queue_setup(member_port_id, q_id,
+ 				bd_rx_q->nb_rx_desc,
+-				rte_eth_dev_socket_id(member_port_id),
++				// In spite of performance problem, bonding slaves had better to support
++				// slaves from different numa nodes. Considering that numa node on which
++				// the resources of bonding port is allocated from is specified by
++				// rte_eth_bond_create() at bonding creation, the slave's queue_setup
++				// would fail if specified with the slave's numa node id that is different
++				// from the one of the bonding port. See rte_eth_dma_zone_reserve() for
++				// details.
++				SOCKET_ID_ANY,
+ 				&(bd_rx_q->rx_conf), bd_rx_q->mb_pool);
+ 		if (errval != 0) {
+ 			RTE_BOND_LOG(ERR,
+@@ -1831,7 +1838,14 @@ member_start(struct rte_eth_dev *bonding_eth_dev,
+ 
+ 		errval = rte_eth_tx_queue_setup(member_port_id, q_id,
+ 				bd_tx_q->nb_tx_desc,
+-				rte_eth_dev_socket_id(member_port_id),
++				// In spite of performance problem, bonding slaves had better to support
++				// slaves from different numa nodes. Considering that numa node on which
++				// the resources of bonding port is allocated from is specified by
++				// rte_eth_bond_create() at bonding creation, the slave's queue_setup
++				// would fail if specified with the slave's numa node id that is different
++				// from the one of the bonding port. See rte_eth_dma_zone_reserve() for
++				// details.
++				SOCKET_ID_ANY,
+ 				&bd_tx_q->tx_conf);
+ 		if (errval != 0) {
+ 			RTE_BOND_LOG(ERR,
+-- 
+2.31.1
+

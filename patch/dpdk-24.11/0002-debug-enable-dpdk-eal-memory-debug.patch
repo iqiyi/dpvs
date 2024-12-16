@@ -1,0 +1,55 @@
+From 456164059079a114d9905b275a97788b46914ef4 Mon Sep 17 00:00:00 2001
+From: ywc689 <ywc689@163.com>
+Date: Fri, 13 Dec 2024 17:33:04 +0800
+Subject: [PATCH 2/6] debug: enable dpdk eal memory debug
+
+Signed-off-by: ywc689 <ywc689@163.com>
+---
+ lib/eal/common/rte_malloc.c  |  4 ++++
+ lib/eal/include/rte_malloc.h | 15 +++++++++++++++
+ 2 files changed, 19 insertions(+)
+
+diff --git a/lib/eal/common/rte_malloc.c b/lib/eal/common/rte_malloc.c
+index 3eed4d4..3a57769 100644
+--- a/lib/eal/common/rte_malloc.c
++++ b/lib/eal/common/rte_malloc.c
+@@ -25,6 +25,10 @@
+ #include "eal_memcfg.h"
+ #include "eal_private.h"
+ 
++int rte_memmory_ok(void *addr)
++{
++	return malloc_elem_cookies_ok(RTE_PTR_SUB(addr, MALLOC_ELEM_HEADER_LEN));
++}
+ 
+ /* Free the memory space back to heap */
+ static void
+diff --git a/lib/eal/include/rte_malloc.h b/lib/eal/include/rte_malloc.h
+index c8836de..d8b95a7 100644
+--- a/lib/eal/include/rte_malloc.h
++++ b/lib/eal/include/rte_malloc.h
+@@ -273,6 +273,21 @@ rte_calloc_socket(const char *type, size_t num, size_t size, unsigned align, int
+ 	__rte_alloc_size(2, 3)	__rte_alloc_align(4)
+ 	__rte_malloc __rte_dealloc_free;
+ 
++/**
++ * Check the header/tailer cookies of memory pointed to by the provided pointer.
++ *
++ * This pointer must have been returned by a previous call to
++ * rte_malloc(), rte_zmalloc(), rte_calloc() or rte_realloc().
++ *
++ * @param ptr
++ *   The pointer to memory to be checked.
++ * @return
++ *   - true if the header/tailer cookies are OK.
++ *   - Otherwise, false.
++ */
++int
++rte_memmory_ok(void *ptr);
++
+ /**
+  * If malloc debug is enabled, check a memory block for header
+  * and trailer markers to indicate that all is well with the block.
+-- 
+2.31.1
+
