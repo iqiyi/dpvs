@@ -287,6 +287,7 @@ int netif_unregister_pkt(struct pkt_type *pt);
 struct netif_port* netif_port_get(portid_t id);
 /* get netif by name, fail return NULL */
 struct netif_port* netif_port_get_by_name(const char *name);
+bool netif_flow_fuzzy_match(void);
 bool is_physical_port(portid_t pid);
 bool is_bond_port(portid_t pid);
 void netif_physical_port_range(portid_t *start, portid_t *end);

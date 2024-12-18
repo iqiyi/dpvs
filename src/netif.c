@@ -88,6 +88,9 @@ static uint16_t g_nports;
 /*for arp process*/
 static struct rte_ring *arp_ring[DPVS_MAX_LCORE];
 
+/* use fuzzy match instead of perfect match, refer to dpdk:rte_flow_item_fuzzy */
+static int flow_fuzzy_match = 0;
+
 #define NETIF_BOND_MODE_DEF         BONDING_MODE_ROUND_ROBIN
 #define NETIF_BOND_NUMA_NODE_DEF    0
 
@@ -160,6 +163,11 @@ static struct list_head port_ntab[NETIF_PORT_TABLE_BUCKETS]; /* hashed by name *
 
 /* function declarations */
 static void kni_lcore_loop(void *dummy);
+
+bool netif_flow_fuzzy_match(void)
+{
+    return !!flow_fuzzy_match;
+};
 
 bool is_physical_port(portid_t pid)
 {
@@ -277,9 +285,6 @@ static void pktpool_cache_handler(vector_t tokens)
     FREE_PTR(str);
 }
 
-#ifdef CONFIG_DPVS_FDIR
-static enum rte_fdir_mode g_fdir_mode = RTE_FDIR_MODE_PERFECT;
-
 static void fdir_mode_handler(vector_t tokens)
 {
     char *mode, *str = set_value(tokens);
@@ -288,19 +293,18 @@ static void fdir_mode_handler(vector_t tokens)
     mode = strlwr(str);
 
     if (!strncmp(mode, "perfect", sizeof("perfect")))
-        g_fdir_mode = RTE_FDIR_MODE_PERFECT;
+        flow_fuzzy_match = 0;
     else if (!strncmp(mode, "signature", sizeof("signature")))
-        g_fdir_mode = RTE_FDIR_MODE_SIGNATURE;
+        flow_fuzzy_match = 1;
     else {
         RTE_LOG(WARNING, NETIF, "invalid fdir_mode %s, using default %s\n",
                 mode, "perfect");
-        g_fdir_mode = RTE_FDIR_MODE_PERFECT;
+        flow_fuzzy_match = 0;
     }
-    RTE_LOG(INFO, NETIF, "g_fdir_mode = %s\n", mode);
+    RTE_LOG(INFO, NETIF, "fdir_mode = %s\n", mode);
 
     FREE_PTR(str);
 }
-#endif
 
 static void device_handler(vector_t tokens)
 {
@@ -904,9 +908,7 @@ void netif_keyword_value_init(void)
         /* KW_TYPE_INIT keyword */
         netif_pktpool_nb_mbuf = NETIF_PKTPOOL_NB_MBUF_DEF;
         netif_pktpool_mbuf_cache = NETIF_PKTPOOL_MBUF_CACHE_DEF;
-#ifdef CONFIG_DPVS_FDIR
-        g_fdir_mode = RTE_FDIR_MODE_PERFECT;
-#endif
+        flow_fuzzy_match = 0;
     }
     /* KW_TYPE_NORMAL keyword */
 }
@@ -916,9 +918,7 @@ void install_netif_keywords(void)
     install_keyword_root("netif_defs", netif_defs_handler);
     install_keyword("pktpool_size", pktpool_size_handler, KW_TYPE_INIT);
     install_keyword("pktpool_cache", pktpool_cache_handler, KW_TYPE_INIT);
-#ifdef CONFIG_DPVS_FDIR
     install_keyword("fdir_mode", fdir_mode_handler, KW_TYPE_INIT);
-#endif
     install_keyword("device", device_handler, KW_TYPE_INIT);
     install_sublevel();
     install_keyword("rx", NULL, KW_TYPE_INIT);
@@ -3895,24 +3895,6 @@ static int add_bond_slaves(struct netif_port *port)
     return EDPVS_OK;
 }
 
-#ifdef CONFIG_DPVS_FDIR
-static int config_fdir_conf(struct rte_fdir_conf *fdir_conf)
-{
-    int shift;
-
-    /* how many mask bits needed? */
-    for (shift = 0; (0x1<<shift) < g_slave_lcore_num; shift++)
-        ;
-    if (shift >= 16)
-        return EDPVS_INVAL;
-
-    fdir_conf->mask.dst_port_mask = htons(~((~0x0) << shift));
-    fdir_conf->mode = g_fdir_mode;
-
-    return EDPVS_OK;
-}
-#endif
-
 /*
  * Note: Invoke the function after port is allocated and lcores are configured.
  */
@@ -3944,11 +3926,6 @@ int netif_port_start(struct netif_port *port)
                 port->dev_info.max_tx_queues, port->nrxq, port->ntxq);
     }
 
-#ifdef CONFIG_DPVS_FDIR
-    ret = config_fdir_conf(&port->dev_conf.fdir_conf);
-    if (ret != EDPVS_OK)
-        return ret;
-#endif
     if (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
         port->dev_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_IPV4_CKSUM;
     if (port->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD)
@@ -4242,28 +4219,6 @@ static struct rte_eth_conf default_port_conf = {
     .txmode = {
         .mq_mode = RTE_ETH_MQ_TX_NONE,
     },
-#ifdef CONFIG_DPVS_FDIR
-    .fdir_conf = {
-        .mode    = RTE_FDIR_MODE_PERFECT, /* maybe changed by config file */
-        .pballoc = RTE_FDIR_PBALLOC_64K,
-        .status  = RTE_FDIR_REPORT_STATUS,
-        .mask    = {
-            .ipv4_mask  = {
-                .dst_ip = 0xFFFFFFFF,
-            },
-            .ipv6_mask  = {
-                .dst_ip = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF },
-            },
-            /* to be changed according to slave lcore number in use */
-            .dst_port_mask = 0x0700,
-        },
-        .drop_queue = 127,
-        .flex_conf  = {
-            .nb_payloads    = 0,
-            .nb_flexmasks   = 0,
-        },
-    },
-#endif
 };
 
 int netif_print_port_conf(const struct rte_eth_conf *port_conf, char *buf, int *len)
