@@ -1,37 +1,22 @@
 #!/bin/sh
 # program: dpvs
-# Sep 19, 2024 #
+# Dec 24, 2024 #
 ##
 # Features
-# - dpvs: Support QUIC/HTTP3, add nginx patches and facilitating code snippets for use of quic.
-# - dpvs: Support SCTP forwarding implementation.
-# - dpvs: Support LLDP protocol.
-# - dpvs: Update default dpdk version to dpdk-stable-20.11.10.
-# - dpvs: IPVS supports ipset based allow/deny list which allows for cidr acl rule.
-# - dpvs: Support IPv6 link-local address auto configuration.
-# - tools: Add ipset supports in dpvs-agent.
-# - tools: Add snapshot caches for dpvs-agent virtual server apis.
-# - doc: Update README.md.
+# - dpvs: Upgrade dpdk from 20.11 to 24.11.
+# - dpvs: Support virtio-user kni implement.
+# - dpvs: Remove flow director and replace it with rte_flow completely.
+# - dpvs: IPv6 routes support flush and lpm differentiates identical prefix routes on different ports.
 #
 # Bugfixes
-# - dpvs: Fix multicast address sync problems and add dpip supports for multicast address lookup.
-# - dpvs: Fix build errors and warnings with gcc verison 8.0+.
-# - dpvs: Fix coredump problem when starting dpvs with insufficient memory.
-# - dpvs: Use dpdk random generator in critical datapath for performance enhancement.
-# - dpvs: Fix ipset default address family problem.
-# - dpvs: Fix segmentation fault problem when running on machines whose cpu number is over DPVS_MAX_LCORE.
-# - dpvs: Refactor netif_rte_port_alloc with netif_alloc.
-# - dpvs: Fix prolems in IPv6 all-nodes and all-routers address initialization.
-# - dpvs: Fix memory corruption problem when retrieving nic's xstats.
-# - tools: Fix concurrency racing problem when dpvs-agent and healthcheck changing rs simultaneously.
-# - tools: Fix healthchech bad icmp checksum problem ocasionally appeared in udp and udpping checkers.
-# - tools: Fix keepalived quorum up script not excuted problem when old rs removed and new ones added in a reload.
-# - tools: Fix ipvsadm local IP won't remove problem.
-# - tools: Fix ipset list-all problem and improve efficiency.
-# - tools: Fix dpip delay problem when list empty ipset with sorting enabled.
+# - dpvs: Fix dropped packet accounting problem caused by ARP replies from kni devices.
+# - dpvs: Fix some logging and header including problems.
+# - dpvs: Flush addrs and routes when vlan device removed.
+# - conf: Fix init attribute for serveral config items.
+# - script: Fix directory problems in dpdk build script dpdk-build.sh.
 #
 
-export VERSION=1.9
-export RELEASE=8
+export VERSION=1.10
+export RELEASE=0
 
 echo $VERSION-$RELEASE
