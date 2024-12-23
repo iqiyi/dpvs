@@ -5,7 +5,7 @@
 build_options="-Denable_kmods=true"
 debug_options="-Dbuildtype=debug -Dc_args=-DRTE_MALLOC_DEBUG"
 
-dpdkver=20.11.10                            # default dpdk version (use stable version)
+dpdkver=24.11                       # default dpdk version (use stable version)
 workdir=$(pwd)/dpdk/
 patchdir=""
 

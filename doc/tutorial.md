@@ -1481,9 +1481,10 @@ $
 
 The `dpdk-pdump` runs as a DPDK secondary process and is capable of enabling packet capture on dpdk ports. DPVS works as the primary process for dpdk-pdump, which should enable the packet capture framework by setting `global_defs/pdump` to be `on` in `/etc/dpvs.conf` when DPVS starts up. 
 
-Refer to [dpdk-pdump doc](https://doc.dpdk.org/guides/tools/pdump.html) for its usage. DPVS extends dpdk-pdump with a [DPDK patch](../patch/dpdk-stable-18.11.2/0005-enable-pdump-and-change-dpdk-pdump-tool-for-dpvs.patch) to add some packet filtering features. Run `dpdk-pdump  -- --help` to find all supported pdump params.
+Refer to [dpdk-pdump doc](https://doc.dpdk.org/guides/tools/pdump.html) for its usage. DPVS extends dpdk-pdump with a [DPDK patch](../patch/dpdk-24.11/0001-pdump-add-cmdline-packet-filters-for-dpdk-pdump-tool.patch) to add some packet filtering features. Run `dpdk-pdump  -- --help` to find all supported pdump params.
 
-> usage: dpdk-pdump [EAL options] -- --pdump '(port=<port id> | device_id=<pci id or vdev name>),(queue=<queue_id>),(rx-dev=<iface or pcap file> | tx-dev=<iface or pcap file>,[host=<ipaddress> | src-host=<source ip address> |dst-host=<destination ip address>],[proto=<protocol type>support:tcp/udp/icmp],[proto-port=<protocol port> |src-port=<source protocol port> |dst-port=<destination protocol port>],[ring-size=<ring size>default:16384],[mbuf-size=<mbuf data size>default:2176],[total-num-mbufs=<number of mbufs>default:65535]'
+> usage: ./bin/dpdk-pdump [EAL options] -- --[multi]
+> --pdump '(port=<port id> | device_id=<pci id or vdev name>),(queue=<queue_id>),(rx-dev=<iface or pcap file> | tx-dev=<iface or pcap file>,[host=<ipaddress> | src-host=<source ip address> |dst-host=<destination ip address>],[proto=<protocol type>support:tcp/udp/icmp/icmp6],[proto-port=<protocol port> |src-port=<source protocol port> |dst-port=<destination protocol port>],[ring-size=<ring size>default:16384],[mbuf-size=<mbuf data size>default:2176],[total-num-mbufs=<number of mbufs>default:65535]'
 
 Well, it's time to demonstrate how to use dpdk-pdump with our test case.
 

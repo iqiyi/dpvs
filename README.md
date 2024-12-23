@@ -4,7 +4,7 @@
 
 # Introduction
 
-`DPVS` is a high performance **Layer-4 load balancer** based on [DPDK](http://dpdk.org). It's derived from Linux Virtual Server [LVS](http://www.linuxvirtualserver.org/) and its modification [alibaba/LVS](https://github.com/alibaba/LVS).
+`DPVS` is a high performance **Layer-4 load balancer** based on [DPDK](http://dpdk.org). It derives from Linux Virtual Server [LVS](http://www.linuxvirtualserver.org/) and its modification [alibaba/LVS](https://github.com/alibaba/LVS).
 
 > Notes: The name `DPVS` comes from "DPDK-LVS".
 
@@ -43,25 +43,29 @@ DPVS consists of the modules illustrated in the diagram below.
 
 This *quick start* is performed in the environments described below.
 
-* Linux Distribution: CentOS 7.6
-* Kernel: 3.10.0-957.el7.x86_64
 * CPU: Intel(R) Xeon(R) CPU E5-2650 v4 @ 2.20GHz
 * NIC: Intel Corporation Ethernet Controller 10-Gigabit X540-AT2 (rev 03)
 * Memory: 64G with two NUMA node.
-* GCC: 4.8.5 20150623 (Red Hat 4.8.5-36)
+* Linux Distribution: Anolis OS release 8.8
+* Kernel: 5.10.134-13.an8.x86_64
+* GCC: gcc (GCC) 8.5.0 20210514 (Anolis 8.5.0-10.0.3)
+* Python: 3.6 (with pyelftools: 0.31)
+* meson: 0.58.2
+* pkgconf: 1.4.2
+* numactl-devel: 2.0.14 (required by DPDK on NUMA-aware system)
 * Golang: go1.20.4 linux/amd64 (required only when CONFIG_DPVS_AGENT enabled).
 
-Other environments should also be OK if DPDK works, please check [dpdk.org](http://www.dpdk.org) for more information.
+Other environments should also be OK if DPDK works, please check [DPDK Supported Hardware](https://core.dpdk.org/supported/) and [DPDK System Requirements](https://doc.dpdk.org/guides/linux_gsg/sys_reqs.html#) for more information.
 
 > Notes:
-> 1. Please check this link for NICs supported by DPDK: http://dpdk.org/doc/nics.
+> 1. Please check this link for NICs supported by DPDK: http://core.dpdk.org/supported.
 > 2. `Flow Control` ([rte_flow](http://dpdk.org/doc/guides/nics/overview.html#id1)) is required for `FNAT` and `SNAT` mode when DPVS running on multi-cores unless `conn redirect` is enabled. The minimum requirements to ensure DPVS works with multi-core properly is that `rte_flow` must support "ipv4, ipv6, tcp, udp" four items, and "drop, queue" two actions.
 > 3. DPVS doesn't confine itself to the this test environments. In fact, DPVS is an user-space application which relies very little on operating system, kernel versions, compilers, and other platform discrepancies. As far as is known, DPVS has been verified at least in the following environments.
->   * Centos 7.2, 7.6, 7.9
 >   * Anolis 8.6, 8.8, 8.9
->   * GCC 4.8, 8.5
+>   * GCC 8.5
 >   * Kernel: 3.10.0, 4.18.0, 5.10.134
 >   * NIC: Intel IXGBE, NVIDIA MLX5
+>   * Centos 7.x and GCC 4.8 are also supported by DPVS versions earlier than v1.10.
 
 ## Clone DPVS
 
@@ -74,27 +78,35 @@ Well, let's start from DPDK then.
 
 ## DPDK setup
 
-Currently, `dpdk-stable-20.11.10` is recommended for `DPVS`, and we will not support dpdk version earlier than dpdk-20.11 any more. If you are still using earlier dpdk versions, such as `dpdk-stable-17.11.6` and `dpdk-stable-18.11.2`, please use earlier DPVS releases, such as [v1.8.12](https://github.com/iqiyi/dpvs/releases/tag/v1.8.12).
+Currently, `dpdk-24.11` is recommended for `DPVS`, and we will not support dpdk versions earlier than dpdk-20.11 any more. If you are still using earlier dpdk versions, please use earlier [DPVS releases](https://github.com/iqiyi/dpvs/releases). The best matched DPDK versions are listed in the table below.
 
-> Notes: You can skip this section if experienced with DPDK, and refer the [link](http://dpdk.org/doc/guides/linux_gsg/index.html) for details.
+| DPVS Version    | DPDK Version     |
+| --------------- | ---------------- |
+| v1.10           | 24.11            |
+| v1.9            | 20.11            |
+| v1.8            | 18.11            |
+| v1.7 or earlier | 17.11 or earlier |
+
+> Notes: You can skip this section if experienced with DPDK, and refer to this [link](https://doc.dpdk.org/guides/linux_gsg/index.html) for details.
 
 ```bash
-$ wget https://fast.dpdk.org/rel/dpdk-20.11.10.tar.xz   # download from dpdk.org if link failed.
-$ tar xf dpdk-20.11.10.tar.xz
+$ wget https://fast.dpdk.org/rel/dpdk-24.11.tar.xz   # download from dpdk.org if link failed.
+$ tar xf dpdk-24.11.tar.xz
 ```
 
-### DPDK patchs
+### DPDK patches
 
-There are some patches for DPDK to support extra features needed by DPVS. Apply them if needed. For example, there's a patch for DPDK `rte_kni` driver for hardware multicast, apply it if you want to use `rte_kni` as your management network for such exception data path as SSH, OSPF, BGP, etc.
+There are some patches for DPDK to support extra features needed by DPVS. Apply them if needed. For example, there's a patch for DPDK ixgbe flow, apply it if you are using the ixgbe network adapter.
 
-> Notes: It's assumed we are in DPVS root directory where you have installed dpdk-stable-20.11.10 source codes. Please note it's not mandatory, just for convenience.
+> Notes: It's assumed we are in DPVS root directory where you have installed dpdk-24.11 source codes. Please note it's not mandatory, just for convenience.
 
 ```
 $ cd <path-of-dpvs>
-$ cp patch/dpdk-stable-20.11.10/*.patch dpdk-stable-20.11.10/
-$ cd dpdk-stable-20.11.10/
-$ patch -p1 < 0001-kni-use-netlink-event-for-multicast-driver-part.patch
-$ patch -p1 < 0002-pdump-change-dpdk-pdump-tool-for-dpvs.patch
+$ cp patch/dpdk-24.11/*.patch dpdk-24.11/
+$ cd dpdk-24.11/
+$ patch -p1 < 0001-pdump-add-cmdline-packet-filters-for-dpdk-pdump-tool.patch
+$ patch -p1 < 0002-debug-enable-dpdk-eal-memory
+$ patch -p1 < 0003-ixgbe_flow-patch-ixgbe-fdir-rte_flow-for-dpvs.patch
 $ ...
 ```
 
@@ -105,7 +117,7 @@ $ ...
 Use meson-ninja to build DPDK, and export environment variable `PKG_CONFIG_PATH` for DPDK application (DPVS). The sub-Makefile `src/dpdk.mk` in DPVS will check the presence of libdpdk.
 
 ```bash
-$ cd dpdk-stable-20.11.10
+$ cd dpdk-24.11
 $ mkdir dpdklib                 # user desired install folder
 $ mkdir dpdkbuild               # user desired build folder
 $ meson -Denable_kmods=true -Dprefix=dpdklib dpdkbuild
@@ -116,7 +128,7 @@ $ export PKG_CONFIG_PATH=$(pwd)/../dpdklib/lib64/pkgconfig/
 
 > Tips: You can use script [dpdk-build.sh](./scripts/dpdk-build.sh) to facilitate dpdk build. Run `dpdk-build.sh -h` for the usage of the script.
 
-Next is to set up DPDK hugepage. Our test environment is NUMA system. For single-node system please refer to the [link](http://dpdk.org/doc/guides/linux_gsg/sys_reqs.html).
+Next is to set up DPDK hugepage. Our test environment is NUMA system. For single-node system please refer to the [link](http://doc.dpdk.org/guides/linux_gsg/sys_reqs.html#use-of-hugepages-in-the-linux-environment).
 
 ```bash
 $ # for NUMA machine
@@ -137,34 +149,31 @@ $ mount -t hugetlbfs nodev /mnt/huge
 ```
 
 > Notes:
-> 1. Hugepages of other size, such as 1GB-size hugepages, can also be used if your system supports.
+> 1. Hugepages of other sizes, such as 1GB-size hugepages, can also be used if your system supports.
 > 2. It's recommended to reserve hugepage memory and isolate CPUs used by DPVS with linux kernel cmdline options in production environments, for example `isolcpus=1-9 default_hugepagesz=1G hugepagesz=1G hugepages=32`.
 
 Next, install kernel modules required by DPDK and DPVS.
 
 * DPDK driver kernel module: 
-Depending on your NIC and system, NIC may require binding a DPDK-compitable driver, such as `vfio-pci`, `igb_uio`, or `uio_pci_generic`. Refer to [DPDK doc](https://doc.dpdk.org/guides/linux_gsg/linux_drivers.html) for more details. In this test, we use the linux standard UIO kernel module `uio_pci_generic`.
+Depending on your NIC and system, NIC may require binding a DPDK-compitable driver, such as `vfio-pci`, `igb_uio`, or `uio_pci_generic`. Note that some NICs supporting bifircated driver should skip the step. Refer to [DPDK Linux Drivers](https://doc.dpdk.org/guides/linux_gsg/linux_drivers.html) for details. In this test, we use the linux standard UIO kernel module `uio_pci_generic` for the ixgbe NIC.
 
 * KNI kernel module: 
-KNI kernel module `rte_kni.ko` is required as a solution to the exception data path to handle all packets not processed in DPVS.
+The KNI kernel module, library and PMD has been removed since DPDK 23.11 release. DPVS has replaced it with virtio-user devices(namely virtio-user kni) since v1.10. Nevertheless, the kernel module `rte_kni.ko` is required if you are still using DPDK KNI in earlier DPDK/DPVS versions as a solution to the exception data path.
 
 ```bash
 $ modprobe uio_pci_generic
 
-$ cd dpdk-stable-20.11.10
-$ insmod dpdkbuild/kernel/linux/kni/rte_kni.ko carrier=on
-
-$ # bind eth0 to uio_pci_generic (Be aware: Network on eth0 will get broken!)
+$ ## bind eth0 to uio_pci_generic (Be aware: Network on eth0 will get broken!)
 $ ./usertools/dpdk-devbind.py --status
 $ ifconfig eth0 down          # assuming eth0's pci-bus location is 0000:06:00.0
 $ ./usertools/dpdk-devbind.py -b uio_pci_generic 0000:06:00.0
 ```
 > Notes:
 > 1. The test in our Quick Start uses only one NIC. Bind as many NICs as required in your DPVS application to DPDK driver kernel module. For example, you should bind at least 2 NICs if you are testing DPVS with two-arm.
-> 2. `dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver like `ixgbe`. Use `lspci` or `ethtool -i eth0` to check the NIC's PCI bus-id. Please refer to [DPDK Doc:Binding and Unbinding Network Ports to/from the Kernel Modules](https://doc.dpdk.org/guides/linux_gsg/linux_drivers.html#binding-and-unbinding-network-ports-to-from-the-kernel-modules) for more details.
-> 3. NVIDIA/Mellanox NIC uses bifurcated driver which doesn't rely on UIO/VFIO driver, so not bind any DPDK driver kernel module, but [NVIDIA MLNX_OFED/EN](https://network.nvidia.com/products/infiniband-drivers/linux/mlnx_ofed/) is required. Refer to [Mellanox DPDK](https://enterprise-support.nvidia.com/s/article/mellanox-dpdk) for its PMD and [Compilation Prerequisites](https://doc.dpdk.org/guides/platform/mlx5.html#linux-prerequisites) for OFED installation.
-> 4. A kernel module parameter `carrier` has been added to `rte_kni.ko` since [DPDK v18.11](https://elixir.bootlin.com/dpdk/v18.11/source/kernel/linux/kni/kni_misc.c), and the default value for it is "off". We need to load `rte_kni.ko` with extra parameter `carrier=on` to make KNI devices work properly.
-> 5. Following the DPDK technical board decision and refinement, the KNI kernel module, library and PMD was removed from the DPDK 23.11 release (refer to [ABI and API Deprecation(DPDK 22.11)](https://doc.dpdk.org/guides-22.11/rel_notes/deprecation.html)). As a replacement solution, DPVS has supported [virtio-user as exception path](https://doc.dpdk.org/guides/howto/virtio_user_as_exception_path.html), which is default off now and can be enabled with `CONFIG_KNI_VIRTIO_USER` in config.mk.
+> 2. `dpdk-devbind.py -u` can be used to unbind driver and switch it back to Linux driver. Use `lspci` or `ethtool -i eth0` to check the NIC's PCI bus-id. Please refer to [DPDK Doc:Binding and Unbinding Network Ports to/from the Kernel Modules](https://doc.dpdk.org/guides/linux_gsg/linux_drivers.html#binding-and-unbinding-network-ports-to-from-the-kernel-modules) for more details.
+> 3. NVIDIA/Mellanox NIC uses bifurcated driver which doesn't rely on UIO/VFIO driver, so NOT bind any DPDK driver kernel module, but [NVIDIA MLNX_OFED/EN](https://network.nvidia.com/products/infiniband-drivers/linux/mlnx_ofed/) is required. Refer to [Mellanox DPDK](https://enterprise-support.nvidia.com/s/article/mellanox-dpdk) for its PMD and [Compilation Prerequisites](https://doc.dpdk.org/guides/platform/mlx5.html#linux-prerequisites) for OFED installation.
+> 4. A kernel module parameter `carrier` was added to `rte_kni.ko` for DPDK 18.11~23.11, and the default value for it is "off". We need to load `rte_kni.ko` with extra parameter `carrier=on` to make KNI devices work properly.
+> 5. Following the DPDK technical board decision and refinement, the KNI kernel module, library and PMD was removed from the DPDK 23.11 release (refer to [ABI and API Deprecation(DPDK 22.11)](https://doc.dpdk.org/guides-22.11/rel_notes/deprecation.html)). As a replacement solution, DPVS has supported [virtio-user as exception path](https://doc.dpdk.org/guides/howto/virtio_user_as_exception_path.html) since v1.9.10, which is default off in v1.9 and can be enabled with `CONFIG_KNI_VIRTIO_USER` in config.mk.
 > 6. Multiple DPVS instances can run on a single server if there are enough NICs or VFs within one NIC. Refer to [tutorial:Multiple Instances](https://github.com/iqiyi/dpvs/blob/devel/doc/tutorial.md#multi-instance) for details.
 
 ## Build DPVS
@@ -212,7 +221,7 @@ $ ./dpvs &
 $ # alternatively and strongly advised, start DPVS with NIC and CPU explicitly specified:
 $ ./dpvs -- -a 0000:06:00.0 -l 1-9
 ```
-> Notes:
+> Tips:
 > 1. Run `./dpvs --help` for DPVS supported command line options, and `./dpvs -- --help` for common DPDK EAL command line options.
 > 2. The default `dpvs.conf` require 9 CPUs(1 master worker, 8 slave workers), modify it if not so many available CPUs in your system.
 
