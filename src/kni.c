@@ -147,7 +147,7 @@ static struct rte_eth_conf virtio_kni_eth_conf = {
         .mq_mode        = ETH_MQ_RX_NONE,
         .max_rx_pkt_len = ETHER_MAX_LEN,
         .split_hdr_size = 0,
-        .offloads       = DEV_RX_OFFLOAD_CHECKSUM | DEV_RX_OFFLOAD_TCP_LRO,
+        //.offloads     = DEV_RX_OFFLOAD_CHECKSUM | DEV_RX_OFFLOAD_TCP_LRO,
     },
     .rx_adv_conf = {
         .rss_conf = {
@@ -214,7 +214,7 @@ static int virtio_kni_start(struct virtio_kni *kni)
         return EDPVS_DPDKAPIFAIL;
     }
 
-    disable_kni_tx_csum_offload(kni->ifname);
+    //disable_kni_tx_csum_offload(kni->ifname);
 
     rte_eth_macaddr_get(kni->dpdk_pid, &macaddr);
     if (!eth_addr_equal(&macaddr, &kni->master->kni.addr)) {
