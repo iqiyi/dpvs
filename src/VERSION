@@ -1,6 +1,6 @@
 #!/bin/sh
 # program: dpvs
-# Dec 24, 2024 #
+# Jan 9, 2025 #
 ##
 # Features
 # - dpvs: Upgrade dpdk from 20.11 to 24.11.
@@ -9,6 +9,7 @@
 # - dpvs: IPv6 routes support flush and lpm differentiates identical prefix routes on different ports.
 #
 # Bugfixes
+# - dpvs: Fix packet reception problem caused by TX_OFFLOAD_MBUF_FAST_FREE.
 # - dpvs: Fix dropped packet accounting problem caused by ARP replies from kni devices.
 # - dpvs: Fix some logging and header including problems.
 # - dpvs: Flush addrs and routes when vlan device removed.
@@ -17,6 +18,6 @@
 #
 
 export VERSION=1.10
-export RELEASE=0
+export RELEASE=1
 
 echo $VERSION-$RELEASE
