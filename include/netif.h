@@ -49,6 +49,7 @@ enum {
     NETIF_PORT_FLAG_TC_INGRESS              = (0x1<<11),
     NETIF_PORT_FLAG_NO_ARP                  = (0x1<<12),
     NETIF_PORT_FLAG_LLDP                    = (0x1<<13),
+    NETIF_PORT_FLAG_TX_MBUF_FAST_FREE       = (0x1<<14),
 };
 
 /* max tx/rx queue number for each nic */
@@ -86,6 +87,9 @@ struct netif_queue_conf
     queueid_t id;
     uint16_t len;
     struct rx_partner *isol_rxq;
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+    struct rte_mempool *pktpool;    /* for RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE */
+#endif
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
 } __rte_cache_aligned;
 
