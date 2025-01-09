@@ -35,6 +35,7 @@ netif_defs {
         tx {
             queue_number        8
             descriptor_number   1024
+            mbuf_fast_free      on
         }
         ! mtu                   1500
         ! promisc_mode
@@ -51,6 +52,7 @@ netif_defs {
         tx {
             queue_number        8
             descriptor_number   1024
+            mbuf_fast_free      on
         }
         ! mtu                   1500
         ! promisc_mode

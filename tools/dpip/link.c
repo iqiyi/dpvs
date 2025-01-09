@@ -274,6 +274,8 @@ static int dump_nic_basic(char *name, int namelen)
         printf("OF_TX_TCP_CSUM ");
     if (get.ol_tx_udp_csum)
         printf("OF_TX_UDP_CSUM ");
+    if (get.ol_tx_fast_free)
+        printf("OF_TX_FAST_FREE ");
     printf("\n");
 
     return EDPVS_OK;

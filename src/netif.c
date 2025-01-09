@@ -106,6 +106,7 @@ struct port_conf_stream {
 
     int tx_queue_nb;
     int tx_desc_nb;
+    bool tx_mbuf_fast_free;
 
     bool promisc_mode;
     bool allmulticast;
@@ -326,6 +327,7 @@ static void device_handler(vector_t tokens)
     port_cfg->tx_queue_nb = -1;
     port_cfg->rx_desc_nb = NETIF_NB_RX_DESC_DEF;
     port_cfg->tx_desc_nb = NETIF_NB_TX_DESC_DEF;
+    port_cfg->tx_mbuf_fast_free = true;
     port_cfg->mtu = NETIF_DEFAULT_ETH_MTU;
 
     port_cfg->promisc_mode = false;
@@ -441,6 +443,31 @@ static void tx_desc_nb_handler(vector_t tokens)
         RTE_LOG(INFO, NETIF, "%s:nb_tx_desc = %d (round to 2^n)\n",
                 current_device->name, desc_nb);
         current_device->tx_desc_nb = desc_nb;
+    }
+
+    FREE_PTR(str);
+}
+
+static void tx_mbuf_fast_free_handler(vector_t tokens)
+{
+    int val = -1;
+    char *str = set_value(tokens);
+    struct port_conf_stream *current_device = list_entry(port_list.next,
+            struct port_conf_stream, port_list_node);
+
+    assert(str);
+    if (!strcasecmp(str, "off"))
+        val = 0;
+    else if (!strcasecmp(str, "on"))
+        val = 1;
+
+    if (val < 0) {
+        RTE_LOG(WARNING, NETIF, "invalid %s:tx_mbuf_fast_free, using default ON\n",
+                current_device->name);
+        current_device->tx_mbuf_fast_free = true;
+    } else {
+        current_device->tx_mbuf_fast_free = !!val;
+        RTE_LOG(INFO, NETIF, "%s:tx_mbuf_fast_free = %s\n", current_device->name, str);
     }
 
     FREE_PTR(str);
@@ -931,6 +958,7 @@ void install_netif_keywords(void)
     install_sublevel();
     install_keyword("queue_number", tx_queue_number_handler, KW_TYPE_INIT);
     install_keyword("descriptor_number", tx_desc_nb_handler, KW_TYPE_INIT);
+    install_keyword("mbuf_fast_free", tx_mbuf_fast_free_handler, KW_TYPE_INIT);
     install_sublevel_end();
     install_keyword("promisc_mode", promisc_mode_handler, KW_TYPE_INIT);
     install_keyword("allmulticast", allmulticast_handler, KW_TYPE_INIT);
@@ -2126,8 +2154,7 @@ static inline void netif_tx_burst(lcoreid_t cid, portid_t pid, queueid_t qindex)
     dev = netif_port_get(pid);
     if (dev && (dev->flag & NETIF_PORT_FLAG_FORWARD2KNI)) {
         for (; i < txq->len; i++) {
-            if (NULL == (mbuf_copied = mbuf_copy(txq->mbufs[i],
-                pktmbuf_pool[dev->socket])))
+            if (NULL == (mbuf_copied = mbuf_copy(txq->mbufs[i], pktmbuf_pool[dev->socket])))
                 RTE_LOG(WARNING, NETIF, "%s: fail to copy outbound mbuf into kni\n", __func__);
             else
                 kni_ingress(mbuf_copied, dev);
@@ -2313,6 +2340,18 @@ int netif_hard_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
         txq->len = 0;
     }
 
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+    if ((dev->flag & NETIF_PORT_FLAG_TX_MBUF_FAST_FREE) && txq->pktpool) {
+        if (txq->pktpool != mbuf->pool) {
+            RTE_LOG(ERR, NETIF, "%s:txq%d pktmbuf pool changed: %s->%s, please disable tx_mbuf_fast_free\n",
+                    dev->name, txq->id, txq->pktpool->name, mbuf->pool->name);
+            txq->pktpool = mbuf->pool;
+        }
+    } else {
+        txq->pktpool = mbuf->pool;
+    }
+#endif
+
     lcore_stats[cid].obytes += mbuf->pkt_len;
     txq->mbufs[txq->len] = mbuf;
     txq->len++;
@@ -2467,7 +2506,7 @@ int netif_rcv_mbuf(struct netif_port *dev, lcoreid_t cid, struct rte_mbuf *mbuf,
                      || (i == rte_get_main_lcore()))
                     continue;
                 /* rte_pktmbuf_clone will not clone pkt.data, just copy pointer! */
-                mbuf_clone = rte_pktmbuf_clone(mbuf, pktmbuf_pool[rte_socket_id()]);
+                mbuf_clone = rte_pktmbuf_clone(mbuf, pktmbuf_pool[dev->socket]);
                 if (unlikely(!mbuf_clone)) {
                     RTE_LOG(WARNING, NETIF, "%s arp reply mbuf clone failed on lcore %d\n",
                             __func__, i);
@@ -3484,6 +3523,14 @@ static inline void setup_dev_of_flags(struct netif_port *port)
     if (port->dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_UDP_CKSUM)
         port->flag |= NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD;
 
+    // Device supports optimization for fast release of mbufs.
+    // The feature is configurable via dpvs.conf.
+    // When set application must guarantee that per-queue all mbufs comes from
+    // the same mempool and has refcnt = 1.
+    // https://doc.dpdk.org/api/rte__ethdev_8h.html#a43f198c6b59d965130d56fd8f40ceac1
+    if (!(port->dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE))
+        port->flag &= ~NETIF_PORT_FLAG_TX_MBUF_FAST_FREE;
+
     /* FIXME: may be a bug in dev_info get for virtio device,
      *        set the txq_of_flags manually for this type device */
     if (strncmp(port->dev_info.driver_name, "net_virtio", strlen("net_virtio")) == 0) {
@@ -3508,10 +3555,8 @@ static inline void setup_dev_of_flags(struct netif_port *port)
 #endif
 
     /* rx offload conf and flags */
-    if (port->dev_info.rx_offload_capa & RTE_ETH_RX_OFFLOAD_VLAN_STRIP) {
+    if (port->dev_info.rx_offload_capa & RTE_ETH_RX_OFFLOAD_VLAN_STRIP)
         port->flag |= NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD;
-        port->dev_conf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_VLAN_STRIP;
-    }
     if (port->dev_info.rx_offload_capa & RTE_ETH_RX_OFFLOAD_IPV4_CKSUM)
         port->flag |= NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD;
 
@@ -3803,6 +3848,8 @@ static void fill_port_config(struct netif_port *port, char *promisc_on, char *al
         }
         port->rxq_desc_nb = cfg_stream->rx_desc_nb;
         port->txq_desc_nb = cfg_stream->tx_desc_nb;
+        if (cfg_stream->tx_mbuf_fast_free)
+            port->flag |= NETIF_PORT_FLAG_TX_MBUF_FAST_FREE;
     } else {
         /* using default configurations */
         port->rxq_desc_nb = NETIF_NB_RX_DESC_DEF;
@@ -3831,6 +3878,8 @@ static void fill_port_config(struct netif_port *port, char *promisc_on, char *al
             port->rxq_desc_nb = cfg_stream->rx_desc_nb;
             port->txq_desc_nb = cfg_stream->tx_desc_nb;
             port->mtu = cfg_stream->mtu;
+            if (cfg_stream->tx_mbuf_fast_free)
+                port->flag |= NETIF_PORT_FLAG_TX_MBUF_FAST_FREE;
         } else {
             port->rxq_desc_nb = NETIF_NB_RX_DESC_DEF;
             port->txq_desc_nb = NETIF_NB_TX_DESC_DEF;
@@ -3926,13 +3975,20 @@ int netif_port_start(struct netif_port *port)
                 port->dev_info.max_tx_queues, port->nrxq, port->ntxq);
     }
 
+    if (port->flag & NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD)
+        port->dev_conf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_IPV4_CKSUM;
+    if (port->flag & NETIF_PORT_FLAG_RX_VLAN_STRIP_OFFLOAD)
+        port->dev_conf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_VLAN_STRIP;
+
     if (port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD)
         port->dev_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_IPV4_CKSUM;
     if (port->flag & NETIF_PORT_FLAG_TX_UDP_CSUM_OFFLOAD)
         port->dev_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
     if (port->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD)
         port->dev_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_TCP_CKSUM;
-    port->dev_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
+    if (port->flag & NETIF_PORT_FLAG_TX_MBUF_FAST_FREE)
+        port->dev_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
+
     adapt_device_conf(port->id, &port->dev_conf.rx_adv_conf.rss_conf.rss_hf,
             &port->dev_conf.rxmode.offloads, &port->dev_conf.txmode.offloads);
 
@@ -4842,6 +4898,8 @@ static int get_port_basic(struct netif_port *port, void **out, size_t *out_len)
         get->ol_tx_udp_csum = 1;
     if (port->flag & NETIF_PORT_FLAG_LLDP)
         get->lldp = 1;
+    if (port->flag & NETIF_PORT_FLAG_TX_MBUF_FAST_FREE)
+        get->ol_tx_fast_free = 1;
 
     *out = get;
     *out_len = sizeof(netif_nic_basic_get_t);
