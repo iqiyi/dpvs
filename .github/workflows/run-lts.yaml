@@ -1,30 +1,26 @@
-name: RUN
+name: RUN-LTS
 
 on:
   push:
     branches:
-      - 'master'
-      - 'devel'
+      - 'DPVS-1.9-LTS'
   release:
     branches:
-      - 'master'
-      - 'devel'
+      - 'DPVS-1.9-LTS'
     types:
       - published
-  schedule:
-    - cron: '30 3 * * 1'
   pull_request:
     types:
       - labeled
     branches:
-      - 'master'
-      - 'devel'
+      - 'DPVS-1.9-LTS'
 
 jobs:
   run-dpvs:
     runs-on: self-hosted
     env:
-      PKG_CONFIG_PATH: /data/dpdk/24.11/dpdklib/lib64/pkgconfig
+      PKG_CONFIG_PATH: /data/dpdk/20.11.10/dpdklib/lib64/pkgconfig
+      #ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
