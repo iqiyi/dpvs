@@ -14,17 +14,17 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
+#
+# Notice:
+#  Do NOT configure DPVS features by modifying this file.
+#  Instead, use file `config.mk` in DPVS's home directory.
+#
 
 CFLAGS += -D DPVS_MAX_SOCKET=$(CONFIG_DPVS_MAX_SOCKET)
 CFLAGS += -D DPVS_MAX_LCORE=$(CONFIG_DPVS_MAX_LCORE)
 
 ifeq ($(CONFIG_DPVS_AGENT), y)
 CFLAGS += -D CONFIG_DPVS_AGENT
-endif
-
-# for ixgbe nic
-ifeq ($(CONFIG_IXGEB_PMD), y)
-CFLAGS += -D CONFIG_DPVS_FDIR
 endif
 
 ifeq ($(CONFIG_DPVS_LOG), y)
@@ -39,9 +39,9 @@ ifeq ($(CONFIG_ICMP_REDIRECT_CORE), y)
 CFLAGS += -D CONFIG_ICMP_REDIRECT_CORE
 endif
 
-ifeq ($(CONFIG_KNI_VIRTIO_USER), y)
+## CONFIG_KNI_VIRTIO_USER should always be ON from DPVS v1.10
+## since only virtio-user kni supported from then.
 CFLAGS += -D CONFIG_KNI_VIRTIO_USER
-endif
 
 ifeq ($(CONFIG_DPVS_NEIGH_DEBUG), y)
 CFLAGS += -D CONFIG_DPVS_NEIGH_DEBUG

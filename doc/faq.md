@@ -18,6 +18,8 @@ DPVS Frequently Asked Questions (FAQ)
 * [Does DPVS support Bonding/VLAN/Tunnel ?](#vir-dev)
 * [Why CPU usages are 100% when running DPVS ?](#cpu-100)
 * [Does iptables conflict with DPVS ?](#iptables)
+* [Why DPVS exits due to "Cause: failed to init tc: no memory"?](#no-memory)
+* [Why IPv6 is not supported by my Keepalived?](#keepalived-ipv6)
 
 -------------------------------------------------
 
@@ -223,3 +225,24 @@ It's normal, not issue. Since DPDK application is using busy-polling mode. Every
 ### Does iptables conflict with DPVS ?
 
 Yes, DPDK is kernel-bypass solution, all forwarding traffic in data plane do not get into the Linux Kernel, it means `iptables`(Netfilter) won't work for that kind of traffic.
+
+
+<a id="no-memory" />
+
+### Why DPVS exits due to "Cause: failed to init tc: no memory"?
+
+1. Check hugepage configurations on your system. Adequate free hugepages must be available for DPVS. Generally, 8GB free hugepages on each NUMA node would be enough for running DPVS with default configs.
+
+2. Check NUMA supports of your DPDK compilation. DPVS by default uses 2 NUMA nodes. If your system is not NUMA-aware, set the macro in config.mk `CONFIG_DPVS_MAX_SOCKET=1`. Otherwise, ensure `numactld-devel` package has installed before DPDK compilation.
+
+<a id="keepalived-ipv6" />
+
+### Why IPv6 is not supported by my Keepalived?
+
+Keepalived IPv6 requires libnl3. Please install `libnl3-devel` package and recompile DPVS.
+
+```sh
+make clean
+make distclean
+make
+```

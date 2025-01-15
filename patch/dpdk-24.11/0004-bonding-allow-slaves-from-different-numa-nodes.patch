@@ -1,23 +1,22 @@
-From 30c3918317ea30a7586f2c081a6623c4574dade9 Mon Sep 17 00:00:00 2001
-From: huangyichen <huangyichen@iqiyi.com>
-Date: Wed, 4 Aug 2021 15:16:04 +0800
-Subject: [PATCH 5/7] bonding: allow slaves from different numa nodes
+From c6c5e201b4c02eb4ca7f1592ac901223caea78a5 Mon Sep 17 00:00:00 2001
+From: ywc689 <ywc689@163.com>
+Date: Mon, 16 Dec 2024 14:39:15 +0800
+Subject: [PATCH 4/6] bonding: allow slaves from different numa nodes
 
-Note the patch may have a negative influnce on performance.
-It's not a good practice to bonding slaves across numa nodes.
+Signed-off-by: ywc689 <ywc689@163.com>
 ---
  drivers/net/bonding/rte_eth_bond_pmd.c | 18 ++++++++++++++++--
  1 file changed, 16 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
-index 0c9a1df..371c888 100644
+index 91bf2c2..eebb8d2 100644
 --- a/drivers/net/bonding/rte_eth_bond_pmd.c
 +++ b/drivers/net/bonding/rte_eth_bond_pmd.c
-@@ -1780,7 +1780,14 @@ struct bwg_slave {
+@@ -1815,7 +1815,14 @@ member_start(struct rte_eth_dev *bonding_eth_dev,
  
- 		errval = rte_eth_rx_queue_setup(slave_eth_dev->data->port_id, q_id,
+ 		errval = rte_eth_rx_queue_setup(member_port_id, q_id,
  				bd_rx_q->nb_rx_desc,
--				rte_eth_dev_socket_id(slave_eth_dev->data->port_id),
+-				rte_eth_dev_socket_id(member_port_id),
 +				// In spite of performance problem, bonding slaves had better to support
 +				// slaves from different numa nodes. Considering that numa node on which
 +				// the resources of bonding port is allocated from is specified by
@@ -29,11 +28,11 @@ index 0c9a1df..371c888 100644
  				&(bd_rx_q->rx_conf), bd_rx_q->mb_pool);
  		if (errval != 0) {
  			RTE_BOND_LOG(ERR,
-@@ -1796,7 +1803,14 @@ struct bwg_slave {
+@@ -1831,7 +1838,14 @@ member_start(struct rte_eth_dev *bonding_eth_dev,
  
- 		errval = rte_eth_tx_queue_setup(slave_eth_dev->data->port_id, q_id,
+ 		errval = rte_eth_tx_queue_setup(member_port_id, q_id,
  				bd_tx_q->nb_tx_desc,
--				rte_eth_dev_socket_id(slave_eth_dev->data->port_id),
+-				rte_eth_dev_socket_id(member_port_id),
 +				// In spite of performance problem, bonding slaves had better to support
 +				// slaves from different numa nodes. Considering that numa node on which
 +				// the resources of bonding port is allocated from is specified by
@@ -46,5 +45,5 @@ index 0c9a1df..371c888 100644
  		if (errval != 0) {
  			RTE_BOND_LOG(ERR,
 -- 
-1.8.3.1
+2.31.1
 

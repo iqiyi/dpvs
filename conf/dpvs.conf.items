@@ -38,6 +38,8 @@ netif_defs {
         tx {
             queue_number        6           <16, 0-16>
             descriptor_number   512         <512, 16-8192>
+            mbuf_fast_free      on          <on, on|off>    ## Disable it when ports used for two-arm forwarding
+                                                            ## located at different NUMA nodes.
         }
     !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>

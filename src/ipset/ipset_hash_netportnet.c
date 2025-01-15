@@ -258,8 +258,8 @@ hash_netportnet_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
 
     memset(&e, 0, sizeof(e));
     e.proto = proto;
-    memcpy(&e.ip1, ip6hdr->src_addr, sizeof(e.ip1));
-    memcpy(&e.ip2, ip6hdr->dst_addr, sizeof(e.ip2));
+    memcpy(&e.ip1, &ip6hdr->src_addr, sizeof(e.ip1));
+    memcpy(&e.ip2, &ip6hdr->dst_addr, sizeof(e.ip2));
     if (l4hdr) {
         if (dst_match)
             e.port = l4hdr->dst_port;

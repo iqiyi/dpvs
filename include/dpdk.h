@@ -35,6 +35,7 @@
 #include <rte_per_lcore.h>
 #include <rte_branch_prediction.h>
 #include <rte_interrupts.h>
+#include <rte_bus.h>
 #include <rte_pci.h>
 #include <rte_bus_pci.h>
 #include <rte_random.h>
@@ -44,6 +45,7 @@
 #include <rte_ring.h>
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
+#include <rte_arp.h>
 #include <rte_ip.h>
 #include <rte_tcp.h>
 #include <rte_udp.h>
@@ -56,7 +58,6 @@
 #include <rte_ip_frag.h>
 #include <rte_eth_bond.h>
 #include <rte_eth_bond_8023ad.h>
-#include <rte_ethdev_driver.h>
 #include "mbuf.h"
 #ifndef CONFIG_KNI_VIRTIO_USER
 #include <rte_kni.h>

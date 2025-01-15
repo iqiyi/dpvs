@@ -237,7 +237,9 @@ static struct route6 *rt6_lpm_lookup(const struct flow6 *fl6)
     struct lpm6_route *lpm6rt;
     struct route6 *rt6 = NULL;
 
-    if (rte_lpm6_lookup(this_lpm6_struct, (uint8_t*)&fl6->fl6_daddr, &idx) != 0) {
+    if (rte_lpm6_lookup(this_lpm6_struct,
+                (const struct rte_ipv6_addr *)&fl6->fl6_daddr,
+                &idx) != 0) {
         if (this_rt6_default)
             rte_atomic32_inc(&this_rt6_default->refcnt);
         return this_rt6_default;
@@ -363,7 +365,8 @@ static int rt6_lpm_add_lcore(const struct dp_vs_route6_conf *rt6_cfg)
     rt6_fill_with_cfg(&entry->entry, rt6_cfg);
     rte_atomic32_set(&entry->entry.refcnt, 1);
 
-    if (rte_lpm6_is_rule_present(this_lpm6_struct, (uint8_t*)&rt6_cfg->dst.addr,
+    if (rte_lpm6_is_rule_present(this_lpm6_struct,
+                (const struct rte_ipv6_addr *)&rt6_cfg->dst.addr,
                 (uint8_t)rt6_cfg->dst.plen, &lpm_nexthop)) {
         assert(lpm_nexthop < g_lpm6_conf_max_rules);
         head = this_rt6_array->entries[lpm_nexthop];
@@ -373,7 +376,8 @@ static int rt6_lpm_add_lcore(const struct dp_vs_route6_conf *rt6_cfg)
         if (unlikely(ret != EDPVS_OK))
             goto rt6_free;
         this_rt6_array->cursor = lpm_nexthop;
-        ret = rte_lpm6_add(this_lpm6_struct, (uint8_t*)&entry->entry.rt6_dst.addr,
+        ret = rte_lpm6_add(this_lpm6_struct,
+                (const struct rte_ipv6_addr *)&entry->entry.rt6_dst.addr,
                 (uint8_t)entry->entry.rt6_dst.plen, lpm_nexthop);
         if (unlikely(ret < 0)) {
             ret = EDPVS_DPDKAPIFAIL;
@@ -441,7 +445,8 @@ static int rt6_lpm_del_lcore(const struct dp_vs_route6_conf *rt6_cfg)
             } else if (lpm6rt->next) {
                 this_rt6_array->entries[lpm_nexthop] = lpm6rt->next;
             } else {
-                ret = rte_lpm6_delete(this_lpm6_struct, (uint8_t *)&entry->rt6_dst.addr,
+                ret = rte_lpm6_delete(this_lpm6_struct,
+                        (const struct rte_ipv6_addr *)&entry->rt6_dst.addr,
                         (uint8_t)entry->rt6_dst.plen);
                 if (unlikely(ret < 0)) {
                     /* rte_lpm6_delete return OK even if no satisfied route exists,
@@ -507,7 +512,8 @@ static int rt6_lpm_flush_lcore(const struct dp_vs_route6_conf *rt6_cfg)
                     } else if (lpm6rt->next) {
                         this_rt6_array->entries[lpm_nexthop] = lpm6rt->next;
                     } else {
-                        if (rte_lpm6_delete(this_lpm6_struct, (uint8_t *)&entry->rt6_dst.addr,
+                        if (rte_lpm6_delete(this_lpm6_struct,
+                                    (const struct rte_ipv6_addr *)&entry->rt6_dst.addr,
                                     (uint8_t)entry->rt6_dst.plen) < 0) {
                             dump_rt6_prefix(&entry->rt6_dst, buf, sizeof(buf));
                             RTE_LOG(WARNING, RT6, "[%d]%s: rt6_lpm_flush_lcore del %s dev %s failed!\n",

@@ -1,20 +1,25 @@
-From 4b9735e0d479916ec0e7636e5440d4538b349148 Mon Sep 17 00:00:00 2001
-From: huangyichen <huangyichen@iqiyi.com>
-Date: Fri, 2 Jul 2021 11:55:47 +0800
-Subject: [PATCH 4/7] ixgbe_flow: patch ixgbe fdir rte_flow for dpvs
+From fb255fafabacd06fc36dd73b37386b4c3cba282c Mon Sep 17 00:00:00 2001
+From: ywc689 <ywc689@163.com>
+Date: Mon, 16 Dec 2024 13:47:27 +0800
+Subject: [PATCH 3/6] ixgbe_flow: patch ixgbe fdir rte_flow for dpvs
 
 1. Ignore fdir flow rule priority attribute.
-2. Use different fdir soft-id for flow rules configured for the same queue.
-3. Disable fdir mask settings by rte_flow.
-4. Allow IPv6 to pass flow rule ETH item validation.
-5. TCP & UDP flow item dest port = 0 is invalid of ixgbe_parse_ntuple_filter()
-6. Safe free ixgbe_flow_list item of MARCO RTE_MALLOC_DEBUG is define (configure meson with option -Dc_args="-DRTE_MALLOC_DEBUG")
+2. Use different fdir soft-id for flow rules configured on the same queue.
+3. Allow IPv6 to pass flow rule ETH item validation.
+4. Invalidate TCP&UDP flow item rule whose dest port is 0 in ntuple filter so that
+   the rule can be handed over to flow director filter in lower priority.
+5. Safely free ixgbe_flow_list item when MARCO RTE_MALLOC_DEBUG is define (configure
+   meson with option -Dc_args="-DRTE_MALLOC_DEBUG").
+6. Change IPv4/IPv6 fdir mask default value to 0, the same value as in DPVS, so that
+   IPv4 and IPv6 fidr rules can coexist.
+
+Signed-off-by: ywc689 <ywc689@163.com>
 ---
- drivers/net/ixgbe/ixgbe_flow.c | 119 ++++++++++++++++++++++++++++++++++++-----
- 1 file changed, 105 insertions(+), 14 deletions(-)
+ drivers/net/ixgbe/ixgbe_flow.c | 100 +++++++++++++++++++++++++++++----
+ 1 file changed, 88 insertions(+), 12 deletions(-)
 
 diff --git a/drivers/net/ixgbe/ixgbe_flow.c b/drivers/net/ixgbe/ixgbe_flow.c
-index 7e5b684..e9bc402 100644
+index 1b35ed5..f2f7b7f 100644
 --- a/drivers/net/ixgbe/ixgbe_flow.c
 +++ b/drivers/net/ixgbe/ixgbe_flow.c
 @@ -2,7 +2,6 @@
@@ -25,7 +30,7 @@ index 7e5b684..e9bc402 100644
  #include <stdio.h>
  #include <errno.h>
  #include <stdint.h>
-@@ -15,6 +14,7 @@
+@@ -14,6 +13,7 @@
  #include <rte_common.h>
  #include <rte_cycles.h>
  
@@ -33,7 +38,7 @@ index 7e5b684..e9bc402 100644
  #include <rte_interrupts.h>
  #include <rte_log.h>
  #include <rte_debug.h>
-@@ -468,6 +468,29 @@ const struct rte_flow_action *next_no_void_action(
+@@ -467,6 +467,29 @@ cons_parse_ntuple_filter(const struct rte_flow_attr *attr,
  		}
  
  		tcp_spec = item->spec;
@@ -63,7 +68,7 @@ index 7e5b684..e9bc402 100644
  		filter->dst_port  = tcp_spec->hdr.dst_port;
  		filter->src_port  = tcp_spec->hdr.src_port;
  		filter->tcp_flags = tcp_spec->hdr.tcp_flags;
-@@ -501,6 +524,30 @@ const struct rte_flow_action *next_no_void_action(
+@@ -500,6 +523,30 @@ cons_parse_ntuple_filter(const struct rte_flow_attr *attr,
  		filter->src_port_mask = udp_mask->hdr.src_port;
  
  		udp_spec = item->spec;
@@ -94,7 +99,7 @@ index 7e5b684..e9bc402 100644
  		filter->dst_port = udp_spec->hdr.dst_port;
  		filter->src_port = udp_spec->hdr.src_port;
  	} else if (item->type == RTE_FLOW_ITEM_TYPE_SCTP) {
-@@ -1419,11 +1466,8 @@ const struct rte_flow_action *next_no_void_action(
+@@ -1418,11 +1465,8 @@ ixgbe_parse_fdir_act_attr(const struct rte_flow_attr *attr,
  
  	/* not supported */
  	if (attr->priority) {
@@ -104,20 +109,23 @@ index 7e5b684..e9bc402 100644
 -			attr, "Not support priority.");
 -		return -rte_errno;
 +		PMD_DRV_LOG(INFO, "ixgbe flow doesn't support priority %d "
-+                "(priority must be 0), ignore and continue....\n", attr->priority);
++                "(priority must be 0), ignore and continue....", attr->priority);
  	}
  
  	/* check if the first not void action is QUEUE or DROP. */
-@@ -1642,7 +1686,7 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
- 	 * value. So, we need not do anything for the not provided fields later.
- 	 */
- 	memset(rule, 0, sizeof(struct ixgbe_fdir_rule));
--	memset(&rule->mask, 0xFF, sizeof(struct ixgbe_hw_fdir_mask));
-+	memset(&rule->mask, 0, sizeof(struct ixgbe_hw_fdir_mask)); /* mask default zero */
+@@ -1645,6 +1689,11 @@ ixgbe_parse_fdir_filter_normal(struct rte_eth_dev *dev,
  	rule->mask.vlan_tci_mask = 0;
  	rule->mask.flex_bytes_mask = 0;
  
-@@ -1760,6 +1804,8 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
++	/* DPVS requires IPv4 and IPv6 flow rules coexist in some cases,
++	 * so we let the default source mask be consistent with DPVS. */
++	rule->mask.src_ipv4_mask = 0;
++	rule->mask.src_ipv6_mask = 0;
++
+ 	/**
+ 	 * The first not void item should be
+ 	 * MAC or IPv4 or TCP or UDP or SCTP.
+@@ -1759,6 +1808,8 @@ ixgbe_parse_fdir_filter_normal(struct rte_eth_dev *dev,
  			}
  		} else {
  			if (item->type != RTE_FLOW_ITEM_TYPE_IPV4 &&
@@ -126,28 +134,7 @@ index 7e5b684..e9bc402 100644
  					item->type != RTE_FLOW_ITEM_TYPE_VLAN) {
  				memset(rule, 0, sizeof(struct ixgbe_fdir_rule));
  				rte_flow_error_set(error, EINVAL,
-@@ -1815,6 +1861,10 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
- 		 */
- 		rule->ixgbe_fdir.formatted.flow_type =
- 			IXGBE_ATR_FLOW_TYPE_IPV4;
-+
-+		/* Update flow rule mode by global param. */
-+		rule->mode = dev->data->dev_conf.fdir_conf.mode;
-+
- 		/*Not supported last point for range*/
- 		if (item->last) {
- 			rte_flow_error_set(error, EINVAL,
-@@ -1888,6 +1938,9 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
- 		rule->ixgbe_fdir.formatted.flow_type =
- 			IXGBE_ATR_FLOW_TYPE_IPV6;
- 
-+		/* Update flow rule mode by global param. */
-+		rule->mode = dev->data->dev_conf.fdir_conf.mode;
-+
- 		/**
- 		 * 1. must signature match
- 		 * 2. not support last
-@@ -2748,12 +2801,45 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
+@@ -2747,12 +2798,31 @@ ixgbe_parse_fdir_filter_tunnel(const struct rte_flow_attr *attr,
  	return ixgbe_parse_fdir_act_attr(attr, actions, rule, error);
  }
  
@@ -167,20 +154,6 @@ index 7e5b684..e9bc402 100644
 +	/* Soft-id for different rx-queue should be different. */
 +	rule->soft_id = softid[rule->queue]++;
 +
-+	/* Disable mask config from rte_flow.
-+	 * FIXME:
-+	 *   Ixgbe only supports one global mask, all the masks should be the same.
-+	 *   Generally, fdir masks should be configured globally before port start.
-+	 *   But the rte_flow configures masks at flow creation. So we disable fdir
-+	 *   mask configs in rte_flow and configure it globally when port start.
-+	 *   Refer to `ixgbe_dev_start/ixgbe_fdir_configure` for details. The global
-+	 *   masks are configured into device initially with user specified params.
-+	 */
-+	rule->b_mask = 0;
-+
-+	/* Use user-defined mode. */
-+	rule->mode = dev->data->dev_conf.fdir_conf.mode;
-+
 +	return 0;
 +}
 +
@@ -194,14 +167,13 @@ index 7e5b684..e9bc402 100644
  			struct rte_flow_error *error)
  {
  	int ret;
-@@ -2787,13 +2873,18 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
- 		rule->ixgbe_fdir.formatted.dst_port != 0))
- 		return -ENOTSUP;
- 
--	if (fdir_mode == RTE_FDIR_MODE_NONE ||
--	    fdir_mode != rule->mode)
-+	if (fdir_mode == RTE_FDIR_MODE_NONE)
- 		return -ENOTSUP;
+@@ -2795,12 +2865,18 @@ ixgbe_parse_fdir_filter(struct rte_eth_dev *dev,
+ 			return ret;
+ 		}
+ 	} else if (fdir_conf->mode != rule->mode) {
+-		return -ENOTSUP;
++			return -ENOTSUP;
+ 	}
  
  	if (rule->queue >= dev->data->nb_rx_queues)
  		return -ENOTSUP;
@@ -215,7 +187,7 @@ index 7e5b684..e9bc402 100644
  	return ret;
  }
  
-@@ -3128,7 +3219,7 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
+@@ -3135,7 +3211,7 @@ ixgbe_flow_create(struct rte_eth_dev *dev,
  
  	memset(&fdir_rule, 0, sizeof(struct ixgbe_fdir_rule));
  	ret = ixgbe_parse_fdir_filter(dev, attr, pattern,
@@ -224,7 +196,7 @@ index 7e5b684..e9bc402 100644
  	if (!ret) {
  		/* A mask cannot be deleted. */
  		if (fdir_rule.b_mask) {
-@@ -3299,7 +3390,7 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
+@@ -3306,7 +3382,7 @@ ixgbe_flow_validate(struct rte_eth_dev *dev,
  
  	memset(&fdir_rule, 0, sizeof(struct ixgbe_fdir_rule));
  	ret = ixgbe_parse_fdir_filter(dev, attr, pattern,
@@ -233,7 +205,7 @@ index 7e5b684..e9bc402 100644
  	if (!ret)
  		return 0;
  
-@@ -3335,7 +3426,7 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
+@@ -3342,7 +3418,7 @@ ixgbe_flow_destroy(struct rte_eth_dev *dev,
  	struct ixgbe_eth_syn_filter_ele *syn_filter_ptr;
  	struct ixgbe_eth_l2_tunnel_conf_ele *l2_tn_filter_ptr;
  	struct ixgbe_fdir_rule_ele *fdir_rule_ptr;
@@ -242,15 +214,15 @@ index 7e5b684..e9bc402 100644
  	struct ixgbe_hw_fdir_info *fdir_info =
  		IXGBE_DEV_PRIVATE_TO_FDIR_INFO(dev->data->dev_private);
  	struct ixgbe_rss_conf_ele *rss_filter_ptr;
-@@ -3432,7 +3523,7 @@ static inline uint8_t signature_match(const struct rte_flow_item pattern[])
+@@ -3439,7 +3515,7 @@ ixgbe_flow_destroy(struct rte_eth_dev *dev,
  		return ret;
  	}
  
 -	TAILQ_FOREACH(ixgbe_flow_mem_ptr, &ixgbe_flow_list, entries) {
-+	TAILQ_FOREACH_SAFE(ixgbe_flow_mem_ptr, &ixgbe_flow_list, entries, next_ptr) {
++	RTE_TAILQ_FOREACH_SAFE(ixgbe_flow_mem_ptr, &ixgbe_flow_list, entries, next_ptr) {
  		if (ixgbe_flow_mem_ptr->flow == pmd_flow) {
  			TAILQ_REMOVE(&ixgbe_flow_list,
  				ixgbe_flow_mem_ptr, entries);
 -- 
-1.8.3.1
+2.31.1
 

@@ -49,6 +49,7 @@ enum {
     NETIF_PORT_FLAG_TC_INGRESS              = (0x1<<11),
     NETIF_PORT_FLAG_NO_ARP                  = (0x1<<12),
     NETIF_PORT_FLAG_LLDP                    = (0x1<<13),
+    NETIF_PORT_FLAG_TX_MBUF_FAST_FREE       = (0x1<<14),
 };
 
 /* max tx/rx queue number for each nic */
@@ -86,6 +87,9 @@ struct netif_queue_conf
     queueid_t id;
     uint16_t len;
     struct rx_partner *isol_rxq;
+#ifdef CONFIG_DPVS_NETIF_DEBUG
+    struct rte_mempool *pktpool;    /* for RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE */
+#endif
     struct rte_mbuf *mbufs[NETIF_MAX_PKT_BURST];
 } __rte_cache_aligned;
 
@@ -287,6 +291,7 @@ int netif_unregister_pkt(struct pkt_type *pt);
 struct netif_port* netif_port_get(portid_t id);
 /* get netif by name, fail return NULL */
 struct netif_port* netif_port_get_by_name(const char *name);
+bool netif_flow_fuzzy_match(void);
 bool is_physical_port(portid_t pid);
 bool is_bond_port(portid_t pid);
 void netif_physical_port_range(portid_t *start, portid_t *end);
