@@ -145,7 +145,7 @@ struct rte_mbuf *mbuf_copy(struct rte_mbuf *md, struct rte_mempool *mp);
 void mbuf_copy_metadata(struct rte_mbuf *mi, struct rte_mbuf *m);
 
 #ifdef CONFIG_DPVS_MBUF_DEBUG
-inline void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf);
+void dp_vs_mbuf_dump(const char *msg, int af, const struct rte_mbuf *mbuf);
 #endif
 
 void *mbuf_userdata(struct rte_mbuf *, mbuf_usedata_field_t);
