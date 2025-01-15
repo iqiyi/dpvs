@@ -1,4 +1,4 @@
-![Build](https://github.com/iqiyi/dpvs/workflows/Build/badge.svg)  ![Run](https://github.com/iqiyi/dpvs/workflows/Run/badge.svg)
+![Build](https://github.com/iqiyi/dpvs/workflows/build.yaml/badge.svg)  ![Run](https://github.com/iqiyi/dpvs/workflows/run.yaml/badge.svg)  ![Build(LTS)](https://github.com/iqiyi/dpvs/workflows/build-lts.yaml/badge.svg)  ![Run(LTS)](https://github.com/iqiyi/dpvs/workflows/run-lts.yaml/badge.svg)
 
 ![dpvs-logo.png](./pic/DPVS-logo.png)
 
