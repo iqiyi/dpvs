@@ -11,13 +11,16 @@ RM = rm
 
 all: $(TARGET)
 
-$(TARGET):
+$(TARGET): go-proxy
 	-$(GO) mod tidy
 	$(GO_BUILD) -o $@
 
 clean:
 	$(GO_CLEAN)
 	-$(RM) $(TARGET)
+
+go-proxy:
+	$(GO) env -w GOPROXY=https://goproxy.cn,direct
 
 install: $(TARGET)
 	$(INSTALL) -m 0755 -d $(INSDIR)
