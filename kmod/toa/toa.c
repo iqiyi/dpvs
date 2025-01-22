@@ -239,6 +239,12 @@ init_toa_ip6(void)
 {
     int i;
 
+    toa_ip6_sk_lock.lock = alloc_percpu(spinlock_t);
+    if (toa_ip6_sk_lock.lock == NULL) {
+        TOA_INFO("fail to alloc per cpu ip6's destruct lock\n");
+        return -ENOMEM;
+    }
+
     for_each_possible_cpu(i) {
         spinlock_t *lock;
 
@@ -251,11 +257,6 @@ init_toa_ip6(void)
         spin_lock_init(&__toa_ip6_list_tab[i].lock);
     }
 
-    toa_ip6_sk_lock.lock = alloc_percpu(spinlock_t);
-    if (toa_ip6_sk_lock.lock == NULL) {
-        TOA_INFO("fail to alloc per cpu ip6's destruct lock\n");
-        return -ENOMEM;
-    }
 
     return 0;
 }
