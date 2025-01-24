@@ -25,6 +25,8 @@ type AppConf struct {
 	MetricServerAddr string
 	// metric server http uri for exporting healthcheck statistics
 	MetricServerUri string
+	// channel size for metric data sent from va/vs/checker to metric server
+	MetricNotifyChanSize uint
 }
 
 var DefaultAppConf = AppConf{
@@ -39,4 +41,5 @@ var DefaultAppConf = AppConf{
 	DpvsServiceListInterval: 15 * time.Second,
 	MetricServerAddr:        ":6601",
 	MetricServerUri:         "/metrics",
+	MetricNotifyChanSize:    1000,
 }

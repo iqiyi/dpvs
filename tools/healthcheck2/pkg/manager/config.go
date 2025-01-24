@@ -10,17 +10,18 @@ const (
 )
 
 type VAConf struct {
-	downPolicy        VAPolicy
-	ationer           string
-	actionMinInterval time.Duration
-	actionParams      map[string]interface{}
+	disable        bool
+	downPolicy     VAPolicy
+	ationer        string
+	actionSyncTime time.Duration
+	actionParams   map[string]interface{}
 }
 
 type VSConf struct {
 	CheckerConf
-	actioner          string
-	actionMinInterval time.Duration
-	actionParams      map[string]interface{}
+	actioner       string
+	actionSyncTime time.Duration
+	actionParams   map[string]interface{}
 }
 
 type CheckerConf struct {
@@ -29,7 +30,6 @@ type CheckerConf struct {
 	downRetry    uint
 	upRetry      uint
 	timeout      time.Duration
-	syncTime     time.Duration
 	methodParams map[string]interface{}
 }
 
@@ -42,9 +42,10 @@ type Conf struct {
 
 var (
 	vaConfDefault VAConf = VAConf{
-		downPolicy:        VAPolicyAllOf,
-		ationer:           "kniAddrAddDel",
-		actionMinInterval: 3 * time.Second,
+		disable:        false,
+		downPolicy:     VAPolicyAllOf,
+		ationer:        "kniAddrAddDel",
+		actionSyncTime: 60 * time.Second,
 	}
 
 	vsConfDefault VSConf = VSConf{
@@ -54,10 +55,9 @@ var (
 			downRetry: 1,
 			upRetry:   1,
 			timeout:   2 * time.Second,
-			syncTime:  300 * time.Second,
 		},
-		actioner:          "updateWeightState",
-		actionMinInterval: 3 * time.Second,
+		actioner:       "updateWeightState",
+		actionSyncTime: 15 * time.Second,
 	}
 
 	confDefault Conf = Conf{
@@ -66,8 +66,8 @@ var (
 	}
 )
 
-func LoadFileConf(filename string) *Conf {
+func LoadFileConf(filename string) (*Conf, error) {
 	// TODO: load config from file
 
-	return &confDefault
+	return &confDefault, nil
 }

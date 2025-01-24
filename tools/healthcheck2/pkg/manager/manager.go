@@ -21,13 +21,15 @@ type cfgFileReloader struct {
 	name     string
 	interval time.Duration
 	filename string
+	m        *Manager // the Manager instance controlling the Task
 }
 
-func NewCfgFileReloader(conf *types.AppConf) *cfgFileReloader {
+func NewCfgFileReloader(m *Manager) *cfgFileReloader {
 	return &cfgFileReloader{
 		name:     "config-file-reloader",
-		interval: conf.HcCfgReloadInterval,
-		filename: conf.HcCfgFile,
+		interval: m.appConf.HcCfgReloadInterval,
+		filename: m.appConf.HcCfgFile,
+		m:        m,
 	}
 }
 
@@ -40,8 +42,11 @@ func (t *cfgFileReloader) Interval() time.Duration {
 }
 
 func (t *cfgFileReloader) Job() {
-	// TODO
-	glog.Info("This is config-file-reloader Job.")
+	conf, err := LoadFileConf(t.filename)
+	if err != nil {
+		glog.Errorf("Fail to load config file %s: %v.", t.filename, err)
+	}
+	t.m.conf = conf
 }
 
 type svcLister struct {
@@ -49,14 +54,16 @@ type svcLister struct {
 	interval time.Duration
 	server   string
 	uri      string
+	m        *Manager // the Manager instance controlling the Task
 }
 
-func NewSvcLister(conf *types.AppConf) *svcLister {
+func NewSvcLister(m *Manager) *svcLister {
 	return &svcLister{
 		name:     "service-lister",
-		interval: conf.DpvsServiceListInterval,
-		server:   conf.DpvsAgentAddr,
-		uri:      conf.DpvsServiceListUri,
+		interval: m.appConf.DpvsServiceListInterval,
+		server:   m.appConf.DpvsAgentAddr,
+		uri:      m.appConf.DpvsServiceListUri,
+		m:        m,
 	}
 }
 
@@ -77,13 +84,15 @@ type metricServer struct {
 	addr string
 	uri  string
 
+	notify chan Metric
 	server *http.Server
 }
 
 func metricHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO
-	fmt.Fprintf(w, "This is Metric Server Handler!")
-
+	fmt.Fprintf(w, "%s\n", time.Now())
+	if _, err := fmt.Fprintf(w, "%s", metricDB); err != nil {
+		glog.Warningf("metric handler failed: %v", err)
+	}
 }
 
 func NewMetricServer(conf *types.AppConf) *metricServer {
@@ -97,18 +106,37 @@ func NewMetricServer(conf *types.AppConf) *metricServer {
 		uri:    conf.MetricServerUri,
 		server: &httpSvr,
 	}
+	svr.notify = make(chan Metric, conf.MetricNotifyChanSize)
 
 	return &svr
 }
 
-func (s *metricServer) Run() {
+func (s *metricServer) Run(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	http.HandleFunc(s.uri, metricHandler)
 
-	glog.Infof("Starting metric server listening on %s ...", s.addr)
-	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		glog.Errorf("Metric server started failed: %v", err)
+	wg.Add(1)
+	go func() {
+		glog.Infof("Starting metric http server listening on %s ...", s.addr)
+		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			glog.Errorf("Metric http server started failed: %v", err)
+		}
+		glog.Info("Metric http server finished.")
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			glog.Info("Metric collector finished.")
+			return
+		case m := <-s.notify:
+			if err := metricDB.Update(&m); err != nil {
+				glog.Warningf("MetricDB update failed: %v.", err)
+			}
+		default:
+		}
 	}
-	glog.Info("Metric server finished.")
 }
 
 func (s *metricServer) Shutdown(wg *sync.WaitGroup) {
@@ -130,6 +158,7 @@ func (s *metricServer) Shutdown(wg *sync.WaitGroup) {
 type Manager struct {
 	appConf types.AppConf
 	vas     map[VAID]*VirtualAddress
+	conf    *Conf
 
 	cfgFileReloader *cfgFileReloader
 	svcLister       *svcLister
@@ -140,7 +169,7 @@ type Manager struct {
 }
 
 func NewManager(conf *types.AppConf) *Manager {
-	m := Manager{}
+	m := &Manager{}
 	if conf != nil {
 		m.appConf = *conf
 	} else {
@@ -149,13 +178,13 @@ func NewManager(conf *types.AppConf) *Manager {
 
 	m.vas = make(map[VAID]*VirtualAddress)
 
-	m.cfgFileReloader = NewCfgFileReloader(conf)
-	m.svcLister = NewSvcLister(conf)
+	m.cfgFileReloader = NewCfgFileReloader(m)
+	m.svcLister = NewSvcLister(m)
 	m.metricServer = NewMetricServer(conf)
 
 	m.wg = &sync.WaitGroup{}
 	m.quit = make(chan bool, 1)
-	return &m
+	return m
 }
 
 func (m *Manager) Run() {
@@ -166,7 +195,7 @@ func (m *Manager) Run() {
 	m.wg.Add(1)
 	go utils.RunTask(m.svcLister, ctx, m.wg, nil)
 	m.wg.Add(1)
-	go m.metricServer.Run()
+	go m.metricServer.Run(ctx, m.wg)
 
 	<-m.quit
 	cancel()

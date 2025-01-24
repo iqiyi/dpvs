@@ -49,6 +49,9 @@ func init() {
 	metricServerUri := flag.String("metric-server-uri",
 		types.DefaultAppConf.MetricServerUri,
 		"Http URI for exporting healthcheck state and statistics.")
+	metricNotifyChanSize := flag.Uint("metic-notify-channel-size",
+		types.DefaultAppConf.MetricNotifyChanSize,
+		"Channel size for metric data sent from checkers to metric server.")
 
 	flag.Parse()
 
@@ -84,6 +87,9 @@ func init() {
 	}
 	if metricServerUri != nil {
 		appConf.MetricServerUri = *metricServerUri
+	}
+	if metricNotifyChanSize != nil {
+		appConf.MetricNotifyChanSize = *metricNotifyChanSize
 	}
 }
 

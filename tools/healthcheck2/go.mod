@@ -7,4 +7,4 @@ require (
 	github.com/google/gops v0.3.28
 )
 
-require golang.org/x/sys v0.11.0 // indirect
+require golang.org/x/sys v0.26.0 // indirect
