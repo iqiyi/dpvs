@@ -90,7 +90,54 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 		}
 	}
 
+	update := !*params.PassiveUpdate
+
 	shareSnapshot := settings.ShareSnapshot()
+	if shareSnapshot.ServiceRLock(vs.ID()) {
+		vsModel := shareSnapshot.ServiceGet(vs.ID())
+		if vsModel == nil {
+			shareSnapshot.ServiceRUnlock(vs.ID())
+			return apiVs.NewPutVsVipPortInvalidBackend()
+		}
+
+		if *params.PassiveUpdate {
+			// bypass  VIP, Port, Protocol, Af, netmask
+			if vsModel.Fwmark != vs.GetFwmark() ||
+				vsModel.ConnTimeout != vs.GetConnTimeout() ||
+				vsModel.Bps != vs.GetBps() ||
+				vsModel.LimitProportion != vs.GetLimitProportion() {
+
+				h.logger.Info("Try to update !!! Fwmark | ConnTimeout | Bps | LimitProportion has Changed.", "VipPort", params.VipPort)
+
+				update = true
+			}
+
+			// ExpireQuiescent | SynProxy | Quic | Persistence
+			newFlags := vs.GetFlags()
+			newFlagsNOT := ^newFlags
+			tmpFlags := vsModel.RAMFlags ^ newFlagsNOT
+			if (tmpFlags & vsModel.RAMFlags) != newFlags {
+
+				h.logger.Info("Try to update !!! the flags has changed.", "VipPort", params.VipPort)
+
+				update = true
+			}
+
+			if !strings.EqualFold(vs.GetSchedName(), vsModel.SchedName) {
+
+				h.logger.Info("Try to update !!! the SchedName has changed.", "VipPort", params.VipPort)
+
+				update = true
+			}
+		}
+
+		shareSnapshot.ServiceRUnlock(vs.ID())
+	}
+
+	if !update {
+		return apiVs.NewPutVsVipPortOK().WithPayload("PassiveUpdate")
+	}
+
 	result := vs.Add(h.connPool, h.logger)
 	h.logger.Info("Add virtual server done.", "vs", vs, "result", result.String())
 	switch result {

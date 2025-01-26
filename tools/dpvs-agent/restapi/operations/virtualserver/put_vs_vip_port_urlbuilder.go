@@ -18,7 +18,8 @@ import (
 type PutVsVipPortURL struct {
 	VipPort string
 
-	Snapshot *bool
+	PassiveUpdate *bool
+	Snapshot      *bool
 
 	_basePath string
 	// avoid unkeyed usage
@@ -60,6 +61,14 @@ func (o *PutVsVipPortURL) Build() (*url.URL, error) {
 	_result.Path = golangswaggerpaths.Join(_basePath, _path)
 
 	qs := make(url.Values)
+
+	var passiveUpdateQ string
+	if o.PassiveUpdate != nil {
+		passiveUpdateQ = swag.FormatBool(*o.PassiveUpdate)
+	}
+	if passiveUpdateQ != "" {
+		qs.Set("passiveUpdate", passiveUpdateQ)
+	}
 
 	var snapshotQ string
 	if o.Snapshot != nil {
