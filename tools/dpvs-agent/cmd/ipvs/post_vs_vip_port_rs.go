@@ -15,6 +15,7 @@
 package ipvs
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/dpvs-agent/models"
@@ -73,9 +74,55 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 		rss[i].SetInhibited(&inhibited)
 	}
 
+	update := !*params.PassiveUpdate
+
 	shareSnapshot := settings.ShareSnapshot()
 	if shareSnapshot.ServiceLock(params.VipPort) {
 		defer shareSnapshot.ServiceUnlock(params.VipPort)
+	}
+
+	// default passiveUpdate == false
+	if *params.PassiveUpdate {
+		// passiveUpdate == true
+		vsModel := shareSnapshot.ServiceGet(params.VipPort)
+		if vsModel == nil {
+			h.logger.Info("Try update update. vs not found in snapshot.", "VipPort", params.VipPort)
+			update = true
+		}
+
+		if vsModel != nil {
+			if len(vsModel.RSs.Items) != len(rss) {
+				h.logger.Info("Try update update. vs rss len has changed.", "VipPort", params.VipPort)
+				update = true
+			}
+
+			if len(vsModel.RSs.Items) == len(rss) {
+				cacheRSs := (types.SliceRealServerSpecExpandModel)(vsModel.RSs.Items)
+				sort.Sort(cacheRSs)
+
+				newRSs := (types.SliceRealServerSpec)(rss)
+				sort.Sort(newRSs)
+
+				for i, newRs := range newRSs {
+					cacheRs := cacheRSs[i]
+					if int(cacheRs.Spec.Weight) != int(newRs.GetWeight()) {
+						h.logger.Info("Try update update. rs weight has changed.", "VipPort", params.VipPort, "rs", newRs.ID(), "cache weight", cacheRs.Spec.Weight, "update weight", newRs.GetWeight())
+						update = true
+						break
+					}
+
+					if !strings.EqualFold(strings.ToUpper(cacheRs.Spec.Mode), strings.ToUpper(newRs.GetFwdModeString())) {
+						h.logger.Info("Try update update. rs nat mode has changed.", "VipPort", params.VipPort, "rs", newRs.ID(), "cache nat mode", cacheRs.Spec.Mode, "update nat mode", newRs.GetFwdModeString())
+						update = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if !update {
+		return apiVs.NewPostVsVipPortRsOK().WithPayload("PassiveUpdate")
 	}
 
 	result := front.Update(rss, h.connPool, h.logger)

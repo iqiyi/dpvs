@@ -25,10 +25,13 @@ func NewPutVsVipPortParams() PutVsVipPortParams {
 	var (
 		// initialize parameters with default values
 
-		snapshotDefault = bool(true)
+		passiveUpdateDefault = bool(false)
+		snapshotDefault      = bool(true)
 	)
 
 	return PutVsVipPortParams{
+		PassiveUpdate: &passiveUpdateDefault,
+
 		Snapshot: &snapshotDefault,
 	}
 }
@@ -47,6 +50,11 @@ type PutVsVipPortParams struct {
 	  In: path
 	*/
 	VipPort string
+	/*
+	  In: query
+	  Default: false
+	*/
+	PassiveUpdate *bool
 	/*
 	  In: query
 	  Default: true
@@ -71,6 +79,11 @@ func (o *PutVsVipPortParams) BindRequest(r *http.Request, route *middleware.Matc
 
 	rVipPort, rhkVipPort, _ := route.Params.GetOK("VipPort")
 	if err := o.bindVipPort(rVipPort, rhkVipPort, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
+	qPassiveUpdate, qhkPassiveUpdate, _ := qs.GetOK("passiveUpdate")
+	if err := o.bindPassiveUpdate(qPassiveUpdate, qhkPassiveUpdate, route.Formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -116,6 +129,30 @@ func (o *PutVsVipPortParams) bindVipPort(rawData []string, hasKey bool, formats 
 	// Required: true
 	// Parameter is provided by construction from the route
 	o.VipPort = raw
+
+	return nil
+}
+
+// bindPassiveUpdate binds and validates parameter PassiveUpdate from query.
+func (o *PutVsVipPortParams) bindPassiveUpdate(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+	// AllowEmptyValue: false
+
+	if raw == "" { // empty values pass all other validations
+		// Default values have been previously initialized by NewPutVsVipPortParams()
+		return nil
+	}
+
+	value, err := swag.ConvertBool(raw)
+	if err != nil {
+		return errors.InvalidType("passiveUpdate", "query", "bool", raw)
+	}
+	o.PassiveUpdate = &value
 
 	return nil
 }

@@ -77,6 +77,9 @@ type VirtualServerSpecExpand struct {
 	// r ss
 	RSs *RealServerExpandList `json:"RSs,omitempty"`
 
+	// Ram flags
+	RAMFlags uint32 `json:"RamFlags,omitempty"`
+
 	// sched name
 	// Enum: [rr wrr wlc conhash]
 	SchedName string `json:"SchedName,omitempty"`

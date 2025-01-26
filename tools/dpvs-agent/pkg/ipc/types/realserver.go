@@ -31,6 +31,20 @@ import (
 	"github.com/dpvs-agent/pkg/ipc/pool"
 )
 
+type SliceRealServerSpec []*RealServerSpec
+
+func (rss SliceRealServerSpec) Len() int {
+	return len(rss)
+}
+
+func (rss SliceRealServerSpec) Swap(i, j int) {
+	rss[i], rss[j] = rss[j], rss[i]
+}
+
+func (rss SliceRealServerSpec) Less(i, j int) bool {
+	return rss[i].ID() < rss[j].ID()
+}
+
 type RealServerSpec struct {
 	af           uint32
 	port         uint16

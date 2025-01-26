@@ -207,6 +207,22 @@ func (spec *VirtualServerSpecExpandModel) ID() string {
 	return fmt.Sprintf("%s-%d-%s", net.ParseIP(spec.Addr).String(), spec.Port, proto)
 }
 
+type SliceRealServerSpecExpandModel []*models.RealServerSpecExpand
+
+func (rss SliceRealServerSpecExpandModel) Len() int {
+	return len(rss)
+}
+
+func (rss SliceRealServerSpecExpandModel) Swap(i, j int) {
+	rss[i], rss[j] = rss[j], rss[i]
+}
+
+func (rss SliceRealServerSpecExpandModel) Less(i, j int) bool {
+	rs1 := (*RealServerSpecExpandModel)(rss[i])
+	rs2 := (*RealServerSpecExpandModel)(rss[j])
+	return rs1.ID() < rs2.ID()
+}
+
 func (node *NodeSnapshot) LoadFrom(cacheFile string, logger hclog.Logger) error {
 	content, err := os.ReadFile(cacheFile)
 	if err != nil {
