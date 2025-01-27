@@ -12,7 +12,7 @@ import (
 type Task interface {
 	Name() string
 	Interval() time.Duration
-	Job()
+	Job(ctx context.Context)
 }
 
 func RunTask(t Task, ctx context.Context, wg *sync.WaitGroup, start <-chan time.Time) {
@@ -26,8 +26,8 @@ func RunTask(t Task, ctx context.Context, wg *sync.WaitGroup, start <-chan time.
 	}
 
 	// Run Job immediately on called (after the start delay).
-	glog.V(3).Infof("Task %q scheduled.", t.Name())
-	t.Job()
+	glog.V(7).Infof("Task %q scheduled.", t.Name())
+	t.Job(ctx)
 
 	ticker := time.NewTicker(t.Interval())
 	for {
@@ -37,8 +37,8 @@ func RunTask(t Task, ctx context.Context, wg *sync.WaitGroup, start <-chan time.
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			glog.V(3).Infof("Task %q scheduled.", t.Name())
-			t.Job()
+			glog.V(7).Infof("Task %q scheduled.", t.Name())
+			t.Job(ctx)
 		default:
 		}
 	}

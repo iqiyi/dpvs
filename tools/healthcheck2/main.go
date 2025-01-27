@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -34,12 +35,6 @@ func init() {
 	dpvsAgentAddr := flag.String("dpvs-agent-addr",
 		types.DefaultAppConf.DpvsAgentAddr,
 		"Server address of dpvs-agent.")
-	dpvsWeightStateUri := flag.String("dpvs-weight-state-uri",
-		types.DefaultAppConf.DpvsWeightStateUri,
-		"Http URI of dpvs-agent for updating backend's health state and weight in dpvs.")
-	dpvsServiceListUri := flag.String("dpvs-service-list-uri",
-		types.DefaultAppConf.DpvsServiceListUri,
-		"Http URI of dpvs-agent for listing all services.")
 	dpvsServiceListInterval := flag.Duration("dpvs-service-list-interval",
 		types.DefaultAppConf.DpvsServiceListInterval,
 		"Time interval to refetch dpvs services.")
@@ -73,11 +68,8 @@ func init() {
 	if dpvsAgentAddr != nil {
 		appConf.DpvsAgentAddr = *dpvsAgentAddr
 	}
-	if dpvsWeightStateUri != nil {
-		appConf.DpvsWeightStateUri = *dpvsWeightStateUri
-	}
-	if dpvsServiceListUri != nil {
-		appConf.DpvsServiceListUri = *dpvsServiceListUri
+	if !strings.HasPrefix(appConf.DpvsAgentAddr, "http") {
+		appConf.DpvsAgentAddr += "http://"
 	}
 	if dpvsServiceListInterval != nil {
 		appConf.DpvsServiceListInterval = *dpvsServiceListInterval

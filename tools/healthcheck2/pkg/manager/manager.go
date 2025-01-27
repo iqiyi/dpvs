@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
@@ -41,7 +42,7 @@ func (t *cfgFileReloader) Interval() time.Duration {
 	return t.interval
 }
 
-func (t *cfgFileReloader) Job() {
+func (t *cfgFileReloader) Job(ctx context.Context) {
 	conf, err := LoadFileConf(t.filename)
 	if err != nil {
 		glog.Errorf("Fail to load config file %s: %v.", t.filename, err)
@@ -53,7 +54,6 @@ type svcLister struct {
 	name     string
 	interval time.Duration
 	server   string
-	uri      string
 	m        *Manager // the Manager instance controlling the Task
 }
 
@@ -62,7 +62,6 @@ func NewSvcLister(m *Manager) *svcLister {
 		name:     "service-lister",
 		interval: m.appConf.DpvsServiceListInterval,
 		server:   m.appConf.DpvsAgentAddr,
-		uri:      m.appConf.DpvsServiceListUri,
 		m:        m,
 	}
 }
@@ -75,9 +74,12 @@ func (t *svcLister) Interval() time.Duration {
 	return t.interval
 }
 
-func (t *svcLister) Job() {
-	// TODO
-	glog.Info("This is service-lister Job!")
+func (t *svcLister) Job(ctx context.Context) {
+	dsvcs, err := comm.GetServiceFromDPVS(t.server, ctx)
+	if err != nil {
+		glog.Warningf("Fail to get services from DPVS: %v.", err)
+	}
+	glog.V(7).Infof("Succeed to get services from DPVS:\n%v", dsvcs)
 }
 
 type metricServer struct {
