@@ -3,7 +3,7 @@ module github.com/iqiyi/dpvs/tools/healthcheck
 go 1.20
 
 require (
-	github.com/golang/glog v1.1.1
+	github.com/golang/glog v1.2.4
 	github.com/google/gops v0.3.27
 )
 
