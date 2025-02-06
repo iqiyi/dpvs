@@ -78,8 +78,57 @@ func (t *svcLister) Job(ctx context.Context) {
 	dsvcs, err := comm.GetServiceFromDPVS(t.server, ctx)
 	if err != nil {
 		glog.Warningf("Fail to get services from DPVS: %v.", err)
+		return
 	}
 	glog.V(7).Infof("Succeed to get services from DPVS:\n%v", dsvcs)
+
+	// TODO: remove stale checker/vs/va
+
+	for _, svc := range dsvcs {
+		vaid := VAID(svc.Addr.IP.String())
+		vaConf := t.m.conf.GetVAConf(vaid)
+		va, ok := t.m.vas[vaid]
+		if !ok {
+			if vaConf.disable {
+				continue
+			}
+			va = NewVA(&svc, vaConf)
+			t.m.vas[vaid] = va
+			t.m.wg.Add(1)
+			go va.Run(ctx, t.m.wg)
+		} else {
+			if vaConf.disable {
+				delete(t.m.vas, vaid)
+				va.Stop()
+			}
+			va.Update(vaConf)
+		}
+
+		vsid := VSID(svc.Addr.String())
+		vsConf := t.m.conf.GetVSConf(vsid)
+		vs, ok := va.vss[vsid]
+		if !ok {
+			vs = NewVAVS(&svc, NewVS(&svc, vsConf))
+			va.vss[vsid] = vs
+			va.wg.Add(1)
+			go vs.vs.Run(ctx, va.wg)
+		} else {
+			// TODO
+			vs.vs.Update(&svc, vsConf)
+		}
+
+		ckConf := vsConf.GetCheckerConf()
+		for _, rs := range svc.RSs {
+			ckid := CheckerID(rs.Addr.String())
+			checker, ok := vs.vs.backends[ckid]
+			if !ok {
+				checker = NewVSBackend(vs.vs.version, &rs, NewChecker(&rs, ckConf))
+				vs.vs.backends[ckid] = checker
+				vs.vs.wg.Add(1)
+				go checker.checker.Run(ctx, vs.vs.wg)
+			}
+		}
+	}
 }
 
 type metricServer struct {

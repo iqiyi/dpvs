@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/checker"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
@@ -53,21 +54,9 @@ func (avs *DpvsAgentVs) toVs() (*VirtualServer, error) {
 	if proto != utils.IPProtoTCP && proto != utils.IPProtoUDP {
 		return nil, fmt.Errorf("not supported VS protocol type 0x%0x", avs.Proto)
 	}
-	checker := DestCheckNone
+	method := checker.NoneChecker
 	if len(avs.DestCheck) > 0 { // Note: Support only one check method per VS.
-		name := strings.ToLower(avs.DestCheck[0])
-		switch name {
-		case "tcp":
-			checker = DestCheckTCP
-		case "udp":
-			checker = DestCheckUDP
-		case "ping":
-			checker = DestCheckPing
-		case "udpping":
-			checker = DestCheckUDPPing
-		case "http":
-			checker = DestCheckHTTP
-		}
+		method = checker.ParseMethod(avs.DestCheck[0])
 	}
 	ppversion := ProxyProtoVersion(avs.ProxyProto)
 	quic := strings.EqualFold(avs.Quic, "true")
@@ -78,7 +67,7 @@ func (avs *DpvsAgentVs) toVs() (*VirtualServer, error) {
 			Port:  vport,
 			Proto: proto,
 		},
-		DestCheck:  checker,
+		DestCheck:  method,
 		ProxyProto: ppversion,
 		Quic:       quic,
 	}

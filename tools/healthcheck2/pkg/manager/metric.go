@@ -41,10 +41,13 @@ type Statistics struct {
 	up          uint64
 	downNoticed uint64
 	upNoticed   uint64
+	downFailed  uint64
+	upFailed    uint64
 }
 
 func (s *Statistics) String() string {
-	return fmt.Sprintf("%d %d %d %d", s.up, s.down, s.upNoticed, s.downNoticed)
+	return fmt.Sprintf("%d %d %d %d %d %d", s.up, s.down, s.upNoticed, s.downNoticed,
+		s.upFailed, s.downFailed)
 }
 
 // Metric holds metric data sent from VA/VS/Checker to metric server.
@@ -165,8 +168,8 @@ func (db *MetricDB) String() string {
 	db.lock.RUnlock()
 
 	sep := "    "
-	banner := fmt.Sprintf("%s%s%s%s%s%s%s", "object", sep, "state", sep,
-		"statistics(up|down|up_notice|down_notice)", sep, "extra(optional)")
+	banner := fmt.Sprintf("%s%s%s%s%s%s%s%s%s", "object", sep, "state", sep,
+		"statistics(up|down|up_notice|down_notice|up_fail|down_fail)", sep, "extra(optional)")
 	builder.WriteString(fmt.Sprintf("%s\n", banner))
 	builder.WriteString(fmt.Sprintf("%s\n", strings.Repeat("-", 80)))
 

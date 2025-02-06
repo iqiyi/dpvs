@@ -1,6 +1,7 @@
 package comm
 
 import (
+	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/checker"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
@@ -13,7 +14,7 @@ type RealServer struct {
 type VirtualServer struct {
 	Version    uint64
 	Addr       utils.L3L4Addr
-	DestCheck  DestCheckMethod
+	DestCheck  checker.Method
 	ProxyProto ProxyProtoVersion
 	Quic       bool
 	RSs        []RealServer
@@ -27,21 +28,6 @@ const (
 	ProxyProtoV2         ProxyProtoVersion = 0x2
 	ProxyProtoV1Insecure ProxyProtoVersion = 0x11
 	ProxyProtoV2Insecure ProxyProtoVersion = 0x12
-)
-
-type DestCheckMethod uint16
-
-const (
-	DestCheckNone    DestCheckMethod = iota
-	DestCheckPassive                 // "passive"
-	DestCheckTCP                     // "tcp"
-	DestCheckUDP                     // "udp"
-	DestCheckPing                    // "ping"
-	DestCheckUDPPing                 // "udpping"
-	DestCheckHTTP                    // "http"
-
-	// TODO: add new check methods here
-
 )
 
 type DpvsAgentRs struct {

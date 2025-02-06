@@ -106,6 +106,22 @@ func (addr *L3L4Addr) String() string {
 	return fmt.Sprintf("%s-%s-%d", addr.IP, addr.Proto, addr.Port)
 }
 
+func (in *L3L4Addr) DeepCopyInto(out *L3L4Addr) {
+	*out = *in
+	out.IP = make(net.IP, len(in.IP))
+	copy(out.IP[:], in.IP[:])
+	return
+}
+
+func (in *L3L4Addr) DeepCopy() *L3L4Addr {
+	if in == nil {
+		return nil
+	}
+	out := new(L3L4Addr)
+	in.DeepCopyInto(out)
+	return out
+}
+
 // ParseL3L4Addr produces a L3L4Addr from its string representation.
 func ParseL3L4Addr(str string) *L3L4Addr {
 	segs := strings.Split(str, "-")

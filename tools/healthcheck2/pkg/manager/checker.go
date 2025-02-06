@@ -1,10 +1,13 @@
 package manager
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/checker"
+	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
@@ -37,7 +40,16 @@ type Checker struct {
 	quit   chan bool
 }
 
+func NewChecker(rs *comm.RealServer, conf *CheckerConf) *Checker {
+	// TODO
+	return nil
+}
+
 // UUID returns a global unique ID for the checker.
 func (c *Checker) UUID() string {
 	return fmt.Sprintf("%s/%s", c.vs.id, c.id)
+}
+
+func (c *Checker) Run(ctx context.Context, wg *sync.WaitGroup) {
+	// TODO
 }

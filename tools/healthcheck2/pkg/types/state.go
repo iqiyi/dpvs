@@ -1,7 +1,7 @@
 package types
 
 const (
-	UnKnown   State = 0
+	Unknown   State = 0
 	Healthy   State = 1
 	Unhealthy State = 2
 )
