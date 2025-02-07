@@ -6,12 +6,23 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang/glog"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
+
+/*
+ Metric Indications:
+
+|                    | up/down            | upNotified/downNotified          | upFailed/downFailed |
+| ------------------ | ------------------ | -------------------------------- | ------------------- |
+| Checker            | probe state counts | state change notices             | fail actions        |
+| VirtualService(VS) | success actions    | received va state change notices | fail actions        |
+| VirtualAddress(VA) | success actions    | received vs state change notices | fail actions        |
+*/
 
 type MetricType uint
 
@@ -228,4 +239,59 @@ func (db *MetricDB) String() string {
 	} // VA ending
 
 	return builder.String()
+}
+
+// TheadStats MUST access with atomic operations.
+type ThreadStats struct {
+	running  int32
+	stopping int32
+	finished uint64
+}
+
+func (t *ThreadStats) Running() int32 {
+	return atomic.LoadInt32(&t.running)
+}
+
+func (t *ThreadStats) RunningInc() {
+	atomic.AddInt32(&t.running, 1)
+}
+
+func (t *ThreadStats) RunningDec() {
+	atomic.AddInt32(&t.running, -1)
+}
+
+func (t *ThreadStats) Stopping() int32 {
+	return atomic.LoadInt32(&t.stopping)
+}
+
+func (t *ThreadStats) StoppingInc() {
+	atomic.AddInt32(&t.stopping, 1)
+}
+
+func (t *ThreadStats) StoppingDec() {
+	atomic.AddInt32(&t.stopping, -1)
+}
+
+func (t *ThreadStats) Finished() uint64 {
+	return atomic.LoadUint64(&t.finished)
+}
+
+func (t *ThreadStats) FinishedInc() {
+	atomic.AddUint64(&t.finished, 1)
+}
+
+func (t *ThreadStats) Dump(title bool) string {
+	if title {
+		return fmt.Sprintf("%-16s%-16s%-16s", "running", "stopping", "finished")
+	}
+	return fmt.Sprintf("%-16d%-16d%-16d", t.Running(), t.Stopping(), t.Finished())
+}
+
+func AppThreadStatsDump() string {
+	str := VAThreads.Dump(true)
+	res := fmt.Sprintf("%-20s%s\n", "", str)
+	res += fmt.Sprintf("%s%-20s%s\n", res, "VirtualAddress", VAThreads.Dump(false))
+	res += fmt.Sprintf("%s%-20s%s\n", res, "VirtualService", VSThreads.Dump(false))
+	res += fmt.Sprintf("%s%-20s%s\n", res, "Checker", CheckerThreads.Dump(false))
+	return res
 }

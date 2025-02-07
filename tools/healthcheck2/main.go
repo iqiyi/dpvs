@@ -14,6 +14,22 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
+/* Log Level Convention (glog.V().Info):
+
+| level |   Type    | importance | frequency |
+|-------|-----------|------------|-----------|
+|   0   |   Fatal   |     \      |     \     |
+|   1   |   Error   |     \      |     \     |
+|   2   |  Warning  |     \      |     \     |
+|   3   |   Info    |     \      |     \     |
+|   4   |   Debug   |    high    |    low    |
+|   5   |   Debug   |   medium   |    low    |
+|   6   |   Debug   |    high    |    high   |
+|   7   |   Debug   |   medium   |    high   |
+|   8   |   Debug   |    low     |    low    |
+|   9   |   Debug   |    low     |    high   |
+*/
+
 var appConf types.AppConf = types.DefaultAppConf
 
 func init() {

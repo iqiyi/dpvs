@@ -54,6 +54,13 @@ func IPAF(ip net.IP) AF {
 	return IPv6
 }
 
+// IPAddrClone returns the deep-copied IP address.
+func IPAddrClone(ip net.IP) net.IP {
+	addr := make(net.IP, len(ip))
+	copy(addr[:], ip[:])
+	return addr
+}
+
 // IPProto specifies an IP protocol.
 type IPProto uint16
 

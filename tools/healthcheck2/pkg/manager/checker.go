@@ -12,6 +12,8 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
+var CheckerThreads ThreadStats
+
 // CheckerID represents VS-scoped Checker ID.
 // It has the format of L3L4Addr::String().
 type CheckerID string

@@ -1,3 +1,4 @@
+// +k8s:deepcopy-gen=package
 package comm
 
 import (
@@ -5,12 +6,14 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
+// +k8s:deepcopy-gen=true
 type RealServer struct {
 	Addr      utils.L3L4Addr
 	Weight    uint16
 	Inhibited bool
 }
 
+// +k8s:deepcopy-gen=true
 type VirtualServer struct {
 	Version    uint64
 	Addr       utils.L3L4Addr

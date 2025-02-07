@@ -7,7 +7,6 @@ import (
 
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/checker"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
-	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 )
 
 type VAPolicy int
@@ -25,11 +24,19 @@ type ActionConf struct {
 	actionParams   map[string]string
 }
 
+func (acf *ActionConf) Valid() bool {
+	return acf.actionTimeout > 0 && acf.actionSyncTime > 0
+}
+
 // +k8s:deepcopy-gen=true
 type VAConf struct {
 	disable    bool
 	downPolicy VAPolicy
 	ActionConf
+}
+
+func (va *VAConf) Valid() bool {
+	return va.ActionConf.Valid()
 }
 
 func (va *VAConf) DeepEqual(other *VAConf) bool {
@@ -40,7 +47,10 @@ func (va *VAConf) DeepEqual(other *VAConf) bool {
 type VSConf struct {
 	CheckerConf
 	ActionConf
-	backends map[CheckerID]VSBackendConf
+}
+
+func (vs *VSConf) Valid() bool {
+	return vs.CheckerConf.Valid() && vs.ActionConf.Valid()
 }
 
 func (vs *VSConf) DeepEqual(other *VSConf) bool {
@@ -51,47 +61,33 @@ func (c *VSConf) GetCheckerConf() *CheckerConf {
 	return &c.CheckerConf
 }
 
-// Merge configs from dpvs and files. Configs from dpvs takes precede than files.
-func (c *VSConf) MergeConf(vs *comm.VirtualServer) {
-	if vs.DestCheck != checker.NoneChecker && c.method != vs.DestCheck {
+func (c *VSConf) GetActionConf() *ActionConf {
+	return &c.ActionConf
+}
+
+// Merge configs from dpvs and files. Configs from dpvs takes precede over files.
+// Add new params to "params" if given (not nil), otherwise created one.
+func (c *VSConf) MergeDpvsCheckerConf(vs *comm.VirtualServer, params map[string]string) map[string]string {
+	rc := params
+	if rc == nil {
+		rc = make(map[string]string)
+	}
+
+	if vs.DestCheck != checker.NoneChecker {
 		c.method = vs.DestCheck
 	}
 
 	if vs.ProxyProto&comm.ProxyProtoV1 == comm.ProxyProtoV1 {
-		c.methodParams[checker.ParamProxyProto] = "v1"
+		params[checker.ParamProxyProto] = "v1"
 	} else if vs.ProxyProto&comm.ProxyProtoV2 == comm.ProxyProtoV2 {
-		c.methodParams[checker.ParamProxyProto] = "v2"
+		params[checker.ParamProxyProto] = "v2"
 	}
 
 	if vs.Quic {
-		c.methodParams[checker.ParamQuic] = "true"
+		params[checker.ParamQuic] = "true"
 	}
 
-	if len(vs.RSs) == 0 {
-		return
-	}
-	if c.backends == nil {
-		c.backends = make(map[CheckerID]VSBackendConf)
-	}
-	for _, rs := range vs.RSs {
-		checkerID := CheckerID(rs.Addr.String())
-		backend := VSBackendConf{
-			version: vs.Version,
-			uweight: uint(rs.Weight),
-			state:   types.Healthy,
-		}
-		if rs.Inhibited {
-			backend.state = types.Unhealthy
-		}
-		c.backends[checkerID] = backend
-	}
-}
-
-// +k8s:deepcopy-gen=true
-type VSBackendConf struct {
-	version uint64
-	state   types.State
-	uweight uint
+	return rc
 }
 
 // +k8s:deepcopy-gen=true
@@ -102,6 +98,10 @@ type CheckerConf struct {
 	upRetry      uint
 	timeout      time.Duration
 	methodParams map[string]string
+}
+
+func (c *CheckerConf) Valid() bool {
+	return c.interval > 0 && c.timeout > 0
 }
 
 func (c *CheckerConf) DeepEqual(other *CheckerConf) bool {
@@ -135,7 +135,7 @@ var (
 		disable:    false,
 		downPolicy: VAPolicyAllOf,
 		ActionConf: ActionConf{
-			actioner:       "kniAddrAddDel",
+			actioner:       "KniAddrAddDel",
 			actionTimeout:  2 * time.Second,
 			actionSyncTime: 60 * time.Second,
 		},
@@ -150,7 +150,7 @@ var (
 			timeout:   2 * time.Second,
 		},
 		ActionConf: ActionConf{
-			actioner:       "updateWeightState",
+			actioner:       "WeightStateUpdate",
 			actionTimeout:  2 * time.Second,
 			actionSyncTime: 15 * time.Second,
 		},
@@ -166,4 +166,24 @@ func LoadFileConf(filename string) (*Conf, error) {
 	// TODO: load config from file
 
 	return &confDefault, nil
+}
+
+// +k8s:deepcopy-gen=true
+type VAConfExt struct {
+	VAConf
+	vss []comm.VirtualServer
+}
+
+func (c *VAConfExt) GetVAConf() *VAConf {
+	return &c.VAConf
+}
+
+// +k8s:deepcopy-gen=true
+type VSConfExt struct {
+	VSConf
+	vs comm.VirtualServer
+}
+
+func (c *VSConfExt) GetVSConf() *VSConf {
+	return &c.VSConf
 }

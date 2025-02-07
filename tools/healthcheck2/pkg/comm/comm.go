@@ -17,6 +17,9 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
+// Notes:
+// dpvs-agent dpvsAgentServiceListUri/dpvsAgentCheckUpdateUri always returns
+// backend user-specified weight rather than healthchecker modified weight.
 const (
 	httpClientTimeout          = 10 * time.Second
 	dpvsAgentServiceListUri    = "/v2/vs"

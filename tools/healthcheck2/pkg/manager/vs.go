@@ -5,11 +5,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/actioner"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
+
+var VSThreads ThreadStats
 
 // VSID represents the VirtualService ID.
 // It must have the same format of L3L4Addr::String().
@@ -38,7 +41,6 @@ type VirtualService struct {
 	id      VSID
 	subject utils.L3L4Addr
 	conf    VSConf
-	version uint64 // deployment version
 
 	// vs's status
 	state        types.State
@@ -54,14 +56,14 @@ type VirtualService struct {
 
 	wg     *sync.WaitGroup
 	notify chan BackendState
-	update chan VSConf
+	update chan VSConfExt
 	metric chan Metric
 	quit   chan bool
 }
 
-func NewVS(sub *comm.VirtualServer, conf *VSConf) *VirtualService {
+func NewVS(sub *comm.VirtualServer, conf *VSConf, m *Manager) (*VirtualService, error) {
 	// TODO
-	return nil
+	return nil, nil
 }
 
 func NewVSBackend(version uint64, rs *comm.RealServer, checker *Checker) *VSBackend {
@@ -81,24 +83,15 @@ func NewVSBackend(version uint64, rs *comm.RealServer, checker *Checker) *VSBack
 	return vsb
 }
 
-func (vs *VirtualService) Update(sub *comm.VirtualServer, conf *VSConf) {
-	confCopied := conf.DeepCopy()
-	confCopied.MergeConf(sub)
-	if confCopied.DeepEqual(&vs.conf) {
-		return
-	}
-	vs.update <- *confCopied // Update VirtualService and Backends
-
-	checkerConf := &confCopied.CheckerConf
-	if checkerConf.DeepEqual(&vs.conf.CheckerConf) {
-		return
-	}
-	for _, rs := range vs.backends {
-		checkerConfCopied := checkerConf.DeepCopy()
-		rs.checker.update <- *checkerConfCopied // Update Checker
-	}
+func (vs *VirtualService) Update(conf *VSConfExt) {
+	// TODO
 }
 
-func (vs *VirtualService) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (vs *VirtualService) Stop() {
+	glog.Info("stopping VS %s ...", vs.id)
+	vs.quit <- true
+}
+
+func (vs *VirtualService) Run(ctx context.Context, wg *sync.WaitGroup, start <-chan time.Time) {
 	// TODO
 }

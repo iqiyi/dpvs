@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
+
+const VAStartDelayMax = 3 * time.Second
 
 var (
 	_ utils.Task = (*cfgFileReloader)(nil)
@@ -75,6 +78,9 @@ func (t *svcLister) Interval() time.Duration {
 }
 
 func (t *svcLister) Job(ctx context.Context) {
+	var err error
+
+	// get the latest service list
 	dsvcs, err := comm.GetServiceFromDPVS(t.server, ctx)
 	if err != nil {
 		glog.Warningf("Fail to get services from DPVS: %v.", err)
@@ -82,52 +88,62 @@ func (t *svcLister) Job(ctx context.Context) {
 	}
 	glog.V(7).Infof("Succeed to get services from DPVS:\n%v", dsvcs)
 
-	// TODO: remove stale checker/vs/va
-
+	// remove staled VAs
+	staled := make(map[VAID]bool)
+	for vaid, _ := range t.m.vas {
+		staled[vaid] = true
+	}
 	for _, svc := range dsvcs {
 		vaid := VAID(svc.Addr.IP.String())
+		if _, ok := staled[vaid]; ok {
+			delete(staled, vaid)
+		}
+	}
+	for vaid, _ := range staled {
+		va := t.m.vas[vaid]
+		delete(t.m.vas, vaid)
+		va.Stop()
+	}
+
+	// add new or update existing VAs
+	vsgroup := make(map[VAID][]comm.VirtualServer)
+	for _, svc := range dsvcs {
+		vaid := VAID(svc.Addr.IP.String())
+		if _, ok := vsgroup[vaid]; !ok {
+			vsgroup[vaid] = make([]comm.VirtualServer, 0, 2)
+		}
+		vsgroup[vaid] = append(vsgroup[vaid], svc)
+	}
+	for vaid, vss := range vsgroup {
+		addr := vss[0].Addr.IP
 		vaConf := t.m.conf.GetVAConf(vaid)
 		va, ok := t.m.vas[vaid]
 		if !ok {
 			if vaConf.disable {
 				continue
 			}
-			va = NewVA(&svc, vaConf)
+			va, err = NewVA(addr, vaConf, t.m)
+			if err != nil {
+				glog.Errorf("VA created failed for %s: %v", addr, err)
+				continue
+			}
 			t.m.vas[vaid] = va
 			t.m.wg.Add(1)
-			go va.Run(ctx, t.m.wg)
+			delay := time.NewTicker(time.Duration(1+rand.Intn(int(
+				VAStartDelayMax.Milliseconds()))) * time.Millisecond)
+			go va.Run(ctx, t.m.wg, delay.C)
 		} else {
 			if vaConf.disable {
 				delete(t.m.vas, vaid)
 				va.Stop()
-			}
-			va.Update(vaConf)
-		}
-
-		vsid := VSID(svc.Addr.String())
-		vsConf := t.m.conf.GetVSConf(vsid)
-		vs, ok := va.vss[vsid]
-		if !ok {
-			vs = NewVAVS(&svc, NewVS(&svc, vsConf))
-			va.vss[vsid] = vs
-			va.wg.Add(1)
-			go vs.vs.Run(ctx, va.wg)
-		} else {
-			// TODO
-			vs.vs.Update(&svc, vsConf)
-		}
-
-		ckConf := vsConf.GetCheckerConf()
-		for _, rs := range svc.RSs {
-			ckid := CheckerID(rs.Addr.String())
-			checker, ok := vs.vs.backends[ckid]
-			if !ok {
-				checker = NewVSBackend(vs.vs.version, &rs, NewChecker(&rs, ckConf))
-				vs.vs.backends[ckid] = checker
-				vs.vs.wg.Add(1)
-				go checker.checker.Run(ctx, vs.vs.wg)
+				continue
 			}
 		}
+		vaConfExt := &VAConfExt{
+			VAConf: *vaConf,
+			vss:    vss,
+		}
+		va.Update(vaConfExt)
 	}
 }
 
@@ -140,7 +156,8 @@ type metricServer struct {
 }
 
 func metricHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "%s\n", time.Now())
+	fmt.Fprintf(w, "%s\n\n", time.Now())
+	fmt.Fprintf(w, "Thread Statistics:\n%s\n", AppThreadStatsDump())
 	if _, err := fmt.Fprintf(w, "%s", metricDB); err != nil {
 		glog.Warningf("metric handler failed: %v", err)
 	}

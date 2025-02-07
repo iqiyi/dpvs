@@ -30,6 +30,7 @@ MODULE_NAME := $(shell grep '^module ' go.mod | awk '{print $$2}')
 GO_PATH := $(shell $(GO) env GOPATH)
 code-gen: $(GO_PATH)/bin/deepcopy-gen
 	$(GO_PATH)/bin/deepcopy-gen --alsologtostderr -i $(MODULE_NAME)/pkg/manager/ -O zz_deepcopy_generated --go-header-file=license.txt --trim-path-prefix=$(MODULE_NAME)
+	$(GO_PATH)/bin/deepcopy-gen --alsologtostderr -i $(MODULE_NAME)/pkg/comm/ -O zz_deepcopy_generated --go-header-file=license.txt --trim-path-prefix=$(MODULE_NAME)
 
 $(GO_PATH)/bin/deepcopy-gen:
 	go install k8s.io/code-generator/cmd/deepcopy-gen@v0.29.12
