@@ -26,8 +26,8 @@ const (
 	HTTPChecker           // "http"
 	// TODO: add new check methods here
 
-	PassiveChecker Method = 10000 // "passive", dpvs internal checker, ignore it
-	AutoChecker    Method = 65535 // "automatically inferred from protocol"
+	AutoChecker    Method = 10000 // "automatically inferred from protocol"
+	PassiveChecker Method = 65535 // "passive", dpvs internal checker, ignore it
 )
 
 func ParseMethod(name string) Method {
@@ -70,6 +70,16 @@ func (m *Method) String() string {
 		return "unknown"
 	}
 	return ""
+}
+
+func (m *Method) TranslateAuto(proto utils.IPProto) Method {
+	switch proto {
+	case utils.IPProtoTCP:
+		return TCPChecker
+	case utils.IPProtoUDP:
+		return UDPPingChecker
+	}
+	return PingChecker
 }
 
 // Checker params that can be derived from dpvs.

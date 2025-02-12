@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/checker"
-	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
@@ -42,9 +41,9 @@ type Checker struct {
 	quit   chan bool
 }
 
-func NewChecker(rs *comm.RealServer, conf *CheckerConf) *Checker {
+func NewChecker(target *utils.L3L4Addr, conf *CheckerConf, vs *VirtualService) (*Checker, error) {
 	// TODO
-	return nil
+	return nil, nil
 }
 
 // UUID returns a global unique ID for the checker.
@@ -52,6 +51,15 @@ func (c *Checker) UUID() string {
 	return fmt.Sprintf("%s/%s", c.vs.id, c.id)
 }
 
-func (c *Checker) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (c *Checker) Update(conf *CheckerConf) {
+	// Note: conf has been deep-copied already
+	c.update <- *conf
+}
+
+func (c *Checker) Run(ctx context.Context, wg *sync.WaitGroup, start <-chan time.Time) {
+	// TODO
+}
+
+func (c *Checker) Stop() {
 	// TODO
 }

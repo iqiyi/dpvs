@@ -63,41 +63,47 @@ func init() {
 	metricNotifyChanSize := flag.Uint("metic-notify-channel-size",
 		types.DefaultAppConf.MetricNotifyChanSize,
 		"Channel size for metric data sent from checkers to metric server.")
+	metricDelay := flag.Duration("metric-delay",
+		types.DefaultAppConf.MetricDelay,
+		"Max delayed time to send changed metric to metric server.")
 
 	flag.Parse()
 
 	if debug != nil {
 		appConf.Debug = *debug
 	}
-	if checkerNotifyChanSize != nil {
+	if checkerNotifyChanSize != nil && *checkerNotifyChanSize > 0 {
 		appConf.CheckerNotifyChanSize = *checkerNotifyChanSize
 	}
-	if vsNotifyChanSize != nil {
+	if vsNotifyChanSize != nil && *vsNotifyChanSize > 0 {
 		appConf.VSNotifyChanSize = *vsNotifyChanSize
 	}
-	if hcCfgFile != nil {
+	if hcCfgFile != nil && utils.IsFile(*hcCfgFile) {
 		appConf.HcCfgFile = *hcCfgFile
 	}
-	if hcCfgReloadInterval != nil {
+	if hcCfgReloadInterval != nil && *hcCfgReloadInterval > 0 {
 		appConf.HcCfgReloadInterval = *hcCfgReloadInterval
 	}
-	if dpvsAgentAddr != nil {
+	if dpvsAgentAddr != nil && len(*dpvsAgentAddr) > 0 {
 		appConf.DpvsAgentAddr = *dpvsAgentAddr
 	}
 	if !strings.HasPrefix(appConf.DpvsAgentAddr, "http") {
 		appConf.DpvsAgentAddr += "http://"
 	}
-	if dpvsServiceListInterval != nil {
+	if dpvsServiceListInterval != nil && *dpvsServiceListInterval > 0 {
 		appConf.DpvsServiceListInterval = *dpvsServiceListInterval
 	}
-	if metricServerAddr != nil {
+	if metricServerAddr != nil && len(*metricServerAddr) > 0 {
 		appConf.MetricServerAddr = *metricServerAddr
 	}
-	if metricServerUri != nil {
+	if metricServerUri != nil && len(*metricServerUri) > 0 {
 		appConf.MetricServerUri = *metricServerUri
 	}
-	if metricNotifyChanSize != nil {
+	if metricNotifyChanSize != nil && *metricNotifyChanSize > 0 {
 		appConf.MetricNotifyChanSize = *metricNotifyChanSize
+	}
+	if metricDelay != nil && *metricDelay > 0 {
+		appConf.MetricDelay = *metricDelay
 	}
 }
 

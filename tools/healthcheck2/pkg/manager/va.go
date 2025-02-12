@@ -14,7 +14,9 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
-const VSStartDelayMax = 3 * time.Second
+const (
+	VSStartDelayMax = 3 * time.Second
+)
 
 var VAThreads ThreadStats
 
@@ -49,18 +51,22 @@ type VirtualAddress struct {
 	state   types.State
 	since   time.Time
 	stats   Statistics
-	downVSs uint
-	upVSs   uint
+	downVSs int
+	upVSs   int
 
 	vss      map[VSID]*VAVS
 	actioner actioner.ActionMethod
 	resync   *time.Ticker // timer to resync VA's state to dpvs
 
+	// metric members
+	metricTaint  bool
+	metricTicker *time.Ticker
+	metric       chan<- Metric
+
 	// thread-safe members
 	wg     *sync.WaitGroup
 	update chan VAConfExt
 	notify chan VSState
-	metric chan<- Metric
 	quit   chan bool
 }
 
@@ -83,13 +89,14 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 	vaid := VAID(sub.String())
 	confCopied := conf.DeepCopy()
 	act, err := actioner.NewActioner(conf.actioner, &utils.L3L4Addr{IP: sub},
-		confCopied.ActionConf.actionParams)
+		confCopied.actionParams)
 	if err != nil {
 		return nil, fmt.Errorf("VA actioner created failed: %v", err)
 	}
 	resyncTicker := time.NewTicker(confCopied.actionSyncTime)
+	metricTicker := time.NewTicker(m.appConf.MetricDelay)
 
-	vs := &VirtualAddress{
+	va := &VirtualAddress{
 		id:      vaid,
 		subject: utils.IPAddrClone(sub),
 		conf:    *confCopied,
@@ -102,15 +109,18 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 		actioner: act,
 		resync:   resyncTicker,
 
+		metricTaint:  true,
+		metricTicker: metricTicker,
+		metric:       m.metricServer.notify,
+
 		wg:     &sync.WaitGroup{},
 		update: make(chan VAConfExt),
 		notify: make(chan VSState, m.appConf.VSNotifyChanSize),
-		metric: m.metricServer.notify,
 		quit:   make(chan bool),
 	}
 
 	glog.Infof("VA %s created", vaid)
-	return vs, nil
+	return va, nil
 }
 
 func (va *VirtualAddress) Update(conf *VAConfExt) {
@@ -126,12 +136,12 @@ func (va *VirtualAddress) Stop() {
 // calcState sums each state of VS in VA, updates VA's upVSs/downVSs,
 // and finally concludes the VA state.
 func (va *VirtualAddress) calcState() types.State {
-	var ups, downs uint
+	var ups, downs int
 	for _, vs := range va.vss {
 		if vs.checkerState == types.Unhealthy {
 			downs++
 		} else {
-			ups++
+			ups++ // including types.Unknown
 		}
 	}
 
@@ -144,6 +154,11 @@ func (va *VirtualAddress) calcState() types.State {
 // its configured downPolicy.
 // Note that the initial state Unknown is counted as Healthy.
 func (va *VirtualAddress) judge() types.State {
+	if va.upVSs < 0 || va.downVSs < 0 {
+		glog.Warningf("got minus state number in VA %s, UPs %d DOWNs %d, recalculate",
+			va.id, va.upVSs, va.downVSs)
+		return va.calcState()
+	}
 	switch va.conf.downPolicy {
 	case VAPolicyAllOf:
 		if va.upVSs == 0 {
@@ -161,24 +176,28 @@ func (va *VirtualAddress) judge() types.State {
 }
 
 func (va *VirtualAddress) actUP() error {
-	if err := va.actioner.Act(types.Healthy, va.conf.actionTimeout); err != nil {
+	if _, err := va.actioner.Act(types.Healthy, va.conf.actionTimeout); err != nil {
 		va.stats.upFailed++
+		va.metricTaint = true
 		return err
 	}
 	va.state = types.Healthy
 	va.since = time.Now()
 	va.stats.up++
+	va.metricTaint = true
 	return nil
 }
 
 func (va *VirtualAddress) actDOWN() error {
-	if err := va.actioner.Act(types.Unhealthy, va.conf.actionTimeout); err != nil {
+	if _, err := va.actioner.Act(types.Unhealthy, va.conf.actionTimeout); err != nil {
 		va.stats.downFailed++
+		va.metricTaint = true
 		return err
 	}
 	va.state = types.Unhealthy
 	va.since = time.Now()
 	va.stats.down++
+	va.metricTaint = true
 	return nil
 }
 
@@ -192,13 +211,54 @@ func (va *VirtualAddress) act(state types.State) error {
 func (va *VirtualAddress) doUpdate(ctx context.Context, conf *VAConfExt) {
 	vacf := conf.GetVAConf()
 
-	// update VAConf
+	// Update VAConf
 	if !vacf.DeepEqual(&va.conf) {
-		va.conf = *vacf
-		va.doResync()
+		skip := false
+		needResync := false
+		if vacf.downPolicy != va.conf.downPolicy {
+			vacf.downPolicy = va.conf.downPolicy
+			needResync = true
+		}
+		if vacf.actionSyncTime > 0 && vacf.actionSyncTime != va.conf.actionSyncTime {
+			va.resync.Stop()
+			va.resync = time.NewTicker(vacf.actionSyncTime)
+			va.conf.actionSyncTime = vacf.actionSyncTime
+		}
+		if vacf.actionTimeout > 0 && vacf.actionTimeout != va.conf.actionTimeout {
+			va.conf.actionTimeout = vacf.actionTimeout
+		}
+		if !vacf.ActionConf.DeepEqual(&va.conf.ActionConf) {
+			if va.state == types.Unhealthy {
+				// Restore Healthy state before changing Actioner to avoid inconsistency.
+				if err := va.actUP(); err != nil {
+					glog.Errorf("restore %s before changing VA %s actioner failed: %v, abort change",
+						types.Healthy, va.id, err)
+					skip = true
+				}
+			}
+			if !skip {
+				if act, err := actioner.NewActioner(vacf.actioner, &utils.L3L4Addr{IP: va.subject},
+					vacf.actionParams); err != nil {
+					glog.Errorf("VA %s actioner recreated failed: %v", va.id, err)
+					skip = true
+				} else {
+					va.actioner = act
+					needResync = true
+				}
+			}
+		}
+		if !skip {
+			va.conf = *vacf
+			glog.Infof("VAConf for %s updated successfully", va.id)
+		} else {
+			glog.Warningf("VAConf for %s partially updated", va.id)
+		}
+		if needResync {
+			va.doResync()
+		}
 	}
 
-	// remove staled VSs
+	// Remove staled VSs
 	staled := make(map[VSID]struct{})
 	for vsid, _ := range va.vss {
 		staled[vsid] = struct{}{}
@@ -212,16 +272,30 @@ func (va *VirtualAddress) doUpdate(ctx context.Context, conf *VAConfExt) {
 	for vsid, _ := range staled {
 		vavs := va.vss[vsid]
 		delete(va.vss, vsid)
+		if vavs.checkerState == types.Unhealthy {
+			va.downVSs--
+		} else {
+			va.upVSs--
+		}
+		va.metricTaint = true
 		vavs.vs.Stop()
 	}
+	if len(staled) > 0 {
+		vaState := va.judge()
+		if vaState != va.state {
+			if err := va.act(vaState); err != nil {
+				glog.Warningf("VA %s state change to %s failed: %v", va.id, vaState, err)
+			}
+		}
+	}
 
-	// add new or update existing VSs
+	// Create new or update existing VSs
 	for _, svc := range conf.vss {
 		vsid := VSID(svc.Addr.String())
 		vsConf := va.m.conf.GetVSConf(vsid)
 		vavs, ok := va.vss[vsid]
 		if !ok { // create
-			vs, err := NewVS(&svc, vsConf, va.m)
+			vs, err := NewVS(&svc, vsConf, va)
 			if err != nil {
 				glog.Errorf("VS created failed for %s: %v", vsid, err)
 				continue
@@ -234,11 +308,24 @@ func (va *VirtualAddress) doUpdate(ctx context.Context, conf *VAConfExt) {
 				vs:           vs,
 			}
 			va.vss[vsid] = vavs
+			va.upVSs++ // new VS default Healthy
+			va.metricTaint = true
 			va.wg.Add(1)
 			delay := time.NewTicker(time.Duration(1+rand.Intn(int(
 				VSStartDelayMax.Milliseconds()))) * time.Millisecond)
 			go vs.Run(ctx, va.wg, delay.C)
 		} else { // update
+			if vavs.version > svc.Version {
+				glog.Warningf("received VS %s with eariler version, skip it", vsid)
+				continue
+			}
+			if vavs.version == svc.Version {
+				// ??? Is it safe to skip VS with version unchanged?
+				// It relies on dpvs-agent, an alien factor. But it worths taking a risk
+				// for the notewothy performance gains.
+				glog.V(7).Infof("skip VS %s with version unchanged", vsid)
+				continue
+			}
 			vavs.version = svc.Version
 		}
 		vsConfExt := &VSConfExt{
@@ -255,12 +342,12 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 	} else {
 		va.stats.upNoticed++
 	}
+	va.metricTaint = true
 
 	vavs, ok := va.vss[state.id]
 	if !ok {
-		// State notice of expired VS recieved. Need to resync?
-		// No! It has resync-ed when config was updated.
-		glog.V(4).Infof("VS %s not found for recieved VS state notice", state.id)
+		// State notice of expired VS recieved. It should never reach here.
+		glog.Warningf("VS %s not found upon recieved state notice!", state.id)
 		return
 	}
 
@@ -271,6 +358,7 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 
 	if state.state == types.Unhealthy {
 		va.downVSs++
+		va.upVSs--
 		vaState := va.judge()
 		if vaState != va.state {
 			if err := va.act(vaState); err != nil {
@@ -279,6 +367,7 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 		}
 	} else {
 		va.upVSs++
+		va.downVSs--
 		vaState := va.judge()
 		if vaState != va.state {
 			if err := va.act(vaState); err != nil {
@@ -299,14 +388,36 @@ func (va *VirtualAddress) doResync() {
 	}
 }
 
+func (va *VirtualAddress) doMetricSend() {
+	if !va.metricTaint {
+		return
+	}
+
+	metric := Metric{
+		kind: MetricTypeVA,
+		vaID: va.id,
+		state: State{
+			state:    va.state,
+			duration: time.Since(va.since),
+		},
+		stats: va.stats,
+	}
+	va.metric <- metric
+
+	va.metricTaint = false
+}
+
 func (va *VirtualAddress) cleanup() {
 	va.resync.Stop()
+	va.metricTicker.Stop()
 	for _, vavs := range va.vss {
 		vavs.vs.Stop()
 	}
 	va.wg.Wait()
 
 	// close and drain channels
+	// Notes: No write to these channels now, so it's safe to close the channels
+	//   from the read side.
 	close(va.notify)
 	for {
 		if _, ok := <-va.notify; !ok {
@@ -367,6 +478,8 @@ func (va *VirtualAddress) Run(ctx context.Context, wg *sync.WaitGroup, start <-c
 			va.recvNotice(&state)
 		case <-va.resync.C:
 			va.doResync()
+		case <-va.metricTicker.C:
+			va.doMetricSend()
 		}
 	}
 }

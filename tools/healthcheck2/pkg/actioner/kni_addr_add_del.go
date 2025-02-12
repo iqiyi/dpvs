@@ -17,8 +17,8 @@ type KniAddrAction struct {
 	// TODO
 }
 
-func (actioner *KniAddrAction) Act(signal types.State, timeout time.Duration) error {
-	return nil
+func (actioner *KniAddrAction) Act(signal types.State, timeout time.Duration, data ...interface{}) (interface{}, error) {
+	return nil, nil
 }
 
 func (actioner *KniAddrAction) create(target *utils.L3L4Addr, configs map[string]string) (ActionMethod, error) {

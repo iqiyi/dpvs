@@ -23,6 +23,8 @@ type AppConf struct {
 	MetricServerUri string
 	// channel size for metric data sent from va/vs/checker to metric server
 	MetricNotifyChanSize uint
+	// max delayed time to send changed metric to metric server
+	MetricDelay time.Duration
 }
 
 var DefaultAppConf = AppConf{
@@ -36,4 +38,5 @@ var DefaultAppConf = AppConf{
 	MetricServerAddr:        ":6601",
 	MetricServerUri:         "/metrics",
 	MetricNotifyChanSize:    1000,
+	MetricDelay:             2 * time.Second,
 }

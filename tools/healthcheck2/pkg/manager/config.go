@@ -25,7 +25,11 @@ type ActionConf struct {
 }
 
 func (acf *ActionConf) Valid() bool {
-	return acf.actionTimeout > 0 && acf.actionSyncTime > 0
+	return acf.actionTimeout > 0 && acf.actionSyncTime > 0 && len(acf.actioner) > 0
+}
+
+func (acf *ActionConf) DeepEqual(other *ActionConf) bool {
+	return reflect.DeepEqual(acf, other)
 }
 
 // +k8s:deepcopy-gen=true
@@ -66,7 +70,7 @@ func (c *VSConf) GetActionConf() *ActionConf {
 }
 
 // Merge configs from dpvs and files. Configs from dpvs takes precede over files.
-// Add new params to "params" if given (not nil), otherwise created one.
+// Append new params to "params" if given (not nil), otherwise created one.
 func (c *VSConf) MergeDpvsCheckerConf(vs *comm.VirtualServer, params map[string]string) map[string]string {
 	rc := params
 	if rc == nil {
@@ -101,7 +105,7 @@ type CheckerConf struct {
 }
 
 func (c *CheckerConf) Valid() bool {
-	return c.interval > 0 && c.timeout > 0
+	return c.interval > 0 && c.timeout > 0 && (c.method <= checker.AutoChecker && c.method > checker.NoneChecker)
 }
 
 func (c *CheckerConf) DeepEqual(other *CheckerConf) bool {
