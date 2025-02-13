@@ -249,7 +249,7 @@ func (va *VirtualAddress) doUpdate(ctx context.Context, conf *VAConfExt) {
 		}
 		if !skip {
 			va.conf = *vacf
-			glog.Infof("VAConf for %s updated successfully", va.id)
+			glog.V(5).Infof("VAConf for %s updated successfully", va.id)
 		} else {
 			glog.Warningf("VAConf for %s partially updated", va.id)
 		}

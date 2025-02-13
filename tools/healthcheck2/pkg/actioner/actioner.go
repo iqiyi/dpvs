@@ -12,6 +12,7 @@ var methods map[string]ActionMethod
 
 type ActionMethod interface {
 	// Act performs actions corresponding to health state change signal.
+	// The function MUST return in or immediately after `timeout` time.
 	Act(signal types.State, timeout time.Duration, data ...interface{}) (interface{}, error)
 	// create validates the given configs, returns an instance of the action
 	// method, and binds configs to it.

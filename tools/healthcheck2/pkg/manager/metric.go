@@ -19,7 +19,7 @@ import (
 
 |                    | up/down            | upNotified/downNotified          | upFailed/downFailed |
 | ------------------ | ------------------ | -------------------------------- | ------------------- |
-| Checker            | probe state counts | state change notices             | fail actions        |
+| Checker            | probe state counts | state change notices             | fail checks         |
 | VirtualService(VS) | success actions    | received va state change notices | fail actions        |
 | VirtualAddress(VA) | success actions    | received vs state change notices | fail actions        |
 */
@@ -48,17 +48,28 @@ func (s *State) String() string {
 }
 
 type Statistics struct {
-	down        uint64
-	up          uint64
-	downNoticed uint64
-	upNoticed   uint64
-	downFailed  uint64
-	upFailed    uint64
+	up          uint64 // act UP success, check UP
+	down        uint64 // act DOWN success, check DOWN
+	upNoticed   uint64 // UP state notified or received
+	downNoticed uint64 // DOWN state notified or received
+	upFailed    uint64 // act UP failed, check timeout
+	downFailed  uint64 // act DOWN failed, check error
 }
 
 func (s *Statistics) String() string {
-	return fmt.Sprintf("%d %d %d %d %d %d", s.up, s.down, s.upNoticed, s.downNoticed,
-		s.upFailed, s.downFailed)
+	return fmt.Sprintf("%d %d %d %d %d %d",
+		s.up, s.down,
+		s.upNoticed, s.downNoticed,
+		s.upFailed, s.downFailed,
+	)
+}
+
+func (s *Statistics) Title() string {
+	return fmt.Sprintf("%s %s %s %s %s %s",
+		"up", "down",
+		"up_notices", "down_notices",
+		"fail(up,timeout)", "fail(down,error)",
+	)
 }
 
 // Metric holds metric data sent from VA/VS/Checker to metric server.
@@ -173,14 +184,15 @@ func (db *MetricDB) Update(m *Metric) error {
 func (db *MetricDB) String() string {
 	var dbCopied *MetricDB
 	var builder strings.Builder
+	stats := Statistics{}
 
 	db.lock.RLock()
 	dbCopied = db.DeepCopy()
 	db.lock.RUnlock()
 
 	sep := "    "
-	banner := fmt.Sprintf("%s%s%s%s%s%s%s%s%s", "object", sep, "state", sep,
-		"statistics(up|down|up_notice|down_notice|up_fail|down_fail)", sep, "extra(optional)")
+	banner := fmt.Sprintf("%s%s%s%s%s%s%sstatistics: %s%s", "object", sep, "state", sep,
+		stats.Title(), sep, "extra(optional)")
 	builder.WriteString(fmt.Sprintf("%s\n", banner))
 	builder.WriteString(fmt.Sprintf("%s\n", strings.Repeat("-", 80)))
 
@@ -293,5 +305,6 @@ func AppThreadStatsDump() string {
 	res += fmt.Sprintf("%s%-20s%s\n", res, "VirtualAddress", VAThreads.Dump(false))
 	res += fmt.Sprintf("%s%-20s%s\n", res, "VirtualService", VSThreads.Dump(false))
 	res += fmt.Sprintf("%s%-20s%s\n", res, "Checker", CheckerThreads.Dump(false))
+	res += fmt.Sprintf("%s%-20s%s\n", res, "HealthCheck", HealthCheckThreads.Dump(false))
 	return res
 }

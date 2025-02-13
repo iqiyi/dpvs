@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,9 +11,11 @@ import (
 
 type CheckMethod interface {
 	// Check executes a healthcheck procedure of the method once.
+	// The function MUST return in or immediately after `timeout` time.
 	Check(target *utils.L3L4Addr, timeout time.Duration) (types.State, error)
-	// BindConfig binds method specific configs.
-	BindConfig(configs map[string]string) error
+	// create validates the given params, returns an instance of the checker
+	// method, and binds params to it.
+	create(params map[string]string) (CheckMethod, error)
 }
 
 type Method uint16
@@ -29,6 +32,27 @@ const (
 	AutoChecker    Method = 10000 // "automatically inferred from protocol"
 	PassiveChecker Method = 65535 // "passive", dpvs internal checker, ignore it
 )
+
+var methods map[Method]CheckMethod
+
+func registerMethod(kind Method, method CheckMethod) {
+	if methods == nil {
+		methods = make(map[Method]CheckMethod)
+	}
+	methods[kind] = method
+}
+
+func NewChecker(kind Method, target *utils.L3L4Addr, configs map[string]string) (CheckMethod, error) {
+	method, ok := methods[kind]
+	if !ok {
+		return nil, fmt.Errorf("unsupported Action type %q", kind)
+	}
+	checker, err := method.create(configs)
+	if err != nil {
+		return nil, fmt.Errorf("checker create failed: %v", err)
+	}
+	return checker, nil
+}
 
 func ParseMethod(name string) Method {
 	name = strings.ToLower(name)

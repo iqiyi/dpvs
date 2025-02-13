@@ -109,7 +109,7 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 
 		metricTaint:  true,
 		metricTicker: metricTicker,
-		metric:       va.m.metricServer.notify,
+		metric:       va.metric,
 
 		wg:     &sync.WaitGroup{},
 		update: make(chan VSConfExt),
@@ -276,7 +276,7 @@ func (vs *VirtualService) doUpdate(ctx context.Context, conf *VSConfExt) {
 		}
 		if !skip {
 			vs.conf = *vscf
-			glog.Infof("VSConf for %s updated successfully", vs.id)
+			glog.V(5).Infof("VSConf for %s updated successfully", vs.id)
 		} else {
 			vs.conf.CheckerConf = vscf.CheckerConf
 			glog.Warningf("VSConf for %s partially updated", vs.id)
@@ -316,7 +316,7 @@ func (vs *VirtualService) doUpdate(ctx context.Context, conf *VSConfExt) {
 	// Create new or update existing Backends
 	for _, rs := range conf.vs.RSs {
 		ckid := CheckerID(rs.Addr.String())
-		ckConf := vscf.GetCheckerConf().DeepCopy()
+		ckConf := vscf.GetCheckerConf()
 		state := types.Healthy
 		if rs.Inhibited {
 			state = types.Unhealthy
@@ -378,7 +378,7 @@ func (vs *VirtualService) doUpdate(ctx context.Context, conf *VSConfExt) {
 					glog.Warningf("VS %s update backend %s to %s failed: %v", vs.id, ckid, err)
 				}
 			}
-			vsb.checker.Update(ckConf)
+			vsb.checker.Update(ckConf.DeepCopy())
 		}
 	}
 }
@@ -483,8 +483,8 @@ func (vs *VirtualService) cleanup() {
 	vs.wg.Wait()
 
 	// close and drain channels
-	// Notes: No write to these channels now, so it's safe to close the channels
-	//   from the read side.
+	// Notes: No write to these channels any more,
+	//   so it's safe to close the channels from the read side.
 	close(vs.notify)
 	for {
 		if _, ok := <-vs.notify; !ok {
