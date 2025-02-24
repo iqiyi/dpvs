@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -208,7 +207,7 @@ func (va *VirtualAddress) act(state types.State) error {
 	return va.actUP()
 }
 
-func (va *VirtualAddress) doUpdate(ctx context.Context, conf *VAConfExt) {
+func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 	vacf := conf.GetVAConf()
 
 	// Update VAConf
@@ -313,7 +312,7 @@ func (va *VirtualAddress) doUpdate(ctx context.Context, conf *VAConfExt) {
 			va.wg.Add(1)
 			delay := time.NewTicker(time.Duration(1+rand.Intn(int(
 				VSStartDelayMax.Milliseconds()))) * time.Millisecond)
-			go vs.Run(ctx, va.wg, delay.C)
+			go vs.Run(va.wg, delay.C)
 		} else { // update
 			if vavs.version > svc.Version {
 				glog.Warningf("received VS %s with eariler version, skip it", vsid)
@@ -430,7 +429,7 @@ func (va *VirtualAddress) cleanup() {
 	<-va.quit
 }
 
-func (va *VirtualAddress) Run(ctx context.Context, wg *sync.WaitGroup, start <-chan time.Time) {
+func (va *VirtualAddress) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 	glog.Infof("starting VA %s ...", va.id)
 	VAThreads.RunningInc()
 	defer func() {
@@ -446,12 +445,8 @@ func (va *VirtualAddress) Run(ctx context.Context, wg *sync.WaitGroup, start <-c
 		VAThreads.RunningDec()
 		VAThreads.StoppingInc()
 		return
-	case <-ctx.Done():
-		VAThreads.RunningDec()
-		VAThreads.StoppingInc()
-		return
 	case conf := <-va.update:
-		va.doUpdate(ctx, &conf)
+		va.doUpdate(&conf)
 	}
 
 	// wait for a tick to avoid thundering herd at startup and to stagger
@@ -462,18 +457,13 @@ func (va *VirtualAddress) Run(ctx context.Context, wg *sync.WaitGroup, start <-c
 
 	for {
 		select {
-		case <-ctx.Done():
-			VAThreads.RunningDec()
-			VAThreads.StoppingInc()
-			va.cleanup()
-			return
 		case <-va.quit:
 			VAThreads.RunningDec()
 			VAThreads.StoppingInc()
 			va.cleanup()
 			return
 		case conf := <-va.update:
-			va.doUpdate(ctx, &conf)
+			va.doUpdate(&conf)
 		case state := <-va.notify:
 			va.recvNotice(&state)
 		case <-va.resync.C:

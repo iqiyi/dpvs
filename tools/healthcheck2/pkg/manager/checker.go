@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -224,7 +223,7 @@ func (c *Checker) Update(conf *CheckerConf) {
 	c.update <- *conf
 }
 
-func (c *Checker) Run(ctx context.Context, wg *sync.WaitGroup, start <-chan time.Time) {
+func (c *Checker) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 	uuid := c.UUID()
 	glog.Infof("starting Checker %s ...", uuid)
 
@@ -243,11 +242,6 @@ func (c *Checker) Run(ctx context.Context, wg *sync.WaitGroup, start <-chan time
 
 	for {
 		select {
-		case <-ctx.Done():
-			CheckerThreads.RunningDec()
-			CheckerThreads.StoppingInc()
-			c.cleanup()
-			return
 		case <-c.quit:
 			CheckerThreads.RunningDec()
 			CheckerThreads.StoppingInc()

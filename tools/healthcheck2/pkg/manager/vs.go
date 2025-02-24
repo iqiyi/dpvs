@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -58,7 +57,6 @@ type VirtualService struct {
 	downBackends int
 	upBackends   int
 
-	ctx      context.Context
 	backends map[CheckerID]*VSBackend
 	actioner actioner.ActionMethod
 	resync   *time.Ticker // timer to resync backend state to dpvs
@@ -212,7 +210,7 @@ func (vs *VirtualService) act(changed []CheckerID) error {
 				VSConf: *vsConf,
 				vs:     *svc,
 			}
-			vs.doUpdate(vs.ctx, vsConfExt.DeepCopy())
+			vs.doUpdate(vsConfExt.DeepCopy())
 		} else {
 			return fmt.Errorf("%v, response: %v", err, resp)
 		}
@@ -227,7 +225,7 @@ func (vs *VirtualService) act(changed []CheckerID) error {
 	return nil
 }
 
-func (vs *VirtualService) doUpdate(ctx context.Context, conf *VSConfExt) {
+func (vs *VirtualService) doUpdate(conf *VSConfExt) {
 	// Update VSConf
 	vscf := conf.GetVSConf()
 
@@ -350,7 +348,7 @@ func (vs *VirtualService) doUpdate(ctx context.Context, conf *VSConfExt) {
 			vs.wg.Add(1)
 			delay := time.NewTicker(time.Duration(1+rand.Intn(int(
 				CheckerStartDelayMax.Milliseconds()))) * time.Millisecond)
-			go checker.Run(ctx, vs.wg, delay.C)
+			go checker.Run(vs.wg, delay.C)
 		} else { // update
 			uuid := vsb.checker.UUID()
 			if vsb.version > conf.vs.Version {
@@ -497,8 +495,7 @@ func (vs *VirtualService) cleanup() {
 	<-vs.quit
 }
 
-func (vs *VirtualService) Run(ctx context.Context, wg *sync.WaitGroup, start <-chan time.Time) {
-	vs.ctx = ctx
+func (vs *VirtualService) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 	glog.Infof("starting VS %s ...", vs.id)
 
 	VSThreads.RunningInc()
@@ -515,12 +512,8 @@ func (vs *VirtualService) Run(ctx context.Context, wg *sync.WaitGroup, start <-c
 		VSThreads.RunningDec()
 		VSThreads.StoppingInc()
 		return
-	case <-ctx.Done():
-		VSThreads.RunningDec()
-		VSThreads.StoppingInc()
-		return
 	case conf := <-vs.update:
-		vs.doUpdate(ctx, &conf)
+		vs.doUpdate(&conf)
 	}
 
 	// wait for a tick to avoid thundering herd at startup and to stagger
@@ -531,18 +524,13 @@ func (vs *VirtualService) Run(ctx context.Context, wg *sync.WaitGroup, start <-c
 
 	for {
 		select {
-		case <-ctx.Done():
-			VSThreads.RunningDec()
-			VSThreads.StoppingInc()
-			vs.cleanup()
-			return
 		case <-vs.quit:
 			VSThreads.RunningDec()
 			VSThreads.StoppingInc()
 			vs.cleanup()
 			return
 		case conf := <-vs.update:
-			vs.doUpdate(ctx, &conf)
+			vs.doUpdate(&conf)
 		case state := <-vs.notify:
 			vs.recvNotice(&state)
 		case <-vs.resync.C:

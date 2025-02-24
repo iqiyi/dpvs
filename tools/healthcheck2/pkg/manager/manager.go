@@ -131,7 +131,7 @@ func (t *svcLister) Job(ctx context.Context) {
 			t.m.wg.Add(1)
 			delay := time.NewTicker(time.Duration(1+rand.Intn(int(
 				VAStartDelayMax.Milliseconds()))) * time.Millisecond)
-			go va.Run(ctx, t.m.wg, delay.C)
+			go va.Run(t.m.wg, delay.C)
 		} else {
 			if vaConf.disable {
 				delete(t.m.vas, vaid)
@@ -179,12 +179,9 @@ func NewMetricServer(conf *types.AppConf) *metricServer {
 	return &svr
 }
 
-func (s *metricServer) Run(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (s *metricServer) Run(ctx context.Context) {
 	http.HandleFunc(s.uri, metricHandler)
 
-	wg.Add(1)
 	go func() {
 		glog.Infof("Starting metric http server listening on %s ...", s.addr)
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -230,10 +227,13 @@ type Manager struct {
 
 	cfgFileReloader *cfgFileReloader
 	svcLister       *svcLister
-	metricServer    *metricServer
+	cancel          context.CancelFunc
 
-	wg   *sync.WaitGroup
-	quit chan bool
+	metricServer *metricServer
+
+	wg       *sync.WaitGroup
+	quit     chan bool
+	stopping bool
 }
 
 func NewManager(conf *types.AppConf) *Manager {
@@ -257,26 +257,41 @@ func NewManager(conf *types.AppConf) *Manager {
 
 func (m *Manager) Run() {
 	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
 
 	m.wg.Add(1)
 	go utils.RunTask(m.cfgFileReloader, ctx, m.wg, nil)
 	m.wg.Add(1)
 	go utils.RunTask(m.svcLister, ctx, m.wg, nil)
-	m.wg.Add(1)
-	go m.metricServer.Run(ctx, m.wg)
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	go m.metricServer.Run(ctx2)
 
 	<-m.quit
-	cancel()
-	m.metricServer.Shutdown(m.wg)
-
 	m.wg.Wait()
+
+	// Metric server MUST stop after everything is done.
+	cancel2()
+	m.metricServer.Shutdown(nil)
+
 	glog.Info("Manager server closed successfully.")
 }
 
 func (m *Manager) Shutdown() {
+	if m.stopping {
+		return
+	}
+	m.stopping = true
+
 	glog.Info("Closing manager server ...")
 	select {
 	case m.quit <- true:
+		// Stop tasks: cfgFileReloader, svcLister.
+		m.cancel()
+		// Stop all VAs, VSs, and Checkers.
+		for _, va := range m.vas {
+			va.Stop()
+		}
 	default:
 	}
 }
