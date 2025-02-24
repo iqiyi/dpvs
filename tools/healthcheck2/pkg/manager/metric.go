@@ -39,12 +39,13 @@ func init() {
 }
 
 type State struct {
-	state    types.State
-	duration time.Duration
+	state types.State
+	since time.Time
 }
 
-func (s *State) String() string {
-	return fmt.Sprintf("%s %s", s.state, s.duration)
+func (s State) String() string {
+	duration := time.Duration(time.Since(s.since).Seconds()) * time.Second
+	return fmt.Sprintf("%s %v", s.state, duration)
 }
 
 type Statistics struct {
@@ -56,8 +57,8 @@ type Statistics struct {
 	downFailed  uint64 // act DOWN failed, check error
 }
 
-func (s *Statistics) String() string {
-	return fmt.Sprintf("%d %d %d %d %d %d",
+func (s Statistics) String() string {
+	return fmt.Sprintf("%d,%d,%d,%d,%d,%d",
 		s.up, s.down,
 		s.upNoticed, s.downNoticed,
 		s.upFailed, s.downFailed,
@@ -65,7 +66,7 @@ func (s *Statistics) String() string {
 }
 
 func (s *Statistics) Title() string {
-	return fmt.Sprintf("%s %s %s %s %s %s",
+	return fmt.Sprintf("%s,%s,%s,%s,%s,%s",
 		"up", "down",
 		"up_notices", "down_notices",
 		"fail(up,timeout)", "fail(down,error)",
@@ -123,7 +124,7 @@ func (db *MetricDB) Update(m *Metric) error {
 		}
 		va, exist := db.data[m.vaID]
 		if !exist {
-			va := new(VAMetric)
+			va = new(VAMetric)
 			va.vss = make(map[VSID]*VSMetric)
 			db.data[m.vaID] = va
 		}
@@ -191,7 +192,7 @@ func (db *MetricDB) String() string {
 	db.lock.RUnlock()
 
 	sep := "    "
-	banner := fmt.Sprintf("%s%s%s%s%s%s%sstatistics: %s%s", "object", sep, "state", sep,
+	banner := fmt.Sprintf("%s%s%s%sstatistics:%s%s%s", "object", sep, "state", sep,
 		stats.Title(), sep, "extra(optional)")
 	builder.WriteString(fmt.Sprintf("%s\n", banner))
 	builder.WriteString(fmt.Sprintf("%s\n", strings.Repeat("-", 80)))
@@ -300,11 +301,10 @@ func (t *ThreadStats) Dump(title bool) string {
 }
 
 func AppThreadStatsDump() string {
-	str := VAThreads.Dump(true)
-	res := fmt.Sprintf("%-20s%s\n", "", str)
-	res += fmt.Sprintf("%s%-20s%s\n", res, "VirtualAddress", VAThreads.Dump(false))
-	res += fmt.Sprintf("%s%-20s%s\n", res, "VirtualService", VSThreads.Dump(false))
-	res += fmt.Sprintf("%s%-20s%s\n", res, "Checker", CheckerThreads.Dump(false))
-	res += fmt.Sprintf("%s%-20s%s\n", res, "HealthCheck", HealthCheckThreads.Dump(false))
+	res := fmt.Sprintf("%-20s%s\n", "", VAThreads.Dump(true))
+	res += fmt.Sprintf("%-20s%s\n", "VirtualAddress", VAThreads.Dump(false))
+	res += fmt.Sprintf("%-20s%s\n", "VirtualService", VSThreads.Dump(false))
+	res += fmt.Sprintf("%-20s%s\n", "Checker", CheckerThreads.Dump(false))
+	res += fmt.Sprintf("%-20s%s\n", "HealthCheck", HealthCheckThreads.Dump(false))
 	return res
 }

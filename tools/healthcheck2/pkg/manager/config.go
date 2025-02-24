@@ -154,7 +154,7 @@ var (
 			timeout:   2 * time.Second,
 		},
 		ActionConf: ActionConf{
-			actioner:       "WeightStateUpdate",
+			actioner:       "BackendUpdate",
 			actionTimeout:  2 * time.Second,
 			actionSyncTime: 15 * time.Second,
 		},

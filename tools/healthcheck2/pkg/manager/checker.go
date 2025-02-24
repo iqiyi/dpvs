@@ -210,8 +210,8 @@ func (c *Checker) doMetricSend() {
 		vsID:      c.vs.id,
 		checkerID: c.id,
 		state: State{
-			state:    c.state,
-			duration: time.Since(c.since),
+			state: c.state,
+			since: c.since,
 		},
 	}
 	c.metric <- metric

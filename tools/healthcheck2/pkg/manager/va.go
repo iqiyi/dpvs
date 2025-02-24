@@ -397,8 +397,8 @@ func (va *VirtualAddress) doMetricSend() {
 		kind: MetricTypeVA,
 		vaID: va.id,
 		state: State{
-			state:    va.state,
-			duration: time.Since(va.since),
+			state: va.state,
+			since: va.since,
 		},
 		stats: va.stats,
 	}

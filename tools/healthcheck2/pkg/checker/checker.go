@@ -45,7 +45,7 @@ func registerMethod(kind Method, method CheckMethod) {
 func NewChecker(kind Method, target *utils.L3L4Addr, configs map[string]string) (CheckMethod, error) {
 	method, ok := methods[kind]
 	if !ok {
-		return nil, fmt.Errorf("unsupported Action type %q", kind)
+		return nil, fmt.Errorf("unsupported checker type %q", kind)
 	}
 	checker, err := method.create(configs)
 	if err != nil {
@@ -74,8 +74,8 @@ func ParseMethod(name string) Method {
 	return NoneChecker
 }
 
-func (m *Method) String() string {
-	switch *m {
+func (m Method) String() string {
+	switch m {
 	case TCPChecker:
 		return "tcp"
 	case UDPChecker:

@@ -464,8 +464,8 @@ func (vs *VirtualService) doMetricSend() {
 		vaID: vs.va.id,
 		vsID: vs.id,
 		state: State{
-			state:    vs.state,
-			duration: time.Since(vs.since),
+			state: vs.state,
+			since: vs.since,
 		},
 		stats: vs.stats,
 	}

@@ -88,7 +88,7 @@ func init() {
 		appConf.DpvsAgentAddr = *dpvsAgentAddr
 	}
 	if !strings.HasPrefix(appConf.DpvsAgentAddr, "http") {
-		appConf.DpvsAgentAddr += "http://"
+		appConf.DpvsAgentAddr = "http://" + appConf.DpvsAgentAddr
 	}
 	if dpvsServiceListInterval != nil && *dpvsServiceListInterval > 0 {
 		appConf.DpvsServiceListInterval = *dpvsServiceListInterval
