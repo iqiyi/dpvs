@@ -59,8 +59,6 @@ func NewChecker(target *utils.L3L4Addr, conf *CheckerConf, vs *VirtualService) (
 	if err != nil {
 		return nil, fmt.Errorf("fail to create checker method %v: %v", confCopied.method, err)
 	}
-	checkTicker := time.NewTicker(confCopied.interval)
-	metricTicker := time.NewTicker(vs.va.m.appConf.MetricDelay)
 
 	checker := &Checker{
 		id:     ckid,
@@ -71,11 +69,11 @@ func NewChecker(target *utils.L3L4Addr, conf *CheckerConf, vs *VirtualService) (
 		since: time.Now(),
 
 		method:      method,
-		checkTicker: checkTicker,
+		checkTicker: nil, // init it in func `Run`
 		vs:          vs,
 
 		metricTaint:  true,
-		metricTicker: metricTicker,
+		metricTicker: nil, // init it in func `Run`
 		metric:       vs.metric,
 
 		update: make(chan CheckerConf),
@@ -103,6 +101,7 @@ func (c *Checker) sendNotice() {
 	} else {
 		c.stats.upNoticed++
 	}
+	c.metricTaint = true
 }
 
 func (c *Checker) doPostCheck(newState types.State) {
@@ -116,11 +115,13 @@ func (c *Checker) doPostCheck(newState types.State) {
 	switch newState {
 	case types.Healthy:
 		c.stats.up++
+		c.metricTaint = true
 		if c.count == c.conf.upRetry {
 			c.sendNotice()
 		}
 	case types.Unhealthy:
 		c.stats.down++
+		c.metricTaint = true
 		if c.count == c.conf.downRetry {
 			c.sendNotice()
 		}
@@ -170,16 +171,17 @@ func (c *Checker) doUpdate(conf *CheckerConf) {
 }
 
 func (c *Checker) doCheck() {
+	glog.V(9).Infof("Checking %s ...", c.UUID())
 	ch := make(chan types.State)
 
 	go func() {
 		// TODO: Determine a way to ensure that this go routine does not linger.
 		HealthCheckThreads.RunningInc()
 		if state, err := c.method.Check(&c.target, c.conf.timeout); err != nil {
-			ch <- state
-		} else {
 			glog.Warningf("Checker %s executes healthcheck failed: %v", c.UUID(), err)
 			ch <- types.Unknown
+		} else {
+			ch <- state
 		}
 		HealthCheckThreads.RunningDec()
 		HealthCheckThreads.FinishedInc()
@@ -191,9 +193,11 @@ func (c *Checker) doCheck() {
 			c.doPostCheck(state)
 		} else {
 			c.stats.downFailed++
+			c.metricTaint = true
 		}
 	case <-time.After(c.conf.timeout + time.Second):
 		c.stats.upFailed++
+		c.metricTaint = true
 		glog.Warningf("Checker %s executes healthcheck timeout", c.UUID())
 	}
 }
@@ -212,6 +216,7 @@ func (c *Checker) doMetricSend() {
 			state: c.state,
 			since: c.since,
 		},
+		stats: c.stats,
 	}
 	c.metric <- metric
 
@@ -240,6 +245,15 @@ func (c *Checker) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 		<-start
 	}
 
+	if c.checkTicker == nil {
+		c.checkTicker = time.NewTicker(c.conf.interval)
+	}
+	if c.metricTicker == nil {
+		c.metricTicker = time.NewTicker(c.vs.va.m.appConf.MetricDelay)
+	}
+
+	glog.V(5).Infof("Checker %v loop started\n", uuid)
+
 	for {
 		select {
 		case <-c.quit:
@@ -258,8 +272,12 @@ func (c *Checker) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 }
 
 func (c *Checker) cleanup() {
-	c.checkTicker.Stop()
-	c.metricTicker.Stop()
+	if c.checkTicker != nil {
+		c.checkTicker.Stop()
+	}
+	if c.metricTicker != nil {
+		c.metricTicker.Stop()
+	}
 
 	// Notes: No write to these channels any more,
 	//   so it's safe to close the channels from the read side.
@@ -270,6 +288,6 @@ func (c *Checker) cleanup() {
 }
 
 func (c *Checker) Stop() {
-	glog.Infof("Stopping Checker %d ...", c.UUID())
+	glog.Infof("Stopping Checker %v ...", c.UUID())
 	c.quit <- true
 }

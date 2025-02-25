@@ -21,16 +21,16 @@ type CheckMethod interface {
 type Method uint16
 
 const (
-	NoneChecker    Method = iota
-	TCPChecker            // "tcp"
-	UDPChecker            // "udp"
-	PingChecker           // "ping"
-	UDPPingChecker        // "udpping"
-	HTTPChecker           // "http"
+	CheckMethodNone    Method = iota
+	CheckMethodTCP            // "tcp"
+	CheckMethodUDP            // "udp"
+	CheckMethodPing           // "ping"
+	CheckMethodUDPPing        // "udpping"
+	CheckMethodHTTP           // "http"
 	// TODO: add new check methods here
 
-	AutoChecker    Method = 10000 // "automatically inferred from protocol"
-	PassiveChecker Method = 65535 // "passive", dpvs internal checker, ignore it
+	CheckMethodAuto    Method = 10000 // "automatically inferred from protocol"
+	CheckMethodPassive Method = 65535 // "passive", dpvs internal checker, ignore it
 )
 
 var methods map[Method]CheckMethod
@@ -58,37 +58,37 @@ func ParseMethod(name string) Method {
 	name = strings.ToLower(name)
 	switch name {
 	case "tcp":
-		return TCPChecker
+		return CheckMethodTCP
 	case "udp":
-		return UDPChecker
+		return CheckMethodUDP
 	case "ping":
-		return PingChecker
+		return CheckMethodPing
 	case "udpping":
-		return UDPPingChecker
+		return CheckMethodUDPPing
 	case "http":
-		return HTTPChecker
+		return CheckMethodHTTP
 
 	case "auto":
-		return AutoChecker
+		return CheckMethodAuto
 	}
-	return NoneChecker
+	return CheckMethodNone
 }
 
 func (m Method) String() string {
 	switch m {
-	case TCPChecker:
+	case CheckMethodTCP:
 		return "tcp"
-	case UDPChecker:
+	case CheckMethodUDP:
 		return "udp"
-	case PingChecker:
+	case CheckMethodPing:
 		return "ping"
-	case UDPPingChecker:
+	case CheckMethodUDPPing:
 		return "udpping"
-	case NoneChecker:
+	case CheckMethodNone:
 		return "none"
-	case PassiveChecker:
+	case CheckMethodPassive:
 		return "passive"
-	case AutoChecker:
+	case CheckMethodAuto:
 		return "auto"
 	default:
 		return "unknown"
@@ -99,11 +99,11 @@ func (m Method) String() string {
 func (m *Method) TranslateAuto(proto utils.IPProto) Method {
 	switch proto {
 	case utils.IPProtoTCP:
-		return TCPChecker
+		return CheckMethodTCP
 	case utils.IPProtoUDP:
-		return UDPPingChecker
+		return CheckMethodUDPPing
 	}
-	return PingChecker
+	return CheckMethodPing
 }
 
 // Checker params that can be derived from dpvs.

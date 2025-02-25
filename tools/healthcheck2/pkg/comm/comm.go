@@ -57,7 +57,7 @@ func (avs *DpvsAgentVs) toVs() (*VirtualServer, error) {
 	if proto != utils.IPProtoTCP && proto != utils.IPProtoUDP {
 		return nil, fmt.Errorf("not supported VS protocol type 0x%0x", avs.Proto)
 	}
-	method := checker.NoneChecker
+	method := checker.CheckMethodNone
 	if len(avs.DestCheck) > 0 { // Note: Support only one check method per VS.
 		method = checker.ParseMethod(avs.DestCheck[0])
 	}

@@ -81,7 +81,7 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 	vsid := VSID(sub.Addr.String())
 	confCopied := conf.DeepCopy()
 	confCopied.methodParams = confCopied.MergeDpvsCheckerConf(sub, confCopied.methodParams)
-	if confCopied.method == checker.AutoChecker {
+	if confCopied.method == checker.CheckMethodAuto {
 		confCopied.method = confCopied.method.TranslateAuto(sub.Addr.Proto)
 	}
 
@@ -89,8 +89,6 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 	if err != nil {
 		return nil, fmt.Errorf("VS actioner created failed: %v", err)
 	}
-	resyncTicker := time.NewTicker(confCopied.actionSyncTime)
-	metricTicker := time.NewTicker(va.m.appConf.MetricDelay)
 
 	vs := &VirtualService{
 		id:      vsid,
@@ -103,10 +101,10 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 
 		backends: make(map[CheckerID]*VSBackend),
 		actioner: act,
-		resync:   resyncTicker,
+		resync:   nil, // init it in func `Run`
 
 		metricTaint:  true,
-		metricTicker: metricTicker,
+		metricTicker: nil, // init it in func `Run`
 		metric:       va.metric,
 
 		wg:     &sync.WaitGroup{},
@@ -230,15 +228,17 @@ func (vs *VirtualService) doUpdate(conf *VSConfExt) {
 	vscf := conf.GetVSConf()
 
 	vscf.methodParams = vscf.MergeDpvsCheckerConf(&conf.vs, vscf.methodParams)
-	if vscf.method == checker.AutoChecker {
+	if vscf.method == checker.CheckMethodAuto {
 		vscf.method = vscf.method.TranslateAuto(conf.vs.Addr.Proto)
 	}
 
 	if !vscf.DeepEqual(&vs.conf) {
 		skip := false
 		if vscf.actionSyncTime > 0 && vscf.actionSyncTime != vs.conf.actionSyncTime {
-			vs.resync.Stop()
-			vs.resync = time.NewTicker(vscf.actionSyncTime)
+			if vs.resync != nil {
+				vs.resync.Stop()
+				vs.resync = time.NewTicker(vscf.actionSyncTime)
+			}
 			vs.conf.actionSyncTime = vscf.actionSyncTime
 		}
 		if vscf.actionTimeout > 0 && vscf.actionTimeout != vs.conf.actionTimeout {
@@ -343,7 +343,6 @@ func (vs *VirtualService) doUpdate(conf *VSConfExt) {
 				checker:      checker,
 			}
 			vs.backends[ckid] = vsb
-			vs.upBackends++ // new Checker default Healthy, but do NOT update VS state
 			vs.metricTaint = true
 			vs.wg.Add(1)
 			delay := time.NewTicker(time.Duration(1+rand.Intn(int(
@@ -408,7 +407,9 @@ func (vs *VirtualService) recvNotice(state *BackendState) {
 
 	if state.state == types.Unhealthy {
 		vs.downBackends++
-		vs.upBackends--
+		if vs.upBackends > 0 {
+			vs.upBackends--
+		}
 		vsState := vs.judge()
 		if vsState != vs.state {
 			vs.sendStateChangeNotice(vsState)
@@ -416,7 +417,9 @@ func (vs *VirtualService) recvNotice(state *BackendState) {
 		}
 	} else {
 		vs.upBackends++
-		vs.downBackends--
+		if vs.downBackends > 0 {
+			vs.downBackends--
+		}
 		vsState := vs.judge()
 		if vsState != vs.state {
 			vs.sendStateChangeNotice(vsState)
@@ -443,6 +446,8 @@ func (vs *VirtualService) doResync() {
 	}
 
 	// recalculate and sync VS state
+	glog.V(7).Infof("VS %s state before resync: %v, upBackends %d, downBackends %d",
+		vs.id, vs.state, vs.upBackends, vs.downBackends)
 	vsState := vs.calcState()
 	if vsState != vs.state {
 		glog.Warningf("VS %s state changed %s->%s after recalculation",
@@ -473,8 +478,12 @@ func (vs *VirtualService) doMetricSend() {
 }
 
 func (vs *VirtualService) cleanup() {
-	vs.resync.Stop()
-	vs.metricTicker.Stop()
+	if vs.resync != nil {
+		vs.resync.Stop()
+	}
+	if vs.metricTicker != nil {
+		vs.metricTicker.Stop()
+	}
 	for _, rs := range vs.backends {
 		rs.checker.Stop()
 	}
@@ -521,6 +530,15 @@ func (vs *VirtualService) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 	if start != nil {
 		<-start
 	}
+
+	if vs.resync == nil {
+		vs.resync = time.NewTicker(vs.conf.actionSyncTime)
+	}
+	if vs.metricTicker == nil {
+		vs.metricTicker = time.NewTicker(vs.va.m.appConf.MetricDelay)
+	}
+
+	glog.V(5).Infof("VS %v loop started\n", vs.id)
 
 	for {
 		select {

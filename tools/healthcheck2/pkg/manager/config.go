@@ -77,7 +77,7 @@ func (c *VSConf) MergeDpvsCheckerConf(vs *comm.VirtualServer, params map[string]
 		rc = make(map[string]string)
 	}
 
-	if vs.DestCheck != checker.NoneChecker {
+	if vs.DestCheck != checker.CheckMethodNone {
 		c.method = vs.DestCheck
 	}
 
@@ -105,7 +105,7 @@ type CheckerConf struct {
 }
 
 func (c *CheckerConf) Valid() bool {
-	return c.interval > 0 && c.timeout > 0 && (c.method <= checker.AutoChecker && c.method > checker.NoneChecker)
+	return c.interval > 0 && c.timeout > 0 && (c.method <= checker.CheckMethodAuto && c.method > checker.CheckMethodNone)
 }
 
 func (c *CheckerConf) DeepEqual(other *CheckerConf) bool {
@@ -147,7 +147,7 @@ var (
 
 	vsConfDefault VSConf = VSConf{
 		CheckerConf: CheckerConf{
-			method:    checker.AutoChecker,
+			method:    checker.CheckMethodAuto,
 			interval:  2 * time.Second,
 			downRetry: 1,
 			upRetry:   1,

@@ -92,8 +92,6 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 	if err != nil {
 		return nil, fmt.Errorf("VA actioner created failed: %v", err)
 	}
-	resyncTicker := time.NewTicker(confCopied.actionSyncTime)
-	metricTicker := time.NewTicker(m.appConf.MetricDelay)
 
 	va := &VirtualAddress{
 		id:      vaid,
@@ -106,10 +104,10 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 
 		vss:      make(map[VSID]*VAVS),
 		actioner: act,
-		resync:   resyncTicker,
+		resync:   nil, // init it in func `Run`
 
 		metricTaint:  true,
-		metricTicker: metricTicker,
+		metricTicker: nil, // init it in func `Run`
 		metric:       m.metricServer.notify,
 
 		wg:     &sync.WaitGroup{},
@@ -219,8 +217,10 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 			needResync = true
 		}
 		if vacf.actionSyncTime > 0 && vacf.actionSyncTime != va.conf.actionSyncTime {
-			va.resync.Stop()
-			va.resync = time.NewTicker(vacf.actionSyncTime)
+			if va.resync != nil {
+				va.resync.Stop()
+				va.resync = time.NewTicker(vacf.actionSyncTime)
+			}
 			va.conf.actionSyncTime = vacf.actionSyncTime
 		}
 		if vacf.actionTimeout > 0 && vacf.actionTimeout != va.conf.actionTimeout {
@@ -307,7 +307,6 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 				vs:           vs,
 			}
 			va.vss[vsid] = vavs
-			va.upVSs++ // new VS default Healthy
 			va.metricTaint = true
 			va.wg.Add(1)
 			delay := time.NewTicker(time.Duration(1+rand.Intn(int(
@@ -357,7 +356,9 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 
 	if state.state == types.Unhealthy {
 		va.downVSs++
-		va.upVSs--
+		if va.upVSs > 0 {
+			va.upVSs--
+		}
 		vaState := va.judge()
 		if vaState != va.state {
 			if err := va.act(vaState); err != nil {
@@ -366,7 +367,9 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 		}
 	} else {
 		va.upVSs++
-		va.downVSs--
+		if va.downVSs > 0 {
+			va.downVSs--
+		}
 		vaState := va.judge()
 		if vaState != va.state {
 			if err := va.act(vaState); err != nil {
@@ -377,6 +380,8 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 }
 
 func (va *VirtualAddress) doResync() {
+	glog.V(7).Infof("VA %s state before resync: %v, upVSs %d, downVSs %d",
+		va.id, va.state, va.upVSs, va.downVSs)
 	state := va.calcState()
 	if state != va.state {
 		if err := va.act(state); err != nil {
@@ -407,8 +412,12 @@ func (va *VirtualAddress) doMetricSend() {
 }
 
 func (va *VirtualAddress) cleanup() {
-	va.resync.Stop()
-	va.metricTicker.Stop()
+	if va.resync != nil {
+		va.resync.Stop()
+	}
+	if va.metricTicker != nil {
+		va.metricTicker.Stop()
+	}
 	for _, vavs := range va.vss {
 		vavs.vs.Stop()
 	}
@@ -454,6 +463,15 @@ func (va *VirtualAddress) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 	if start != nil {
 		<-start
 	}
+
+	if va.resync == nil {
+		va.resync = time.NewTicker(va.conf.actionSyncTime)
+	}
+	if va.metricTicker == nil {
+		va.metricTicker = time.NewTicker(va.m.appConf.MetricDelay)
+	}
+
+	glog.V(5).Infof("VA %v loop started\n", va.id)
 
 	for {
 		select {
