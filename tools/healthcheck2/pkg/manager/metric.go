@@ -4,6 +4,7 @@ package manager
 import (
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -197,7 +198,14 @@ func (db *MetricDB) String() string {
 	builder.WriteString(fmt.Sprintf("%s\n", banner))
 	builder.WriteString(fmt.Sprintf("%s\n", strings.Repeat("-", 80)))
 
-	for vaID, va := range dbCopied.data {
+	vaIDSortList := make([]string, 0, len(dbCopied.data))
+	for vaID, _ := range dbCopied.data {
+		vaIDSortList = append(vaIDSortList, string(vaID))
+	}
+	sort.Strings(vaIDSortList)
+	for _, vaIDStr := range vaIDSortList {
+		vaID := VAID(vaIDStr)
+		va := dbCopied.data[vaID]
 		indent := ""
 		vip := net.ParseIP(string(vaID))
 		if vip == nil {
@@ -211,7 +219,14 @@ func (db *MetricDB) String() string {
 		builder.WriteString("\n")
 
 		indent += sep
-		for vsID, vs := range va.vss {
+		vsIDSortList := make([]string, 0, len(va.vss))
+		for vsID, _ := range va.vss {
+			vsIDSortList = append(vsIDSortList, string(vsID))
+		}
+		sort.Strings(vsIDSortList)
+		for _, vsIDStr := range vsIDSortList {
+			vsID := VSID(vsIDStr)
+			vs := va.vss[vsID]
 			vipport := utils.ParseL3L4Addr(string(vsID))
 			if vipport == nil || !vip.Equal(vipport.IP) {
 				glog.Warningf("VA %s VSID %v is not valid, skip VS metric %v.", vaID, vsID, vs)
@@ -230,7 +245,14 @@ func (db *MetricDB) String() string {
 			builder.WriteString("\n")
 
 			indent += "-> "
-			for ckID, ck := range vs.checkers {
+			ckIDSortList := make([]string, 0, len(vs.checkers))
+			for ckID, _ := range vs.checkers {
+				ckIDSortList = append(ckIDSortList, string(ckID))
+			}
+			sort.Strings(ckIDSortList)
+			for _, ckIDStr := range ckIDSortList {
+				ckID := CheckerID(ckIDStr)
+				ck := vs.checkers[ckID]
 				backend := utils.ParseL3L4Addr(string(ckID))
 				if backend == nil || backend.Proto != vipport.Proto {
 					glog.Warningf("VS %s CheckerID %v is not valid, skip Checker metric %v.", vsID, ckID, ck)
