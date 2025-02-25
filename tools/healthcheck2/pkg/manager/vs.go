@@ -477,6 +477,15 @@ func (vs *VirtualService) doMetricSend() {
 	vs.metricTaint = false
 }
 
+func (vs *VirtualService) metricClean() {
+	metric := Metric{
+		kind: MetricTypeDelVS,
+		vaID: vs.va.id,
+		vsID: vs.id,
+	}
+	vs.metric <- metric
+}
+
 func (vs *VirtualService) cleanup() {
 	if vs.resync != nil {
 		vs.resync.Stop()
@@ -488,6 +497,8 @@ func (vs *VirtualService) cleanup() {
 		rs.checker.Stop()
 	}
 	vs.wg.Wait()
+
+	vs.metricClean()
 
 	// close and drain channels
 	// Notes: No write to these channels any more,

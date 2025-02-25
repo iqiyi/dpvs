@@ -411,6 +411,14 @@ func (va *VirtualAddress) doMetricSend() {
 	va.metricTaint = false
 }
 
+func (va *VirtualAddress) metricClean() {
+	metric := Metric{
+		kind: MetricTypeDelVA,
+		vaID: va.id,
+	}
+	va.metric <- metric
+}
+
 func (va *VirtualAddress) cleanup() {
 	if va.resync != nil {
 		va.resync.Stop()
@@ -423,6 +431,7 @@ func (va *VirtualAddress) cleanup() {
 	}
 	va.wg.Wait()
 
+	va.metricClean()
 	// close and drain channels
 	// Notes: No write to these channels now, so it's safe to close the channels
 	//   from the read side.

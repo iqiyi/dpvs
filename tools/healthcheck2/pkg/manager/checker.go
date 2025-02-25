@@ -223,6 +223,16 @@ func (c *Checker) doMetricSend() {
 	c.metricTaint = false
 }
 
+func (c *Checker) metricClean() {
+	metric := Metric{
+		kind:      MetricTypeDelChecker,
+		vaID:      c.vs.va.id,
+		vsID:      c.vs.id,
+		checkerID: c.id,
+	}
+	c.metric <- metric
+}
+
 func (c *Checker) Update(conf *CheckerConf) {
 	// Note: conf has been deep-copied already
 	c.update <- *conf
@@ -278,6 +288,7 @@ func (c *Checker) cleanup() {
 	if c.metricTicker != nil {
 		c.metricTicker.Stop()
 	}
+	c.metricClean()
 
 	// Notes: No write to these channels any more,
 	//   so it's safe to close the channels from the read side.

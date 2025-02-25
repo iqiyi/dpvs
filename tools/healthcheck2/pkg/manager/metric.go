@@ -31,6 +31,9 @@ const (
 	MetricTypeVA MetricType = iota
 	MetricTypeVS
 	MetricTypeChecker
+	MetricTypeDelVA
+	MetricTypeDelVS
+	MetricTypeDelChecker
 )
 
 var metricDB *MetricDB
@@ -177,6 +180,34 @@ func (db *MetricDB) Update(m *Metric) error {
 		metric := new(Metric)
 		m.DeepCopyInto(metric)
 		vs.checkers[m.checkerID] = metric
+	case MetricTypeDelVA:
+		if !m.vaID.valid() {
+			return fmt.Errorf("invalid vaID(%v) in deleting metric data", m.vaID)
+		}
+		delete(db.data, m.vaID)
+	case MetricTypeDelVS:
+		if !m.vaID.valid() || !m.vsID.valid() {
+			return fmt.Errorf("invalid vaID(%v) or vsID(%v) in deleting metric data", m.vaID, m.vsID)
+		}
+		va, exist := db.data[m.vaID]
+		if !exist {
+			return nil
+		}
+		delete(va.vss, m.vsID)
+	case MetricTypeDelChecker:
+		if !m.vaID.valid() || !m.vsID.valid() || !m.checkerID.valid() {
+			return fmt.Errorf("invalid vaID(%v) or vsID(%v) or metricID(%v) in deleting metric data",
+				m.vaID, m.vsID, m.checkerID)
+		}
+		va, exist := db.data[m.vaID]
+		if !exist {
+			return nil
+		}
+		vs, exist := va.vss[m.vsID]
+		if !exist {
+			return nil
+		}
+		delete(vs.checkers, m.checkerID)
 	default:
 		return fmt.Errorf("unknow metric data type %v", m.kind)
 	}
@@ -270,6 +301,7 @@ func (db *MetricDB) String() string {
 				}
 				builder.WriteString("\n")
 			} // backend ending
+			indent = strings.TrimSuffix(indent, "-> ")
 		} // VS ending
 	} // VA ending
 
