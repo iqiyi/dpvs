@@ -9,6 +9,20 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
+// Checker params that can be derived from dpvs.
+const (
+	ParamProxyProto = "proxy-protocol" // "", "v1", "v2"
+	ParamQuic       = "quic"           // "", "true", "false"
+)
+
+var (
+	proxyProtoV1LocalCmd        = "PROXY UNKNOWN\r\n"
+	proxyProtoV2LocalCmd []byte = []byte{
+		0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51,
+		0x55, 0x49, 0x54, 0x0A, 0x20, 0x00, 0x00, 0x00,
+	}
+)
+
 type CheckMethod interface {
 	// Check executes a healthcheck procedure of the method once.
 	// The function MUST return in or immediately after `timeout` time.
@@ -105,9 +119,3 @@ func (m *Method) TranslateAuto(proto utils.IPProto) Method {
 	}
 	return CheckMethodPing
 }
-
-// Checker params that can be derived from dpvs.
-const (
-	ParamProxyProto = "proxy-protocol" // "", "v1", "v2"
-	ParamQuic       = "quic"           // "", "true", "false"
-)

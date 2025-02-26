@@ -129,6 +129,36 @@ func (in *L3L4Addr) DeepCopy() *L3L4Addr {
 	return out
 }
 
+// Network returns the network name for net.Dailer
+func (addr *L3L4Addr) Network() string {
+	var network string
+	version := 4
+	if addr.IP.To4() == nil {
+		version = 6
+	}
+	switch addr.Proto {
+	case IPProtoTCP:
+		network = fmt.Sprintf("tcp%d", version)
+	case IPProtoUDP:
+		network = fmt.Sprintf("udp%d", version)
+	case IPProtoICMP:
+		network = "ip4:icmp"
+	case IPProtoICMPv6:
+		network = "ip6:ipv6-icmp"
+	default:
+		return "(unknown)"
+	}
+	return network
+}
+
+// Addr returns the IP:Port representation for net.Dailer
+func (addr *L3L4Addr) Addr() string {
+	if addr.IP.To4() != nil {
+		return fmt.Sprintf("%v:%d", addr.IP, addr.Port)
+	}
+	return fmt.Sprintf("[%v]:%d", addr.IP, addr.Port)
+}
+
 // ParseL3L4Addr produces a L3L4Addr from its string representation.
 func ParseL3L4Addr(str string) *L3L4Addr {
 	segs := strings.Split(str, "-")
@@ -157,4 +187,16 @@ func ParseL3L4Addr(str string) *L3L4Addr {
 		}
 	}
 	return &addr
+}
+
+// WriteFull tries to write the whole data in a slice to a net conn.
+func WriteFull(conn net.Conn, b []byte) error {
+	for len(b) > 0 {
+		n, err := conn.Write(b)
+		if err != nil {
+			return err
+		}
+		b = b[n:]
+	}
+	return nil
 }
