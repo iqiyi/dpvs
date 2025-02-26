@@ -224,10 +224,10 @@ func (db *MetricDB) String() string {
 	db.lock.RUnlock()
 
 	sep := "    "
-	banner := fmt.Sprintf("%s%s%s%sstatistics:%s%s%s", "object", sep, "state", sep,
-		stats.Title(), sep, "extra(optional)")
+	banner := fmt.Sprintf("%-32s%s%-32s%s%-32s%s%s", "object", sep, "state", sep,
+		"statistics", sep, "extra(optional)")
 	builder.WriteString(fmt.Sprintf("%s\n", banner))
-	builder.WriteString(fmt.Sprintf("%s\n", strings.Repeat("-", 80)))
+	builder.WriteString(fmt.Sprintf("%s\n", strings.Repeat("-", 123)))
 
 	vaIDSortList := make([]string, 0, len(dbCopied.data))
 	for vaID, _ := range dbCopied.data {
@@ -243,7 +243,7 @@ func (db *MetricDB) String() string {
 			glog.Warningf("VAID %v is not IP-formatted, skip VA metric %v.", vaID, va)
 			continue
 		}
-		builder.WriteString(fmt.Sprintf("%s%s%s%s%s%s", indent, vip, sep, va.state, sep, va.stats))
+		builder.WriteString(fmt.Sprintf("%s%-32s%s%-32s%s%-32s", indent, vip, sep, va.state, sep, va.stats))
 		if len(va.extras) > 0 {
 			builder.WriteString(fmt.Sprintf("%s%s", sep, strings.Join(va.extras, " ")))
 		}
@@ -269,7 +269,7 @@ func (db *MetricDB) String() string {
 			} else {
 				vipportStr = fmt.Sprintf("%s [%s]:%d", vipport.Proto, vipport.IP, vipport.Port)
 			}
-			builder.WriteString(fmt.Sprintf("%s%s%s%s%s%s", indent, vipportStr, sep, vs.state, sep, vs.stats))
+			builder.WriteString(fmt.Sprintf("%s%-32s%s%-32s%s%-32s", indent, vipportStr, sep, vs.state, sep, vs.stats))
 			if len(vs.extras) > 0 {
 				builder.WriteString(fmt.Sprintf("%s%s", sep, strings.Join(vs.extras, " ")))
 			}
@@ -295,7 +295,7 @@ func (db *MetricDB) String() string {
 				} else {
 					backendStr = fmt.Sprintf("[%s]:%d", backend.IP, backend.Port)
 				}
-				builder.WriteString(fmt.Sprintf("%s%s%s%s%s%s", indent, backendStr, sep, ck.state, sep, ck.stats))
+				builder.WriteString(fmt.Sprintf("%s%-32s%s%-32s%s%-32s", indent, backendStr, sep, ck.state, sep, ck.stats))
 				if len(ck.extras) > 0 {
 					builder.WriteString(fmt.Sprintf("%s%s", sep, strings.Join(ck.extras, " ")))
 				}
@@ -305,6 +305,7 @@ func (db *MetricDB) String() string {
 		} // VS ending
 	} // VA ending
 
+	builder.WriteString(fmt.Sprintf("Notes:\n  statistics implications: %s\n", stats.Title()))
 	return builder.String()
 }
 
