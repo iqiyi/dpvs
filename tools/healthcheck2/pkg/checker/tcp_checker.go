@@ -5,8 +5,8 @@ TCP Checker Params:
 -----------------------------------
 name                value
 -----------------------------------
-send                non-zero string
-receive             non-zero string
+send                non-empty string
+receive             non-empty string
 prxoy-protocol      v1 | v2
 ------------------------------------
 */
