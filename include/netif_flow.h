@@ -93,8 +93,8 @@ int netif_sapool_flow_del(struct netif_port *dev, lcoreid_t cid,
  *      IP address family.
  *  @param addr [in]
  *      Dedicated IP address of kni interface.
- *  @param flows [in]
- *      Containing netif flow handlers to delete.
+ *  @param flows [out]
+ *      Containing netif flow handlers if success, undefined otherwise.
  *
  *  @return
  *      DPVS error code.
@@ -113,8 +113,8 @@ int netif_kni_flow_add(struct netif_port *dev, lcoreid_t cid,
  *      IP address family.
  *  @param addr [in]
  *      Dedicated IP address of kni interface.
- *  @param flows [out]
- *      Containing netif flow handlers if success, undefined otherwise.
+ *  @param flows [in]
+ *      Containing netif flow handlers to delete.
  *
  *  @return
  *      DPVS error code.

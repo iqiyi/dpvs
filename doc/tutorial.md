@@ -67,21 +67,32 @@ For *one-arm*, only one DPDK intreface is needed, and you can refer [conf/dpvs.c
 
 ## KNI Device
 
-Like `LVS`, `DPVS` can be deployed as different sort of *Cluster* models for High-Available (HA) purpose. Both *OSPF/ECMP* and *Master/Backup* models are supported. *OSPF/ECMP* model need package `quagga` and its `zebra` and `ospfd` programs. And *master/back* model need `Keepalived`.
+Like `LVS`, `DPVS` is often deployed in cluster for High-Available (HA) purpose. The Master/Backup and ECMP(based on OSPF or BGP) are among the most popular clustering models. Both the clustering models are supported by DPVS. In practice, ECMP clustering requires BGP/OSPF agent tools such as [quagga](https://www.nongnu.org/quagga/) or [bird](https://bird.network.cz/) while Master/Backup relies on VRRP protocol implemented by [keepalived](https://www.keepalived.org/).
 
-Considering `DPDK` application manages the networking interface completely (except the extra control NIC if exist), Linux Kernel and programs run on Kernel TCP/IP stack cannot receive packets from `DPDK` interface directly. To make Linux programs like `sshd`, `zebra/ospfd` and `keepalived` work, DPDK `kni` device is used. Then the Linux programs can working on `kni` device with Linux TCP/IP stack. Actually, `DPVS` passes the packets, which it's not interested in, to `kni` device. For instance, *OSPF/VRRP/ssh* packets. So that the programs "working" on Linux stack are able to handle them.
+Considering `DPDK` application takes over the network interfaces completely, Linux kernel and other application programs running on kernel's network stack cannot receive packets from these network interfaces. Generally, there are two solutions to make the kernel network-stack based applications work:
 
-> We do not want to port `ospfd`/`keepalieved`/`sshd` to DPDK environment, beacause TCP and Socket layer is needed. And the work load is another reason.
+* Use extra network interfaces.
+* Support Exception Path in DPVS.
 
-![kni](pics/kni.png)
+For the first solution, you must have enough network interafces, either physical (PF) or virtual (VF). Then you can disable DPVS's Exception Path totally with `kni off` in `global_defs` of config file. Note that you should carefully segment traffic handled by DPVS or kernel stack, usually by assigning different network address segments.
 
-It should not that `keepalived` is modified by `DPVS` project to support some specific parameters. The codes is resident in [tools/keepalived](../tools/keepalived) and the executable file is `bin/keepalived`. And `ospfd`/`sshd` is the standard version.
+Exception Path in DPVS is implemented with KNI([Kernel NIC Interface](https://doc.dpdk.org/guides-22.11/prog_guide/kernel_nic_interface.html)) at present, and is to replaced by [virtio-user](https://doc.dpdk.org/guides/howto/virtio_user_as_exception_path.html) implementation in the future because the KNI kernel module, library and PMD has been removed since the DPDK 23.11 release. The KNI is more efficient but requires installation on yourself of an out-of-tree kernel module named `rte_kni.ko` while the virtio-user resolves kernel module dependency automatically. Nevertheless, two implementations have little differences in term of configurations and deployments for DPVS users. Actually, we still call the virtio-user based implementation `KNI` for convenience. 
 
-Let's start from *Full-NAT* example first, it's not the easiest but really popular.
+KNI is enabled by default in DPVS. All the packets not processed (consumed, forwarded, or dropped) by DPVS are redirected to KNI. Users may also redirect extra traffic targeted at particular IP addresses to KNI interfaces by using rte_flow (see `dpip flow -h`). Moreover, all packets can be copied and forwarded to KNI interface if `forward2kni` on a DPVS port is enabled (for example, `dpip link set dpdk0 forward2kni on`), which may be useful for debugging. The KNI packet forwarding in DPVS are handled by Master worker by default, and a dedicated worker can take over the task if a "type kni" worker correctly configured in `dpvs.conf`.
+
+> We didn't intend to port the whole network stack into DPDK environments to support application programs such as `sshd`, `quagga`(zebra, ospfd, bgpd, ...), `keepalieved` which require TCP and Socket layer. Performance may deteriorate, and the work load is another reason.
+
+![kni](pics/kni.svg)
+
+It should notes that `keepalived` is modified to adapt for `DPVS`. The codes resides in [tools/keepalived](../tools/keepalived) and the executable file is `bin/keepalived` after successful build. Other application programs like `ssh`/`quagga`/`bird` are untouched and you can use any of the standard releases for them.
+
+Refer to [test/kni.md](../test/kni.md) for performance data of different KNI implementations and working modes.
 
 <a id='fnat'/>
 
 # Full-NAT Mode
+
+Let's start from *Full-NAT* example first, it's not the easiest but really popular.
 
 <a id='simple-fnat'/>
 
@@ -190,13 +201,13 @@ Be aware that **application may need some changes** if you are using NAT64. An e
 
 ## Full-NAT with OSPF/ECMP (two-arm)
 
-To work with *OSPF*, the patch in `patch/dpdk-xxx/` must be applied to the corresponding DPDK source codes and the correct `rte_kni.ko` should be installed.
+To work with *OSPF*, the patch in `patch/dpdk-xxx/` must be applied to the corresponding DPDK source codes and the KNI interfaces should be configured up properly.
 
 `DPVS` OSPF-cluster model looks like this, it leverages `OSPF/ECMP` for HA and high-scalability. This model is widely used in practice.
 
 ![fnat-ospf-two-arm](pics/fnat-ospf-two-arm.png)
 
-For `DPVS`, things become more complicated. As mentioned above, `DPDK` program (here is `dpvs`) have full control of DPDK NICs, so Linux program (`ospfd`) needs receive/send packets through `kni` device (`dpdk1.kni`) related to DPDK device (`dpdk1`).
+For `DPVS`, things become more complicated. As mentioned above, `DPDK` program (here is `dpvs`) have full control of DPDK NICs, so Linux program (`ospfd`) needs receive/send packets through KNI device (`dpdk1.kni`) related to DPDK device (`dpdk1`).
 
 > DPDK apps based on whole TCP/IP stack like user-space Linux/BSD do not have this kind of configuration complexity, but more developing efforts are needed to porting `ospfd` and `keepalived` to the TCP/IP stack used by DPDK. Anyway, that's another solution.
 
@@ -208,8 +219,8 @@ Now the configuration has two parts, one is for `dpvs` and another is for `zebra
 
 `dpvs` part is almost the same with the example in [simple fnat](#simple-fnat), except
 
-* one more address/route is needed to communicate between dpvs and wan-side L3-switch. For ospf packets, dpvs will just send them to kernel.
-* VIP should not only set to `dpvs` by `dpip addr`, but also need to set to `kni`, so that `ospfd` can be aware of it and then to publish.
+* One more addresses/routes are needed to communicate between dpvs and wan-side L3-switch. For ospf packets, dpvs will just send them to kernel.
+* VIP should not only be configured into `dpvs` by `dpip addr` but also into `kni` so that `ospfd` can be aware of it and then to advertise it.
 
 > If you add any kni_host route which means all packets will be sent to kernel by dpvs, the prefix length of `kni_host` must be 32.
 
@@ -248,7 +259,7 @@ $ ip addr add 123.1.2.3/32 dev dpdk1.kni # add VIP to kni for ospfd
 $ ip route add default via 172.10.0.1 dev dpdk1.kni
 ```
 
-> VIP should be add to kni device, to let ospfd to publish it.
+> VIP should be added onto kni device, to let ospfd to publish it.
 
 Check if inter-connection works by `ping` switch.
 
@@ -1255,7 +1266,8 @@ ipvsadm -ln
 
 #### NIC Ports, KNI and Routes
 
-The multiple DPVS instances running on a server are independent, that is DPVS adopts the deployment model [Running Multiple Independent DPDK Applications](https://doc.dpdk.org/guides/prog_guide/multi_proc_support.html#running-multiple-independent-dpdk-applications), which requires the instances cannot share any NIC ports. We can use the EAL options "-a, --allow" or "-b, --block" to allow/disable the NIC ports for a DPVS instance. However, Linux KNI kernel module only supports one DPVS instance in a specific network namespace (refer to [kernel/linux/kni/kni_misc.c](https://github.com/DPDK/dpdk/tree/main/kernel/linux/kni)). Basically, DPVS provides two solutions to the problem.
+The multiple DPVS instances running on a server are independent, that is DPVS adopts the deployment model [Running Multiple Independent DPDK Applications](https://doc.dpdk.org/guides/prog_guide/multi_proc_support.html#running-multiple-independent-dpdk-applications), which requires the instances cannot share any NIC ports. We can use the EAL options "-a, --allow" or "-b, --block" to allow/disable the NIC ports for a DPVS instance.
+However, Linux KNI kernel module `rte_kni.ko` supports only one DPDK application instance per network namespace. Basically, DPVS provides two solutions to the problem.
 
 * Solution 1: Disable KNI on all other DPVS instances except the first one. A global config item `kni` has been added to DPVS since now. 
 
@@ -1469,9 +1481,10 @@ $
 
 The `dpdk-pdump` runs as a DPDK secondary process and is capable of enabling packet capture on dpdk ports. DPVS works as the primary process for dpdk-pdump, which should enable the packet capture framework by setting `global_defs/pdump` to be `on` in `/etc/dpvs.conf` when DPVS starts up. 
 
-Refer to [dpdk-pdump doc](https://doc.dpdk.org/guides/tools/pdump.html) for its usage. DPVS extends dpdk-pdump with a [DPDK patch](../patch/dpdk-stable-18.11.2/0005-enable-pdump-and-change-dpdk-pdump-tool-for-dpvs.patch) to add some packet filtering features. Run `dpdk-pdump  -- --help` to find all supported pdump params.
+Refer to [dpdk-pdump doc](https://doc.dpdk.org/guides/tools/pdump.html) for its usage. DPVS extends dpdk-pdump with a [DPDK patch](../patch/dpdk-24.11/0001-pdump-add-cmdline-packet-filters-for-dpdk-pdump-tool.patch) to add some packet filtering features. Run `dpdk-pdump  -- --help` to find all supported pdump params.
 
-> usage: dpdk-pdump [EAL options] -- --pdump '(port=<port id> | device_id=<pci id or vdev name>),(queue=<queue_id>),(rx-dev=<iface or pcap file> | tx-dev=<iface or pcap file>,[host=<ipaddress> | src-host=<source ip address> |dst-host=<destination ip address>],[proto=<protocol type>support:tcp/udp/icmp],[proto-port=<protocol port> |src-port=<source protocol port> |dst-port=<destination protocol port>],[ring-size=<ring size>default:16384],[mbuf-size=<mbuf data size>default:2176],[total-num-mbufs=<number of mbufs>default:65535]'
+> usage: ./bin/dpdk-pdump [EAL options] -- --[multi]
+> --pdump '(port=<port id> | device_id=<pci id or vdev name>),(queue=<queue_id>),(rx-dev=<iface or pcap file> | tx-dev=<iface or pcap file>,[host=<ipaddress> | src-host=<source ip address> |dst-host=<destination ip address>],[proto=<protocol type>support:tcp/udp/icmp/icmp6],[proto-port=<protocol port> |src-port=<source protocol port> |dst-port=<destination protocol port>],[ring-size=<ring size>default:16384],[mbuf-size=<mbuf data size>default:2176],[total-num-mbufs=<number of mbufs>default:65535]'
 
 Well, it's time to demonstrate how to use dpdk-pdump with our test case.
 

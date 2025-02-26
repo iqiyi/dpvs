@@ -14,17 +14,17 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
+#
+# Notice:
+#  Do NOT configure DPVS features by modifying this file.
+#  Instead, use file `config.mk` in DPVS's home directory.
+#
 
 CFLAGS += -D DPVS_MAX_SOCKET=$(CONFIG_DPVS_MAX_SOCKET)
 CFLAGS += -D DPVS_MAX_LCORE=$(CONFIG_DPVS_MAX_LCORE)
 
 ifeq ($(CONFIG_DPVS_AGENT), y)
 CFLAGS += -D CONFIG_DPVS_AGENT
-endif
-
-# for ixgbe nic
-ifeq ($(CONFIG_IXGEB_PMD), y)
-CFLAGS += -D CONFIG_DPVS_FDIR
 endif
 
 ifeq ($(CONFIG_DPVS_LOG), y)
@@ -38,6 +38,10 @@ endif
 ifeq ($(CONFIG_ICMP_REDIRECT_CORE), y)
 CFLAGS += -D CONFIG_ICMP_REDIRECT_CORE
 endif
+
+## CONFIG_KNI_VIRTIO_USER should always be ON from DPVS v1.10
+## since only virtio-user kni supported from then.
+CFLAGS += -D CONFIG_KNI_VIRTIO_USER
 
 ifeq ($(CONFIG_DPVS_NEIGH_DEBUG), y)
 CFLAGS += -D CONFIG_DPVS_NEIGH_DEBUG
@@ -117,6 +121,10 @@ endif
 
 ifeq ($(CONFIG_DPVS_ICMP_DEBUG), y)
 CFLAGS += -D CONFIG_DPVS_ICMP_DEBUG
+endif
+
+ifeq ($(CONFIG_DPVS_ROUTE_DEBUG), y)
+CFLAGS += -D DPVS_ROUTE6_DEBUG
 endif
 
 GCC_MAJOR = $(shell echo __GNUC__ | $(CC) -E -x c - | tail -n 1)

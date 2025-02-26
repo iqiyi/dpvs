@@ -30,6 +30,8 @@
 #include "netif_addr.h"
 #include "kni.h"
 #include "ctrl.h"
+#include "route.h"
+#include "route6.h"
 #include "vlan.h"
 #include "conf/vlan.h"
 
@@ -111,7 +113,7 @@ static int vlan_xmit(struct rte_mbuf *mbuf, struct netif_port *dev)
      */
     if (ethhdr->ether_type != htons(ETH_P_8021Q)) {
         mbuf->vlan_tci = ntohs(vlan->vlan_id);
-        mbuf->ol_flags |= PKT_TX_VLAN_PKT;
+        mbuf->ol_flags |= RTE_MBUF_F_TX_VLAN;
     }
 
     /* hand over it to real device */
@@ -322,6 +324,30 @@ int vlan_del_dev(struct netif_port *real_dev, __be16 vlan_proto,
         return EDPVS_NOTEXIST;
     }
 
+    err = inet_addr_flush(AF_INET, dev);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, VLAN, "%s: fail to flush IPv4 addresses on vlan %s: %s\n",
+                __func__, dev->name, dpvs_strerror(err));
+    }
+
+    err = route_flush(dev);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, VLAN, "%s: fail to flush IPv4 routes on vlan %s: %s\n",
+                __func__, dev->name, dpvs_strerror(err));
+    }
+
+    err = inet_addr_flush(AF_INET6, dev);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, VLAN, "%s: fail to flush IPv6 addresses on vlan %s: %s\n",
+                __func__, dev->name, dpvs_strerror(err));
+    }
+
+    err = route6_flush(dev);
+    if (err != EDPVS_OK) {
+        RTE_LOG(WARNING, VLAN, "%s: fail to flush IPv6 routes on vlan %s: %s\n",
+                __func__, dev->name, dpvs_strerror(err));
+    }
+
     err = kni_del_dev(dev);
     if (err != EDPVS_OK) {
         RTE_LOG(WARNING, VLAN, "%s: fail to del kni device: %s\n",
@@ -381,7 +407,7 @@ static inline int vlan_untag_mbuf(struct rte_mbuf *mbuf)
     struct vlan_ethhdr *vehdr = NULL;
 
     /* VLAN RX offloaded (vlan stripped by HW) ? */
-    if (mbuf->ol_flags & PKT_RX_VLAN_STRIPPED)
+    if (mbuf->ol_flags & RTE_MBUF_F_RX_VLAN_STRIPPED)
         return EDPVS_OK;
 
     if (unlikely(mbuf_may_pull(mbuf, sizeof(struct rte_ether_hdr) + \
@@ -391,7 +417,7 @@ static inline int vlan_untag_mbuf(struct rte_mbuf *mbuf)
     /* the data_off of mbuf is still at ethernet header. */
     vehdr = rte_pktmbuf_mtod(mbuf, struct vlan_ethhdr *);
 
-    mbuf->ol_flags |= PKT_RX_VLAN_STRIPPED; /* "borrow" it */
+    mbuf->ol_flags |= RTE_MBUF_F_RX_VLAN_STRIPPED; /* "borrow" it */
     mbuf->vlan_tci = ntohs(vehdr->h_vlan_TCI);
 
     /* strip the vlan header */
@@ -429,11 +455,11 @@ int vlan_rcv(struct rte_mbuf *mbuf, struct netif_port *real_dev)
          * "Our lower layer thinks this is not local, let's make sure.
          * This allows the VLAN to have a different MAC than the
          * underlying device, and still route correctly." */
-        if (eth_addr_equal(&ehdr->d_addr, &dev->addr))
+        if (eth_addr_equal(&ehdr->dst_addr, &dev->addr))
             mbuf->packet_type = ETH_PKT_HOST;
     }
 
-    mbuf->ol_flags &= (~PKT_RX_VLAN_STRIPPED);
+    mbuf->ol_flags &= (~RTE_MBUF_F_RX_VLAN_STRIPPED);
     mbuf->vlan_tci = 0;
 
     /* statistics */

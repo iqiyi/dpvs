@@ -112,6 +112,7 @@ typedef struct netif_nic_basic_get
     uint16_t ol_tx_tcp_csum:1;
     uint16_t ol_tx_udp_csum:1;
     uint16_t lldp:1;
+    uint16_t ol_tx_fast_free:1;
 } netif_nic_basic_get_t;
 
 /* nic statistics specified by port_id */

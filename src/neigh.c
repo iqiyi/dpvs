@@ -424,12 +424,12 @@ static void neigh_fill_mac(struct neighbour_entry *neighbour,
 
     if (!neighbour && target) {
         ipv6_mac_mult(target, &mult_eth);
-        rte_ether_addr_copy(&mult_eth, &eth->d_addr);
+        rte_ether_addr_copy(&mult_eth, &eth->dst_addr);
     } else {
-        rte_ether_addr_copy(&neighbour->eth_addr, &eth->d_addr);
+        rte_ether_addr_copy(&neighbour->eth_addr, &eth->dst_addr);
     }
 
-    rte_ether_addr_copy(&port->addr, &eth->s_addr);
+    rte_ether_addr_copy(&port->addr, &eth->src_addr);
     pkt_type = (uint16_t)m->packet_type;
     eth->ether_type = rte_cpu_to_be_16(pkt_type);
 }
@@ -510,12 +510,12 @@ int neigh_resolve_input(struct rte_mbuf *m, struct netif_port *port)
                                      (uint16_t)sizeof(struct rte_ether_hdr));
 
     if (rte_be_to_cpu_16(arp->arp_opcode) == RTE_ARP_OP_REQUEST) {
-        rte_ether_addr_copy(&eth->s_addr, &eth->d_addr);
-        rte_memcpy(&eth->s_addr, &port->addr, 6);
+        rte_ether_addr_copy(&eth->src_addr, &eth->dst_addr);
+        rte_memcpy(&eth->src_addr, &port->addr, 6);
         arp->arp_opcode = rte_cpu_to_be_16(RTE_ARP_OP_REPLY);
 
         rte_ether_addr_copy(&arp->arp_data.arp_sha, &arp->arp_data.arp_tha);
-        rte_ether_addr_copy(&eth->s_addr, &arp->arp_data.arp_sha);
+        rte_ether_addr_copy(&eth->src_addr, &arp->arp_data.arp_sha);
 
         ipaddr = arp->arp_data.arp_sip;
         arp->arp_data.arp_sip = arp->arp_data.arp_tip;
@@ -568,8 +568,8 @@ static int neigh_send_arp(struct netif_port *port, uint32_t src_ip, uint32_t dst
     eth = rte_pktmbuf_mtod(m, struct rte_ether_hdr *);
     arp = (struct rte_arp_hdr *)&eth[1];
 
-    memset(&eth->d_addr, 0xFF, 6);
-    rte_ether_addr_copy(&port->addr, &eth->s_addr);
+    memset(&eth->dst_addr, 0xFF, 6);
+    rte_ether_addr_copy(&port->addr, &eth->src_addr);
     eth->ether_type = htons(RTE_ETHER_TYPE_ARP);
 
     memset(arp, 0, sizeof(struct rte_arp_hdr));

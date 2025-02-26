@@ -23,7 +23,6 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <linux/if_ether.h>
 
 typedef uint32_t sockoptid_t;
 
@@ -138,12 +137,6 @@ enum {
 extern const char *dpvs_strerror(int err);
 
 int get_numa_nodes(void);
-
-int linux_get_link_status(const char *ifname, int *if_flags, char *if_flags_str, size_t len);
-int linux_set_if_mac(const char *ifname, const unsigned char mac[ETH_ALEN]);
-int linux_hw_mc_add(const char *ifname, const uint8_t hwma[ETH_ALEN]);
-int linux_hw_mc_del(const char *ifname, const uint8_t hwma[ETH_ALEN]);
-int linux_ifname2index(const char *ifname);
 
 /* read "n" bytes from a descriptor */
 ssize_t readn(int fd, void *vptr, size_t n);

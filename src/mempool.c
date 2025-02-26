@@ -305,7 +305,7 @@ bool dpvs_mp_elem_ok(void *obj)
     }
 
     /* apply the patch to get `rte_memmory_ok`:
-     * dpdk-stable-17.11.6/enable-dpdk-eal-memory-debug.patch */
+     * patch/<dpdk-version>/xxxxx-enable-dpdk-eal-memory-debug.patch */
     if (cookie->flag == MEM_OBJ_FROM_HEAP)
         assert(rte_memmory_ok((void *)cookie));
 

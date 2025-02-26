@@ -57,8 +57,8 @@
 
 static void inline dpdk_version_check(void)
 {
-#if RTE_VERSION < RTE_VERSION_NUM(20, 11, 1, 0)
-    rte_panic("The current DPVS needs dpdk-stable-20.11.1 or higher. "
+#if RTE_VERSION < RTE_VERSION_NUM(24, 11, 0, 0)
+    rte_panic("The current DPVS requires dpdk-stable-24.11 or higher. "
             "Try old releases if you are using earlier dpdk versions.");
 #endif
 }
@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
     for (pid = 0; pid < nports; pid++) {
         dev = netif_port_get(pid);
         if (!dev) {
-            RTE_LOG(WARNING, DPVS, "port %d not found\n", pid);
+            RTE_LOG(INFO, DPVS, "netif port of portid %d not found, likely kni portid, skip ...\n", pid);
             continue;
         }
 

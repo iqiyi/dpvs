@@ -31,7 +31,12 @@ static uint64_t s_all_socket_heap_freesz[RTE_MAX_NUMA_NODES];
 #else
 #define MAX_SEGMENT_NUM         RTE_MAX_MEMSEG
 #endif
+
+#if RTE_VERSION >= RTE_VERSION_NUM(24, 11, 0, 0)
+#define MAX_MEMZONE_NUM         2560
+#else
 #define MAX_MEMZONE_NUM         RTE_MAX_MEMZONE
+#endif
 
 #if RTE_VERSION >= RTE_VERSION_NUM(18, 11, 0, 0)
 static int dp_vs_get_all_socket_heap_freesz_stats(void)

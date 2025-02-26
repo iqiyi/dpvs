@@ -38,6 +38,8 @@ netif_defs {
         tx {
             queue_number        6           <16, 0-16>
             descriptor_number   512         <512, 16-8192>
+            mbuf_fast_free      on          <on, on|off>    ## Disable it when ports used for two-arm forwarding
+                                                            ## located at different NUMA nodes.
         }
     !    mtu                    1500        <1500,0-9000>
     !    promisc_mode                       <disable>
@@ -201,10 +203,9 @@ ipv6_defs {
         <init> method       "hlist"     <"hlist"/"lpm">
         recycle_time        10          <10, 1-36000>
         lpm {
-            <init> lpm6_max_rules       1024    <1024, 16-2147483647>
-            <init> lpm6_num_tbl8s       65536   <65536, 16-2147483647>
-            <init> rt6_array_size       65536   <65536, 16-2147483647>
-            <init> rt6_hash_bucket      256     <256, 2-2147483647>
+            <init> lpm6_max_rules       1024    <1024, 16-65536>
+            <init> lpm6_num_tbl8s       16384   <16384, 256-1048576>
+            <init> rt6_hash_bucket      256     <256, 16-65536>
         }
     }
 }
@@ -212,7 +213,6 @@ ipv6_defs {
 ! control plane config
 ctrl_defs {
     lcore_msg {
-        #bucket_number   256
         <init> ring_size                4096    <4096, 256-524288>
         sync_msg_timeout_us             2000    <2000, 1-∞>
         priority_level                  low     <low, low|norm|high|ign>

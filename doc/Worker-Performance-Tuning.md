@@ -61,7 +61,7 @@ Generally speaking, we may follow some practical rules below to choose the CPU c
 You can get the CPU layout of your system by the script provided by DPDK `cpu_layout.py `, example as shown below. 
 
 ```
-[root@~ dpdk]# python dpdk-stable-18.11.2/usertools/cpu_layout.py 
+[root@~ dpdk]# python [DPDK-SOURCE]/usertools/cpu_layout.py 
 ======================================================================
 Core and Socket Information (as reported by '/sys/devices/system/cpu')
 ======================================================================

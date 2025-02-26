@@ -256,8 +256,8 @@ hash_ipportnet_test6(struct ipset *set, struct rte_mbuf *mbuf, bool dst_match)
     // Unlikely other set types, which match source address first and then dest address,
     // ip,port,net always matches source address with its "net" part, dest address with its
     // "ip" part respectively, and its "port" part match is determined by param dst_match.
-    memcpy(&e.ip2, ip6hdr->dst_addr, sizeof(e.ip2)); // dst_ip
-    memcpy(&e.ip, ip6hdr->src_addr, sizeof(e.ip));   // src_net
+    memcpy(&e.ip2, &ip6hdr->dst_addr, sizeof(e.ip2)); // dst_ip
+    memcpy(&e.ip, &ip6hdr->src_addr, sizeof(e.ip));   // src_net
     if (l4hdr) {
         if (dst_match)
             e.port = l4hdr->dst_port; // dst_ip,dst_port,src_net

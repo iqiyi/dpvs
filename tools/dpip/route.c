@@ -30,7 +30,8 @@ static void route_help(void)
 {
     fprintf(stderr,
         "Usage:\n"
-        "    dpip route { show | flush | help }\n"
+        "    dpip route { show | help }\n"
+        "    dpip route flush dev IFNAME\n"
         "    dpip route { add | del | set } ROUTE\n"
         "Parameters:\n"
         "    ROUTE      := PREFIX [ via ADDR ] [ dev IFNAME ] [ OPTIONS ]\n"
@@ -46,7 +47,7 @@ static void route_help(void)
         "    dpip -6 route add 2001:db8:1::/64 via 2001:db8:1::1 dev dpdk0\n"
         "    dpip route del 172.0.0.0/16\n"
         "    dpip route set 172.0.0.0/16 via 172.0.0.1\n"
-        "    dpip route flush\n"
+        "    dpip route flush dev dpdk0\n"
         );
 }
 
@@ -233,6 +234,12 @@ static int route4_parse_args(struct dpip_conf *conf,
 
     if (conf->cmd == DPIP_CMD_SHOW)
         return 0;
+    if (conf->cmd == DPIP_CMD_FLUSH) {
+        if (strlen(route->ifname) > 0)
+            return 0;
+        fprintf(stderr, "no device specified\n");
+        return -1;
+    }
 
     if (!prefix) {
         fprintf(stderr, "missing prefix\n");
@@ -357,6 +364,13 @@ static int route6_parse_args(struct dpip_conf *conf,
     if (conf->cmd == DPIP_CMD_SHOW)
         return 0;
 
+    if (conf->cmd == DPIP_CMD_FLUSH) {
+        if (strlen(rt6_cfg->ifname) > 0)
+            return 0;
+        fprintf(stderr, "no device specified\n");
+        return -1;
+    }
+
     if (!prefix) {
         fprintf(stderr, "missing prefix\n");
         return -1;
@@ -411,7 +425,7 @@ static int route4_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd,
         return dpvs_setsockopt(SOCKOPT_SET_ROUTE_SET, &route, sizeof(route));
 
     case DPIP_CMD_FLUSH:
-        return dpvs_setsockopt(SOCKOPT_SET_ROUTE_FLUSH, NULL, 0);
+        return dpvs_setsockopt(SOCKOPT_SET_ROUTE_FLUSH, &route, sizeof(route));
 
     case DPIP_CMD_SHOW:
         err = dpvs_getsockopt(SOCKOPT_GET_ROUTE_SHOW, &route, sizeof(route),

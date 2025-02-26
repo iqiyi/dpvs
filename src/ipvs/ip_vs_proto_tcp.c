@@ -177,7 +177,7 @@ int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         if (likely(select_dev && (select_dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
             mbuf->l3_len = iphdrlen;
             mbuf->l4_len = (th->doff << 2);
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
+            mbuf->ol_flags |= (RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IPV6);
             th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, iphdrlen, IPPROTO_TCP);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)
@@ -196,7 +196,7 @@ int tcp_send_csum(int af, int iphdrlen, struct tcphdr *th,
         if (likely(select_dev && (select_dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
             mbuf->l3_len = iphdrlen;
             mbuf->l4_len = (th->doff << 2);
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+            mbuf->ol_flags |= (RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4);
             th->check = rte_ipv4_phdr_cksum(iph, mbuf->ol_flags);
         } else {
             if (mbuf_may_pull(mbuf, mbuf->pkt_len) != 0)

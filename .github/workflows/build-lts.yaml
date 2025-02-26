@@ -1,22 +1,17 @@
-name: BUILD
+name: BUILD-LTS
 
 on:
   push:
     branches:
-      - 'master'
-      - 'devel'
+      - 'DPVS-1.9-LTS'
   release:
     branches:
-      - 'master'
-      - 'devel'
+      - 'DPVS-1.9-LTS'
     types:
       - published
-  schedule:
-    - cron:  '30 2 * * 1'
   pull_request:
     branches:
-      - 'master'
-      - 'devel'
+      - 'DPVS-1.9-LTS'
     types:
       - labeled
 
@@ -24,7 +19,7 @@ jobs:
   build-basic:
     runs-on: self-hosted
     env:
-      PKG_CONFIG_PATH: /data/dpdk/24.11/dpdklib/lib64/pkgconfig
+      PKG_CONFIG_PATH: /data/dpdk/20.11.10/dpdklib/lib64/pkgconfig
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
@@ -34,7 +29,7 @@ jobs:
   build-all:
     runs-on: self-hosted
     env:
-      PKG_CONFIG_PATH: /data/dpdk/24.11/dpdklib/lib64/pkgconfig
+      PKG_CONFIG_PATH: /data/dpdk/20.11.10/dpdklib/lib64/pkgconfig
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4

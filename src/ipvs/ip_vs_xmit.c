@@ -73,7 +73,7 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
         ip4h = ip4_hdr(mbuf);
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         ip4h->hdr_checksum = 0;
     } else {
         ip4_send_csum(ip4h);
@@ -81,8 +81,8 @@ static int __dp_vs_fast_xmit_fnat4(struct dp_vs_proto *proto,
 
     eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
                     (uint16_t)sizeof(struct rte_ether_hdr));
-    rte_ether_addr_copy(&conn->in_dmac, &eth->d_addr);
-    rte_ether_addr_copy(&conn->in_smac, &eth->s_addr);
+    rte_ether_addr_copy(&conn->in_dmac, &eth->dst_addr);
+    rte_ether_addr_copy(&conn->in_smac, &eth->src_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
@@ -134,8 +134,8 @@ static int __dp_vs_fast_xmit_fnat6(struct dp_vs_proto *proto,
 
     eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
                     (uint16_t)sizeof(struct rte_ether_hdr));
-    rte_ether_addr_copy(&conn->in_dmac, &eth->d_addr);
-    rte_ether_addr_copy(&conn->in_smac, &eth->s_addr);
+    rte_ether_addr_copy(&conn->in_dmac, &eth->dst_addr);
+    rte_ether_addr_copy(&conn->in_smac, &eth->src_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
@@ -195,7 +195,7 @@ static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
             return err;
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         ip4h->hdr_checksum = 0;
     } else {
         ip4_send_csum(ip4h);
@@ -203,8 +203,8 @@ static int __dp_vs_fast_outxmit_fnat4(struct dp_vs_proto *proto,
 
     eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
                     (uint16_t)sizeof(struct rte_ether_hdr));
-    rte_ether_addr_copy(&conn->out_dmac, &eth->d_addr);
-    rte_ether_addr_copy(&conn->out_smac, &eth->s_addr);
+    rte_ether_addr_copy(&conn->out_dmac, &eth->dst_addr);
+    rte_ether_addr_copy(&conn->out_smac, &eth->src_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
@@ -256,8 +256,8 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
 
     eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
                     (uint16_t)sizeof(struct rte_ether_hdr));
-    rte_ether_addr_copy(&conn->out_dmac, &eth->d_addr);
-    rte_ether_addr_copy(&conn->out_smac, &eth->s_addr);
+    rte_ether_addr_copy(&conn->out_dmac, &eth->dst_addr);
+    rte_ether_addr_copy(&conn->out_smac, &eth->src_addr);
     eth->ether_type = rte_cpu_to_be_16(packet_type);
     mbuf->packet_type = packet_type;
 
@@ -302,8 +302,8 @@ static void dp_vs_save_xmit_info(struct rte_mbuf *mbuf,
 
     eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
 
-    rte_ether_addr_copy(&eth->s_addr, &conn->out_dmac);
-    rte_ether_addr_copy(&eth->d_addr, &conn->out_smac);
+    rte_ether_addr_copy(&eth->src_addr, &conn->out_dmac);
+    rte_ether_addr_copy(&eth->dst_addr, &conn->out_smac);
 
     rte_pktmbuf_adj(mbuf, sizeof(struct rte_ether_hdr));
 }
@@ -331,8 +331,8 @@ static void dp_vs_save_outxmit_info(struct rte_mbuf *mbuf,
 
     eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf, mbuf->l2_len);
 
-    rte_ether_addr_copy(&eth->s_addr, &conn->in_dmac);
-    rte_ether_addr_copy(&eth->d_addr, &conn->in_smac);
+    rte_ether_addr_copy(&eth->src_addr, &conn->in_dmac);
+    rte_ether_addr_copy(&eth->dst_addr, &conn->in_smac);
 
     rte_pktmbuf_adj(mbuf, sizeof(struct rte_ether_hdr));
 }
@@ -480,7 +480,7 @@ static int __dp_vs_xmit_fnat4(struct dp_vs_proto *proto,
         iph = ip4_hdr(mbuf);
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(iph);
@@ -679,7 +679,7 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
         ip4h = ip4_hdr(mbuf);
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         ip4h->hdr_checksum = 0;
     } else {
         ip4_send_csum(ip4h);
@@ -803,7 +803,7 @@ static int __dp_vs_out_xmit_fnat4(struct dp_vs_proto *proto,
             goto errout;
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(iph);
@@ -1406,7 +1406,7 @@ static int __dp_vs_xmit_snat4(struct dp_vs_proto *proto,
     }
 
     /* L3 re-checksum */
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM))
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM))
         iph->hdr_checksum = 0;
     else
         ip4_send_csum(iph);
@@ -1566,7 +1566,7 @@ static int __dp_vs_out_xmit_snat4(struct dp_vs_proto *proto,
     }
 
     /* L3 re-checksum */
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM))
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM))
         iph->hdr_checksum = 0;
     else
         ip4_send_csum(iph);
@@ -1605,7 +1605,7 @@ static int dp_vs_fast_xmit_nat(struct dp_vs_proto *proto,
             return err;
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(iph);
@@ -1613,8 +1613,8 @@ static int dp_vs_fast_xmit_nat(struct dp_vs_proto *proto,
 
     eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
                     (uint16_t)sizeof(struct rte_ether_hdr));
-    rte_ether_addr_copy(&conn->in_dmac, &eth->d_addr);
-    rte_ether_addr_copy(&conn->in_smac, &eth->s_addr);
+    rte_ether_addr_copy(&conn->in_dmac, &eth->dst_addr);
+    rte_ether_addr_copy(&conn->in_smac, &eth->src_addr);
     eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
     mbuf->packet_type = RTE_ETHER_TYPE_IPV4;
 
@@ -1650,7 +1650,7 @@ static int dp_vs_fast_outxmit_nat(struct dp_vs_proto *proto,
             return err;
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(iph);
@@ -1658,8 +1658,8 @@ static int dp_vs_fast_outxmit_nat(struct dp_vs_proto *proto,
 
     eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
                     (uint16_t)sizeof(struct rte_ether_hdr));
-    rte_ether_addr_copy(&conn->out_dmac, &eth->d_addr);
-    rte_ether_addr_copy(&conn->out_smac, &eth->s_addr);
+    rte_ether_addr_copy(&conn->out_dmac, &eth->dst_addr);
+    rte_ether_addr_copy(&conn->out_smac, &eth->src_addr);
     eth->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4);
     mbuf->packet_type = RTE_ETHER_TYPE_IPV4;
 
@@ -1817,7 +1817,7 @@ static int __dp_vs_xmit_nat4(struct dp_vs_proto *proto,
             goto errout;
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(iph);
@@ -1989,7 +1989,7 @@ static int __dp_vs_out_xmit_nat4(struct dp_vs_proto *proto,
             goto errout;
     }
 
-    if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM)) {
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
         iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(iph);
@@ -2156,7 +2156,7 @@ static int __dp_vs_xmit_tunnel4(struct dp_vs_proto *proto,
     new_iph->packet_id = ip4_select_id(new_iph);
 
     if (rt->port && rt->port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD) {
-        mbuf->ol_flags |= PKT_TX_IP_CKSUM;
+        mbuf->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM;
         new_iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(new_iph);
@@ -2313,7 +2313,7 @@ static int __dp_vs_xmit_tunnel_6o4(struct dp_vs_proto *proto,
     new_iph->packet_id = ip4_select_id(new_iph);
 
     if (rt->port && rt->port->flag & NETIF_PORT_FLAG_TX_IP_CSUM_OFFLOAD) {
-        mbuf->ol_flags |= PKT_TX_IP_CKSUM;
+        mbuf->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM;
         new_iph->hdr_checksum = 0;
     } else {
         ip4_send_csum(new_iph);

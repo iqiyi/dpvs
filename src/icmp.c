@@ -57,7 +57,7 @@ static int icmp_echo(struct rte_mbuf *mbuf)
     uint16_t csum;
     struct flow4 fl4;
 
-    if (ich->icmp_type != RTE_IP_ICMP_ECHO_REQUEST || ich->icmp_code != 0) {
+    if (ich->icmp_type != RTE_ICMP_TYPE_ECHO_REQUEST || ich->icmp_code != 0) {
         RTE_LOG(WARNING, ICMP, "%s: not echo-request\n", __func__);
         goto errout;
     }
@@ -79,7 +79,7 @@ static int icmp_echo(struct rte_mbuf *mbuf)
         goto errout;
     }
 
-    ich->icmp_type = RTE_IP_ICMP_ECHO_REPLY;
+    ich->icmp_type = RTE_ICMP_TYPE_ECHO_REPLY;
     /* recalc the checksum */
     ich->icmp_cksum = 0;
     csum = rte_raw_cksum(ich, mbuf->pkt_len);

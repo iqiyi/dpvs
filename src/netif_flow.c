@@ -25,8 +25,8 @@
 /* uncomment the macro if rte_flow pmd driver is not thread-safe. */
 // #define CONFIG_DEV_FLOW_LOCK
 
-/* sapool pattern stack: ETH | IP | TCP/UDP | END */
-#define SAPOOL_PATTERN_NUM  4
+/* sapool pattern stack: ETH | IP | TCP/UDP | [ FUZZY ] | END */
+#define SAPOOL_PATTERN_NUM  5
 /* sapool action stack: QUEUE | END */
 #define SAPOOL_ACTION_NUM   2
 /* kni flow pattern stack: ETH | IP | END */
@@ -282,6 +282,7 @@ int netif_sapool_flow_add(struct netif_port *dev, lcoreid_t cid,
     struct rte_flow_item_ipv6 ip6_spec, ip6_mask;
     struct rte_flow_item_tcp tcp_spec, tcp_mask;
     struct rte_flow_item_udp udp_spec, udp_mask;
+    struct rte_flow_item_fuzzy fuzzy_spec = { .thresh = 0xFFFFFFFF };
 
     queueid_t queue_id;
     struct rte_flow_action_queue queue;
@@ -332,7 +333,14 @@ int netif_sapool_flow_add(struct netif_port *dev, lcoreid_t cid,
     pattern[2].type = RTE_FLOW_ITEM_TYPE_TCP;
     pattern[2].spec = &tcp_spec;
     pattern[2].mask = &tcp_mask;
-    pattern[3].type = RTE_FLOW_ITEM_TYPE_END;
+    if (netif_flow_fuzzy_match()) {
+        pattern[3].type = RTE_FLOW_ITEM_TYPE_FUZZY;
+        pattern[3].spec = &fuzzy_spec;
+        pattern[3].mask = &fuzzy_spec;
+        pattern[4].type = RTE_FLOW_ITEM_TYPE_END;
+    } else {
+        pattern[3].type = RTE_FLOW_ITEM_TYPE_END;
+    }
 
     /* set tcp flow */
     resp.size = flows->size;

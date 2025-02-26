@@ -1,0 +1,86 @@
+From 158b5708203309449e0ac85d9b6034158ae8a351 Mon Sep 17 00:00:00 2001
+From: ywc689 <ywc689@163.com>
+Date: Mon, 16 Dec 2024 18:06:55 +0800
+Subject: [PATCH 6/6] bonding device supports sending packets from user
+ specified member, which ensures protocols like LLDP work properly.
+
+Signed-off-by: ywc689 <ywc689@163.com>
+---
+ drivers/net/bonding/rte_eth_bond_pmd.c | 26 ++++++++++++++++++++++++--
+ lib/mbuf/rte_mbuf.h                    |  2 ++
+ 2 files changed, 26 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/bonding/rte_eth_bond_pmd.c b/drivers/net/bonding/rte_eth_bond_pmd.c
+index 35e0bad..d9efb2b 100644
+--- a/drivers/net/bonding/rte_eth_bond_pmd.c
++++ b/drivers/net/bonding/rte_eth_bond_pmd.c
+@@ -586,6 +586,22 @@ bond_ethdev_rx_burst_alb(void *queue, struct rte_mbuf **bufs, uint16_t nb_pkts)
+ 	return nb_recv_pkts;
+ }
+ 
++static inline int
++bond_ethdev_populate_member_by_user(const struct rte_mbuf *mbuf, const uint16_t *members,
++		int num_member)
++{
++	uint16_t i, pid = mbuf->hash.txadapter.reserved2;
++
++	if (likely(pid == RTE_MBUF_PORT_INVALID))
++		return -1;
++
++	for (i = 0; i < num_member; i++) {
++		if (members[i] == pid)
++			return i;
++	}
++	return -1;
++}
++
+ static uint16_t
+ bond_ethdev_tx_burst_round_robin(void *queue, struct rte_mbuf **bufs,
+ 		uint16_t nb_pkts)
+@@ -618,7 +634,9 @@ bond_ethdev_tx_burst_round_robin(void *queue, struct rte_mbuf **bufs,
+ 
+ 	/* Populate members mbuf with which packets are to be sent on it  */
+ 	for (i = 0; i < nb_pkts; i++) {
+-		cmember_idx = (member_idx + i) % num_of_members;
++		cmember_idx = bond_ethdev_populate_member_by_user(bufs[i], members, num_of_members);
++		if (likely(cmember_idx < 0))
++			cmember_idx = (member_idx + i) % num_of_members;
+ 		member_bufs[cmember_idx][(member_nb_pkts[cmember_idx])++] = bufs[i];
+ 	}
+ 
+@@ -1188,7 +1206,11 @@ tx_burst_balance(void *queue, struct rte_mbuf **bufs, uint16_t nb_bufs,
+ 
+ 	for (i = 0; i < nb_bufs; i++) {
+ 		/* Populate member mbuf arrays with mbufs for that member. */
+-		uint16_t member_idx = bufs_member_port_idxs[i];
++		int member_idx;
++
++		member_idx = bond_ethdev_populate_member_by_user(bufs[i], member_port_ids, member_count);
++		if (likely(member_idx < 0))
++			member_idx = bufs_member_port_idxs[i];
+ 
+ 		member_bufs[member_idx][member_nb_bufs[member_idx]++] = bufs[i];
+ 	}
+diff --git a/lib/mbuf/rte_mbuf.h b/lib/mbuf/rte_mbuf.h
+index 0d2e0e6..3d0339f 100644
+--- a/lib/mbuf/rte_mbuf.h
++++ b/lib/mbuf/rte_mbuf.h
+@@ -602,6 +602,7 @@ static inline struct rte_mbuf *rte_mbuf_raw_alloc(struct rte_mempool *mp)
+ 
+ 	if (rte_mempool_get(mp, &ret.ptr) < 0)
+ 		return NULL;
++	ret.m->hash.txadapter.reserved2 = RTE_MBUF_PORT_INVALID;
+ 	__rte_mbuf_raw_sanity_check(ret.m);
+ 	return ret.m;
+ }
+@@ -882,6 +883,7 @@ static inline void rte_pktmbuf_reset(struct rte_mbuf *m)
+ 	m->vlan_tci_outer = 0;
+ 	m->nb_segs = 1;
+ 	m->port = RTE_MBUF_PORT_INVALID;
++	m->hash.txadapter.reserved2 = RTE_MBUF_PORT_INVALID;
+ 
+ 	m->ol_flags &= RTE_MBUF_F_EXTERNAL;
+ 	m->packet_type = 0;
+-- 
+2.31.1
+

@@ -684,7 +684,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         ip6h->ip6_dst = tmpaddr;
         ip6h->ip6_hlim = dp_vs_synproxy_ctrl_synack_ttl;
 
-        if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
+        if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_TCP_CKSUM)) {
             mbuf->l3_len = (void *)th - (void *)ip6h;
             mbuf->l4_len = (th->doff << 2);
             th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, mbuf->l3_len, IPPROTO_TCP);
@@ -704,7 +704,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         iph->tos = 0;
 
         /* compute checksum */
-        if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
+        if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_TCP_CKSUM)) {
             mbuf->l3_len = iphlen;
             mbuf->l4_len = (th->doff << 2);
             th->check = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)iph, mbuf->ol_flags);
@@ -714,7 +714,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
             tcp4_send_csum((struct rte_ipv4_hdr*)iph, th);
         }
 
-        if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM))
+        if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM))
             iph->check = 0;
         else
             ip4_send_csum((struct rte_ipv4_hdr*)iph);
@@ -790,9 +790,10 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
     }
     if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
         if (af == AF_INET)
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+            mbuf->ol_flags |= (RTE_MBUF_F_TX_TCP_CKSUM |
+                    RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4);
         else
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
+            mbuf->ol_flags |= (RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IPV6);
     }
 
     /* reuse mbuf */
@@ -806,9 +807,9 @@ int dp_vs_synproxy_syn_rcv(int af, struct rte_mbuf *mbuf,
         RTE_LOG(ERR, IPVS, "%s: no memory\n", __func__);
         goto syn_rcv_out;
     }
-    memcpy(&ethaddr, &eth->s_addr, sizeof(struct rte_ether_addr));
-    memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct rte_ether_addr));
-    memcpy(&eth->d_addr, &ethaddr, sizeof(struct rte_ether_addr));
+    memcpy(&ethaddr, &eth->src_addr, sizeof(struct rte_ether_addr));
+    memcpy(&eth->src_addr, &eth->dst_addr, sizeof(struct rte_ether_addr));
+    memcpy(&eth->dst_addr, &ethaddr, sizeof(struct rte_ether_addr));
 
     if (unlikely(EDPVS_OK != (ret = netif_xmit(mbuf, dev)))) {
         RTE_LOG(ERR, IPVS, "%s: netif_xmit failed -- %s\n",
@@ -1036,9 +1037,9 @@ static int syn_proxy_build_tcp_rst(int af, struct rte_mbuf *mbuf,
     }
     if (likely(dev && (dev->flag & NETIF_PORT_FLAG_TX_TCP_CSUM_OFFLOAD))) {
         if (af == AF_INET6)
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IPV6);
+            mbuf->ol_flags |= (RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IPV6);
         else
-            mbuf->ol_flags |= (PKT_TX_TCP_CKSUM | PKT_TX_IP_CKSUM | PKT_TX_IPV4);
+            mbuf->ol_flags |= (RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4);
     }
 
     /* exchange ports */
@@ -1080,7 +1081,7 @@ static int syn_proxy_build_tcp_rst(int af, struct rte_mbuf *mbuf,
         ip6h->ip6_plen = htons(ntohs(ip6h->ip6_plen) - payload_len);
 
         /* compute checksum */
-        if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
+        if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_TCP_CKSUM)) {
             mbuf->l3_len = l3_len;
             mbuf->l4_len = l4_len;
             th->check = ip6_phdr_cksum(ip6h, mbuf->ol_flags, mbuf->l3_len, IPPROTO_TCP);
@@ -1101,7 +1102,7 @@ static int syn_proxy_build_tcp_rst(int af, struct rte_mbuf *mbuf,
         ip4h->tos = 0;
 
         /* compute checksum */
-        if (likely(mbuf->ol_flags & PKT_TX_TCP_CKSUM)) {
+        if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_TCP_CKSUM)) {
             mbuf->l3_len = l3_len;
             mbuf->l4_len = l4_len;
             th->check = rte_ipv4_phdr_cksum((struct rte_ipv4_hdr*)ip4h, mbuf->ol_flags);
@@ -1111,7 +1112,7 @@ static int syn_proxy_build_tcp_rst(int af, struct rte_mbuf *mbuf,
             tcp4_send_csum((struct rte_ipv4_hdr*)ip4h, th);
         }
 
-        if (likely(mbuf->ol_flags & PKT_TX_IP_CKSUM))
+        if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM))
             ip4h->check = 0;
         else
             ip4_send_csum((struct rte_ipv4_hdr*)ip4h);
@@ -1164,9 +1165,9 @@ static int syn_proxy_send_tcp_rst(int af, struct rte_mbuf *mbuf)
         RTE_LOG(ERR, IPVS, "%s: no memory\n", __func__);
         return EDPVS_NOMEM;
     }
-    memcpy(&ethaddr, &eth->s_addr, sizeof(struct rte_ether_addr));
-    memcpy(&eth->s_addr, &eth->d_addr, sizeof(struct rte_ether_addr));
-    memcpy(&eth->d_addr, &ethaddr, sizeof(struct rte_ether_addr));
+    memcpy(&ethaddr, &eth->src_addr, sizeof(struct rte_ether_addr));
+    memcpy(&eth->src_addr, &eth->dst_addr, sizeof(struct rte_ether_addr));
+    memcpy(&eth->dst_addr, &ethaddr, sizeof(struct rte_ether_addr));
 
     dev = netif_port_get(mbuf->port);
     if (unlikely(!dev)) {

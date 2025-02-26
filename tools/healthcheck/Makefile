@@ -9,9 +9,12 @@ GO_CLEAN = $(GO) clean
 
 all: $(TARGET)
 
-$(TARGET):
+$(TARGET): go-proxy
 	-$(GO) mod tidy
 	$(GO_BUILD) -o $@
+
+go-proxy:
+	$(GO) env -w GOPROXY=https://goproxy.cn,direct
 
 clean:
 	$(GO_CLEAN)

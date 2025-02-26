@@ -266,6 +266,52 @@ static int rt6_hlist_del_lcore(const struct dp_vs_route6_conf *cf)
     return EDPVS_OK;
 }
 
+static int rt6_hlist_flush_lcore(const struct dp_vs_route6_conf *cf)
+{
+    int i;
+    struct rt6_hlist *hlist, *hlist_next;
+    struct route6 *rt6, *rt6_next;
+    bool flush_all;
+#ifdef DPVS_ROUTE6_DEBUG
+    char buf[64];
+#endif
+
+    if (cf && strlen(cf->ifname) > 0)
+        flush_all = false;
+    else
+        flush_all = true;
+
+    list_for_each_entry_safe(hlist, hlist_next, &this_rt6_htable, node) {
+        for (i = 0; i < hlist->nbuckets; i++) {
+            list_for_each_entry_safe(rt6, rt6_next, &hlist->hlist[i], hnode) {
+                if (flush_all || (rt6->rt6_dev && strcmp(rt6->rt6_dev->name, cf->ifname) == 0)) {
+#ifdef DPVS_ROUTE6_DEBUG
+                    dump_rt6_prefix(&rt6->rt6_dst, buf, sizeof(buf));
+                    RTE_LOG(DEBUG, RT6, "[%d] %s: del route6 node: %s->%s\n",
+                            rte_lcore_id(), __func__, buf, cf->ifname);
+#endif
+                    list_del(&rt6->hnode);
+                    route6_free(rt6);
+                    hlist->nroutes--;
+                    this_rt6_nroutes--;
+                }
+            }
+        }
+        assert(!flush_all || (flush_all && hlist->nroutes == 0));
+        if (hlist->nroutes == 0) {
+#ifdef DPVS_ROUTE6_DEBUG
+            RTE_LOG(DEBUG, RT6, "[%d] %s: del rt6_hlist: plen=%d, nbuckets=%d\n",
+                    rte_lcore_id(), __func__, hlist->plen, hlist->nbuckets);
+#endif
+            list_del(&hlist->node);
+            rte_free(hlist);
+        }
+    }
+    assert(!flush_all || (flush_all && hlist->nroutes == 0));
+
+    return EDPVS_OK;
+}
+
 static inline bool
 rt6_hlist_flow_match(const struct route6 *rt6, const struct flow6 *fl6)
 {
@@ -370,6 +416,7 @@ static struct route6_method rt6_hlist_method = {
     .rt6_count = rt6_hlist_count,
     .rt6_add_lcore = rt6_hlist_add_lcore,
     .rt6_del_lcore = rt6_hlist_del_lcore,
+    .rt6_flush_lcore = rt6_hlist_flush_lcore,
     .rt6_get = rt6_hlist_get,
     .rt6_input = rt6_hlist_input,
     .rt6_output = rt6_hlist_output,
