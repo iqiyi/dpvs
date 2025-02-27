@@ -148,10 +148,10 @@ var (
 	vsConfDefault VSConf = VSConf{
 		CheckerConf: CheckerConf{
 			method:    checker.CheckMethodAuto,
-			interval:  2 * time.Second,
+			interval:  3 * time.Second,
 			downRetry: 1,
 			upRetry:   1,
-			timeout:   1500 * time.Millisecond,
+			timeout:   2 * time.Second,
 		},
 		ActionConf: ActionConf{
 			actioner:       "BackendUpdate",

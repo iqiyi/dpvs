@@ -159,6 +159,8 @@ func (vs *VirtualService) sendStateChangeNotice(newState types.State) {
 	}
 }
 func (vs *VirtualService) updateStateTo(newState types.State) {
+	glog.V(4).Infof("VS %v state update: %v->%v (upBackends:%d, downBackends:%d)",
+		vs.id, vs.state, newState, vs.upBackends, vs.downBackends)
 	vs.state = newState
 	vs.since = time.Now()
 	if newState == types.Unhealthy {
@@ -399,6 +401,7 @@ func (vs *VirtualService) recvNotice(state *BackendState) {
 	if rs.checkerState == state.state {
 		return
 	}
+	oldState := rs.checkerState
 	rs.checkerState = state.state
 
 	if err := vs.act([]CheckerID{state.id}); err != nil {
@@ -407,7 +410,7 @@ func (vs *VirtualService) recvNotice(state *BackendState) {
 
 	if state.state == types.Unhealthy {
 		vs.downBackends++
-		if vs.upBackends > 0 {
+		if oldState == types.Healthy {
 			vs.upBackends--
 		}
 		vsState := vs.judge()
@@ -417,7 +420,7 @@ func (vs *VirtualService) recvNotice(state *BackendState) {
 		}
 	} else {
 		vs.upBackends++
-		if vs.downBackends > 0 {
+		if oldState == types.Unhealthy {
 			vs.downBackends--
 		}
 		vsState := vs.judge()
@@ -450,8 +453,8 @@ func (vs *VirtualService) doResync() {
 		vs.id, vs.state, vs.upBackends, vs.downBackends)
 	vsState := vs.calcState()
 	if vsState != vs.state {
-		glog.Warningf("VS %s state changed %s->%s after recalculation",
-			vs.id, vs.state, vsState)
+		glog.Warningf("VS %s state changed %s->%s after recalculation, upBackends %d, downBackends %d",
+			vs.id, vs.state, vsState, vs.upBackends, vs.downBackends)
 		vs.sendStateChangeNotice(vsState)
 		vs.updateStateTo(vsState)
 	}

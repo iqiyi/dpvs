@@ -178,6 +178,8 @@ func (va *VirtualAddress) actUP() error {
 		va.metricTaint = true
 		return err
 	}
+	glog.V(4).Infof("VA %v state changed to %v (upVSs:%d, downVSs:%d)",
+		va.id, types.Healthy, va.upVSs, va.downVSs)
 	va.state = types.Healthy
 	va.since = time.Now()
 	va.stats.up++
@@ -191,6 +193,8 @@ func (va *VirtualAddress) actDOWN() error {
 		va.metricTaint = true
 		return err
 	}
+	glog.V(4).Infof("VA %v state changed to %v (upVSs:%d, downVSs:%d)",
+		va.id, types.Unhealthy, va.upVSs, va.downVSs)
 	va.state = types.Unhealthy
 	va.since = time.Now()
 	va.stats.down++
@@ -352,11 +356,12 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 	if vavs.checkerState == state.state {
 		return
 	}
+	oldState := vavs.checkerState
 	vavs.checkerState = state.state
 
 	if state.state == types.Unhealthy {
 		va.downVSs++
-		if va.upVSs > 0 {
+		if oldState == types.Healthy {
 			va.upVSs--
 		}
 		vaState := va.judge()
@@ -367,7 +372,7 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 		}
 	} else {
 		va.upVSs++
-		if va.downVSs > 0 {
+		if oldState == types.Unhealthy {
 			va.downVSs--
 		}
 		vaState := va.judge()
