@@ -35,7 +35,7 @@ func init() {
 }
 
 func (c *UDPChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (types.State, error) {
-	if timeout == time.Duration(0) {
+	if timeout <= time.Duration(0) {
 		return types.Unknown, fmt.Errorf("zero timeout on UDP check")
 	}
 

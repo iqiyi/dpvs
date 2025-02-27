@@ -35,7 +35,7 @@ func init() {
 }
 
 func (c *PingChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (types.State, error) {
-	if timeout == time.Duration(0) {
+	if timeout <= time.Duration(0) {
 		return types.Unknown, fmt.Errorf("zero timeout on Ping check")
 	}
 
@@ -54,7 +54,7 @@ func (c *PingChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (type
 		return types.Unhealthy, nil
 	}
 
-	glog.V(9).Infof("Ping check %v %v: succeed", targetCopied.IP, types.Unhealthy)
+	glog.V(9).Infof("Ping check %v %v: succeed", targetCopied.IP, types.Healthy)
 	return types.Healthy, nil
 }
 
