@@ -151,7 +151,7 @@ var (
 			interval:  2 * time.Second,
 			downRetry: 1,
 			upRetry:   1,
-			timeout:   2 * time.Second,
+			timeout:   1500 * time.Millisecond,
 		},
 		ActionConf: ActionConf{
 			actioner:       "BackendUpdate",

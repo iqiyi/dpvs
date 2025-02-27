@@ -77,7 +77,7 @@ func NewChecker(target *utils.L3L4Addr, conf *CheckerConf, vs *VirtualService) (
 		metric:       vs.metric,
 
 		update: make(chan CheckerConf),
-		quit:   make(chan bool),
+		quit:   make(chan bool, 1),
 	}
 
 	return checker, nil

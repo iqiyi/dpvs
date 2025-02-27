@@ -113,7 +113,7 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 		wg:     &sync.WaitGroup{},
 		update: make(chan VAConfExt),
 		notify: make(chan VSState, m.appConf.VSNotifyChanSize),
-		quit:   make(chan bool),
+		quit:   make(chan bool, 1),
 	}
 
 	glog.Infof("VA %s created", vaid)

@@ -110,7 +110,7 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 		wg:     &sync.WaitGroup{},
 		update: make(chan VSConfExt),
 		notify: make(chan BackendState, va.m.appConf.CheckerNotifyChanSize),
-		quit:   make(chan bool),
+		quit:   make(chan bool, 1),
 	}
 
 	glog.Infof("VS %s created", vsid)
