@@ -1,13 +1,10 @@
 package checker
 
 import (
-	"flag"
 	"net"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/golang/glog"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
 )
 
@@ -33,16 +30,6 @@ var http_url_targets = []string{
 	"http://www.iqiyi.com",
 	"https://www.iqiyi.com",
 	"https://www.google.com",
-}
-
-func TestMain(m *testing.M) {
-	// To support test args, run test with params like:
-	// `go test -v . -args -logtostderr=true -v=9`
-	flag.Parse()
-
-	rc := m.Run()
-	glog.Flush()
-	os.Exit(rc)
 }
 
 func TestHttpChecker(t *testing.T) {
