@@ -92,8 +92,12 @@ func (c *UDPChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (types
 		if len(c.send) == 0 && len(c.receive) == 0 {
 			if neterr, ok := err.(net.Error); ok {
 				if neterr.Timeout() {
-					glog.V(9).Infof("UDP check %v %v: i/o timeout", addr, types.Unknown)
-					return types.Unknown, nil
+					// Intuitively, we should assign types.Unknown to the check result.
+					// But it can lead to inconsistent problem when health states changed.
+					// Thus return types.Healthy instead.
+					glog.V(9).Infof("UDP check %v %v: i/o timeout, state %v returned", addr,
+						types.Unknown, types.Healthy)
+					return types.Healthy, nil
 				}
 			}
 		}
