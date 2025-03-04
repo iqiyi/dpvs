@@ -305,7 +305,7 @@ func (db *MetricDB) String() string {
 		} // VS ending
 	} // VA ending
 
-	builder.WriteString(fmt.Sprintf("Notes:\n  statistics implications: %s\n", stats.Title()))
+	builder.WriteString(fmt.Sprintf("Notes:\n  statistics denotation: %s\n", stats.Title()))
 	return builder.String()
 }
 

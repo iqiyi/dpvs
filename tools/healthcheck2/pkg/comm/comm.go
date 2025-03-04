@@ -195,7 +195,7 @@ func UpdateCheckState(svr string, vs *VirtualServer, ctx context.Context) (*Virt
 		return nil, err
 	}
 	defer resp.Body.Close()
-	glog.V(9).Infof("[dpvs-agent check update API] Request: %v, Code: %v", req, resp.Status)
+	glog.V(9).Infof("[dpvs-agent check update API] URL: %v, Request: %v, Code: %v", url, req, resp.Status)
 	if resp.StatusCode != 200 {
 		if data, err = io.ReadAll(resp.Body); err != nil {
 			return nil, fmt.Errorf("http response code: %v, msg read error: %v", resp.StatusCode, err)

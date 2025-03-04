@@ -84,6 +84,10 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 	if confCopied.method == checker.CheckMethodAuto {
 		confCopied.method = confCopied.method.TranslateAuto(sub.Addr.Proto)
 	}
+	if confCopied.actionParams == nil {
+		confCopied.actionParams = make(map[string]string)
+	}
+	confCopied.actionParams["api-server-addr"] = va.m.appConf.DpvsAgentAddr
 
 	act, err := actioner.NewActioner(conf.actioner, &sub.Addr, confCopied.actionParams)
 	if err != nil {
@@ -172,23 +176,34 @@ func (vs *VirtualService) updateStateTo(newState types.State) {
 }
 
 func (vs *VirtualService) act(changed []CheckerID) error {
-	targets := make([]comm.RealServer, 0, len(changed))
+	var version uint64 = 0
+	rss := make([]comm.RealServer, 0, len(changed))
 	for _, ckid := range changed {
 		rs := vs.backends[ckid]
-		targets = append(targets, comm.RealServer{
+		if version == 0 || rs.version < version {
+			// just in case, use the minimum version of all changed backends
+			version = rs.version
+		}
+		rss = append(rss, comm.RealServer{
 			Addr:      rs.addr,
 			Weight:    uint16(rs.uweight),
 			Inhibited: rs.checkerState == types.Unhealthy,
 		})
 	}
+	vsCom := comm.VirtualServer{
+		Version: version,
+		Addr:    vs.subject,
+		RSs:     rss,
+		// ignore any other field not concerned
+	}
 
-	// Batch update, real checker states are carried by param `targets`.
-	resp, err := vs.actioner.Act(types.Unknown, vs.conf.actionTimeout, targets)
+	// Batch update, real checker states are carried by param `vsCom.rss`.
+	resp, err := vs.actioner.Act(types.Unknown, vs.conf.actionTimeout, &vsCom)
 	if err != nil {
 		// FIXME: Partial update may have happened,
 		//  how to know exactly the number of failed backends?
 		var ups, downs int
-		for _, rs := range targets {
+		for _, rs := range rss {
 			if rs.Inhibited {
 				downs++
 			} else {
@@ -203,24 +218,25 @@ func (vs *VirtualService) act(changed []CheckerID) error {
 			vs.stats.downFailed++
 			vs.metricTaint = true
 		}
-		if svc, ok := resp.(*comm.VirtualServer); ok {
-			// TODO: process the returned new VS conf
-			vsConf := vs.va.m.conf.GetVSConf(vs.id) // refetch VSConf
-			vsConfExt := &VSConfExt{
-				VSConf: *vsConf,
-				vs:     *svc,
-			}
-			vs.doUpdate(vsConfExt.DeepCopy())
-		} else {
-			return fmt.Errorf("%v, response: %v", err, resp)
+		return err
+	}
+	if svc, ok := resp.(*comm.VirtualServer); ok && svc != nil {
+		// process the returned new VS conf
+		// Note:
+		//   The returned new VS conf MUST contain all backends rather than
+		//   only the changed ones of the virtual service.
+		vsConf := vs.va.m.conf.GetVSConf(vs.id) // refetch VSConf
+		vsConfExt := &VSConfExt{
+			VSConf: *vsConf,
+			vs:     *svc,
 		}
-		return err // never reach here
-	} else {
-		// act succeeded, backend checkerState reflects its real state now
-		for _, ckid := range changed {
-			rs := vs.backends[ckid]
-			rs.state = rs.checkerState
-		}
+		vs.doUpdate(vsConfExt.DeepCopy())
+		return fmt.Errorf("outdated vs version %d", version)
+	}
+	// act succeeded, backend checkerState reflects its real state now
+	for _, ckid := range changed {
+		rs := vs.backends[ckid]
+		rs.state = rs.checkerState
 	}
 	return nil
 }
@@ -405,7 +421,7 @@ func (vs *VirtualService) recvNotice(state *BackendState) {
 	rs.checkerState = state.state
 
 	if err := vs.act([]CheckerID{state.id}); err != nil {
-		glog.Warningf("VS %s update backend %s to %s failed: %v", vs.id, state.id, err)
+		glog.Warningf("VS %s update backend %s to %s failed: %v", vs.id, state.id, state.state, err)
 	}
 
 	if state.state == types.Unhealthy {
