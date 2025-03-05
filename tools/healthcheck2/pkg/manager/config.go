@@ -139,7 +139,7 @@ var (
 		disable:    false,
 		downPolicy: VAPolicyAllOf,
 		ActionConf: ActionConf{
-			actioner:       "KniAddrAddDel",
+			actioner:       "KernelRouteAddDel",
 			actionTimeout:  2 * time.Second,
 			actionSyncTime: 60 * time.Second,
 		},

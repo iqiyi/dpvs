@@ -57,7 +57,7 @@ func (a *BackendAction) Act(signal types.State, timeout time.Duration, data ...i
 		glog.Warningf("BackendUpdate actioner %s (VS: %v) outdated and returned newVS %v",
 			a.name, *vs, newVS)
 	} else {
-		glog.V(6).Infof("BackendUpdate actioner %s (VS %v) succeed: %v", a.name, *vs)
+		glog.V(6).Infof("BackendUpdate actioner %s (VS %v) succeed", a.name, *vs)
 	}
 
 	return newVS, err
