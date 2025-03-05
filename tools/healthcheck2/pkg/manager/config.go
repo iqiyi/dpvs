@@ -142,6 +142,7 @@ var (
 			actioner:       "KernelRouteAddDel",
 			actionTimeout:  2 * time.Second,
 			actionSyncTime: 60 * time.Second,
+			actionParams:   map[string]string{"ifname": "lo"},
 		},
 	}
 
