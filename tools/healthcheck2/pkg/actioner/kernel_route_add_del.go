@@ -189,7 +189,7 @@ func (a *KernelRouteAction) create(target *utils.L3L4Addr, params map[string]str
 	}
 
 	if len(actioner.ifname) == 0 {
-		return nil, errors.New(" KernelRouteAction actioner misses param: ifname")
+		return nil, errors.New("KernelRouteAction actioner misses param: ifname")
 	}
 	return actioner, nil
 }

@@ -287,7 +287,7 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 		vaState := va.judge()
 		if vaState != va.state {
 			if err := va.act(vaState); err != nil {
-				glog.Warningf("VA %s state change to %s failed: %v", va.id, vaState, err)
+				glog.Warningf("VA %s state change to %v failed: %v", va.id, vaState, err)
 			}
 		}
 	}
@@ -367,7 +367,7 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 		vaState := va.judge()
 		if vaState != va.state {
 			if err := va.act(vaState); err != nil {
-				glog.Warningf("VA %s state change to %s failed: %v", va.id, state, err)
+				glog.Warningf("VA %s state change to %v failed: %v", va.id, state, err)
 			}
 		}
 	} else {
@@ -378,7 +378,7 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 		vaState := va.judge()
 		if vaState != va.state {
 			if err := va.act(vaState); err != nil {
-				glog.Warningf("VA %s state change to %s failed: %v", va.id, state, err)
+				glog.Warningf("VA %s state change to %v failed: %v", va.id, state, err)
 			}
 		}
 	}

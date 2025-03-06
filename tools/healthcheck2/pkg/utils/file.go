@@ -28,3 +28,18 @@ func IsFile(path string) bool {
 	}
 	return !s.IsDir()
 }
+
+func IsExecutableFile(filePath string) bool {
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+	if fileInfo.IsDir() {
+		return false
+	}
+	mode := fileInfo.Mode()
+	if mode&0111 != 0 {
+		return true
+	}
+	return false
+}

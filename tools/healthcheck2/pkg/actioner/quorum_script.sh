@@ -1,0 +1,40 @@
+#!/bin/env sh
+#
+# The script adds/removes IP address to/from linux "lo" interface and the
+# specified dpdk port <dpvs.ifname> according to the given UP/DOWN signal,
+# which can be used as a test script for ScriptAction.
+#
+# Usage: $0 <dpvs.ifname> UP|DOWN <IP>
+#
+
+[ $# -lt 3 ] && echo "Usage: $0 <dpvs.ifname> UP|DOWN <IP>" && exit 1
+
+ifname=$1
+action=$2
+ip=$3
+
+ipcalc -s -c $ip
+[ $? -ne 0 ] && echo "invalid IP address $ip" && exit 1
+
+if [ "_$action" != "_UP" -a "_$action" != "_DOWN" ]; then
+    echo "invalid action $action, only support UP|DOWN"
+    exit 1
+fi
+
+dpip link show $ifname > /dev/null 2>&1
+[ $? -ne 0 ] && echo "invalid DPVS ifname $ifname" && exit 1
+
+
+pfxlen=32
+ipcalc -6 $ip >/dev/null 2>&1
+[ $? -eq 0 ] && pfxlen=128
+
+if [ "_$action" == "_UP" ]; then
+    ip addr add $ip/$pfxlen dev lo
+    dpip addr add $ip/$pfxlen dev $ifname
+else ### action DOWN
+    ip addr del $ip/$pfxlen dev lo
+    dpip addr del $ip/$pfxlen dev $ifname
+fi
+
+exit 0
