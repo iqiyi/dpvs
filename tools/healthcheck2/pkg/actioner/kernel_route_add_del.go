@@ -71,13 +71,13 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 	addr := a.target.IP
 	var operation string
 
-	if timeout < 0 {
+	if timeout <= 0 {
 		return nil, fmt.Errorf("zero timeout on %s actioner %v", kernelRouteActionerName, addr)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	glog.V(7).Infof("starting %s actioner %s ...", kernelRouteActionerName, addr)
+	glog.V(7).Infof("starting %s actioner %v ...", kernelRouteActionerName, addr)
 
 	done := make(chan error, 1)
 
@@ -112,7 +112,7 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 		ipAddr := &netlink.Addr{IPNet: ipNet}
 
 		if signal != types.Unhealthy { // ADD
-			operation = "ADD"
+			operation = "UP"
 			if err := netlink.AddrAdd(link, ipAddr); err != nil {
 				if isExistError(err) {
 					glog.V(8).Infof("Warning: adding address %v already exists: %v\n", addr, err)
@@ -133,7 +133,7 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 				}
 			}
 		} else { // DELETE
-			operation = "DELETE"
+			operation = "DOWN"
 			if err := netlink.AddrDel(link, ipAddr); err != nil {
 				if isNotExistError(err) {
 					glog.V(8).Infof("Warning: deleting address %v does not exist: %v\n", addr, err)
@@ -174,10 +174,9 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 
 func (a *KernelRouteAction) create(target *utils.L3L4Addr, params map[string]string,
 	extras ...interface{}) (ActionMethod, error) {
-	if target == nil {
+	if target == nil || len(target.IP) == 0 {
 		return nil, fmt.Errorf("no target address for %s actioner", kernelRouteActionerName)
 	}
-
 	actioner := &KernelRouteAction{
 		target: target.DeepCopy(),
 	}

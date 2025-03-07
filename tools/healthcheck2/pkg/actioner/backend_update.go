@@ -36,7 +36,7 @@ type BackendAction struct {
 
 func (a *BackendAction) Act(signal types.State, timeout time.Duration,
 	data ...interface{}) (interface{}, error) {
-	if timeout < 0 {
+	if timeout <= 0 {
 		return nil, fmt.Errorf("zero timeout on actioner %s", a.name)
 	}
 	if len(data) < 1 {
@@ -71,7 +71,7 @@ func (a *BackendAction) create(target *utils.L3L4Addr, params map[string]string,
 
 	if len(extras) > 0 {
 		if apiServer, ok := extras[0].(string); ok {
-			actioner.apiServer = string(apiServer)
+			actioner.apiServer = apiServer
 		}
 	}
 
@@ -88,7 +88,7 @@ func (a *BackendAction) create(target *utils.L3L4Addr, params map[string]string,
 	}
 
 	if len(actioner.apiServer) == 0 {
-		return nil, fmt.Errorf("%s actioner misses apiServer config", backendActionerName)
+		return nil, fmt.Errorf("%s actioner misses dpvs api server config", backendActionerName)
 	}
 
 	return actioner, nil

@@ -26,6 +26,7 @@ const (
 	dpvsAgentServiceListMethod = http.MethodGet
 	dpvsAgentCheckUpdateUri    = "/v2/vs/%s/rs/health?version=%d"
 	dpvsAgentCheckUpdateMethod = http.MethodPut
+	dpvsAgentDeviceAddrUri     = "/v2/device/%s/addr"
 )
 
 var client *http.Client = &http.Client{Timeout: httpClientTimeout}
@@ -212,4 +213,48 @@ func UpdateCheckState(svr string, vs *VirtualServer, ctx context.Context) (*Virt
 		return ret, nil
 	}
 	return nil, nil
+}
+
+func AddDelDeviceAddr(isAdd bool, svr, ifname string, addr net.IP, ctx context.Context) error {
+	url := svr + dpvsAgentDeviceAddrUri
+	url = fmt.Sprintf(url, ifname)
+	if strings.HasPrefix(url, "https://") {
+		// TODO: add supports for HTTPS
+		return fmt.Errorf("https not supported")
+	}
+
+	method := http.MethodPut
+	if !isAdd {
+		method = http.MethodDelete
+	}
+
+	data := map[string]string{
+		"addr": addr.String(),
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("fail to marshal json data: %v", err)
+	}
+
+	var req *http.Request
+	if ctx != nil {
+		req, err = http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(jsonData))
+	} else {
+		req, err = http.NewRequest(method, url, bytes.NewBuffer(jsonData))
+	}
+	if err != nil {
+		return fmt.Errorf("failed to create http request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("http request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected http status code: %v", resp.StatusCode)
+	}
+	return nil
 }

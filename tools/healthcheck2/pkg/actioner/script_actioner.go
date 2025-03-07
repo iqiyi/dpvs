@@ -77,7 +77,7 @@ func (a *ScriptAction) Act(signal types.State, timeout time.Duration,
 	data ...interface{}) (interface{}, error) {
 	cmdline := a.commandline(signal)
 
-	if timeout < 0 {
+	if timeout <= 0 {
 		return nil, fmt.Errorf("zero timeout on %s actioner %q", scriptActionerName, cmdline)
 	}
 

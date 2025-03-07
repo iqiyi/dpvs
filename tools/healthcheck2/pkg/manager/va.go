@@ -88,7 +88,7 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 	vaid := VAID(sub.String())
 	confCopied := conf.DeepCopy()
 	act, err := actioner.NewActioner(conf.actioner, &utils.L3L4Addr{IP: sub},
-		confCopied.actionParams)
+		confCopied.actionParams, m.appConf.DpvsAgentAddr)
 	if err != nil {
 		return nil, fmt.Errorf("VA actioner created failed: %v", err)
 	}

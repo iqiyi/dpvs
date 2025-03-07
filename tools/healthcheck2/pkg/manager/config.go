@@ -146,6 +146,12 @@ var (
 		},
 		/*
 			ActionConf: ActionConf{
+				actioner:       "DpvsAddrAddDel",
+				actionTimeout:  2 * time.Second,
+				actionSyncTime: 60 * time.Second,
+				actionParams:   map[string]string{"dpvs-ifname": "dpdk0.102"},
+			},
+			ActionConf: ActionConf{
 				actioner:       "Script",
 				actionTimeout:  2 * time.Second,
 				actionSyncTime: 60 * time.Second,
