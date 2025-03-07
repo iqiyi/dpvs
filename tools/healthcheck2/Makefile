@@ -11,6 +11,7 @@ all: $(TARGET)
 
 $(TARGET): go-proxy
 	-$(GO) mod tidy
+	$(GO) vet
 	$(GO_BUILD) -o $@
 
 go-proxy:

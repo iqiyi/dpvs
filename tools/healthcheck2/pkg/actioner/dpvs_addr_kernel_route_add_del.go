@@ -9,18 +9,22 @@ import (
 
 var _ ActionMethod = (*DpvsAddrKernelRouteAction)(nil)
 
+const addrRouteActionerName = "DpvsAddrKernelRouteAddDel"
+
 func init() {
-	registerMethod("DpvsAddrKernelRouteAddDel", &DpvsAddrKernelRouteAction{})
+	registerMethod(addrRouteActionerName, &DpvsAddrKernelRouteAction{})
 }
 
 type DpvsAddrKernelRouteAction struct {
 	// TODO
 }
 
-func (actioner *DpvsAddrKernelRouteAction) Act(signal types.State, timeout time.Duration, data ...interface{}) (interface{}, error) {
+func (a *DpvsAddrKernelRouteAction) Act(signal types.State, timeout time.Duration,
+	data ...interface{}) (interface{}, error) {
 	return nil, nil
 }
 
-func (actioner *DpvsAddrKernelRouteAction) create(target *utils.L3L4Addr, configs map[string]string) (ActionMethod, error) {
+func (a *DpvsAddrKernelRouteAction) create(target *utils.L3L4Addr, params map[string]string,
+	extras ...interface{}) (ActionMethod, error) {
 	return &DpvsAddrKernelRouteAction{}, nil
 }

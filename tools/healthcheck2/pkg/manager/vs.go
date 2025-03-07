@@ -84,12 +84,9 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 	if confCopied.method == checker.CheckMethodAuto {
 		confCopied.method = confCopied.method.TranslateAuto(sub.Addr.Proto)
 	}
-	if confCopied.actionParams == nil {
-		confCopied.actionParams = make(map[string]string)
-	}
-	confCopied.actionParams["api-server-addr"] = va.m.appConf.DpvsAgentAddr
 
-	act, err := actioner.NewActioner(conf.actioner, &sub.Addr, confCopied.actionParams)
+	act, err := actioner.NewActioner(conf.actioner, &sub.Addr, confCopied.actionParams,
+		va.m.appConf.DpvsAgentAddr)
 	if err != nil {
 		return nil, fmt.Errorf("VS actioner created failed: %v", err)
 	}

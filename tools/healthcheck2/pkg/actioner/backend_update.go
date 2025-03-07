@@ -5,14 +5,12 @@ BackendAction Actioner Params:
 -------------------------------------------------------
 name                value
 -------------------------------------------------------
-api-server-addr     dpvs-agent server address(internal)
 
 -------------------------------------------------------
 */
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -25,8 +23,10 @@ import (
 
 var _ ActionMethod = (*BackendAction)(nil)
 
+const backendActionerName = "BackendUpdate"
+
 func init() {
-	registerMethod("BackendUpdate", &BackendAction{})
+	registerMethod(backendActionerName, &BackendAction{})
 }
 
 type BackendAction struct {
@@ -34,7 +34,8 @@ type BackendAction struct {
 	apiServer string
 }
 
-func (a *BackendAction) Act(signal types.State, timeout time.Duration, data ...interface{}) (interface{}, error) {
+func (a *BackendAction) Act(signal types.State, timeout time.Duration,
+	data ...interface{}) (interface{}, error) {
 	if timeout < 0 {
 		return nil, fmt.Errorf("zero timeout on actioner %s", a.name)
 	}
@@ -46,45 +47,48 @@ func (a *BackendAction) Act(signal types.State, timeout time.Duration, data ...i
 		return nil, fmt.Errorf("invalid backend data for %s", a.name)
 	}
 
-	glog.V(7).Infof("starting BackendUpdate actioner %s ...", a.name)
+	glog.V(7).Infof("starting %s actioner %s ...", backendActionerName, a.name)
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	newVS, err := comm.UpdateCheckState(a.apiServer, vs, ctx)
 	if err != nil {
-		glog.Errorf("BackendUpdate actioner %s (VS: %v) failed: %v", a.name, *vs, err)
+		glog.Errorf("%s actioner %s (VS: %v) failed: %v", backendActionerName, a.name, *vs, err)
 	} else if newVS != nil {
-		glog.Warningf("BackendUpdate actioner %s (VS: %v) outdated and returned newVS %v",
-			a.name, *vs, newVS)
+		glog.Warningf("%s actioner %s (VS: %v) outdated and returned newVS %v",
+			backendActionerName, a.name, *vs, newVS)
 	} else {
-		glog.V(6).Infof("BackendUpdate actioner %s (VS %v) succeed", a.name, *vs)
+		glog.V(6).Infof("%s actioner %s (VS %v) succeed", backendActionerName, a.name, *vs)
 	}
 
 	return newVS, err
 }
 
-func (a *BackendAction) create(target *utils.L3L4Addr, params map[string]string) (ActionMethod, error) {
+func (a *BackendAction) create(target *utils.L3L4Addr, params map[string]string,
+	extras ...interface{}) (ActionMethod, error) {
 	actioner := &BackendAction{name: target.String()}
 
+	if len(extras) > 0 {
+		if apiServer, ok := extras[0].(string); ok {
+			actioner.apiServer = string(apiServer)
+		}
+	}
+
 	unsupported := make([]string, 0, len(params))
-	for param, val := range params {
+	for param, _ := range params {
 		switch param {
-		case "api-server-addr":
-			if len(val) == 0 {
-				return nil, fmt.Errorf("empty BackendUpdate actioner param: %s", param)
-			}
-			actioner.apiServer = val
 		default:
 			unsupported = append(unsupported, param)
 		}
 	}
 	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported BackendUpdate actioner params: %s", strings.Join(unsupported, ","))
+		return nil, fmt.Errorf("unsupported %s actioner params: %s", backendActionerName,
+			strings.Join(unsupported, ","))
 	}
 
 	if len(actioner.apiServer) == 0 {
-		return nil, errors.New("BackendUpdate actioner misses param: api-server-address")
+		return nil, fmt.Errorf("%s actioner misses apiServer config", backendActionerName)
 	}
 
 	return actioner, nil

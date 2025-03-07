@@ -1,5 +1,16 @@
 package actioner
 
+/*
+BackendAction Actioner Params:
+-------------------------------------------------------
+name                value
+-------------------------------------------------------
+dpvs-ifname         dpvs netif port name
+api-server-addr     dpvs-agent server address(internal)
+
+-------------------------------------------------------
+*/
+
 import (
 	"time"
 
@@ -9,18 +20,22 @@ import (
 
 var _ ActionMethod = (*DpvsAddrAction)(nil)
 
+const dpvsAddrActionerName = "DpvsAddrAddDel"
+
 func init() {
-	registerMethod("DpvsAddrAddDel", &DpvsAddrAction{})
+	registerMethod(dpvsAddrActionerName, &DpvsAddrAction{})
 }
 
 type DpvsAddrAction struct {
-	// TODO
+	apiServer string
 }
 
-func (actioner *DpvsAddrAction) Act(signal types.State, timeout time.Duration, data ...interface{}) (interface{}, error) {
+func (a *DpvsAddrAction) Act(signal types.State, timeout time.Duration,
+	data ...interface{}) (interface{}, error) {
 	return nil, nil
 }
 
-func (actioner *DpvsAddrAction) create(target *utils.L3L4Addr, configs map[string]string) (ActionMethod, error) {
+func (a *DpvsAddrAction) create(target *utils.L3L4Addr, configs map[string]string,
+	extras ...interface{}) (ActionMethod, error) {
 	return &DpvsAddrAction{}, nil
 }

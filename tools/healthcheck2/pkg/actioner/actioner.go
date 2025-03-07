@@ -16,7 +16,7 @@ type ActionMethod interface {
 	Act(signal types.State, timeout time.Duration, data ...interface{}) (interface{}, error)
 	// create validates the given configs, returns an instance of the action
 	// method, and binds configs to it.
-	create(target *utils.L3L4Addr, configs map[string]string) (ActionMethod, error)
+	create(target *utils.L3L4Addr, configs map[string]string, extras ...interface{}) (ActionMethod, error)
 }
 
 func registerMethod(name string, method ActionMethod) {
@@ -26,12 +26,13 @@ func registerMethod(name string, method ActionMethod) {
 	methods[name] = method
 }
 
-func NewActioner(kind string, target *utils.L3L4Addr, configs map[string]string) (ActionMethod, error) {
+func NewActioner(kind string, target *utils.L3L4Addr, configs map[string]string,
+	extras ...interface{}) (ActionMethod, error) {
 	method, ok := methods[kind]
 	if !ok {
 		return nil, fmt.Errorf("unsupported Action type %q", kind)
 	}
-	actioner, err := method.create(target, configs)
+	actioner, err := method.create(target, configs, extras...)
 	if err != nil {
 		return nil, fmt.Errorf("actioner create failed: %v", err)
 	}

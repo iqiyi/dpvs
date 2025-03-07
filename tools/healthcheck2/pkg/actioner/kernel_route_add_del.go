@@ -12,9 +12,9 @@ ifname              network interface name
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -26,8 +26,10 @@ import (
 
 var _ ActionMethod = (*KernelRouteAction)(nil)
 
+const kernelRouteActionerName = "KernelRouteAddDel"
+
 func init() {
-	registerMethod("KernelRouteAddDel", &KernelRouteAction{})
+	registerMethod(kernelRouteActionerName, &KernelRouteAction{})
 }
 
 type KernelRouteAction struct {
@@ -64,17 +66,18 @@ func isNotExistError(err error) bool {
 	return err == unix.ENOENT || err == unix.ESRCH || err.Error() == "cannot assign requested address"
 }
 
-func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration, data ...interface{}) (interface{}, error) {
+func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
+	data ...interface{}) (interface{}, error) {
 	addr := a.target.IP
 	var operation string
 
 	if timeout < 0 {
-		return nil, fmt.Errorf("zero timeout on KernelRouteAddDel actioner %v", addr)
+		return nil, fmt.Errorf("zero timeout on %s actioner %v", kernelRouteActionerName, addr)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	glog.V(7).Infof("starting KernelRouteAddDel actioner %s ...", addr)
+	glog.V(7).Infof("starting %s actioner %s ...", kernelRouteActionerName, addr)
 
 	done := make(chan error, 1)
 
@@ -157,39 +160,47 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration, data 
 
 	select {
 	case <-ctx.Done():
-		glog.Errorf("KernelRouteAddDel actioner %v %s timeout", addr, operation)
+		glog.Errorf("%s actioner %v %s timeout", kernelRouteActionerName, addr, operation)
 		return nil, ctx.Err()
 	case err := <-done:
 		if err != nil {
-			glog.Errorf("KernelRouteAddDel actioner %v %s failed: %v", addr, operation, err)
+			glog.Errorf("%s actioner %v %s failed: %v", kernelRouteActionerName, addr, operation, err)
 			return nil, err
 		}
 	}
-	glog.V(6).Infof("KernelRouteAddDel actioner %v %s succeed", addr, operation)
+	glog.V(6).Infof("%s actioner %v %s succeed", kernelRouteActionerName, addr, operation)
 	return nil, nil
 }
 
-func (a *KernelRouteAction) create(target *utils.L3L4Addr, params map[string]string) (ActionMethod, error) {
+func (a *KernelRouteAction) create(target *utils.L3L4Addr, params map[string]string,
+	extras ...interface{}) (ActionMethod, error) {
 	if target == nil {
-		return nil, fmt.Errorf("no target address for KernelRouteAction actioner")
+		return nil, fmt.Errorf("no target address for %s actioner", kernelRouteActionerName)
 	}
 
 	actioner := &KernelRouteAction{
 		target: target.DeepCopy(),
 	}
 
+	unsupported := make([]string, 0, len(params))
 	for param, val := range params {
 		switch param {
 		case "ifname":
 			if len(val) == 0 {
-				return nil, fmt.Errorf("empty KernelRouteAction actioner param: %s", param)
+				return nil, fmt.Errorf("empty %s actioner param: %s", kernelRouteActionerName, param)
 			}
 			actioner.ifname = val
+		default:
+			unsupported = append(unsupported, param)
 		}
+	}
+	if len(unsupported) > 0 {
+		return nil, fmt.Errorf("unsupported %s actioner params: %s",
+			kernelRouteActionerName, strings.Join(unsupported, ","))
 	}
 
 	if len(actioner.ifname) == 0 {
-		return nil, errors.New("KernelRouteAction actioner misses param: ifname")
+		return nil, fmt.Errorf("%s actioner misses param: ifname", kernelRouteActionerName)
 	}
 	return actioner, nil
 }
