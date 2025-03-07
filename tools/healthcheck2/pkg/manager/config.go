@@ -146,6 +146,15 @@ var (
 		},
 		/*
 			ActionConf: ActionConf{
+				actioner:       "DpvsAddrKernelRouteAddDel",
+				actionTimeout:  2 * time.Second,
+				actionSyncTime: 60 * time.Second,
+				actionParams: map[string]string{
+					"ifname":      "lo",
+					"dpvs-ifname": "dpdk0.102",
+				},
+			},
+			ActionConf: ActionConf{
 				actioner:       "DpvsAddrAddDel",
 				actionTimeout:  2 * time.Second,
 				actionSyncTime: 60 * time.Second,
