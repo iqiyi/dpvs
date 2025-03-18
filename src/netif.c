@@ -3940,6 +3940,7 @@ static int add_bond_slaves(struct netif_port *port)
     port_mtu_set(port);
     if (rte_eth_dev_info_get(port->id, &port->dev_info))
         RTE_LOG(WARNING, NETIF, "%s: fail to update dev_info of %s\n", __func__, port->name);
+    setup_dev_of_flags(port);
 
     return EDPVS_OK;
 }
@@ -3973,6 +3974,13 @@ int netif_port_start(struct netif_port *port)
                 "but %d rx-queues and %d tx-queues are configured.\n", __func__,
                 port->name, port->dev_info.max_rx_queues,
                 port->dev_info.max_tx_queues, port->nrxq, port->ntxq);
+    }
+
+    // add slaves and update stored info for bonding device
+    if (port->type == PORT_TYPE_BOND_MASTER) {
+        ret = add_bond_slaves(port);
+        if (ret != EDPVS_OK)
+            return ret;
     }
 
     if (port->flag & NETIF_PORT_FLAG_RX_IP_CSUM_OFFLOAD)
@@ -4036,13 +4044,6 @@ int netif_port_start(struct netif_port *port)
     // device configure
     if ((ret = rte_eth_dev_set_mtu(port->id,port->mtu)) != EDPVS_OK)
         return ret;
-
-    // add slaves and update stored info for bonding device
-    if (port->type == PORT_TYPE_BOND_MASTER) {
-        ret = add_bond_slaves(port);
-        if (ret != EDPVS_OK)
-            return ret;
-    }
 
     netif_print_port_conf(&port->dev_conf, buf, &buflen);
     RTE_LOG(INFO, NETIF, "device %s configuration:\n%s\n", port->name, buf);
