@@ -1,0 +1,94 @@
+###### Action Parameters
+ActionParamsBlank: none
+ActionParamsBackendUpdate: none
+ActionParamsKernelRouteAddDel:
+  ifname: string, lo
+ActionParamsDpvsAddrAddDel:
+  dpvs-ifname: string, ""
+ActionParamsDpvsAddrKernelRouteAddDel:
+  ifname: string, lo
+  dpvs-ifname: string, ""
+ActionParamScript:
+  script: string(filepath), ""
+  args: string, ""
+
+###### Checker Parameters
+CheckParamsNone: none
+CheckParamsTCP:
+  send: string, ""
+  receive: string, ""
+  proxy-protocol: string, ""|v1|v2
+CheckParamsUDP:
+  send: string, ""
+  receive: string, ""
+  proxy-protocol: string, ""|v2
+CheckParamsUDPPing:
+  send: string, ""
+  receive: string, ""
+  proxy-protocol: string, ""|v2
+CheckParamsHTTP:
+  method: enum(string),GET|PUT|POST|HEAD
+  host: string
+  uri: string
+  https: bool
+  tls-verify: bool
+  proxy: proxy
+  proxy-protocol: ""|v1|v2
+  request-header: map[string]string
+  request: string
+  response-codes: [HttpCodeRange]array
+  response: string
+
+###### Virtual Address Configuration
+VACONF:
+  disable: bool, true|*false
+  down-policy: enum(int), VAPolicyOneOf(1)|*VAPolicyAllOf(2)
+  action-timeout: duration, 2s
+  action-sync-time: duration, 60s
+  actioner: enum(string), Blank|*KernelRouteAddDel|DpvsAddrAddDel|DpvsAddrKernelRouteAddDel|Script
+  action-params: ActionParamsBlank|ActionParamsKernelRouteAddDel|ActionParamsDpvsAddrAddDel|ActionParamsDpvsAddrKernelRouteAddDel|ActionParamScript
+
+###### Virtual Server Action Configuration
+VSACTIONCONF:
+  action-timeout: duration, 2s
+  action-sync-time: duration, 15s
+  actioner: string, *BackendUpdate
+  action-params: ActionParamsBackendUpdate
+
+###### Checker Configuration
+CHECKERCONF:
+  method: enum(string), tcp(1)|udp(2)|ping(3)|udpping(4)|http(5)|*auto(10000)
+  interval: duration, 3s
+  down-retry: uint, 1
+  up-retry: uint, 1
+  timeout: duration, 2s
+  method-params: CheckParamsNone|CheckParamsTCP|CheckParamsUDP|CheckParamsUDPPing|CheckParamsHTTP
+
+
+#######################################################################################################
+##                           Overall Configuration Layout
+#######################################################################################################
+global:
+  virtual-address:
+    VACONF
+  virtual-server:
+    VSACTIONCONF
+    CHECKERCONF
+
+virtual-addresses:
+  VIP:
+    VACONF
+  VIP:
+    VACONF
+   ...
+
+virtual-servers:
+   VIP-PROTO-PORT
+     VSACTIONCONF
+     CHECKERCONF
+   VIP-PROTO-PORT
+     VSACTIONCONF
+     CHECKERCONF
+   ...
+
+#######################################################################################################

@@ -52,6 +52,22 @@ func (s State) String() string {
 	return fmt.Sprintf("%s %v", s.state, duration)
 }
 
+// TODO: generate DeepCopy method with code-gen
+func (in *State) DeepCopyInto(out *State) {
+	*out = *in
+	// FIXME: deep copy time struct
+	//in.since.DeepCopyInto(&out.since)
+	return
+}
+func (in *State) DeepCopy() *State {
+	if in == nil {
+		return nil
+	}
+	out := new(State)
+	in.DeepCopyInto(out)
+	return out
+}
+
 type Statistics struct {
 	up          uint64 // act UP success, check UP
 	down        uint64 // act DOWN success, check DOWN

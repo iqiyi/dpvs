@@ -1,0 +1,60 @@
+global:
+  virtual-address:
+    disable: false
+    down-policy: 2
+    action-timeout: 2s
+    action-sync-time: 60s
+    actioner: KernelRouteAddDel
+    action-params:
+      ifname: lo
+  virtual-server:
+    ## action conf
+    action-timeout: 2s
+    action-sync-time: 15s
+    actioner:BackendUpdate
+    #action-params:
+    ## checker conf
+    method: 10000  #auto
+    interval: 3s
+    down-retry: 1
+    up-retry: 1
+    timeout: 2s
+    #method-params:
+
+virtual-addresses:
+  192.168.1.2
+    disable: false
+    down-policy: 2
+    action-timeout: 2s
+    action-sync-time: 60s
+    actioner: DpvsAddrKernelRouteAddDel
+    action-params:
+      ifname: lo
+      dpvs-ifname: dpdk1
+  2001::1
+    actioner: Script
+    action-params:
+      script: /tmp/quorum_script.sh
+      args: dpdk0.102
+  2002::2
+    disable: true
+
+virtual-servers:
+  192.168.1.1-TCP-80
+    action-timeout: 1s
+    method: 1      #tcp
+    interval: 3s
+    down-retry: 1
+    up-retry: 2
+    timeout: 1s
+  192.168.1.1-TCP-443
+     method: 5      #http
+     method-params:
+       https: true
+       tls-verify: true
+       uri: /health
+       proxy-protocol: v2
+       response-codes: 200-299
+  2001::1-UDP-6000
+    timeout: 1s
+    action-timeout: 1s

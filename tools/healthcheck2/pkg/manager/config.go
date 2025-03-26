@@ -2,11 +2,14 @@
 package manager
 
 import (
+	"fmt"
+	"io/ioutil"
 	"reflect"
 	"time"
 
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/checker"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
+	"gopkg.in/yaml.v2"
 )
 
 type VAPolicy int
@@ -18,14 +21,14 @@ const (
 
 // +k8s:deepcopy-gen=true
 type ActionConf struct {
-	actioner       string
-	actionTimeout  time.Duration
-	actionSyncTime time.Duration
-	actionParams   map[string]string
+	Actioner       string            `yaml:"actioner"`
+	ActionTimeout  time.Duration     `yaml:"action-timeout"`
+	ActionSyncTime time.Duration     `yaml:"action-sync-time"`
+	ActionParams   map[string]string `yaml:"action-params"`
 }
 
 func (acf *ActionConf) Valid() bool {
-	return acf.actionTimeout > 0 && acf.actionSyncTime > 0 && len(acf.actioner) > 0
+	return acf.ActionTimeout > 0 && acf.ActionSyncTime > 0 && len(acf.Actioner) > 0
 }
 
 func (acf *ActionConf) DeepEqual(other *ActionConf) bool {
@@ -34,9 +37,9 @@ func (acf *ActionConf) DeepEqual(other *ActionConf) bool {
 
 // +k8s:deepcopy-gen=true
 type VAConf struct {
-	disable    bool
-	downPolicy VAPolicy
-	ActionConf
+	Disable    bool     `yaml:"disable"`
+	DownPolicy VAPolicy `yaml:"down-policy"`
+	ActionConf `yaml:",inline"`
 }
 
 func (va *VAConf) Valid() bool {
@@ -49,8 +52,8 @@ func (va *VAConf) DeepEqual(other *VAConf) bool {
 
 // +k8s:deepcopy-gen=true
 type VSConf struct {
-	CheckerConf
-	ActionConf
+	CheckerConf `yaml:",inline"`
+	ActionConf  `yaml:",inline"`
 }
 
 func (vs *VSConf) Valid() bool {
@@ -78,7 +81,7 @@ func (c *VSConf) MergeDpvsCheckerConf(vs *comm.VirtualServer, params map[string]
 	}
 
 	if vs.DestCheck != checker.CheckMethodNone {
-		c.method = vs.DestCheck
+		c.Method = vs.DestCheck
 	}
 
 	if vs.ProxyProto&comm.ProxyProtoV1 == comm.ProxyProtoV1 {
@@ -96,16 +99,16 @@ func (c *VSConf) MergeDpvsCheckerConf(vs *comm.VirtualServer, params map[string]
 
 // +k8s:deepcopy-gen=true
 type CheckerConf struct {
-	method       checker.Method
-	interval     time.Duration
-	downRetry    uint
-	upRetry      uint
-	timeout      time.Duration
-	methodParams map[string]string
+	Method       checker.Method    `yaml:"method"`
+	Interval     time.Duration     `yaml:"interval"`
+	DownRetry    uint              `yaml:"down-retry"`
+	UpRetry      uint              `yaml:"up-retry"`
+	Timeout      time.Duration     `yaml:"timeouot"`
+	MethodParams map[string]string `yaml:"method-params"`
 }
 
 func (c *CheckerConf) Valid() bool {
-	return c.interval > 0 && c.timeout > 0 && (c.method <= checker.CheckMethodAuto && c.method > checker.CheckMethodNone)
+	return c.Interval > 0 && c.Timeout > 0 && (c.Method <= checker.CheckMethodAuto && c.Method > checker.CheckMethodNone)
 }
 
 func (c *CheckerConf) DeepEqual(other *CheckerConf) bool {
@@ -136,36 +139,36 @@ func (c *Conf) GetVSConf(id VSID) *VSConf {
 
 var (
 	vaConfDefault VAConf = VAConf{
-		disable:    false,
-		downPolicy: VAPolicyAllOf,
+		Disable:    false,
+		DownPolicy: VAPolicyAllOf,
 		ActionConf: ActionConf{
-			actioner:       "KernelRouteAddDel",
-			actionTimeout:  2 * time.Second,
-			actionSyncTime: 60 * time.Second,
-			actionParams:   map[string]string{"ifname": "lo"},
+			Actioner:       "KernelRouteAddDel",
+			ActionTimeout:  2 * time.Second,
+			ActionSyncTime: 60 * time.Second,
+			ActionParams:   map[string]string{"ifname": "lo"},
 		},
 		/*
 			ActionConf: ActionConf{
-				actioner:       "DpvsAddrKernelRouteAddDel",
-				actionTimeout:  2 * time.Second,
-				actionSyncTime: 60 * time.Second,
-				actionParams: map[string]string{
+				Actioner:       "DpvsAddrKernelRouteAddDel",
+				ActionTimeout:  2 * time.Second,
+				ActionSyncTime: 60 * time.Second,
+				ActionParams: map[string]string{
 					"ifname":      "lo",
 					"dpvs-ifname": "dpdk0.102",
 				},
 			},
 			ActionConf: ActionConf{
-				actioner:       "DpvsAddrAddDel",
-				actionTimeout:  2 * time.Second,
-				actionSyncTime: 60 * time.Second,
-				actionParams:   map[string]string{"dpvs-ifname": "dpdk0.102"},
+				Actioner:       "DpvsAddrAddDel",
+				ActionTimeout:  2 * time.Second,
+				ActionSyncTime: 60 * time.Second,
+				ActionParams:   map[string]string{"dpvs-ifname": "dpdk0.102"},
 			},
 			ActionConf: ActionConf{
-				actioner:       "Script",
-				actionTimeout:  2 * time.Second,
-				actionSyncTime: 60 * time.Second,
-				actionParams: map[string]string{
-					"script": "./pkg/actioner/quorum_script.sh",
+				Actioner:       "Script",
+				ActionTimeout:  2 * time.Second,
+				ActionSyncTime: 60 * time.Second,
+				ActionParams: map[string]string{
+					"script": "./pkg/Actioner/quorum_script.sh",
 					"args":   "dpdk0.102",
 				},
 			},
@@ -174,16 +177,16 @@ var (
 
 	vsConfDefault VSConf = VSConf{
 		CheckerConf: CheckerConf{
-			method:    checker.CheckMethodAuto,
-			interval:  3 * time.Second,
-			downRetry: 1,
-			upRetry:   1,
-			timeout:   2 * time.Second,
+			Method:    checker.CheckMethodAuto,
+			Interval:  3 * time.Second,
+			DownRetry: 1,
+			UpRetry:   1,
+			Timeout:   2 * time.Second,
 		},
 		ActionConf: ActionConf{
-			actioner:       "BackendUpdate",
-			actionTimeout:  2 * time.Second,
-			actionSyncTime: 15 * time.Second,
+			Actioner:       "BackendUpdate",
+			ActionTimeout:  2 * time.Second,
+			ActionSyncTime: 15 * time.Second,
 		},
 	}
 
@@ -192,12 +195,6 @@ var (
 		vsGlobal: vsConfDefault,
 	}
 )
-
-func LoadFileConf(filename string) (*Conf, error) {
-	// TODO: load config from file
-
-	return &confDefault, nil
-}
 
 // +k8s:deepcopy-gen=true
 type VAConfExt struct {
@@ -217,4 +214,57 @@ type VSConfExt struct {
 
 func (c *VSConfExt) GetVSConf() *VSConf {
 	return &c.VSConf
+}
+
+// /////////////////////// Load Config from File ///////////////////////////
+type ConfFileLayoutGlobal struct {
+	VAConf VAConf `yaml:"virtual-address"`
+	VSConf VSConf `yaml:"virtual-server"`
+}
+
+type ConfFileLayout struct {
+	Global ConfFileLayoutGlobal `yaml:"global"`
+	VAs    map[VAID]VAConf      `yaml:"virtual-addresses"`
+	VSs    map[VSID]VSConf      `yaml:"virtual-servers"`
+}
+
+func (fc *ConfFileLayout) Merge(defaultConf *Conf) {
+	// TODO
+}
+
+func (fc *ConfFileLayout) Validate(omitEmpty bool) error {
+	// TODO
+	return nil
+}
+
+func (fc *ConfFileLayout) Translate() (*Conf, error) {
+	// TODO
+	return &confDefault, nil
+}
+
+func LoadFileConf(filename string) (*Conf, error) {
+	// TODO: load config from file
+	if len(filename) > 0 {
+		return &confDefault, nil
+	}
+
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	var fileConf ConfFileLayout
+
+	err = yaml.Unmarshal(data, &fileConf)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("FileConf:\n %v", fileConf) // TODO: DEL ME
+
+	if err = fileConf.Validate(true); err != nil {
+		return nil, fmt.Errorf("Invalid config from file: %v", err)
+	}
+	fileConf.Merge(&confDefault)
+
+	return fileConf.Translate()
 }

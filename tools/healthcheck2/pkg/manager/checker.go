@@ -55,9 +55,9 @@ func NewChecker(target *utils.L3L4Addr, conf *CheckerConf, vs *VirtualService) (
 	ckid := CheckerID(target.String())
 	confCopied := conf.DeepCopy()
 
-	method, err := checker.NewChecker(confCopied.method, target, confCopied.methodParams)
+	method, err := checker.NewChecker(confCopied.Method, target, confCopied.MethodParams)
 	if err != nil {
-		return nil, fmt.Errorf("fail to create checker method %v: %v", confCopied.method, err)
+		return nil, fmt.Errorf("fail to create checker method %v: %v", confCopied.Method, err)
 	}
 
 	checker := &Checker{
@@ -116,13 +116,13 @@ func (c *Checker) doPostCheck(newState types.State) {
 	case types.Healthy:
 		c.stats.up++
 		c.metricTaint = true
-		if c.count == c.conf.upRetry {
+		if c.count == c.conf.UpRetry {
 			c.sendNotice()
 		}
 	case types.Unhealthy:
 		c.stats.down++
 		c.metricTaint = true
-		if c.count == c.conf.downRetry {
+		if c.count == c.conf.DownRetry {
 			c.sendNotice()
 		}
 	}
@@ -135,27 +135,27 @@ func (c *Checker) doUpdate(conf *CheckerConf) {
 
 	skip := false
 
-	if conf.interval != c.conf.interval {
+	if conf.Interval != c.conf.Interval {
 		c.checkTicker.Stop()
-		c.checkTicker = time.NewTicker(conf.interval)
-		conf.interval = c.conf.interval
+		c.checkTicker = time.NewTicker(conf.Interval)
+		conf.Interval = c.conf.Interval
 	}
-	if conf.downRetry != c.conf.downRetry {
-		c.conf.downRetry = conf.downRetry
+	if conf.DownRetry != c.conf.DownRetry {
+		c.conf.DownRetry = conf.DownRetry
 		c.sendNotice()
 	}
-	if conf.upRetry != c.conf.upRetry {
-		c.conf.upRetry = conf.upRetry
+	if conf.UpRetry != c.conf.UpRetry {
+		c.conf.UpRetry = conf.UpRetry
 		c.sendNotice()
 	}
-	if conf.timeout != c.conf.timeout {
-		c.conf.timeout = conf.timeout
+	if conf.Timeout != c.conf.Timeout {
+		c.conf.Timeout = conf.Timeout
 	}
 	if !conf.DeepEqual(&c.conf) { // method or its params changed
-		method, err := checker.NewChecker(conf.method, &c.target, conf.methodParams)
+		method, err := checker.NewChecker(conf.Method, &c.target, conf.MethodParams)
 		if err != nil {
 			glog.Errorf("fail to update checker method %v-%v: %v",
-				c.conf.method, conf.method, err)
+				c.conf.Method, conf.Method, err)
 			skip = true
 		} else {
 			c.method = method
@@ -177,7 +177,7 @@ func (c *Checker) doCheck() {
 	go func() {
 		// TODO: Determine a way to ensure that this go routine does not linger.
 		HealthCheckThreads.RunningInc()
-		if state, err := c.method.Check(&c.target, c.conf.timeout); err != nil {
+		if state, err := c.method.Check(&c.target, c.conf.Timeout); err != nil {
 			glog.Warningf("Checker %s executes healthcheck failed: %v", c.UUID(), err)
 			ch <- types.Unknown
 		} else {
@@ -195,7 +195,7 @@ func (c *Checker) doCheck() {
 			c.stats.downFailed++
 			c.metricTaint = true
 		}
-	case <-time.After(c.conf.timeout + time.Second):
+	case <-time.After(c.conf.Timeout + time.Second):
 		c.stats.upFailed++
 		c.metricTaint = true
 		glog.Warningf("Checker %s executes healthcheck timeout", c.UUID())
@@ -256,7 +256,7 @@ func (c *Checker) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 	}
 
 	if c.checkTicker == nil {
-		c.checkTicker = time.NewTicker(c.conf.interval)
+		c.checkTicker = time.NewTicker(c.conf.Interval)
 	}
 	if c.metricTicker == nil {
 		c.metricTicker = time.NewTicker(c.vs.va.m.appConf.MetricDelay)

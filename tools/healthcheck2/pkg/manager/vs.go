@@ -80,12 +80,12 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 
 	vsid := VSID(sub.Addr.String())
 	confCopied := conf.DeepCopy()
-	confCopied.methodParams = confCopied.MergeDpvsCheckerConf(sub, confCopied.methodParams)
-	if confCopied.method == checker.CheckMethodAuto {
-		confCopied.method = confCopied.method.TranslateAuto(sub.Addr.Proto)
+	confCopied.MethodParams = confCopied.MergeDpvsCheckerConf(sub, confCopied.MethodParams)
+	if confCopied.Method == checker.CheckMethodAuto {
+		confCopied.Method = confCopied.Method.TranslateAuto(sub.Addr.Proto)
 	}
 
-	act, err := actioner.NewActioner(conf.actioner, &sub.Addr, confCopied.actionParams,
+	act, err := actioner.NewActioner(conf.Actioner, &sub.Addr, confCopied.ActionParams,
 		va.m.appConf.DpvsAgentAddr)
 	if err != nil {
 		return nil, fmt.Errorf("VS actioner created failed: %v", err)
@@ -195,7 +195,7 @@ func (vs *VirtualService) act(changed []CheckerID) error {
 	}
 
 	// Batch update, real checker states are carried by param `vsCom.rss`.
-	resp, err := vs.actioner.Act(types.Unknown, vs.conf.actionTimeout, &vsCom)
+	resp, err := vs.actioner.Act(types.Unknown, vs.conf.ActionTimeout, &vsCom)
 	if err != nil {
 		// FIXME: Partial update may have happened,
 		//  how to know exactly the number of failed backends?
@@ -242,22 +242,22 @@ func (vs *VirtualService) doUpdate(conf *VSConfExt) {
 	// Update VSConf
 	vscf := conf.GetVSConf()
 
-	vscf.methodParams = vscf.MergeDpvsCheckerConf(&conf.vs, vscf.methodParams)
-	if vscf.method == checker.CheckMethodAuto {
-		vscf.method = vscf.method.TranslateAuto(conf.vs.Addr.Proto)
+	vscf.MethodParams = vscf.MergeDpvsCheckerConf(&conf.vs, vscf.MethodParams)
+	if vscf.Method == checker.CheckMethodAuto {
+		vscf.Method = vscf.Method.TranslateAuto(conf.vs.Addr.Proto)
 	}
 
 	if !vscf.DeepEqual(&vs.conf) {
 		skip := false
-		if vscf.actionSyncTime > 0 && vscf.actionSyncTime != vs.conf.actionSyncTime {
+		if vscf.ActionSyncTime > 0 && vscf.ActionSyncTime != vs.conf.ActionSyncTime {
 			if vs.resync != nil {
 				vs.resync.Stop()
-				vs.resync = time.NewTicker(vscf.actionSyncTime)
+				vs.resync = time.NewTicker(vscf.ActionSyncTime)
 			}
-			vs.conf.actionSyncTime = vscf.actionSyncTime
+			vs.conf.ActionSyncTime = vscf.ActionSyncTime
 		}
-		if vscf.actionTimeout > 0 && vscf.actionTimeout != vs.conf.actionTimeout {
-			vs.conf.actionTimeout = vscf.actionTimeout
+		if vscf.ActionTimeout > 0 && vscf.ActionTimeout != vs.conf.ActionTimeout {
+			vs.conf.ActionTimeout = vscf.ActionTimeout
 		}
 		if !vscf.ActionConf.DeepEqual(&vs.conf.ActionConf) {
 			// Restore Healthy state before changing Actioner to avoid inconsistency.
@@ -559,7 +559,7 @@ func (vs *VirtualService) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 	}
 
 	if vs.resync == nil {
-		vs.resync = time.NewTicker(vs.conf.actionSyncTime)
+		vs.resync = time.NewTicker(vs.conf.ActionSyncTime)
 	}
 	if vs.metricTicker == nil {
 		vs.metricTicker = time.NewTicker(vs.va.m.appConf.MetricDelay)

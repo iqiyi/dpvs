@@ -6,6 +6,7 @@ require (
 	github.com/golang/glog v1.2.4
 	github.com/google/gops v0.3.28
 	github.com/vishvananda/netlink v1.3.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

@@ -119,7 +119,7 @@ func (t *svcLister) Job(ctx context.Context) {
 		vaConf := t.m.conf.GetVAConf(vaid)
 		va, ok := t.m.vas[vaid]
 		if !ok {
-			if vaConf.disable {
+			if vaConf.Disable {
 				continue
 			}
 			va, err = NewVA(addr, vaConf, t.m)
@@ -133,7 +133,7 @@ func (t *svcLister) Job(ctx context.Context) {
 				VAStartDelayMax.Milliseconds()))) * time.Millisecond)
 			go va.Run(t.m.wg, delay.C)
 		} else {
-			if vaConf.disable {
+			if vaConf.Disable {
 				delete(t.m.vas, vaid)
 				va.Stop()
 				continue

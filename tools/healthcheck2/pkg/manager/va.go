@@ -87,8 +87,8 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 
 	vaid := VAID(sub.String())
 	confCopied := conf.DeepCopy()
-	act, err := actioner.NewActioner(conf.actioner, &utils.L3L4Addr{IP: sub},
-		confCopied.actionParams, m.appConf.DpvsAgentAddr)
+	act, err := actioner.NewActioner(conf.Actioner, &utils.L3L4Addr{IP: sub},
+		confCopied.ActionParams, m.appConf.DpvsAgentAddr)
 	if err != nil {
 		return nil, fmt.Errorf("VA actioner created failed: %v", err)
 	}
@@ -148,7 +148,7 @@ func (va *VirtualAddress) calcState() types.State {
 }
 
 // judge concludes the VA state with upVSs/downVSs in it with respect to
-// its configured downPolicy.
+// its configured DownPolicy.
 // Note that the initial state Unknown is counted as Healthy.
 func (va *VirtualAddress) judge() types.State {
 	if va.upVSs < 0 || va.downVSs < 0 {
@@ -156,7 +156,7 @@ func (va *VirtualAddress) judge() types.State {
 			va.id, va.upVSs, va.downVSs)
 		return va.calcState()
 	}
-	switch va.conf.downPolicy {
+	switch va.conf.DownPolicy {
 	case VAPolicyAllOf:
 		if va.upVSs == 0 {
 			return types.Unhealthy
@@ -173,7 +173,7 @@ func (va *VirtualAddress) judge() types.State {
 }
 
 func (va *VirtualAddress) actUP() error {
-	if _, err := va.actioner.Act(types.Healthy, va.conf.actionTimeout); err != nil {
+	if _, err := va.actioner.Act(types.Healthy, va.conf.ActionTimeout); err != nil {
 		va.stats.upFailed++
 		va.metricTaint = true
 		return err
@@ -188,7 +188,7 @@ func (va *VirtualAddress) actUP() error {
 }
 
 func (va *VirtualAddress) actDOWN() error {
-	if _, err := va.actioner.Act(types.Unhealthy, va.conf.actionTimeout); err != nil {
+	if _, err := va.actioner.Act(types.Unhealthy, va.conf.ActionTimeout); err != nil {
 		va.stats.downFailed++
 		va.metricTaint = true
 		return err
@@ -216,19 +216,19 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 	if !vacf.DeepEqual(&va.conf) {
 		skip := false
 		needResync := false
-		if vacf.downPolicy != va.conf.downPolicy {
-			vacf.downPolicy = va.conf.downPolicy
+		if vacf.DownPolicy != va.conf.DownPolicy {
+			vacf.DownPolicy = va.conf.DownPolicy
 			needResync = true
 		}
-		if vacf.actionSyncTime > 0 && vacf.actionSyncTime != va.conf.actionSyncTime {
+		if vacf.ActionSyncTime > 0 && vacf.ActionSyncTime != va.conf.ActionSyncTime {
 			if va.resync != nil {
 				va.resync.Stop()
-				va.resync = time.NewTicker(vacf.actionSyncTime)
+				va.resync = time.NewTicker(vacf.ActionSyncTime)
 			}
-			va.conf.actionSyncTime = vacf.actionSyncTime
+			va.conf.ActionSyncTime = vacf.ActionSyncTime
 		}
-		if vacf.actionTimeout > 0 && vacf.actionTimeout != va.conf.actionTimeout {
-			va.conf.actionTimeout = vacf.actionTimeout
+		if vacf.ActionTimeout > 0 && vacf.ActionTimeout != va.conf.ActionTimeout {
+			va.conf.ActionTimeout = vacf.ActionTimeout
 		}
 		if !vacf.ActionConf.DeepEqual(&va.conf.ActionConf) {
 			if va.state == types.Unhealthy {
@@ -240,8 +240,8 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 				}
 			}
 			if !skip {
-				if act, err := actioner.NewActioner(vacf.actioner, &utils.L3L4Addr{IP: va.subject},
-					vacf.actionParams); err != nil {
+				if act, err := actioner.NewActioner(vacf.Actioner, &utils.L3L4Addr{IP: va.subject},
+					vacf.ActionParams); err != nil {
 					glog.Errorf("VA %s actioner recreated failed: %v", va.id, err)
 					skip = true
 				} else {
@@ -479,7 +479,7 @@ func (va *VirtualAddress) Run(wg *sync.WaitGroup, start <-chan time.Time) {
 	}
 
 	if va.resync == nil {
-		va.resync = time.NewTicker(va.conf.actionSyncTime)
+		va.resync = time.NewTicker(va.conf.ActionSyncTime)
 	}
 	if va.metricTicker == nil {
 		va.metricTicker = time.NewTicker(va.m.appConf.MetricDelay)
