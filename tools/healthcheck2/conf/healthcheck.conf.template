@@ -57,10 +57,10 @@ VSACTIONCONF:
 
 ###### Checker Configuration
 CHECKERCONF:
-  method: enum(string), tcp(1)|udp(2)|ping(3)|udpping(4)|http(5)|*auto(10000)
+  method: enum(string), none(1)|tcp(2)|udp(3)|ping(4)|udpping(5)|http(6)|*auto(10000)
   interval: duration, 3s
-  down-retry: uint, 1
-  up-retry: uint, 1
+  down-retry: uint, 0
+  up-retry: uint, 0
   timeout: duration, 2s
   method-params: CheckParamsNone|CheckParamsTCP|CheckParamsUDP|CheckParamsUDPPing|CheckParamsHTTP
 

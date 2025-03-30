@@ -1,8 +1,8 @@
 ---
 global:
   virtual-address:
-    disable: false
-    down-policy: 2
+    # disable: false
+    # down-policy: 2
     action-timeout: 2s
     action-sync-time: 60s
     actioner: KernelRouteAddDel
@@ -12,13 +12,13 @@ global:
     ## action conf
     action-timeout: 2s
     action-sync-time: 15s
-    actioner: BackendUpdate
+    # actioner: BackendUpdate
     # action-params:
     ## checker conf
     method: 10000  # auto
     interval: 3s
     down-retry: 1
-    up-retry: 1
+    # up-retry: 1
     timeout: 2s
     # method-params:
 
@@ -43,13 +43,13 @@ virtual-addresses:
 virtual-servers:
   192.168.1.1-TCP-80:
     action-timeout: 1s
-    method: 1      # tcp
+    method: 2      # tcp
     interval: 3s
     down-retry: 1
     up-retry: 2
     timeout: 1s
   192.168.1.1-TCP-443:
-    method: 5      # http
+    method: 6      # http
     method-params:
       https: true
       tls-verify: true

@@ -2,6 +2,7 @@
 package manager
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"reflect"
@@ -27,12 +28,44 @@ type ActionConf struct {
 	ActionParams   map[string]string `yaml:"action-params"`
 }
 
-func (acf *ActionConf) Valid() bool {
-	return acf.ActionTimeout > 0 && acf.ActionSyncTime > 0 && len(acf.Actioner) > 0
+func (acf *ActionConf) Valid() error {
+	if acf.ActionTimeout <= 0 {
+		return fmt.Errorf("invalid action-timeout: %v", acf.ActionTimeout)
+	}
+	if acf.ActionSyncTime <= 0 {
+		return fmt.Errorf("invalid action-sync-time: %v", acf.ActionSyncTime)
+	}
+	if len(acf.Actioner) == 0 {
+		return errors.New("empty actioner name")
+	}
+
+	return nil
 }
 
 func (acf *ActionConf) DeepEqual(other *ActionConf) bool {
 	return reflect.DeepEqual(acf, other)
+}
+
+func (acf *ActionConf) MergeDefault(defaultConf *ActionConf) {
+	if len(acf.Actioner) == 0 {
+		acf.Actioner = defaultConf.Actioner
+		acf.ActionParams = nil
+		if len(defaultConf.ActionParams) > 0 {
+			acf.ActionParams = make(map[string]string, len(defaultConf.ActionParams))
+			for name, val := range defaultConf.ActionParams {
+				acf.ActionParams[name] = val
+			}
+		}
+	}
+	if acf.ActionTimeout == 0 {
+		acf.ActionTimeout = defaultConf.ActionTimeout
+	}
+	if acf.ActionSyncTime == 0 {
+		acf.ActionSyncTime = defaultConf.ActionSyncTime
+	}
+	if len(acf.ActionParams) == 0 {
+		// TODO: Support method-dependent default params.
+	}
 }
 
 // +k8s:deepcopy-gen=true
@@ -42,12 +75,22 @@ type VAConf struct {
 	ActionConf `yaml:",inline"`
 }
 
-func (va *VAConf) Valid() bool {
+func (va *VAConf) Valid() error {
 	return va.ActionConf.Valid()
 }
 
 func (va *VAConf) DeepEqual(other *VAConf) bool {
 	return reflect.DeepEqual(va, other)
+}
+
+func (va *VAConf) MergeDefault(defaultConf *VAConf) {
+	// VAConf::Disable default 0
+
+	if va.DownPolicy == 0 {
+		va.DownPolicy = defaultConf.DownPolicy
+	}
+
+	va.ActionConf.MergeDefault(&defaultConf.ActionConf)
 }
 
 // +k8s:deepcopy-gen=true
@@ -56,12 +99,23 @@ type VSConf struct {
 	ActionConf  `yaml:",inline"`
 }
 
-func (vs *VSConf) Valid() bool {
-	return vs.CheckerConf.Valid() && vs.ActionConf.Valid()
+func (vs *VSConf) Valid() error {
+	if err := vs.CheckerConf.Valid(); err != nil {
+		return err
+	}
+	if err := vs.ActionConf.Valid(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (vs *VSConf) DeepEqual(other *VSConf) bool {
 	return reflect.DeepEqual(vs, other)
+}
+
+func (vs *VSConf) MergeDefault(defaultConf *VSConf) {
+	vs.CheckerConf.MergeDefault(&defaultConf.CheckerConf)
+	vs.ActionConf.MergeDefault(&defaultConf.ActionConf)
 }
 
 func (c *VSConf) GetCheckerConf() *CheckerConf {
@@ -103,16 +157,55 @@ type CheckerConf struct {
 	Interval     time.Duration     `yaml:"interval"`
 	DownRetry    uint              `yaml:"down-retry"`
 	UpRetry      uint              `yaml:"up-retry"`
-	Timeout      time.Duration     `yaml:"timeouot"`
+	Timeout      time.Duration     `yaml:"timeout"`
 	MethodParams map[string]string `yaml:"method-params"`
 }
 
-func (c *CheckerConf) Valid() bool {
-	return c.Interval > 0 && c.Timeout > 0 && (c.Method <= checker.CheckMethodAuto && c.Method > checker.CheckMethodNone)
+func (c *CheckerConf) Valid() error {
+	if c.Interval <= 0 {
+		return fmt.Errorf("invalid checker interval %v", c.Interval)
+	}
+	if c.Timeout <= 0 {
+		return fmt.Errorf("invalid checker timeout %v", c.Timeout)
+	}
+	if c.Method > checker.CheckMethodAuto || c.Method < checker.CheckMethodNone {
+		return fmt.Errorf("invalid checker method %s", c.Method.String())
+	}
+
+	return nil
 }
 
 func (c *CheckerConf) DeepEqual(other *CheckerConf) bool {
 	return reflect.DeepEqual(c, other)
+}
+
+func (c *CheckerConf) MergeDefault(defaultConf *CheckerConf) {
+	if c.Method == 0 {
+		c.Method = defaultConf.Method
+		c.MethodParams = nil
+		if len(defaultConf.MethodParams) > 0 {
+			c.MethodParams = make(map[string]string, len(defaultConf.MethodParams))
+			for name, val := range defaultConf.MethodParams {
+				c.MethodParams[name] = val
+			}
+		}
+	}
+	if c.Interval == 0 {
+		c.Interval = defaultConf.Interval
+	}
+	if c.DownRetry == 0 { // FIXME: How to specify 0 value?
+		c.DownRetry = defaultConf.DownRetry
+	}
+	if c.UpRetry == 0 { // FIXME: How to specify 0 value?
+		c.UpRetry = defaultConf.UpRetry
+	}
+	if c.Timeout == 0 {
+		c.Timeout = defaultConf.Timeout
+	}
+
+	if len(c.MethodParams) == 0 {
+		// TODO: Support method-dependent default params.
+	}
 }
 
 // +k8s:deepcopy-gen=true
@@ -179,8 +272,8 @@ var (
 		CheckerConf: CheckerConf{
 			Method:    checker.CheckMethodAuto,
 			Interval:  3 * time.Second,
-			DownRetry: 1,
-			UpRetry:   1,
+			DownRetry: 0,
+			UpRetry:   0,
 			Timeout:   2 * time.Second,
 		},
 		ActionConf: ActionConf{
@@ -229,21 +322,63 @@ type ConfFileLayout struct {
 }
 
 func (fc *ConfFileLayout) Merge(defaultConf *Conf) {
-	// TODO
+	fc.Global.VAConf.MergeDefault(&defaultConf.vaGlobal)
+	fc.Global.VSConf.MergeDefault(&defaultConf.vsGlobal)
+	for vaid, _ := range fc.VAs {
+		conf := fc.VAs[vaid]
+		if dft, ok := defaultConf.vaConf[vaid]; ok {
+			conf.MergeDefault(&dft)
+		} else {
+			conf.MergeDefault(&defaultConf.vaGlobal)
+		}
+		fc.VAs[vaid] = conf
+	}
+	for vsid, _ := range fc.VSs {
+		conf := fc.VSs[vsid]
+		if dft, ok := defaultConf.vsConf[vsid]; ok {
+			conf.MergeDefault(&dft)
+		} else {
+			conf.MergeDefault(&defaultConf.vsGlobal)
+		}
+		fc.VSs[vsid] = conf
+	}
 }
 
-func (fc *ConfFileLayout) Validate(omitEmpty bool) error {
-	// TODO
+func (fc *ConfFileLayout) Validate() error {
+	if err := fc.Global.VAConf.Valid(); err != nil {
+		return fmt.Errorf("global/virtual-address: %v", err)
+	}
+
+	if err := fc.Global.VSConf.Valid(); err != nil {
+		return fmt.Errorf("global/virtual-server: %v", err)
+	}
+
+	for vaid, va := range fc.VAs {
+		if err := va.Valid(); err != nil {
+			return fmt.Errorf("virtual-address/%s: %v", vaid, err)
+		}
+	}
+
+	for vsid, vs := range fc.VSs {
+		if err := vs.Valid(); err != nil {
+			return fmt.Errorf("virtual-server/%s: %v", vsid, err)
+		}
+	}
+
 	return nil
 }
 
 func (fc *ConfFileLayout) Translate() (*Conf, error) {
-	// TODO
-	return &confDefault, nil
+	// return &confDefault, nil
+	return &Conf{
+		vaGlobal: fc.Global.VAConf,
+		vsGlobal: fc.Global.VSConf,
+		vaConf:   fc.VAs,
+		vsConf:   fc.VSs,
+	}, nil
 }
 
 func LoadFileConf(filename string) (*Conf, error) {
-	// TODO: load config from file
 	if len(filename) == 0 {
 		return &confDefault, nil
 	}
@@ -259,12 +394,12 @@ func LoadFileConf(filename string) (*Conf, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("FileConf:\n %v", fileConf) // TODO: DEL ME
+	// fmt.Printf("FileConf:\n %v", fileConf)
 
-	if err = fileConf.Validate(true); err != nil {
+	fileConf.Merge(&confDefault)
+	if err = fileConf.Validate(); err != nil {
 		return nil, fmt.Errorf("Invalid config from file: %v", err)
 	}
-	fileConf.Merge(&confDefault)
 	GetAppManager().cfgFileReloader.SetRaw(&fileConf)
 
 	return fileConf.Translate()

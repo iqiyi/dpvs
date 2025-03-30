@@ -217,7 +217,8 @@ func metricConfCheckHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = fileConf.Validate(false)
+	fileConf.Merge(&confDefault)
+	err = fileConf.Validate()
 	if err != nil {
 		fmt.Fprintf(w, "INVALID (Validation Error: %v)", err)
 		return

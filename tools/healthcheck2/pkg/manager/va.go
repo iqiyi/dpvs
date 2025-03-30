@@ -81,8 +81,8 @@ func newVAVS(addr *utils.L3L4Addr, version uint64, vs *VirtualService) *VAVS {
 }
 
 func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
-	if !conf.Valid() {
-		return nil, fmt.Errorf("invalid VAConf %v", *conf)
+	if err := conf.Valid(); err != nil {
+		return nil, fmt.Errorf("invalid VAConf %v: %v", *conf, err)
 	}
 
 	vaid := VAID(sub.String())

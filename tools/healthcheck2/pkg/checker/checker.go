@@ -35,12 +35,13 @@ type CheckMethod interface {
 type Method uint16
 
 const (
-	CheckMethodNone    Method = iota
-	CheckMethodTCP            // "tcp"
-	CheckMethodUDP            // "udp"
-	CheckMethodPing           // "ping"
-	CheckMethodUDPPing        // "udpping"
-	CheckMethodHTTP           // "http"
+	_                  Method = iota
+	CheckMethodNone           // "1, none"
+	CheckMethodTCP            // "2, tcp"
+	CheckMethodUDP            // "3, udp"
+	CheckMethodPing           // "4, ping"
+	CheckMethodUDPPing        // "5, udpping"
+	CheckMethodHTTP           // "6, http"
 	// TODO: add new check methods here
 
 	CheckMethodAuto    Method = 10000 // "automatically inferred from protocol"
@@ -81,11 +82,13 @@ func ParseMethod(name string) Method {
 		return CheckMethodUDPPing
 	case "http":
 		return CheckMethodHTTP
+	case "none":
+		return CheckMethodNone
 
 	case "auto":
 		return CheckMethodAuto
 	}
-	return CheckMethodNone
+	return 0
 }
 
 func (m Method) String() string {
@@ -100,12 +103,14 @@ func (m Method) String() string {
 		return "udpping"
 	case CheckMethodNone:
 		return "none"
+	case CheckMethodHTTP:
+		return "http"
 	case CheckMethodPassive:
 		return "passive"
 	case CheckMethodAuto:
 		return "auto"
 	default:
-		return "unknown"
+		return fmt.Sprintf("unknown(%d)", m)
 	}
 	return ""
 }
