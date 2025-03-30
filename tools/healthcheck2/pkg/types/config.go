@@ -21,6 +21,10 @@ type AppConf struct {
 	MetricServerAddr string
 	// metric server http uri for exporting healthcheck statistics
 	MetricServerUri string
+	// metric server http uri for showing current effective configs
+	MetricServerConfUri string
+	// metric server http uri for checking if config file valid
+	MetricServerConfCheckUri string
 	// channel size for metric data sent from va/vs/checker to metric server
 	MetricNotifyChanSize uint
 	// max delayed time to send changed metric to metric server
@@ -28,15 +32,17 @@ type AppConf struct {
 }
 
 var DefaultAppConf = AppConf{
-	Debug:                   false,
-	CheckerNotifyChanSize:   100,
-	VSNotifyChanSize:        100,
-	HcCfgFile:               "/etc/healthcheck.conf",
-	HcCfgReloadInterval:     177 * time.Second,
-	DpvsAgentAddr:           ":8082",
-	DpvsServiceListInterval: 15 * time.Second,
-	MetricServerAddr:        ":6601",
-	MetricServerUri:         "/metrics",
-	MetricNotifyChanSize:    1000,
-	MetricDelay:             2 * time.Second,
+	Debug:                    false,
+	CheckerNotifyChanSize:    100,
+	VSNotifyChanSize:         100,
+	HcCfgFile:                "/etc/healthcheck.conf",
+	HcCfgReloadInterval:      177 * time.Second,
+	DpvsAgentAddr:            ":8082",
+	DpvsServiceListInterval:  15 * time.Second,
+	MetricServerAddr:         ":6601",
+	MetricServerUri:          "/metrics",
+	MetricServerConfUri:      "/conf",
+	MetricServerConfCheckUri: "/conf/check",
+	MetricNotifyChanSize:     1000,
+	MetricDelay:              2 * time.Second,
 }

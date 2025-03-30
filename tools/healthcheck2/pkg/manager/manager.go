@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
+	"gopkg.in/yaml.v2"
 )
 
 const VAStartDelayMax = 3 * time.Second
@@ -25,7 +27,8 @@ type cfgFileReloader struct {
 	name     string
 	interval time.Duration
 	filename string
-	m        *Manager // the Manager instance controlling the Task
+	raw      *ConfFileLayout // conf file content after merged default
+	m        *Manager        // the Manager instance controlling the Task
 }
 
 func NewCfgFileReloader(m *Manager) *cfgFileReloader {
@@ -51,6 +54,14 @@ func (t *cfgFileReloader) Job(ctx context.Context) {
 		glog.Errorf("Fail to load config file %s: %v.", t.filename, err)
 	}
 	t.m.conf = conf
+}
+
+func (t *cfgFileReloader) SetRaw(fc *ConfFileLayout) {
+	t.raw = fc
+}
+
+func (t *cfgFileReloader) GetRaw() *ConfFileLayout {
+	return t.raw
 }
 
 type svcLister struct {
@@ -148,8 +159,10 @@ func (t *svcLister) Job(ctx context.Context) {
 }
 
 type metricServer struct {
-	addr string
-	uri  string
+	addr         string
+	uri          string
+	uriConf      string
+	uriConfCheck string
 
 	notify chan Metric
 	server *http.Server
@@ -163,6 +176,56 @@ func metricHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func metricConfHandler(w http.ResponseWriter, r *http.Request) {
+	m := GetAppManager()
+	if m.cfgFileReloader == nil {
+		fmt.Fprintf(w, "Error: Config file reloader not functioning!")
+		return
+	}
+
+	data, err := yaml.Marshal(m.cfgFileReloader.GetRaw())
+	if err != nil {
+		fmt.Fprintf(w, "Yaml marshal failed: %v.", err)
+		return
+	}
+	fmt.Fprintf(w, string(data))
+}
+
+func metricConfCheckHandler(w http.ResponseWriter, r *http.Request) {
+	m := GetAppManager()
+	if m.cfgFileReloader == nil || len(m.cfgFileReloader.filename) == 0 {
+		fmt.Fprintf(w, "Config File Default: VALID")
+		return
+	}
+	filename := m.cfgFileReloader.filename
+
+	fmt.Fprintf(w, "Config File %s: ", filename)
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		fmt.Fprintf(w, "INVALID (File Read Error: %v)", err)
+		return
+	}
+
+	defer func() {
+		fmt.Fprintf(w, "\n\n\nRaw Configs from %s:\n%s", filename, data)
+	}()
+
+	var fileConf ConfFileLayout
+	err = yaml.Unmarshal(data, &fileConf)
+	if err != nil {
+		fmt.Fprintf(w, "INVALID (Yaml Format Error: %v)", err)
+		return
+	}
+
+	err = fileConf.Validate(false)
+	if err != nil {
+		fmt.Fprintf(w, "INVALID (Validation Error: %v)", err)
+		return
+	}
+
+	fmt.Fprintf(w, "VALID")
+}
+
 func NewMetricServer(conf *types.AppConf) *metricServer {
 	httpSvr := http.Server{
 		Addr:    conf.MetricServerAddr,
@@ -170,9 +233,11 @@ func NewMetricServer(conf *types.AppConf) *metricServer {
 	}
 
 	svr := metricServer{
-		addr:   conf.MetricServerAddr,
-		uri:    conf.MetricServerUri,
-		server: &httpSvr,
+		addr:         conf.MetricServerAddr,
+		uri:          conf.MetricServerUri,
+		uriConf:      conf.MetricServerConfUri,
+		uriConfCheck: conf.MetricServerConfCheckUri,
+		server:       &httpSvr,
 	}
 	svr.notify = make(chan Metric, conf.MetricNotifyChanSize)
 
@@ -181,6 +246,8 @@ func NewMetricServer(conf *types.AppConf) *metricServer {
 
 func (s *metricServer) Run(ctx context.Context) {
 	http.HandleFunc(s.uri, metricHandler)
+	http.HandleFunc(s.uriConf, metricConfHandler)
+	http.HandleFunc(s.uriConfCheck, metricConfCheckHandler)
 
 	go func() {
 		glog.Infof("Starting metric http server listening on %s ...", s.addr)
@@ -294,4 +361,14 @@ func (m *Manager) Shutdown() {
 		}
 	default:
 	}
+}
+
+var appManager *Manager
+
+func SetAppManager(m *Manager) {
+	appManager = m
+}
+
+func GetAppManager() *Manager {
+	return appManager
 }

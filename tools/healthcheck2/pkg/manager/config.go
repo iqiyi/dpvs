@@ -244,7 +244,7 @@ func (fc *ConfFileLayout) Translate() (*Conf, error) {
 
 func LoadFileConf(filename string) (*Conf, error) {
 	// TODO: load config from file
-	if len(filename) > 0 {
+	if len(filename) == 0 {
 		return &confDefault, nil
 	}
 
@@ -265,6 +265,7 @@ func LoadFileConf(filename string) (*Conf, error) {
 		return nil, fmt.Errorf("Invalid config from file: %v", err)
 	}
 	fileConf.Merge(&confDefault)
+	GetAppManager().cfgFileReloader.SetRaw(&fileConf)
 
 	return fileConf.Translate()
 }

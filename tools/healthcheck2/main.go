@@ -60,6 +60,12 @@ func init() {
 	metricServerUri := flag.String("metric-server-uri",
 		types.DefaultAppConf.MetricServerUri,
 		"Http URI for exporting healthcheck state and statistics.")
+	metricServerConfUri := flag.String("conf-uri",
+		types.DefaultAppConf.MetricServerConfUri,
+		"Http URI for showing current effective configs.")
+	metricServerConfCheckUri := flag.String("conf-check-uri",
+		types.DefaultAppConf.MetricServerConfCheckUri,
+		"Http URI for checking if config file valid.")
 	metricNotifyChanSize := flag.Uint("metic-notify-channel-size",
 		types.DefaultAppConf.MetricNotifyChanSize,
 		"Channel size for metric data sent from checkers to metric server.")
@@ -99,6 +105,12 @@ func init() {
 	if metricServerUri != nil && len(*metricServerUri) > 0 {
 		appConf.MetricServerUri = *metricServerUri
 	}
+	if metricServerConfUri != nil && len(*metricServerConfUri) > 0 {
+		appConf.MetricServerConfUri = *metricServerConfUri
+	}
+	if metricServerConfCheckUri != nil && len(*metricServerConfCheckUri) > 0 {
+		appConf.MetricServerConfCheckUri = *metricServerConfCheckUri
+	}
 	if metricNotifyChanSize != nil && *metricNotifyChanSize > 0 {
 		appConf.MetricNotifyChanSize = *metricNotifyChanSize
 	}
@@ -124,6 +136,7 @@ func main() {
 	if m == nil {
 		glog.Fatalf("NewManager failed!")
 	}
+	manager.SetAppManager(m)
 
 	utils.ShutdownHandler(m)
 	m.Run()
