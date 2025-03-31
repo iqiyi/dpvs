@@ -50,10 +50,12 @@ func (t *cfgFileReloader) Interval() time.Duration {
 
 func (t *cfgFileReloader) Job(ctx context.Context) {
 	conf, err := LoadFileConf(t.filename)
-	if err != nil {
+	if err != nil || conf == nil {
 		glog.Errorf("Fail to load config file %s: %v.", t.filename, err)
+		return
 	}
 	t.m.conf = conf
+	glog.V(6).Infof("Config file reloaded!")
 }
 
 func (t *cfgFileReloader) SetRaw(fc *ConfFileLayout) {
@@ -329,6 +331,17 @@ func (m *Manager) Run() {
 
 	m.wg.Add(1)
 	go utils.RunTask(m.cfgFileReloader, ctx, m.wg, nil)
+
+	// wait until m.conf loaded
+	glog.Infof("Awaiting manager conf to be populated ...")
+	for i := 0; i < 300 && m.conf == nil; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if m.conf == nil {
+		glog.Errorf("Manager conf populating failed!")
+		return
+	}
+
 	m.wg.Add(1)
 	go utils.RunTask(m.svcLister, ctx, m.wg, nil)
 

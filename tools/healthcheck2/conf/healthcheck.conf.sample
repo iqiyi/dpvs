@@ -32,13 +32,13 @@ virtual-addresses:
     action-params:
       ifname: lo
       dpvs-ifname: dpdk1
-  "2001::1":
-    actioner: Script
-    action-params:
-      script: /tmp/quorum_script.sh
-      args: dpdk0.102
   "2002::2":
     disable: true
+  "2001::9":
+    actioner: Script
+    action-params:
+      script: ./pkg/actioner/quorum_script.sh
+      args: dpdk0.102
 
 virtual-servers:
   192.168.1.1-TCP-80:
@@ -56,6 +56,6 @@ virtual-servers:
       uri: /health
       proxy-protocol: v2
       response-codes: 200-299
-  "2001::1-UDP-6000":
+  "2001::8-UDP-443":
     timeout: 1s
     action-timeout: 1s

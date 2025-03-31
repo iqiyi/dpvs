@@ -60,6 +60,10 @@ func registerMethod(kind Method, method CheckMethod) {
 }
 
 func Validate(kind Method, configs map[string]string) error {
+	if kind == CheckMethodAuto {
+		// auto method always uses default configs
+		return nil
+	}
 	method, ok := methods[kind]
 	if !ok {
 		return fmt.Errorf("unsupported checker type: %s", kind)

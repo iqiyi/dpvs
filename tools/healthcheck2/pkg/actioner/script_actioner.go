@@ -125,11 +125,11 @@ func (a *ScriptAction) validate(params map[string]string) error {
 				return fmt.Errorf("empty action param %s", param)
 			}
 			if !utils.IsExecutableFile(val) {
-				return fmt.Errorf("invalid action param %s value %s: not executable file",
+				return fmt.Errorf("invalid action param %s value %s: not an executable file",
 					param, val)
 			}
 		case "args":
-			if len(val) > 0 {
+			if len(val) == 0 {
 				return fmt.Errorf("empty action param %s", param)
 			}
 		default:
