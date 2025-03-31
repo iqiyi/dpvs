@@ -488,7 +488,8 @@ static int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
     uint32_t mtu;
     struct tcpopt_addr *toa;
     uint32_t tcp_opt_len;
-    uint8_t *p, *q, *tail;
+    uint8_t *src, *dst, *tail;
+    size_t move_len;
     struct route_entry *rt;
     struct route6 *rt6;
 
@@ -541,15 +542,11 @@ static int tcp_in_add_toa(struct dp_vs_conn *conn, struct rte_mbuf *mbuf,
      * now add address option
      */
 
-    /* move data down, including existing tcp options
-     * @p is last data byte,
-     * @q is new position of last data byte */
-    p = tail - 1;
-    q = p + tcp_opt_len;
-    while (p >= ((uint8_t *)tcph + sizeof(struct tcphdr))) {
-        *q = *p;
-        p--, q--;
-    }
+    /* move data down, including existing tcp options */
+    src = (uint8_t *)tcph + sizeof(struct tcphdr);
+    dst = src + tcp_opt_len;
+    move_len = tail - src;
+    memmove(dst, src, move_len);
 
     /* insert toa right after TCP basic header */
     toa = (struct tcpopt_addr *)(tcph + 1);
