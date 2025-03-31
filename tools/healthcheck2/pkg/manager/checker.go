@@ -48,9 +48,10 @@ type Checker struct {
 }
 
 func NewChecker(target *utils.L3L4Addr, conf *CheckerConf, vs *VirtualService) (*Checker, error) {
-	if err := conf.Valid(); err != nil {
-		return nil, fmt.Errorf("invalid CheckerConf %v: %v", *conf, err)
-	}
+	// Notes: conf has been validated, do not repeat the work!
+	// if err := conf.Valid(); err != nil {
+	// return nil, fmt.Errorf("invalid CheckerConf %v: %v", *conf, err)
+	// }
 
 	ckid := CheckerID(target.String())
 	confCopied := conf.DeepCopy()

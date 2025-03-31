@@ -57,7 +57,17 @@ func (c *UDPPingChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (t
 	return state, err
 }
 
+func (c *UDPPingChecker) validate(params map[string]string) error {
+	// PingChecker requires no params.
+
+	return c.UDPChecker.validate(params)
+}
+
 func (c *UDPPingChecker) create(params map[string]string) (CheckMethod, error) {
+	if err := c.validate(params); err != nil {
+		return nil, fmt.Errorf("udpping param checker validation failed: %v", err)
+	}
+
 	pingChecker, err := c.PingChecker.create(nil)
 	if err != nil {
 		return nil, fmt.Errorf("fail to create udpping checker: %v", err)

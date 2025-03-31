@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/actioner"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/checker"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
 	"gopkg.in/yaml.v2"
@@ -35,11 +36,11 @@ func (acf *ActionConf) Valid() error {
 	if acf.ActionSyncTime <= 0 {
 		return fmt.Errorf("invalid action-sync-time: %v", acf.ActionSyncTime)
 	}
+
 	if len(acf.Actioner) == 0 {
 		return errors.New("empty actioner name")
 	}
-
-	return nil
+	return actioner.Validate(acf.Actioner, acf.ActionParams)
 }
 
 func (acf *ActionConf) DeepEqual(other *ActionConf) bool {
@@ -76,6 +77,9 @@ type VAConf struct {
 }
 
 func (va *VAConf) Valid() error {
+	if va.DownPolicy > VAPolicyAllOf || va.DownPolicy < VAPolicyOneOf {
+		return fmt.Errorf("invalid down-policy: %d", va.DownPolicy)
+	}
 	return va.ActionConf.Valid()
 }
 
@@ -168,11 +172,8 @@ func (c *CheckerConf) Valid() error {
 	if c.Timeout <= 0 {
 		return fmt.Errorf("invalid checker timeout %v", c.Timeout)
 	}
-	if c.Method > checker.CheckMethodAuto || c.Method < checker.CheckMethodNone {
-		return fmt.Errorf("invalid checker method %s", c.Method.String())
-	}
 
-	return nil
+	return checker.Validate(c.Method, c.MethodParams)
 }
 
 func (c *CheckerConf) DeepEqual(other *CheckerConf) bool {

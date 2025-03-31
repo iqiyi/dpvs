@@ -30,6 +30,8 @@ type CheckMethod interface {
 	// create validates the given params, returns an instance of the checker
 	// method, and binds params to it.
 	create(params map[string]string) (CheckMethod, error)
+	// validate checks if the "params" given are valid for creating a checker.
+	validate(params map[string]string) error
 }
 
 type Method uint16
@@ -55,6 +57,14 @@ func registerMethod(kind Method, method CheckMethod) {
 		methods = make(map[Method]CheckMethod)
 	}
 	methods[kind] = method
+}
+
+func Validate(kind Method, configs map[string]string) error {
+	method, ok := methods[kind]
+	if !ok {
+		return fmt.Errorf("unsupported checker type: %s", kind)
+	}
+	return method.validate(configs)
 }
 
 func NewChecker(kind Method, target *utils.L3L4Addr, configs map[string]string) (CheckMethod, error) {

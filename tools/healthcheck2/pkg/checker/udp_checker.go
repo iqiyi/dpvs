@@ -115,35 +115,49 @@ func (c *UDPChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (types
 	return types.Healthy, nil
 }
 
-func (c *UDPChecker) create(params map[string]string) (CheckMethod, error) {
-	checker := &UDPChecker{}
-
+func (c *UDPChecker) validate(params map[string]string) error {
 	unsupported := make([]string, 0, len(params))
 	for param, val := range params {
 		switch param {
 		case "send":
 			if len(val) == 0 {
-				return nil, fmt.Errorf("empty udp checker param: %s", param)
+				return fmt.Errorf("empty udp checker param: %s", param)
 			}
-			c.send = val
 		case "receive":
 			if len(val) == 0 {
-				return nil, fmt.Errorf("empty udp checker param: %s", param)
+				return fmt.Errorf("empty udp checker param: %s", param)
 			}
-			c.receive = val
 		case ParamProxyProto:
 			val = strings.ToLower(val)
 			if val != "v2" {
-				return nil, fmt.Errorf("invalid udp checker param value: %s:%s", param, params[param])
+				return fmt.Errorf("invalid udp checker param value: %s:%s", param, params[param])
 			}
-			c.proxyProto = val
 		default:
 			unsupported = append(unsupported, param)
 		}
 	}
 
 	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported udp checker params: %q", strings.Join(unsupported, ","))
+		return fmt.Errorf("unsupported udp checker params: %q", strings.Join(unsupported, ","))
+	}
+	return nil
+}
+
+func (c *UDPChecker) create(params map[string]string) (CheckMethod, error) {
+	if err := c.validate(params); err != nil {
+		return nil, fmt.Errorf("udp checker param validation failed: %v", err)
+	}
+
+	checker := &UDPChecker{}
+
+	if val, ok := params["send"]; ok {
+		c.send = val
+	}
+	if val, ok := params["receive"]; ok {
+		c.receive = val
+	}
+	if val, ok := params[ParamProxyProto]; ok {
+		c.proxyProto = val
 	}
 
 	return checker, nil

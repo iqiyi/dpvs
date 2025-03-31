@@ -64,6 +64,37 @@ func (a *DpvsAddrAction) Act(signal types.State, timeout time.Duration,
 	return nil, nil
 }
 
+func (a *DpvsAddrAction) validate(params map[string]string) error {
+	required := []string{"dpvs-ifname"}
+	var missed []string
+	for _, param := range required {
+		if _, ok := params[param]; !ok {
+			missed = append(missed, param)
+		}
+	}
+	if len(missed) > 0 {
+		return fmt.Errorf("missing required action params: %v", strings.Join(missed, ","))
+	}
+
+	unsupported := make([]string, 0, len(params))
+	for param, val := range params {
+		switch param {
+		case "dpvs-ifname":
+			if len(val) == 0 {
+				return fmt.Errorf("empty action param %s", param)
+			}
+			// TODO: check if the interface exists in dpvs
+		default:
+			unsupported = append(unsupported, param)
+		}
+	}
+	if len(unsupported) > 0 {
+		return fmt.Errorf("unsupported action params: %s", strings.Join(unsupported, ","))
+	}
+
+	return nil
+}
+
 func (a *DpvsAddrAction) create(target *utils.L3L4Addr, params map[string]string,
 	extras ...interface{}) (ActionMethod, error) {
 	if target == nil || len(target.IP) == 0 {
@@ -78,31 +109,14 @@ func (a *DpvsAddrAction) create(target *utils.L3L4Addr, params map[string]string
 			actioner.apiServer = apiServer
 		}
 	}
-
-	unsupported := make([]string, 0, len(params))
-	for param, val := range params {
-		switch param {
-		case "dpvs-ifname":
-			if len(val) == 0 {
-				return nil, fmt.Errorf("empty %s actioner param: %s", dpvsAddrActionerName, param)
-			}
-			actioner.ifname = val
-		default:
-			unsupported = append(unsupported, param)
-		}
-	}
-	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported %s actioner params: %s",
-			dpvsAddrActionerName, strings.Join(unsupported, ","))
-	}
-
 	if len(actioner.apiServer) == 0 {
 		return nil, fmt.Errorf("%s actioner misses dpvs api server config", dpvsAddrActionerName)
 	}
 
-	if len(actioner.ifname) == 0 {
-		return nil, fmt.Errorf("%s actioner misses param: dpvs-ifname", dpvsAddrActionerName)
+	if err := a.validate(params); err != nil {
+		return nil, fmt.Errorf("%s actioner param validation failed: %v", dpvsAddrActionerName, err)
 	}
+	actioner.ifname = params["dpvs-ifname"]
 
 	return actioner, nil
 }

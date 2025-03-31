@@ -36,3 +36,7 @@ func (a *BlankAction) create(target *utils.L3L4Addr, params map[string]string,
 	extras ...interface{}) (ActionMethod, error) {
 	return &BlankAction{}, nil
 }
+
+func (a *BlankAction) validate(params map[string]string) error {
+	return nil
+}

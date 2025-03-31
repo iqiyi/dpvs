@@ -74,9 +74,10 @@ type VirtualService struct {
 }
 
 func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualService, error) {
-	if err := conf.Valid(); err != nil {
-		return nil, fmt.Errorf("invalid VSConf %v: %v", *conf, err)
-	}
+	// Notes: conf has been validated, do not repeat the work!
+	// if err := conf.Valid(); err != nil {
+	//	return nil, fmt.Errorf("invalid VSConf %v: %v", *conf, err)
+	// }
 
 	vsid := VSID(sub.Addr.String())
 	confCopied := conf.DeepCopy()

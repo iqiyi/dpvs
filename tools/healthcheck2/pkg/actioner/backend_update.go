@@ -65,6 +65,20 @@ func (a *BackendAction) Act(signal types.State, timeout time.Duration,
 	return newVS, err
 }
 
+func (a *BackendAction) validate(params map[string]string) error {
+	unsupported := make([]string, 0, len(params))
+	for param, _ := range params {
+		switch param {
+		default:
+			unsupported = append(unsupported, param)
+		}
+	}
+	if len(unsupported) > 0 {
+		return fmt.Errorf("unsupported action params: %s", strings.Join(unsupported, ","))
+	}
+	return nil
+}
+
 func (a *BackendAction) create(target *utils.L3L4Addr, params map[string]string,
 	extras ...interface{}) (ActionMethod, error) {
 	actioner := &BackendAction{name: target.String()}
@@ -75,20 +89,12 @@ func (a *BackendAction) create(target *utils.L3L4Addr, params map[string]string,
 		}
 	}
 
-	unsupported := make([]string, 0, len(params))
-	for param, _ := range params {
-		switch param {
-		default:
-			unsupported = append(unsupported, param)
-		}
-	}
-	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported %s actioner params: %s", backendActionerName,
-			strings.Join(unsupported, ","))
-	}
-
 	if len(actioner.apiServer) == 0 {
 		return nil, fmt.Errorf("%s actioner misses dpvs api server config", backendActionerName)
+	}
+
+	if err := a.validate(params); err != nil {
+		return nil, fmt.Errorf("%s actioner param validation failed: %v", err)
 	}
 
 	return actioner, nil

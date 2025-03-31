@@ -58,9 +58,16 @@ func (c *PingChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (type
 	return types.Healthy, nil
 }
 
-func (c *PingChecker) create(params map[string]string) (CheckMethod, error) {
+func (c *PingChecker) validate(params map[string]string) error {
 	if len(params) > 0 {
-		return nil, fmt.Errorf("unsupported ping checker params: %v", params)
+		return fmt.Errorf("unsupported ping checker params: %v", params)
+	}
+	return nil
+}
+
+func (c *PingChecker) create(params map[string]string) (CheckMethod, error) {
+	if err := c.validate(params); err != nil {
+		return nil, fmt.Errorf("ping checker param validation failed: %v", err)
 	}
 
 	checker := &PingChecker{

@@ -65,35 +65,53 @@ func (a *DpvsAddrKernelRouteAction) Act(signal types.State, timeout time.Duratio
 	return nil, nil
 }
 
+func (a *DpvsAddrKernelRouteAction) validate(params map[string]string) error {
+	required := []string{"ifname", "dpvs-ifname"}
+	var missed []string
+	for _, param := range required {
+		if _, ok := params[param]; !ok {
+			missed = append(missed, param)
+		}
+	}
+	if len(missed) > 0 {
+		return fmt.Errorf("missing required action params: %v", strings.Join(missed, ","))
+	}
+
+	unsupported := make([]string, 0, len(params))
+	for param, val := range params {
+		switch param {
+		case "ifname":
+			if len(val) == 0 {
+				return fmt.Errorf("empty action param %s", param)
+			}
+			// TODO: check if the interface exists on the system
+		case "dpvs-ifname":
+			if len(val) == 0 {
+				return fmt.Errorf("empty action param %s", param)
+			}
+			// TODO: check if the interface exists in dpvs
+		default:
+			unsupported = append(unsupported, param)
+		}
+	}
+	if len(unsupported) > 0 {
+		return fmt.Errorf("unsupported action params: %s", strings.Join(unsupported, ","))
+	}
+
+	return nil
+}
+
 func (a *DpvsAddrKernelRouteAction) create(target *utils.L3L4Addr, params map[string]string,
 	extras ...interface{}) (ActionMethod, error) {
 	if target == nil || len(target.IP) == 0 {
 		return nil, fmt.Errorf("no target address for %s actioner", addrRouteActionerName)
 	}
 
-	unsupported := make([]string, 0, len(params))
-	daddrParams := make(map[string]string)
-	krtParams := make(map[string]string)
-	for param, val := range params {
-		switch param {
-		case "ifname":
-			if len(val) == 0 {
-				return nil, fmt.Errorf("empty %s actioner param: %s", addrRouteActionerName, param)
-			}
-			krtParams[param] = val
-		case "dpvs-ifname":
-			if len(val) == 0 {
-				return nil, fmt.Errorf("empty %s actioner param: %s", addrRouteActionerName, param)
-			}
-			daddrParams[param] = val
-		default:
-			unsupported = append(unsupported, param)
-		}
+	if err := a.validate(params); err != nil {
+		return nil, fmt.Errorf("%s actioner param validation failed: %v", addrRouteActionerName, err)
 	}
-	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported %s actioner params: %s", addrRouteActionerName,
-			strings.Join(unsupported, ","))
-	}
+	krtParams := map[string]string{"ifname": params["ifname"]}
+	daddrParams := map[string]string{"dpvs-ifname": params["dpvs-ifname"]}
 
 	daddrAction, err := a.DpvsAddrAction.create(target, daddrParams, extras...)
 	if err != nil {

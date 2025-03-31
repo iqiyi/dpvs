@@ -13,9 +13,9 @@ tls-verify          yes | no | true | false, case insensitive
 proxy               yes | no | true | false, case insensitive
 prxoy-protocol      v1 | v2
 
-request-header      KEY::VALUE
+request-headers     KEY::VALUE;;KEY::VALUE ...
 request             request data
-response-codes      [CODE-CODE|CODE],[CODE-CODE|CODE], ...
+response-codes      [CODE-CODE|CODE],[CODE-CODE|CODE] ...
 response			expected response data
 -------------------------------------------------------------
 
@@ -213,9 +213,72 @@ func (c *HTTPChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (type
 	return types.Healthy, nil
 }
 
+func (c *HTTPChecker) validate(params map[string]string) error {
+	unsupported := make([]string, 0, len(params))
+	for param, val := range params {
+		switch param {
+		case "method":
+			if _, ok := httpAllowddMethod[val]; !ok {
+				return fmt.Errorf("unsupported http method: %s", val)
+			}
+		case "host":
+			if len(val) == 0 {
+				return fmt.Errorf("empty http checker param: %s", param)
+			}
+		case "uri":
+			if len(val) == 0 {
+				return fmt.Errorf("empty http checker param: %s", param)
+			}
+		case "https":
+			if _, err := string2bool(val); err != nil {
+				return fmt.Errorf("invalid http checker param %s:%s", param, params[param])
+			}
+		case "tls-verify":
+			if _, err := string2bool(val); err != nil {
+				return fmt.Errorf("invalid http checker param %s:%s", param, params[param])
+			}
+		case "proxy":
+			if _, err := string2bool(val); err != nil {
+				return fmt.Errorf("invalid http checker param %s:%s", param, params[param])
+			}
+		case ParamProxyProto:
+			val = strings.ToLower(val)
+			if val != "v1" && val != "v2" {
+				return fmt.Errorf("invalid http checker param %s:%s", param, params[param])
+			}
+		case "request-headers":
+			if _, err := parseHttpHeaderParam(val); err != nil {
+				return fmt.Errorf("invalid http checker param %s:%s", param, val)
+			}
+		case "request":
+			if len(val) == 0 {
+				return fmt.Errorf("empty http checker param: %s", param)
+			}
+		case "response-codes":
+			if _, err := parseHttpCodesParam(val); err != nil {
+				return fmt.Errorf("invalid http checker response codes %s: %v", val, err)
+			}
+		case "response":
+			if len(val) == 0 {
+				return fmt.Errorf("empty http checker param: %s", param)
+			}
+		default:
+			unsupported = append(unsupported, param)
+		}
+	}
+
+	if len(unsupported) > 0 {
+		return fmt.Errorf("unsupported http checker params: %q", strings.Join(unsupported, ","))
+	}
+	return nil
+}
+
 func (c *HTTPChecker) create(params map[string]string) (CheckMethod, error) {
-	// init and set default value
-	checker := &HTTPChecker{
+	if err := c.validate(params); err != nil {
+		return nil, fmt.Errorf("http checker param validation failed: %v", err)
+	}
+
+	checker := &HTTPChecker{ // init and set default value
 		method:               "GET",
 		uri:                  "/",
 		https:                false,
@@ -224,73 +287,48 @@ func (c *HTTPChecker) create(params map[string]string) (CheckMethod, error) {
 		responseCodesAllowed: []HttpCodeRange{{200, 299}, {300, 399}, {400, 499}},
 	}
 
-	// parse params
-	var err error
-	unsupported := make([]string, 0, len(params))
-	for param, val := range params {
-		switch param {
-		case "method":
-			if _, ok := httpAllowddMethod[val]; !ok {
-				return nil, fmt.Errorf("unsupported http checker method: %s", val)
-			}
-			checker.method = val
-		case "host":
-			if len(val) == 0 {
-				return nil, fmt.Errorf("empty http checker param: %s", param)
-			}
-			checker.host = val
-		case "uri":
-			if len(val) == 0 {
-				return nil, fmt.Errorf("empty http checker param: %s", param)
-			}
-			checker.uri = val
-		case "https":
-			if checker.https, err = string2bool(val); err != nil {
-				return nil, fmt.Errorf("invalid http checker param %s:%s", param, params[param])
-			}
-		case "tls-verify":
-			if checker.tlsVerify, err = string2bool(val); err != nil {
-				return nil, fmt.Errorf("invalid http checker param %s:%s", param, params[param])
-			}
-		case "proxy":
-			if checker.proxy, err = string2bool(val); err != nil {
-				return nil, fmt.Errorf("invalid http checker param %s:%s", param, params[param])
-			}
-		case ParamProxyProto:
-			val = strings.ToLower(val)
-			if val != "v1" && val != "v2" {
-				return nil, fmt.Errorf("invalid http checker param %s:%s", param, params[param])
-			}
-			checker.proxyProtocol = val
-		case "request-header":
-			hdrName, hdrVal := parseHttpHeaderParam(val)
-			if len(hdrName) == 0 || len(hdrVal) == 0 {
-				return nil, fmt.Errorf("invalid http checker param %s:%s", param, val)
-			}
-			checker.requestHeaders[hdrName] = hdrVal
-		case "request":
-			if len(val) == 0 {
-				return nil, fmt.Errorf("empty http checker param: %s", param)
-			}
-			checker.request = []byte(val)
-		case "response-codes":
-			codes, err := parseHttpCodesParam(val)
-			if err != nil {
-				return nil, fmt.Errorf("invalid http checker response codes %s: %v", val, err)
-			}
-			checker.responseCodesAllowed = codes
-		case "response":
-			if len(val) == 0 {
-				return nil, fmt.Errorf("empty http checker param: %s", param)
-			}
-			checker.response = []byte(val)
-		default:
-			unsupported = append(unsupported, param)
-		}
+	if val, ok := params["method"]; ok {
+		checker.method = val
 	}
 
-	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported http checker params: %q", strings.Join(unsupported, ","))
+	if val, ok := params["host"]; ok {
+		checker.host = val
+	}
+
+	if val, ok := params["uri"]; ok {
+		checker.uri = val
+	}
+
+	if val, ok := params["https"]; ok {
+		checker.https, _ = string2bool(val)
+	}
+
+	if val, ok := params["tls-verify"]; ok {
+		checker.tlsVerify, _ = string2bool(val)
+	}
+
+	if val, ok := params["proxy"]; ok {
+		checker.proxy, _ = string2bool(val)
+	}
+
+	if val, ok := params["ParamProxyProto"]; ok {
+		checker.proxyProtocol = strings.ToLower(val)
+	}
+
+	if val, ok := params["request-headers"]; ok {
+		checker.requestHeaders, _ = parseHttpHeaderParam(val)
+	}
+
+	if val, ok := params["request"]; ok {
+		checker.request = []byte(val)
+	}
+
+	if val, ok := params["response-codes"]; ok {
+		checker.responseCodesAllowed, _ = parseHttpCodesParam(val)
+	}
+
+	if val, ok := params["response"]; ok {
+		checker.response = []byte(val)
 	}
 
 	return checker, nil
@@ -306,13 +344,23 @@ func string2bool(s string) (bool, error) {
 	return false, fmt.Errorf("invalid boolean string value: %s", s)
 }
 
-func parseHttpHeaderParam(header string) (name, val string) {
-	segs := strings.Split(header, "::")
-	if len(segs) != 2 {
-		return
+func parseHttpHeaderParam(headers string) (map[string]string, error) {
+	kvs := strings.Split(headers, ";;")
+
+	parsed := make(map[string]string, len(kvs))
+	for _, kv := range kvs {
+		segs := strings.Split(kv, "::")
+		if len(segs) != 2 {
+			return nil, fmt.Errorf("invalid http header key-value format: %s", kv)
+		}
+		name, val := segs[0], segs[1]
+		if len(name) == 0 || len(val) == 0 {
+			return nil, fmt.Errorf("empty http header name/value: %s", kv)
+		}
+		parsed[name] = val
 	}
-	name, val = segs[0], segs[1]
-	return
+
+	return parsed, nil
 }
 
 func parseHttpCodesParam(codes string) ([]HttpCodeRange, error) {

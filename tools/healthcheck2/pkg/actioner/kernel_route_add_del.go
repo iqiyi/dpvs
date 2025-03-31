@@ -172,13 +172,16 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 	return nil, nil
 }
 
-func (a *KernelRouteAction) create(target *utils.L3L4Addr, params map[string]string,
-	extras ...interface{}) (ActionMethod, error) {
-	if target == nil || len(target.IP) == 0 {
-		return nil, fmt.Errorf("no target address for %s actioner", kernelRouteActionerName)
+func (a *KernelRouteAction) validate(params map[string]string) error {
+	required := []string{"ifname"}
+	var missed []string
+	for _, param := range required {
+		if _, ok := params[param]; !ok {
+			missed = append(missed, param)
+		}
 	}
-	actioner := &KernelRouteAction{
-		target: target.DeepCopy(),
+	if len(missed) > 0 {
+		return fmt.Errorf("missing required action params: %v", strings.Join(missed, ","))
 	}
 
 	unsupported := make([]string, 0, len(params))
@@ -186,20 +189,32 @@ func (a *KernelRouteAction) create(target *utils.L3L4Addr, params map[string]str
 		switch param {
 		case "ifname":
 			if len(val) == 0 {
-				return nil, fmt.Errorf("empty %s actioner param: %s", kernelRouteActionerName, param)
+				return fmt.Errorf("empty action param %s", param)
 			}
-			actioner.ifname = val
+			// TODO: check if the interface exists on the system
 		default:
 			unsupported = append(unsupported, param)
 		}
 	}
 	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported %s actioner params: %s",
-			kernelRouteActionerName, strings.Join(unsupported, ","))
+		return fmt.Errorf("unsupported action params: %s", strings.Join(unsupported, ","))
 	}
 
-	if len(actioner.ifname) == 0 {
-		return nil, fmt.Errorf("%s actioner misses param: ifname", kernelRouteActionerName)
+	return nil
+}
+
+func (a *KernelRouteAction) create(target *utils.L3L4Addr, params map[string]string,
+	extras ...interface{}) (ActionMethod, error) {
+	if target == nil || len(target.IP) == 0 {
+		return nil, fmt.Errorf("no target address for %s actioner", kernelRouteActionerName)
 	}
-	return actioner, nil
+
+	if err := a.validate(params); err != nil {
+		return nil, fmt.Errorf("%s actioner param validation failed: %v", kernelRouteActionerName, err)
+	}
+
+	return &KernelRouteAction{
+		target: target.DeepCopy(),
+		ifname: params["ifname"],
+	}, nil
 }

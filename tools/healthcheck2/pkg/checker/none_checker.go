@@ -29,6 +29,10 @@ func (c *NoneChecker) Check(target *utils.L3L4Addr, timeout time.Duration) (type
 	return types.Healthy, nil
 }
 
+func (c *NoneChecker) validate(params map[string]string) error {
+	return nil
+}
+
 func (c *NoneChecker) create(params map[string]string) (CheckMethod, error) {
 	return &NoneChecker{}, nil
 }

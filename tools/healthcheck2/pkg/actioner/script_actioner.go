@@ -105,36 +105,60 @@ func (a *ScriptAction) Act(signal types.State, timeout time.Duration,
 	return nil, nil
 }
 
-func (a *ScriptAction) create(target *utils.L3L4Addr, params map[string]string,
-	extras ...interface{}) (ActionMethod, error) {
-	actioner := &ScriptAction{}
-
-	if target != nil {
-		actioner.target = target.DeepCopy()
+func (a *ScriptAction) validate(params map[string]string) error {
+	required := []string{"script"} // "args" is optional
+	var missed []string
+	for _, param := range required {
+		if _, ok := params[param]; !ok {
+			missed = append(missed, param)
+		}
+	}
+	if len(missed) > 0 {
+		return fmt.Errorf("missing required action params: %v", strings.Join(missed, ","))
 	}
 
 	unsupported := make([]string, 0, len(params))
 	for param, val := range params {
 		switch param {
 		case "script":
-			if len(val) > 0 {
-				actioner.script = val
+			if len(val) == 0 {
+				return fmt.Errorf("empty action param %s", param)
+			}
+			if !utils.IsExecutableFile(val) {
+				return fmt.Errorf("invalid action param %s value %s: not executable file",
+					param, val)
 			}
 		case "args":
 			if len(val) > 0 {
-				actioner.args = val
+				return fmt.Errorf("empty action param %s", param)
 			}
 		default:
 			unsupported = append(unsupported, param)
 		}
 	}
 	if len(unsupported) > 0 {
-		return nil, fmt.Errorf("unsupported %s actioner params: %s", scriptActionerName,
-			strings.Join(unsupported, ","))
+		return fmt.Errorf("unsupported action params: %s", strings.Join(unsupported, ","))
 	}
 
-	if len(actioner.script) == 0 || !utils.IsExecutableFile(actioner.script) {
-		return nil, fmt.Errorf("invalid %s actioner script name %q", scriptActionerName, actioner.script)
+	return nil
+}
+
+func (a *ScriptAction) create(target *utils.L3L4Addr, params map[string]string,
+	extras ...interface{}) (ActionMethod, error) {
+
+	if err := a.validate(params); err != nil {
+		return nil, fmt.Errorf("%s actioner param validation failed: %v", scriptActionerName, err)
+	}
+
+	actioner := &ScriptAction{
+		script: params["script"],
+	}
+	if args, ok := params["args"]; ok {
+		actioner.args = args
+	}
+
+	if target != nil {
+		actioner.target = target.DeepCopy()
 	}
 	return actioner, nil
 }

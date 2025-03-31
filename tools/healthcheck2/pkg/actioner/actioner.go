@@ -17,6 +17,8 @@ type ActionMethod interface {
 	// create validates the given configs, returns an instance of the action
 	// method, and binds configs to it.
 	create(target *utils.L3L4Addr, configs map[string]string, extras ...interface{}) (ActionMethod, error)
+	// validate checks if the "configs" given are valid for creating an action.
+	validate(configs map[string]string) error
 }
 
 func registerMethod(name string, method ActionMethod) {
@@ -37,4 +39,12 @@ func NewActioner(kind string, target *utils.L3L4Addr, configs map[string]string,
 		return nil, fmt.Errorf("actioner create failed: %v", err)
 	}
 	return actioner, nil
+}
+
+func Validate(kind string, configs map[string]string) error {
+	method, ok := methods[kind]
+	if !ok {
+		return fmt.Errorf("unsupported action type: %s", kind)
+	}
+	return method.validate(configs)
 }
