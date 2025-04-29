@@ -94,7 +94,7 @@ func (a *BackendAction) create(target *utils.L3L4Addr, params map[string]string,
 	}
 
 	if err := a.validate(params); err != nil {
-		return nil, fmt.Errorf("%s actioner param validation failed: %v", err)
+		return nil, fmt.Errorf("%s actioner param validation failed: %v", backendActionerName, err)
 	}
 
 	return actioner, nil

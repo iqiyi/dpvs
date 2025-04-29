@@ -311,7 +311,7 @@ func (c *HTTPChecker) create(params map[string]string) (CheckMethod, error) {
 		checker.proxy, _ = string2bool(val)
 	}
 
-	if val, ok := params["ParamProxyProto"]; ok {
+	if val, ok := params[ParamProxyProto]; ok {
 		checker.proxyProtocol = strings.ToLower(val)
 	}
 
