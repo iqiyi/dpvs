@@ -143,11 +143,15 @@ func (c *Checker) doUpdate(conf *CheckerConf) {
 	}
 	if conf.DownRetry != c.conf.DownRetry {
 		c.conf.DownRetry = conf.DownRetry
-		c.sendNotice()
+		if c.state == types.Unhealthy && conf.DownRetry >= c.count {
+			c.sendNotice()
+		}
 	}
 	if conf.UpRetry != c.conf.UpRetry {
 		c.conf.UpRetry = conf.UpRetry
-		c.sendNotice()
+		if c.state == types.Healthy && conf.UpRetry >= c.count {
+			c.sendNotice()
+		}
 	}
 	if conf.Timeout != c.conf.Timeout {
 		c.conf.Timeout = conf.Timeout

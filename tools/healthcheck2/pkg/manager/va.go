@@ -242,7 +242,7 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 			}
 			if !skip {
 				if act, err := actioner.NewActioner(vacf.Actioner, &utils.L3L4Addr{IP: va.subject},
-					vacf.ActionParams); err != nil {
+					vacf.ActionParams, va.m.appConf.DpvsAgentAddr); err != nil {
 					glog.Errorf("VA %s actioner recreated failed: %v", va.id, err)
 					skip = true
 				} else {

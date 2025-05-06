@@ -50,7 +50,8 @@ func (acf *ActionConf) DeepEqual(other *ActionConf) bool {
 func (acf *ActionConf) MergeDefault(defaultConf *ActionConf) {
 	if len(acf.Actioner) == 0 {
 		acf.Actioner = defaultConf.Actioner
-		acf.ActionParams = nil
+	}
+	if len(acf.ActionParams) == 0 {
 		if len(defaultConf.ActionParams) > 0 {
 			acf.ActionParams = make(map[string]string, len(defaultConf.ActionParams))
 			for name, val := range defaultConf.ActionParams {
@@ -63,9 +64,6 @@ func (acf *ActionConf) MergeDefault(defaultConf *ActionConf) {
 	}
 	if acf.ActionSyncTime == 0 {
 		acf.ActionSyncTime = defaultConf.ActionSyncTime
-	}
-	if len(acf.ActionParams) == 0 {
-		// TODO: Support method-dependent default params.
 	}
 }
 
@@ -330,7 +328,7 @@ func (fc *ConfFileLayout) Merge(defaultConf *Conf) {
 		if dft, ok := defaultConf.vaConf[vaid]; ok {
 			conf.MergeDefault(&dft)
 		} else {
-			conf.MergeDefault(&defaultConf.vaGlobal)
+			conf.MergeDefault(&fc.Global.VAConf)
 		}
 		fc.VAs[vaid] = conf
 	}
@@ -339,7 +337,7 @@ func (fc *ConfFileLayout) Merge(defaultConf *Conf) {
 		if dft, ok := defaultConf.vsConf[vsid]; ok {
 			conf.MergeDefault(&dft)
 		} else {
-			conf.MergeDefault(&defaultConf.vsGlobal)
+			conf.MergeDefault(&fc.Global.VSConf)
 		}
 		fc.VSs[vsid] = conf
 	}
