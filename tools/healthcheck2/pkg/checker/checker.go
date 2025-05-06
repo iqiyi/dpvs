@@ -2,6 +2,7 @@ package checker
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -57,6 +58,24 @@ func registerMethod(kind Method, method CheckMethod) {
 		methods = make(map[Method]CheckMethod)
 	}
 	methods[kind] = method
+}
+
+func DumpMethods() []string {
+	mtds := make([]int, len(methods)+2)
+	mtds[0] = int(CheckMethodAuto)
+	mtds[1] = int(CheckMethodPassive)
+	i := 2
+	for m, _ := range methods {
+		mtds[i] = int(m)
+		i++
+	}
+	sort.Ints(mtds)
+
+	res := make([]string, len(mtds))
+	for i, m := range mtds {
+		res[i] = fmt.Sprintf("%d-%s", m, Method(m))
+	}
+	return res
 }
 
 func Validate(kind Method, configs map[string]string) error {

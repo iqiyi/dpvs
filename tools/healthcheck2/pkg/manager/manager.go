@@ -6,10 +6,12 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/checker"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/comm"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/types"
 	"github.com/iqiyi/dpvs/tools/healthcheck2/pkg/utils"
@@ -190,6 +192,8 @@ func metricConfHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Yaml marshal failed: %v.", err)
 		return
 	}
+	fmt.Fprintf(w, "# Check Method Annotations: %s\n", strings.Join(checker.DumpMethods(), ", "))
+	fmt.Fprintf(w, "# VA DownPolicy Annotations: %s\n\n", strings.Join(DumpVAPolicies(), ", "))
 	fmt.Fprintf(w, string(data))
 }
 
@@ -209,7 +213,10 @@ func metricConfCheckHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer func() {
-		fmt.Fprintf(w, "\n\n\nRaw Configs from %s:\n%s", filename, data)
+		fmt.Fprintf(w, "\n\n\nRaw Configs from %s:\n", filename)
+		fmt.Fprintf(w, "# Check Method Annotations: %s\n", strings.Join(checker.DumpMethods(), ", "))
+		fmt.Fprintf(w, "# VA DownPolicy Annotations: %s\n", strings.Join(DumpVAPolicies(), ", "))
+		w.Write(data)
 	}()
 
 	var fileConf ConfFileLayout

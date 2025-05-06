@@ -21,6 +21,13 @@ const (
 	VAPolicyAllOf VAPolicy = 2
 )
 
+func DumpVAPolicies() []string {
+	return []string{
+		fmt.Sprintf("%d-%s", VAPolicyOneOf, "oneOf"),
+		fmt.Sprintf("%d-%s", VAPolicyAllOf, "allOf"),
+	}
+}
+
 // +k8s:deepcopy-gen=true
 type ActionConf struct {
 	Actioner       string            `yaml:"actioner"`
