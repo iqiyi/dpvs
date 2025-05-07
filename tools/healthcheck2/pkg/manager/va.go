@@ -157,6 +157,9 @@ func (va *VirtualAddress) judge() types.State {
 			va.id, va.upVSs, va.downVSs)
 		return va.calcState()
 	}
+	if (va.upVSs | va.downVSs) == 0 {
+		return types.Unhealthy
+	}
 	switch va.conf.DownPolicy {
 	case VAPolicyAllOf:
 		if va.upVSs == 0 {
@@ -218,10 +221,12 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 		skip := false
 		needResync := false
 		if vacf.DownPolicy != va.conf.DownPolicy {
-			vacf.DownPolicy = va.conf.DownPolicy
+			glog.Infof("Updating DownPolicy of VA %s: %v->%v", va.id, va.conf.DownPolicy, vacf.DownPolicy)
+			va.conf.DownPolicy = vacf.DownPolicy
 			needResync = true
 		}
 		if vacf.ActionSyncTime > 0 && vacf.ActionSyncTime != va.conf.ActionSyncTime {
+			glog.Infof("Updating ActionSyncTime of VA %s: %v->%v", va.id, va.conf.ActionSyncTime, vacf.ActionSyncTime)
 			if va.resync != nil {
 				va.resync.Stop()
 				va.resync = time.NewTicker(vacf.ActionSyncTime)
@@ -229,15 +234,23 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 			va.conf.ActionSyncTime = vacf.ActionSyncTime
 		}
 		if vacf.ActionTimeout > 0 && vacf.ActionTimeout != va.conf.ActionTimeout {
+			glog.Infof("Updating ActionTimeout of VA %s: %v->%v", va.id, va.conf.ActionTimeout, vacf.ActionTimeout)
 			va.conf.ActionTimeout = vacf.ActionTimeout
 		}
+
+		vacf.ActionSyncTime = va.conf.ActionSyncTime
+		vacf.ActionTimeout = va.conf.ActionTimeout
 		if !vacf.ActionConf.DeepEqual(&va.conf.ActionConf) {
-			if va.state == types.Unhealthy {
-				// Restore Healthy state before changing Actioner to avoid inconsistency.
-				if err := va.actUP(); err != nil {
-					glog.Errorf("restore %s before changing VA %s actioner failed: %v, abort change",
-						types.Healthy, va.id, err)
+			glog.Infof("Updating actioner of VA %s: %v(%v)->%v(%v)", va.id, va.conf.Actioner, va.conf.ActionParams,
+				vacf.Actioner, vacf.ActionParams)
+			if va.state == types.Healthy {
+				// Switch state to Unhealthy before changing Actioner to avoid inconsistency.
+				if err := va.actDOWN(); err != nil {
+					glog.Errorf("Switch state to %s before changing VA %s actioner failed: %v, abort change",
+						types.Unhealthy, va.id, err)
 					skip = true
+				} else {
+					needResync = true
 				}
 			}
 			if !skip {
@@ -322,13 +335,6 @@ func (va *VirtualAddress) doUpdate(conf *VAConfExt) {
 				glog.Warningf("received VS %s with eariler version, skip it", vsid)
 				continue
 			}
-			if vavs.version == svc.Version {
-				// ??? Is it safe to skip VS with version unchanged?
-				// It relies on dpvs-agent, an alien factor. But it worths taking a risk
-				// for the notewothy performance gains.
-				glog.V(7).Infof("skip VS %s with version unchanged", vsid)
-				continue
-			}
 			vavs.version = svc.Version
 		}
 		vsConfExt := &VSConfExt{
@@ -386,8 +392,8 @@ func (va *VirtualAddress) recvNotice(state *VSState) {
 }
 
 func (va *VirtualAddress) doResync() {
-	glog.V(7).Infof("VA %s state before resync: %v, upVSs %d, downVSs %d",
-		va.id, va.state, va.upVSs, va.downVSs)
+	glog.V(7).Infof("VA %s state before resync: %v, upVSs %d, downVSs %d, downPolicy %d",
+		va.id, va.state, va.upVSs, va.downVSs, va.conf.DownPolicy)
 	state := va.calcState()
 	if state != va.state {
 		if err := va.act(state); err != nil {
@@ -395,6 +401,8 @@ func (va *VirtualAddress) doResync() {
 		} else {
 			glog.Infof("VA %s state resync to %s succeeded", va.id, state)
 		}
+		glog.V(7).Infof("VA %s state after resync: %v, upVSs %d, downVSs %d, downPolicy %d",
+			va.id, va.state, va.upVSs, va.downVSs, va.conf.DownPolicy)
 	}
 }
 

@@ -251,6 +251,7 @@ func (vs *VirtualService) doUpdate(conf *VSConfExt) {
 	if !vscf.DeepEqual(&vs.conf) {
 		skip := false
 		if vscf.ActionSyncTime > 0 && vscf.ActionSyncTime != vs.conf.ActionSyncTime {
+			glog.Infof("Updating ActionSyncTime of VS %s: %v->%v", vs.id, vs.conf.ActionSyncTime, vscf.ActionSyncTime)
 			if vs.resync != nil {
 				vs.resync.Stop()
 				vs.resync = time.NewTicker(vscf.ActionSyncTime)
@@ -258,33 +259,56 @@ func (vs *VirtualService) doUpdate(conf *VSConfExt) {
 			vs.conf.ActionSyncTime = vscf.ActionSyncTime
 		}
 		if vscf.ActionTimeout > 0 && vscf.ActionTimeout != vs.conf.ActionTimeout {
+			glog.Infof("Updating ActionTimeout of VS %s: %v->%v", vs.id, vs.conf.ActionTimeout, vscf.ActionTimeout)
 			vs.conf.ActionTimeout = vscf.ActionTimeout
 		}
+
+		vscf.ActionTimeout = vs.conf.ActionTimeout
+		vscf.ActionSyncTime = vs.conf.ActionSyncTime
 		if !vscf.ActionConf.DeepEqual(&vs.conf.ActionConf) {
-			// Restore Healthy state before changing Actioner to avoid inconsistency.
+			glog.Infof("Updating actioner of VS %s: %v(%v)->%v(%v)", vs.id, vs.conf.Actioner, vs.conf.ActionParams,
+				vscf.Actioner, vscf.ActionParams)
+			// Restore Healthy state(default state) before changing Actioner to avoid inconsistency.
 			changed := make([]CheckerID, 0, vs.downBackends)
+			restoreUnhealthy := false
 			for ckid, rs := range vs.backends {
 				if rs.checkerState == types.Unhealthy {
 					changed = append(changed, ckid)
 				}
 			}
 			if len(changed) > 0 {
+				// Set checkerState to Healthy manually.
+				//
+				// Note vs.upBackends/vs.downBackends/vs.state are not changed and inconsistent
+				// until restoring the changes later.
+				for _, ckid := range changed {
+					vs.backends[ckid].checkerState = types.Healthy
+				}
 				if err := vs.act(changed); err != nil {
-					glog.Warningf("restore %s before changing VS %s actioner failed -- checkers: %v, error: %v",
+					glog.Warningf("Set %s before changing VS %s actioner failed -- checkers: %v, error: %v",
 						types.Healthy, vs.id, changed, err)
 					skip = true
+				}
+				restoreUnhealthy = true
+			}
+			if !skip {
+				act, err := actioner.NewActioner(vscf.Actioner, &vs.subject, vscf.ActionParams,
+					vs.va.m.appConf.DpvsAgentAddr)
+				if err != nil {
+					glog.Errorf("VS %s actioner recreated failed: %v", vs.id, err)
+					skip = true
 				} else {
-					// Set checkerState to Healthy manually.
-					for _, ckid := range changed {
-						vs.backends[ckid].checkerState = types.Healthy
-					}
-					vs.upBackends = len(vs.backends)
-					vs.downBackends = 0
-					vsState := vs.judge()
-					if vsState != vs.state {
-						vs.sendStateChangeNotice(vsState)
-						vs.updateStateTo(vsState)
-					}
+					vs.actioner = act
+				}
+			}
+			if restoreUnhealthy {
+				// Restore checkerState to Unhealthy manually.
+				for _, ckid := range changed {
+					vs.backends[ckid].checkerState = types.Unhealthy
+				}
+				if err := vs.act(changed); err != nil {
+					glog.Warningf("Restore %s after changing VS %s actioner failed -- checkers: %v, error: %v",
+						types.Unhealthy, vs.id, changed, err)
 				}
 			}
 		}
@@ -368,13 +392,6 @@ func (vs *VirtualService) doUpdate(conf *VSConfExt) {
 			uuid := vsb.checker.UUID()
 			if vsb.version > conf.vs.Version {
 				glog.Warningf("received VSBackend %s with eailier version, skip it", uuid)
-				continue
-			}
-			if vsb.version == conf.vs.Version {
-				// ??? Is it safe to skip Backend with version unchanged?
-				// It relies on dpvs-agent, an alien factor. But it worths taking a risk
-				// for the notewothy performance gains.
-				glog.V(7).Infof("skip VSBackend %s with version unchanged", uuid)
 				continue
 			}
 			if !rs.Inhibited || rs.Weight > 0 { // ??? Is it necessary?

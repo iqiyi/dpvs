@@ -149,6 +149,7 @@ func (t *svcLister) Job(ctx context.Context) {
 			go va.Run(t.m.wg, delay.C)
 		} else {
 			if vaConf.Disable {
+				glog.Infof("VA %s is getting disabled", vaid)
 				delete(t.m.vas, vaid)
 				va.Stop()
 				continue

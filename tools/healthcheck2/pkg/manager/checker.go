@@ -137,26 +137,32 @@ func (c *Checker) doUpdate(conf *CheckerConf) {
 	skip := false
 
 	if conf.Interval != c.conf.Interval {
+		glog.Infof("Updating Interval of checker %s: %v->%v", c.UUID(), c.conf.Interval, conf.Interval)
 		c.checkTicker.Stop()
 		c.checkTicker = time.NewTicker(conf.Interval)
-		conf.Interval = c.conf.Interval
+		c.conf.Interval = conf.Interval
 	}
 	if conf.DownRetry != c.conf.DownRetry {
+		glog.Infof("Updating DownRetry of checker %s: %v->%v", c.UUID(), c.conf.DownRetry, conf.DownRetry)
 		c.conf.DownRetry = conf.DownRetry
 		if c.state == types.Unhealthy && conf.DownRetry >= c.count {
 			c.sendNotice()
 		}
 	}
 	if conf.UpRetry != c.conf.UpRetry {
+		glog.Infof("Updating UpRetry of checker %s: %v->%v", c.UUID(), c.conf.UpRetry, conf.UpRetry)
 		c.conf.UpRetry = conf.UpRetry
 		if c.state == types.Healthy && conf.UpRetry >= c.count {
 			c.sendNotice()
 		}
 	}
 	if conf.Timeout != c.conf.Timeout {
+		glog.Infof("Updating Timeout of checker %s: %v->%v", c.UUID(), c.conf.Timeout, conf.Timeout)
 		c.conf.Timeout = conf.Timeout
 	}
 	if !conf.DeepEqual(&c.conf) { // method or its params changed
+		glog.Infof("Updating Method of checker %s: %v(%v)->%v(%v)", c.UUID(), c.conf.Method,
+			c.conf.MethodParams, conf.Method, conf.MethodParams)
 		method, err := checker.NewChecker(conf.Method, &c.target, conf.MethodParams)
 		if err != nil {
 			glog.Errorf("fail to update checker method %v-%v: %v",
