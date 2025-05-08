@@ -185,6 +185,14 @@ func (c *CheckerConf) DeepEqual(other *CheckerConf) bool {
 	return reflect.DeepEqual(c, other)
 }
 
+// FIXME:
+// Restricted by the structure of CheckerConf, it's impossible to specify a zero
+// DownRetry/UpRetry, which is actually valid for the items.
+// One graceful solution for the problem is to refactor CheckerConf struct, which
+// requires many efforts and leads to performance loss. As a compromise, we use a
+// big enough uint value ZERORETRY in config file for the zero value.
+const ZERORETRY uint = 999999
+
 func (c *CheckerConf) MergeDefault(defaultConf *CheckerConf) {
 	if c.Method == 0 {
 		c.Method = defaultConf.Method
@@ -199,11 +207,15 @@ func (c *CheckerConf) MergeDefault(defaultConf *CheckerConf) {
 	if c.Interval == 0 {
 		c.Interval = defaultConf.Interval
 	}
-	if c.DownRetry == 0 { // FIXME: How to specify 0 value?
+	if c.DownRetry == 0 {
 		c.DownRetry = defaultConf.DownRetry
+	} else if c.DownRetry == ZERORETRY {
+		c.DownRetry = 0
 	}
-	if c.UpRetry == 0 { // FIXME: How to specify 0 value?
+	if c.UpRetry == 0 {
 		c.UpRetry = defaultConf.UpRetry
+	} else if c.UpRetry == ZERORETRY {
+		c.UpRetry = 0
 	}
 	if c.Timeout == 0 {
 		c.Timeout = defaultConf.Timeout
@@ -278,8 +290,8 @@ var (
 		CheckerConf: CheckerConf{
 			Method:    checker.CheckMethodAuto,
 			Interval:  3 * time.Second,
-			DownRetry: 0,
-			UpRetry:   0,
+			DownRetry: 1,
+			UpRetry:   1,
 			Timeout:   2 * time.Second,
 		},
 		ActionConf: ActionConf{

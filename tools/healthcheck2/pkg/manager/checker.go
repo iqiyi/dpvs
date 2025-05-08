@@ -90,6 +90,7 @@ func (c *Checker) UUID() string {
 }
 
 func (c *Checker) sendNotice() {
+	glog.V(5).Infof("Checker %v sending %v notice to VS", c.UUID(), c.state)
 	if c.state == types.Unknown {
 		return
 	}
@@ -117,13 +118,13 @@ func (c *Checker) doPostCheck(newState types.State) {
 	case types.Healthy:
 		c.stats.up++
 		c.metricTaint = true
-		if c.count == c.conf.UpRetry {
+		if c.count == c.conf.UpRetry+1 {
 			c.sendNotice()
 		}
 	case types.Unhealthy:
 		c.stats.down++
 		c.metricTaint = true
-		if c.count == c.conf.DownRetry {
+		if c.count == c.conf.DownRetry+1 {
 			c.sendNotice()
 		}
 	}
@@ -145,14 +146,14 @@ func (c *Checker) doUpdate(conf *CheckerConf) {
 	if conf.DownRetry != c.conf.DownRetry {
 		glog.Infof("Updating DownRetry of checker %s: %v->%v", c.UUID(), c.conf.DownRetry, conf.DownRetry)
 		c.conf.DownRetry = conf.DownRetry
-		if c.state == types.Unhealthy && conf.DownRetry >= c.count {
+		if c.state == types.Unhealthy && conf.DownRetry <= c.count {
 			c.sendNotice()
 		}
 	}
 	if conf.UpRetry != c.conf.UpRetry {
 		glog.Infof("Updating UpRetry of checker %s: %v->%v", c.UUID(), c.conf.UpRetry, conf.UpRetry)
 		c.conf.UpRetry = conf.UpRetry
-		if c.state == types.Healthy && conf.UpRetry >= c.count {
+		if c.state == types.Healthy && conf.UpRetry <= c.count {
 			c.sendNotice()
 		}
 	}

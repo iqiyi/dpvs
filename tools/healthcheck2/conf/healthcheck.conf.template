@@ -59,8 +59,8 @@ VSACTIONCONF:
 CHECKERCONF:
   method: enum(string), none(1)|tcp(2)|udp(3)|ping(4)|udpping(5)|http(6)|*auto(10000)
   interval: duration, 3s
-  down-retry: uint, 0
-  up-retry: uint, 0
+  down-retry: uint, 1 (999999 for zero retry)
+  up-retry: uint, 1 (999999 for zero retry)
   timeout: duration, 2s
   method-params: CheckParamsNone|CheckParamsTCP|CheckParamsUDP|CheckParamsUDPPing|CheckParamsHTTP
 
