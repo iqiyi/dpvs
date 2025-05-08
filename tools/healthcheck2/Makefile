@@ -35,3 +35,9 @@ code-gen: $(GO_PATH)/bin/deepcopy-gen
 
 $(GO_PATH)/bin/deepcopy-gen:
 	go install k8s.io/code-generator/cmd/deepcopy-gen@v0.29.12
+
+license: license.txt
+ifeq ($(shell addlicense 2>&1|grep Usage),)
+	$(error "`addlicense` command not found. You can install it with `go install github.com/google/addlicense`")
+endif
+	-addlicense -f license.txt -v .
