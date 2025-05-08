@@ -52,7 +52,7 @@ var DefaultAppConf = AppConf{
 	CheckerNotifyChanSize:    100,
 	VSNotifyChanSize:         100,
 	HcCfgFile:                "/etc/healthcheck.conf",
-	HcCfgReloadInterval:      177 * time.Second,
+	HcCfgReloadInterval:      53 * time.Second,
 	DpvsAgentAddr:            ":8082",
 	DpvsServiceListInterval:  15 * time.Second,
 	MetricServerAddr:         ":6601",
