@@ -198,9 +198,13 @@ func (vs *VirtualService) act(changed []CheckerID) error {
 			// just in case, use the minimum version of all changed backends
 			version = rs.version
 		}
+		weight := uint16(rs.uweight)
+		if rs.checkerState == types.Unhealthy {
+			weight = 0
+		}
 		rss = append(rss, comm.RealServer{
 			Addr:      rs.addr,
-			Weight:    uint16(rs.uweight),
+			Weight:    weight,
 			Inhibited: rs.checkerState == types.Unhealthy,
 		})
 	}
@@ -421,7 +425,7 @@ func (vs *VirtualService) doUpdate(conf *VSConfExt) {
 			}
 			if vsb.state != vsb.checkerState {
 				if err := vs.act([]CheckerID{ckid}); err != nil {
-					glog.Warningf("VS %s update backend %s to %s failed: %v", vs.id, ckid, err)
+					glog.Warningf("VS %s update backend %s to %s failed: %v", vs.id, ckid, vsb.checkerState, err)
 				}
 			}
 			vsb.checker.Update(ckConf.DeepCopy())
