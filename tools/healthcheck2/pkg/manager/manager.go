@@ -293,7 +293,6 @@ func (s *metricServer) Run(ctx context.Context) {
 			if err := metricDB.Update(&m); err != nil {
 				glog.Warningf("MetricDB update failed: %v.", err)
 			}
-		default:
 		}
 	}
 }

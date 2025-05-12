@@ -55,7 +55,6 @@ func RunTask(t Task, ctx context.Context, wg *sync.WaitGroup, start <-chan time.
 		case <-ticker.C:
 			glog.V(7).Infof("Task %q scheduled.", t.Name())
 			t.Job(ctx)
-		default:
 		}
 	}
 }

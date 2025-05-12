@@ -20,13 +20,6 @@ go-proxy:
 clean:
 	$(GO_CLEAN)
 
-license: license.txt
-ifeq ($(shell addlicense 2>&1|grep Usage),)
-	$(error "`addlicense` command not found. You can install it with `go install github.com/google/addlicense`")
-endif
-	-addlicense -f license.txt -v .
-
-
 MODULE_NAME := $(shell grep '^module ' go.mod | awk '{print $$2}')
 GO_PATH := $(shell $(GO) env GOPATH)
 code-gen: $(GO_PATH)/bin/deepcopy-gen
