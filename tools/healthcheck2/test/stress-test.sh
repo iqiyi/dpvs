@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-dpvs_agent_server=localhost:53224
+dpvs_agent_server=localhost:54321
 
 echo -e "[$(date +%F.%T)] Start"
 
@@ -24,8 +24,8 @@ systemctl restart dpvs-agent
 killall healthcheck2 2>/dev/null
 sleep 5
 
-## Step 2.
-ngroups=5
+## Step 1.
+ngroups=4
 rsid=5000
 echo -e "[$(date +%F.%T)] Adding $ngroups test services ..."
 for i in $(seq 1 $ngroups)
