@@ -1,4 +1,4 @@
-#!/bin/env sh
+#!/usr/bin/env sh
 # /*
 # Copyright 2025 IQiYi Inc. All Rights Reserved.
 #

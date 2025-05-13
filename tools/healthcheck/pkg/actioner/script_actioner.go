@@ -76,12 +76,12 @@ func (a *ScriptAction) commandline(signal types.State) string {
 	if len(a.target.IP) == 0 {
 		return cmdline
 	}
-	cmdline = fmt.Sprintf("%s %v", cmdline, a.target.IP)
+	cmdline = fmt.Sprintf("%s %s", cmdline, a.target.IP.String())
 
 	if a.target.Port == 0 {
 		return cmdline
 	}
-	cmdline = fmt.Sprintf("%s %v", cmdline, a.target.Port)
+	cmdline = fmt.Sprintf("%s %d", cmdline, a.target.Port)
 
 	if a.target.Proto != utils.IPProto(0) {
 		cmdline = fmt.Sprintf("%s %s", cmdline, a.target.Proto)

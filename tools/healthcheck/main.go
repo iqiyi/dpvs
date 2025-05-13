@@ -82,7 +82,7 @@ func init() {
 	metricServerConfCheckUri := flag.String("conf-check-uri",
 		types.DefaultAppConf.MetricServerConfCheckUri,
 		"Http URI for checking if config file valid.")
-	metricNotifyChanSize := flag.Uint("metic-notify-channel-size",
+	metricNotifyChanSize := flag.Uint("metric-notify-channel-size",
 		types.DefaultAppConf.MetricNotifyChanSize,
 		"Channel size for metric data sent from checkers to metric server.")
 	metricDelay := flag.Duration("metric-delay",

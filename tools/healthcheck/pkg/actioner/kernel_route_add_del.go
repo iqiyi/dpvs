@@ -28,6 +28,7 @@ ifname              network interface name
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -75,17 +76,21 @@ func findLinkByAddr(addr net.IP) (netlink.Link, error) {
 }
 
 func isExistError(err error) bool {
-	return err == unix.EEXIST || err.Error() == "file exists"
+	//return err == unix.EEXIST || err.Error() == "file exists"
+	return errors.Is(err, unix.EEXIST)
 }
 
+var ErrCannotAssignRequestedAddress = errors.New("cannot assign requested address")
+
 func isNotExistError(err error) bool {
-	return err == unix.ENOENT || err == unix.ESRCH || err.Error() == "cannot assign requested address"
+	//return err == unix.ENOENT || err == unix.ESRCH || err.Error() == "cannot assign requested address"
+	return errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ESRCH) || strings.Contains(strings.ToLower(err.Error()),
+		"cannot assign requested address")
 }
 
 func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 	data ...interface{}) (interface{}, error) {
 	addr := a.target.IP
-	var operation string
 
 	if timeout <= 0 {
 		return nil, fmt.Errorf("zero timeout on %s actioner %v", kernelRouteActionerName, addr)
@@ -128,7 +133,6 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 		ipAddr := &netlink.Addr{IPNet: ipNet}
 
 		if signal != types.Unhealthy { // ADD
-			operation = "UP"
 			if err := netlink.AddrAdd(link, ipAddr); err != nil {
 				if isExistError(err) {
 					glog.V(8).Infof("Warning: adding address %v already exists: %v\n", addr, err)
@@ -149,7 +153,6 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 				}
 			}
 		} else { // DELETE
-			operation = "DOWN"
 			if err := netlink.AddrDel(link, ipAddr); err != nil {
 				if isNotExistError(err) {
 					glog.V(8).Infof("Warning: deleting address %v does not exist: %v\n", addr, err)
@@ -173,6 +176,11 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 
 		done <- nil
 	}()
+
+	operation := "UP"
+	if signal == types.Unhealthy {
+		operation = "DOWN"
+	}
 
 	select {
 	case <-ctx.Done():

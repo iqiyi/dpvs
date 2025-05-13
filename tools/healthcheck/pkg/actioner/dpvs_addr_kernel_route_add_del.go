@@ -45,7 +45,7 @@ func init() {
 	registerMethod(addrRouteActionerName, &DpvsAddrKernelRouteAction{})
 }
 
-// DpvsAddrKernelRouteAction is a composit actioner, which executes KernelRouteAction
+// DpvsAddrKernelRouteAction is a composite actioner, which executes KernelRouteAction
 // actioner firtly, and when it succeeeds, then executes DpvsAddrAction.
 type DpvsAddrKernelRouteAction struct {
 	target *utils.L3L4Addr

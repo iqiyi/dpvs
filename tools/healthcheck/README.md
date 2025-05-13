@@ -84,7 +84,7 @@ Usage of ./healthcheck:
         Buffer log messages logged at this level or lower (-1 means don't buffer; 0 means buffer INFO only; ...). Has limited applicability on non-prod platforms.
   -logtostderr
         log to standard error instead of files
-  -metic-notify-channel-size uint
+  -metric-notify-channel-size uint
         Channel size for metric data sent from checkers to metric server. (default 1000)
   -metric-delay duration
         Max delayed time to send changed metric to metric server. (default 2s)
