@@ -17,6 +17,8 @@ package utils
 import (
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -44,44 +46,19 @@ func AFs() []AF {
 	return []AF{IPv4, IPv6}
 }
 
-// IP specifies an IP address.
-type IP [net.IPv6len]byte
-
-// NewIP returns a seesaw IP initialised from a net.IP address.
-func NewIP(nip net.IP) IP {
-	var ip IP
-	copy(ip[:], nip.To16())
-	return ip
-}
-
-// ParseIP parses the given string and returns a healthcheck IP initialised
-// with the resulting IP address.
-func ParseIP(ip string) IP {
-	return NewIP(net.ParseIP(ip))
-}
-
-// Equal returns true of the given IP addresses are equal, as determined by
-// net.IP.Equal().
-func (ip IP) Equal(eip IP) bool {
-	return ip.IP().Equal(eip.IP())
-}
-
-// IP returns the net.IP representation of a healthcheck IP address.
-func (ip IP) IP() net.IP {
-	return net.IP(ip[:])
-}
-
-// AF returns the address family of a healthcheck IP address.
-func (ip IP) AF() AF {
-	if ip.IP().To4() != nil {
+// IPAF returns the address family of an IP address.
+func IPAF(ip net.IP) AF {
+	if ip.To4() != nil {
 		return IPv4
 	}
 	return IPv6
 }
 
-// String returns the string representation of an IP address.
-func (ip IP) String() string {
-	return fmt.Sprintf("%v", ip.IP())
+// IPAddrClone returns the deep-copied IP address.
+func IPAddrClone(ip net.IP) net.IP {
+	addr := make(net.IP, len(ip))
+	copy(addr[:], ip[:])
+	return addr
 }
 
 // IPProto specifies an IP protocol.
@@ -106,10 +83,11 @@ func (proto IPProto) String() string {
 	case IPProtoUDP:
 		return "UDP"
 	}
-	return fmt.Sprintf("IP(%d)", proto)
+	return fmt.Sprintf("IPProto(%d)", proto)
 }
 
-func IPProtoFromStr(str string) IPProto {
+// ParseIPProto return an IPProto from its string representation.
+func ParseIPProto(str string) IPProto {
 	switch str {
 	case "TCP":
 		return IPProtoTCP
@@ -121,4 +99,104 @@ func IPProtoFromStr(str string) IPProto {
 		return IPProtoICMPv6
 	}
 	return 0
+}
+
+// L3L4Addr represents a combination of IP, IPProto and Port.
+type L3L4Addr struct {
+	IP    net.IP
+	Port  uint16
+	Proto IPProto
+}
+
+// String returns the string representation of the given L3L4Addr value.
+func (addr *L3L4Addr) String() string {
+	return fmt.Sprintf("%s-%s-%d", addr.IP, addr.Proto, addr.Port)
+}
+
+func (in *L3L4Addr) DeepCopyInto(out *L3L4Addr) {
+	*out = *in
+	out.IP = make(net.IP, len(in.IP))
+	copy(out.IP[:], in.IP[:])
+	return
+}
+
+func (in *L3L4Addr) DeepCopy() *L3L4Addr {
+	if in == nil {
+		return nil
+	}
+	out := new(L3L4Addr)
+	in.DeepCopyInto(out)
+	return out
+}
+
+// Network returns the network name for net.Dailer
+func (addr *L3L4Addr) Network() string {
+	var network string
+	version := 4
+	if addr.IP.To4() == nil {
+		version = 6
+	}
+	switch addr.Proto {
+	case IPProtoTCP:
+		network = fmt.Sprintf("tcp%d", version)
+	case IPProtoUDP:
+		network = fmt.Sprintf("udp%d", version)
+	case IPProtoICMP:
+		network = "ip4:icmp"
+	case IPProtoICMPv6:
+		network = "ip6:ipv6-icmp"
+	default:
+		return "(unknown)"
+	}
+	return network
+}
+
+// Addr returns the IP:Port representation for net.Dailer
+func (addr *L3L4Addr) Addr() string {
+	if addr.IP.To4() != nil {
+		return fmt.Sprintf("%v:%d", addr.IP, addr.Port)
+	}
+	return fmt.Sprintf("[%v]:%d", addr.IP, addr.Port)
+}
+
+// ParseL3L4Addr produces a L3L4Addr from its string representation.
+func ParseL3L4Addr(str string) *L3L4Addr {
+	segs := strings.Split(str, "-")
+	addr := L3L4Addr{}
+	if len(segs) > 0 {
+		if ip := net.ParseIP(segs[0]); ip != nil {
+			addr.IP = ip
+		} else {
+			return nil
+		}
+	}
+	segs = segs[1:]
+	if len(segs) > 0 {
+		if proto := ParseIPProto(segs[0]); proto != 0 {
+			addr.Proto = proto
+		} else {
+			return nil
+		}
+	}
+	segs = segs[1:]
+	if len(segs) > 0 {
+		if port, err := strconv.ParseUint(segs[0], 10, 16); err != nil {
+			return nil
+		} else {
+			addr.Port = uint16(port)
+		}
+	}
+	return &addr
+}
+
+// WriteFull tries to write the whole data in a slice to a net conn.
+func WriteFull(conn net.Conn, b []byte) error {
+	for len(b) > 0 {
+		n, err := conn.Write(b)
+		if err != nil {
+			return err
+		}
+		b = b[n:]
+	}
+	return nil
 }
