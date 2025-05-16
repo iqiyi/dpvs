@@ -1,0 +1,8 @@
+---
+global:
+  virtual-address:
+    actioner: KernelRouteAddDel
+    action-params:
+      ifname: lo
+virtual-addresses:
+virtual-servers:

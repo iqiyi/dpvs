@@ -6,233 +6,439 @@ DPVS 健康检查程序压力测试
 首先，使用 [stress-test.sh](./stress-test.sh) 脚本生成测试业务。
 
 * 测试业务列表只需要有 VS 和 RS 配置，不需要配置 VIP、local IP 等。
-* 通过调整脚本 `Step 2` 中的 i, j 两个循环控制变量的范围控制产生的健康检查配置数量的多少。
+* 通过调整脚本 `Step 2` 中的 i(ngroups), j 两个循环控制变量的范围控制产生的健康检查配置数量的多少。
 * 通过调整脚本 `Step 2` 中循环控制变量 j 的范围控制每个 VS 下配置的 RS 数量的多少，默认每个 VS 配置 5 个 RS。
 
-测试业务生成后 RS 初始状态都是 UP（权重为1）：
+测试业务生成后 RS 初始状态都是 UP（权重为100）：
 
 ```
 ## 未启动健康检查服务时测试业务状态
-IP Virtual Server version 1.9.4 (size=0)
+IP Virtual Server version 1.10.1 (size=0)
 Prot LocalAddress:Port Scheduler Flags
   -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
-TCP  192.168.0.1:80 wlc
-  -> 192.168.19.155:8080          FullNat 1      0          0          
-  -> 192.168.19.156:8080          FullNat 1      0          0          
-  -> 192.168.19.157:8080          FullNat 1      0          0          
-  -> 192.168.19.158:8080          FullNat 1      0          0          
-  -> 192.168.19.159:8080          FullNat 1      0          0          
-TCP  192.168.0.2:80 wlc
-  -> 192.168.19.160:8080          FullNat 1      0          0          
-  -> 192.168.19.161:8080          FullNat 1      0          0          
-  -> 192.168.19.162:8080          FullNat 1      0          0          
-  -> 192.168.19.163:8080          FullNat 1      0          0          
-  -> 192.168.19.164:8080          FullNat 1      0          0          
-TCP  192.168.0.3:80 wlc
-  -> 192.168.19.165:8080          FullNat 1      0          0          
-  -> 192.168.19.166:8080          FullNat 1      0          0          
+TCP  192.168.1.1:80 wrr 
+  -> 192.168.19.155:80            FullNat 100    0          0    
+  -> 192.168.19.156:80            FullNat 100    0          0    
+  -> 192.168.19.157:80            FullNat 100    0          0    
+  -> 192.168.19.158:80            FullNat 100    0          0    
+  -> 192.168.19.159:80            FullNat 100    0          0    
+TCP  192.168.1.2:80 wrr 
+  -> 192.168.19.160:80            FullNat 100    0          0    
+  -> 192.168.19.161:80            FullNat 100    0          0    
+  -> 192.168.19.162:80            FullNat 100    0          0    
+  -> 192.168.19.163:80            FullNat 100    0          0    
+  -> 192.168.19.164:80            FullNat 100    0          0    
+TCP  192.168.1.3:80 wrr 
+  -> 192.168.19.165:80            FullNat 100    0          0    
+  -> 192.168.19.166:80            FullNat 100    0          0   
 ...
 ```
 
-但实际上这些 RS 是不通的，后续健康检查程序会把所有的 RS 设置为 DOWN（权重为 0，并添加  标志）。
+但实际上这些 RS 是不通的，后续健康检查程序会把所有的 RS 设置为 DOWN，即权重设为 0 同时添加 `inhibited` 标记。
 
 ```
 ## 健康检查完成测试业务状态
-IP Virtual Server version 1.9.4 (size=0)
+IP Virtual Server version 1.10.1 (size=0)
 Prot LocalAddress:Port Scheduler Flags
   -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
-TCP  192.168.0.1:80 wlc
-  -> 192.168.19.155:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.156:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.157:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.158:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.159:8080          FullNat 0      0          0          inhibited
-TCP  192.168.0.2:80 wlc
-  -> 192.168.19.160:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.161:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.162:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.163:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.164:8080          FullNat 0      0          0          inhibited
-TCP  192.168.0.3:80 wlc
-  -> 192.168.19.165:8080          FullNat 0      0          0          inhibited
-  -> 192.168.19.166:8080          FullNat 0      0          0          inhibited
+TCP  192.168.1.1:80 wrr
+  -> 192.168.19.155:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.156:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.157:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.158:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.159:80            FullNat 0      0          0          inhibited
+TCP  192.168.1.2:80 wrr
+  -> 192.168.19.160:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.161:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.162:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.163:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.164:80            FullNat 0      0          0          inhibited
+TCP  192.168.1.3:80 wrr
+  -> 192.168.19.165:80            FullNat 0      0          0          inhibited
+  -> 192.168.19.166:80            FullNat 0      0          0          inhibited
 ...
 ```
 
-测试业务创建后，`stress-test.sh` 脚本会循环检测当前的 RS 总数和被置为 DOWN 状态的 RS 数量。当我们启动健康检查程序后，
+测试业务创建后，`stress-test.sh` 脚本会用如下命令在启动健康检查服务并将其置于后台运行，并把日志输出到脚本所在目录中的 `healthcheck.log` 文件中。
 
 ```sh
-./healthcheck -log_dir=./log
+../healthcheck --alsologtostderr -dpvs-agent-addr=$dpvs_agent_server 2>&1 > healthcheck.log &
 ```
 
-测试业务的 RS 会陆续由初始的 UP 状态而转为 DOWN 状态，我们根据 RS 被置为 DOWN 的数量的增长速度即可评估健康检查程序的并发性能。
+> 注意：测试环境默认 dpvs-agent 运行在 54321 端口上，其它端口请修改脚本中对应的变量值。
+
+健康检查程序启动后，`stress-test.sh` 脚本会循环检测当前的 RS 总数和被置为 DOWN 状态的 RS 数量。 测试业务的 RS 会陆续由初始的 UP 状态而转为 DOWN 状态，我们根据 RS 被置为 DOWN 的数量的增长速度即可评估健康检查程序的并发性能。
+
+# 配置文件
+
+压测配置 RS 探测失败不重试、探测失败超时时间为 1 秒，其它都采用默认配置参数。具体配置文件如下。
+
+```yaml
+# Check Method Annotations: 1-none, 2-tcp, 3-udp, 4-ping, 5-udpping, 6-http, 10000-auto, 65535-passive
+# VA DownPolicy Annotations: 1-oneOf, 2-allOf
+---
+global:
+  virtual-address:
+    actioner: KernelRouteAddDel
+    action-params:
+      ifname: dpdk0.102.kni
+  virtual-server:
+    method: 10000
+    down-retry: 999999 ## no retry
+    timeout: 1s
+```
 
 # 测试数据
 
-* RS 数量：测试脚本自动创建的 RS 总量
-* 初始探测耗时：健康检查程序启动到看到第一个 RS 被置为 DOWN 的时间。
+* RS 数量：测试脚本自动创建的 RS 总量。
+* 初始探测耗时：健康检查程序从启动到看到第一个 RS 被置为 DOWN 的时间，包含配置下发、实例创建和一次探测超时的时间。
 * 耗时(5分位)：从第一个 RS 被置为 DOWN 到 50% 的 RS 被置为 DOWN 的时间。
 * 耗时(9分位)：从第一个 RS 被置为 DOWN 到 90% 的 RS 被置为 DOWN 的时间。
 * 总耗时：从第一个 RS 被置为 DOWN 到所有的 RS 被置为 DOWN 的时间。
-* CPU 占用：健康检查程序的 CPU 使用量（用 iftop 命令观测得到）。
-* 内存占用：健康检查程序的内存使用量（用 iftop 命令观测得到）。
+* CPU 占用：健康检查程序的 CPU 使用量（压测期间 `pidstat -ur -p $(pidof healthcheck) 10` 命令输出的CPU%指标）。
+* 内存占用：健康检查程序的内存使用量（压测期间 `pidstat -ur -p $(pidof healthcheck) 10` 命令输出的RSS指标）。
 
-| RS数量 | 初始探测耗时 | 耗时(5分位） | 耗时(9分位) | 总耗时 | CPU占用 | 内存占用 |
-| ------ | ------------ | ------------ | ----------- | ------ | ------- | -------- |
-| 0      | 0            | 0            | 0           | 0      | 0.1核   | 100MB    |
-| 1040   | 6s           | 1s           | 2s          | 2s     | 0.1核   | 110MB    |
-| 5080   | 6s           | 1s           | 2s          | 3s     | 0.4核   | 160MB    |
-| 10160  | 5s           | 4s           | 6s          | 8s     | 0.8核   | 200MB    |
-| 26670  | 5s           | 9s           | 16s         | 34s    | 1.8核   | 560MB    |
-| 52070  | 7s           | 7s           | 33s         | 90s    | 4.4核   | 1120MB   |
+| RS数量 | 初始探测耗时 | 耗时(5分位) | 耗时(9分位) | 总耗时 | CPU占用 | 内存占用 | 备注       |
+| ------ | ------------ | ----------- | ----------- | ------ | ------- | -------- | ---------- |
+| 0      | 0            | 0           | 0           | 0      | 0.0%    | 8MB      |            |
+| 1275   | 4s           | 2s          | 3s          | 3s     | 8.9%    | 56MB     |            |
+| 2550   | 4s           | 2s          | 3s          | 15s    | 16.1%   | 88MB     |            |
+| 5100   | 5s           | 2s          | 3s          | 14s    | 30.6%   | 157MB    |            |
+| 10200  | 5s           | 1s          | 10s         | 13s    | 55.5%   | 307MB    |            |
+| 20400  | 4s           | 2s          | 11s         | 28s    | 107.5%  | 599MB    |            |
+| 40800  | 4s           | 15s         | 30s         | 58s    | 215.1%  | 1162MB   |            |
+| 51000  | 4s           | 14s         | 29s         | 59s    | 264.5%  | 1385MB   |            |
+| 60280  | 7s           | 10s         | 16s         | 72s    | 317.8%  | 1899MB   | 控制面过载 |
 
-> 说明： 健康检查程序默认配置的 retry 为 1 次、timeout 为 1s、周期为 3s，因此初始探测时间理论上为 1s(timeout) + 3s (delay loop) + 1s (timeout) = 5s。该数据和我们测试数据基本一致，不计入性能延迟。
+> 说明：
+> 1. 初始探测耗时包含 1s 的探测超时时间。
+> 2. 测试机 CPU型号为 Intel(R) Xeon(R) CPU E5-2650 v4 @ 2.20GHz。
 
 
 # 测试日志
 
-**1040 个 RS**
+**1275 个 RS**
 
 ```
-[2023-06-02.17:08:51] total: 1040, inhibited: 0
-[2023-06-02.17:08:55] total: 1040, inhibited: 0
-[2023-06-02.17:08:56] total: 1040, inhibited: 0
-[2023-06-02.17:08:57] total: 1040, inhibited: 0
-[2023-06-02.17:08:58] total: 1040, inhibited: 321 
-[2023-06-02.17:08:59] total: 1040, inhibited: 709 
-[2023-06-02.17:09:00] total: 1040, inhibited: 1040
-[2023-06-02.17:09:01] total: 1040, inhibited: 1040
-[2023-06-02.17:09:02] total: 1040, inhibited: 1040
-[2023-06-02.17:09:03] total: 1040, inhibited: 1040
+[2025-05-12.16:05:35] Starting healthcheck program ...
+[2025-05-12.16:05:35] Do Checking ...
+[2025-05-12.16:05:35] total: 1275, inhibited: 0
+[2025-05-12.16:05:36] total: 1275, inhibited: 0
+[2025-05-12.16:05:37] total: 1275, inhibited: 0
+[2025-05-12.16:05:38] total: 1275, inhibited: 0
+[2025-05-12.16:05:39] total: 1275, inhibited: 37
+[2025-05-12.16:05:40] total: 1275, inhibited: 451
+[2025-05-12.16:05:41] total: 1275, inhibited: 892
+[2025-05-12.16:05:42] total: 1275, inhibited: 1265 
+[2025-05-12.16:05:43] total: 1275, inhibited: 1265 
+[2025-05-12.16:05:44] total: 1275, inhibited: 1265 
+[2025-05-12.16:05:45] total: 1275, inhibited: 1265 
+[2025-05-12.16:05:46] total: 1275, inhibited: 1265 
+[2025-05-12.16:05:47] total: 1275, inhibited: 1265 
+[2025-05-12.16:05:48] total: 1275, inhibited: 1265 
+[2025-05-12.16:05:49] total: 1275, inhibited: 1265 
+[2025-05-12.16:05:50] total: 1275, inhibited: 1270 
+[2025-05-12.16:05:51] total: 1275, inhibited: 1274 
+[2025-05-12.16:05:52] total: 1275, inhibited: 1275 
+[2025-05-12.16:05:53] total: 1275, inhibited: 1275 
+[2025-05-12.16:05:54] total: 1275, inhibited: 1275 
+[2025-05-12.16:05:55] total: 1275, inhibited: 1275 
+[2025-05-12.16:05:56] total: 1275, inhibited: 1275 
 ```
 
-**5080 个 RS**
+**2550 个 RS**
 
 ```
-[2023-06-02.17:02:17] total: 5080, inhibited: 0
-[2023-06-02.17:02:18] total: 5080, inhibited: 0
-[2023-06-02.17:02:19] total: 5080, inhibited: 0
-[2023-06-02.17:02:20] total: 5080, inhibited: 0
-[2023-06-02.17:02:21] total: 5080, inhibited: 1474
-[2023-06-02.17:02:22] total: 5080, inhibited: 3340
-[2023-06-02.17:02:23] total: 5080, inhibited: 5078
-[2023-06-02.17:02:25] total: 5080, inhibited: 5080
-[2023-06-02.17:02:26] total: 5080, inhibited: 5080
-[2023-06-02.17:02:27] total: 5080, inhibited: 5080
-[2023-06-02.17:02:28] total: 5080, inhibited: 5080
+[2025-05-12.16:25:36] Starting healthcheck program ...
+[2025-05-12.16:25:36] Do Checking ...
+[2025-05-12.16:25:36] total: 2550, inhibited: 0
+[2025-05-12.16:25:37] total: 2550, inhibited: 0
+[2025-05-12.16:25:38] total: 2550, inhibited: 0
+[2025-05-12.16:25:39] total: 2550, inhibited: 0
+[2025-05-12.16:25:40] total: 2550, inhibited: 140
+[2025-05-12.16:25:41] total: 2550, inhibited: 996
+[2025-05-12.16:25:42] total: 2550, inhibited: 1875 
+[2025-05-12.16:25:43] total: 2550, inhibited: 2473 
+[2025-05-12.16:25:44] total: 2550, inhibited: 2473 
+[2025-05-12.16:25:45] total: 2550, inhibited: 2473 
+[2025-05-12.16:25:46] total: 2550, inhibited: 2473 
+[2025-05-12.16:25:47] total: 2550, inhibited: 2473 
+[2025-05-12.16:25:48] total: 2550, inhibited: 2473
+[2025-05-12.16:25:49] total: 2550, inhibited: 2473
+[2025-05-12.16:25:51] total: 2550, inhibited: 2473
+[2025-05-12.16:25:52] total: 2550, inhibited: 2513
+[2025-05-12.16:25:53] total: 2550, inhibited: 2534
+[2025-05-12.16:25:54] total: 2550, inhibited: 2549
+[2025-05-12.16:25:55] total: 2550, inhibited: 2550
+[2025-05-12.16:25:56] total: 2550, inhibited: 2550
+[2025-05-12.16:25:57] total: 2550, inhibited: 2550
+[2025-05-12.16:25:58] total: 2550, inhibited: 2550
+[2025-05-12.16:25:59] total: 2550, inhibited: 2550
 ```
 
-**10160 个 RS**
+**5100 个 RS**
 
 ```
-[2023-06-02.16:51:21] total: 10160, inhibited: 0
-[2023-06-02.16:51:23] total: 10160, inhibited: 0
-[2023-06-02.16:51:24] total: 10160, inhibited: 0
-[2023-06-02.16:51:25] total: 10160, inhibited: 0
-[2023-06-02.16:51:27] total: 10160, inhibited: 0
-[2023-06-02.16:51:28] total: 10160, inhibited: 52
-[2023-06-02.16:51:29] total: 10160, inhibited: 2050
-[2023-06-02.16:51:30] total: 10160, inhibited: 4021
-[2023-06-02.16:51:32] total: 10160, inhibited: 6027
-[2023-06-02.16:51:33] total: 10160, inhibited: 8094
-[2023-06-02.16:51:34] total: 10160, inhibited: 10116
-[2023-06-02.16:51:36] total: 10160, inhibited: 10160
-[2023-06-02.16:51:37] total: 10160, inhibited: 10160
-[2023-06-02.16:51:38] total: 10160, inhibited: 10160
-[2023-06-02.16:51:39] total: 10160, inhibited: 10160
+[2025-05-12.16:31:50] Starting healthcheck program ...
+[2025-05-12.16:31:50] Do Checking ...
+[2025-05-12.16:31:50] total: 5100, inhibited: 0
+[2025-05-12.16:31:52] total: 5100, inhibited: 0
+[2025-05-12.16:31:53] total: 5100, inhibited: 0
+[2025-05-12.16:31:54] total: 5100, inhibited: 0
+[2025-05-12.16:31:55] total: 5100, inhibited: 546
+[2025-05-12.16:31:56] total: 5100, inhibited: 2278 
+[2025-05-12.16:31:57] total: 5100, inhibited: 4064 
+[2025-05-12.16:31:58] total: 5100, inhibited: 4820 
+[2025-05-12.16:31:59] total: 5100, inhibited: 4820 
+[2025-05-12.16:32:00] total: 5100, inhibited: 4820 
+[2025-05-12.16:32:01] total: 5100, inhibited: 4820 
+[2025-05-12.16:32:03] total: 5100, inhibited: 4820 
+[2025-05-12.16:32:04] total: 5100, inhibited: 4820
+[2025-05-12.16:32:05] total: 5100, inhibited: 4820
+[2025-05-12.16:32:06] total: 5100, inhibited: 4991
+[2025-05-12.16:32:07] total: 5100, inhibited: 5082
+[2025-05-12.16:32:08] total: 5100, inhibited: 5095
+[2025-05-12.16:32:09] total: 5100, inhibited: 5100
+[2025-05-12.16:32:10] total: 5100, inhibited: 5100
+[2025-05-12.16:32:11] total: 5100, inhibited: 5100
+[2025-05-12.16:32:12] total: 5100, inhibited: 5100
+[2025-05-12.16:32:14] total: 5100, inhibited: 5100
 ```
 
-**26670 个 RS**
+**10200 个 RS**
 
 ```
-[2023-06-02.16:44:45] total: 26670, inhibited: 0
-[2023-06-02.16:44:46] total: 26670, inhibited: 0
-[2023-06-02.16:44:48] total: 26670, inhibited: 0
-[2023-06-02.16:44:50] total: 26670, inhibited: 0
-[2023-06-02.16:44:51] total: 26670, inhibited: 0
-[2023-06-02.16:44:53] total: 26670, inhibited: 1857
-[2023-06-02.16:44:55] total: 26670, inhibited: 4389
-[2023-06-02.16:44:56] total: 26670, inhibited: 6887
-[2023-06-02.16:44:58] total: 26670, inhibited: 9388
-[2023-06-02.16:45:00] total: 26670, inhibited: 12166
-[2023-06-02.16:45:02] total: 26670, inhibited: 15079
-[2023-06-02.16:45:03] total: 26670, inhibited: 17741
-[2023-06-02.16:45:05] total: 26670, inhibited: 20307
-[2023-06-02.16:45:07] total: 26670, inhibited: 23046
-[2023-06-02.16:45:09] total: 26670, inhibited: 25967
-[2023-06-02.16:45:10] total: 26670, inhibited: 26665
-[2023-06-02.16:45:12] total: 26670, inhibited: 26665
-[2023-06-02.16:45:14] total: 26670, inhibited: 26666
-[2023-06-02.16:45:16] total: 26670, inhibited: 26667
-[2023-06-02.16:45:18] total: 26670, inhibited: 26667
-[2023-06-02.16:45:19] total: 26670, inhibited: 26667
-[2023-06-02.16:45:21] total: 26670, inhibited: 26668
-[2023-06-02.16:45:23] total: 26670, inhibited: 26669
-[2023-06-02.16:45:25] total: 26670, inhibited: 26669
-[2023-06-02.16:45:26] total: 26670, inhibited: 26670
-[2023-06-02.16:45:28] total: 26670, inhibited: 26670
-[2023-06-02.16:45:30] total: 26670, inhibited: 26670
-[2023-06-02.16:45:32] total: 26670, inhibited: 26670
-[2023-06-02.16:45:34] total: 26670, inhibited: 26670
+[2025-05-12.16:37:42] Starting healthcheck program ...
+[2025-05-12.16:37:42] Do Checking ...
+[2025-05-12.16:37:42] total: 10200, inhibited: 0
+[2025-05-12.16:37:44] total: 10200, inhibited: 0
+[2025-05-12.16:37:45] total: 10200, inhibited: 0
+[2025-05-12.16:37:46] total: 10200, inhibited: 0
+[2025-05-12.16:37:47] total: 10200, inhibited: 1951
+[2025-05-12.16:37:48] total: 10200, inhibited: 5856
+[2025-05-12.16:37:50] total: 10200, inhibited: 8802
+[2025-05-12.16:37:51] total: 10200, inhibited: 8802
+[2025-05-12.16:37:52] total: 10200, inhibited: 8802
+[2025-05-12.16:37:53] total: 10200, inhibited: 8802
+[2025-05-12.16:37:54] total: 10200, inhibited: 8802
+[2025-05-12.16:37:56] total: 10200, inhibited: 8802
+[2025-05-12.16:37:57] total: 10200, inhibited: 8802
+[2025-05-12.16:37:58] total: 10200, inhibited: 9299
+[2025-05-12.16:37:59] total: 10200, inhibited: 9919
+[2025-05-12.16:38:00] total: 10200, inhibited: 10170
+[2025-05-12.16:38:02] total: 10200, inhibited: 10196
+[2025-05-12.16:38:03] total: 10200, inhibited: 10196
+[2025-05-12.16:38:04] total: 10200, inhibited: 10196
+[2025-05-12.16:38:05] total: 10200, inhibited: 10196
+[2025-05-12.16:38:06] total: 10200, inhibited: 10196
+[2025-05-12.16:38:08] total: 10200, inhibited: 10196
+[2025-05-12.16:38:09] total: 10200, inhibited: 10196
+[2025-05-12.16:38:10] total: 10200, inhibited: 10196
+[2025-05-12.16:38:11] total: 10200, inhibited: 10196
+[2025-05-12.16:38:12] total: 10200, inhibited: 10196
+[2025-05-12.16:38:14] total: 10200, inhibited: 10199
+[2025-05-12.16:38:15] total: 10200, inhibited: 10200
+[2025-05-12.16:38:16] total: 10200, inhibited: 10200
+[2025-05-12.16:38:17] total: 10200, inhibited: 10200
+[2025-05-12.16:38:18] total: 10200, inhibited: 10200
+[2025-05-12.16:38:19] total: 10200, inhibited: 10200
 ```
 
-**52070 个 RS**
+**20400 个 RS**
 
 ```
-[2023-06-02.16:37:39] total: 52070, inhibited: 0
-[2023-06-02.16:37:42] total: 52070, inhibited: 0
-[2023-06-02.16:37:44] total: 52070, inhibited: 0
-[2023-06-02.16:37:46] total: 52070, inhibited: 0
-[2023-06-02.16:37:48] total: 52070, inhibited: 1
-[2023-06-02.16:37:51] total: 52070, inhibited: 3032
-[2023-06-02.16:37:53] total: 52070, inhibited: 6743
-[2023-06-02.16:37:55] total: 52070, inhibited: 10129
-[2023-06-02.16:37:58] total: 52070, inhibited: 13849
-[2023-06-02.16:38:00] total: 52070, inhibited: 17478
-[2023-06-02.16:38:03] total: 52070, inhibited: 21177
-[2023-06-02.16:38:05] total: 52070, inhibited: 25168
-[2023-06-02.16:38:08] total: 52070, inhibited: 28867
-[2023-06-02.16:38:10] total: 52070, inhibited: 32909
-[2023-06-02.16:38:13] total: 52070, inhibited: 37034
-[2023-06-02.16:38:16] total: 52070, inhibited: 40798
-[2023-06-02.16:38:18] total: 52070, inhibited: 44471
-[2023-06-02.16:38:21] total: 52070, inhibited: 48355
-[2023-06-02.16:38:23] total: 52070, inhibited: 51830
-[2023-06-02.16:38:26] total: 52070, inhibited: 52025
-[2023-06-02.16:38:29] total: 52070, inhibited: 52030
-[2023-06-02.16:38:31] total: 52070, inhibited: 52034
-[2023-06-02.16:38:34] total: 52070, inhibited: 52035
-[2023-06-02.16:38:36] total: 52070, inhibited: 52035
-[2023-06-02.16:38:39] total: 52070, inhibited: 52035
-[2023-06-02.16:38:41] total: 52070, inhibited: 52035
-[2023-06-02.16:38:44] total: 52070, inhibited: 52035
-[2023-06-02.16:38:46] total: 52070, inhibited: 52035
-[2023-06-02.16:38:49] total: 52070, inhibited: 52035
-[2023-06-02.16:38:51] total: 52070, inhibited: 52037
-[2023-06-02.16:38:53] total: 52070, inhibited: 52042
-[2023-06-02.16:38:56] total: 52070, inhibited: 52042
-[2023-06-02.16:38:58] total: 52070, inhibited: 52047
-[2023-06-02.16:39:01] total: 52070, inhibited: 52049
-[2023-06-02.16:39:03] total: 52070, inhibited: 52052
-[2023-06-02.16:39:06] total: 52070, inhibited: 52053
-[2023-06-02.16:39:08] total: 52070, inhibited: 52057
-[2023-06-02.16:39:11] total: 52070, inhibited: 52060
-[2023-06-02.16:39:13] total: 52070, inhibited: 52060
-[2023-06-02.16:39:16] total: 52070, inhibited: 52065
-[2023-06-02.16:39:18] total: 52070, inhibited: 52070
-[2023-06-02.16:39:21] total: 52070, inhibited: 52070
-[2023-06-02.16:39:23] total: 52070, inhibited: 52070
-[2023-06-02.16:39:25] total: 52070, inhibited: 52070
-[2023-06-02.16:39:28] total: 52070, inhibited: 52070
+[2025-05-12.17:27:28] Starting healthcheck program ...
+[2025-05-12.17:27:28] Do Checking ...
+[2025-05-12.17:27:28] total: 20400, inhibited: 0
+[2025-05-12.17:27:29] total: 20400, inhibited: 0
+[2025-05-12.17:27:30] total: 20400, inhibited: 0
+[2025-05-12.17:27:32] total: 20400, inhibited: 1418
+[2025-05-12.17:27:34] total: 20400, inhibited: 12007 
+[2025-05-12.17:27:35] total: 20400, inhibited: 15979 
+[2025-05-12.17:27:37] total: 20400, inhibited: 15979 
+[2025-05-12.17:27:38] total: 20400, inhibited: 15979 
+[2025-05-12.17:27:39] total: 20400, inhibited: 15979 
+[2025-05-12.17:27:41] total: 20400, inhibited: 15979 
+[2025-05-12.17:27:42] total: 20400, inhibited: 15979 
+[2025-05-12.17:27:43] total: 20400, inhibited: 18208 
+[2025-05-12.17:27:45] total: 20400, inhibited: 19958
+[2025-05-12.17:27:46] total: 20400, inhibited: 20349
+[2025-05-12.17:27:48] total: 20400, inhibited: 20350
+[2025-05-12.17:27:49] total: 20400, inhibited: 20350
+[2025-05-12.17:27:50] total: 20400, inhibited: 20350
+[2025-05-12.17:27:52] total: 20400, inhibited: 20350
+[2025-05-12.17:27:53] total: 20400, inhibited: 20350
+[2025-05-12.17:27:55] total: 20400, inhibited: 20350
+[2025-05-12.17:27:56] total: 20400, inhibited: 20350
+[2025-05-12.17:27:57] total: 20400, inhibited: 20350
+[2025-05-12.17:27:59] total: 20400, inhibited: 20384
+[2025-05-12.17:28:00] total: 20400, inhibited: 20400
+[2025-05-12.17:28:01] total: 20400, inhibited: 20400
+[2025-05-12.17:28:03] total: 20400, inhibited: 20400
+[2025-05-12.17:28:04] total: 20400, inhibited: 20400
+[2025-05-12.17:28:06] total: 20400, inhibited: 20400
+```
+
+**40800 个 RS**
+
+```
+[2025-05-12.17:44:33] Starting healthcheck program ...
+[2025-05-12.17:44:33] Do Checking ...
+[2025-05-12.17:44:33] total: 40800, inhibited: 0
+[2025-05-12.17:44:34] total: 40800, inhibited: 0
+[2025-05-12.17:44:36] total: 40800, inhibited: 0
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[2025-05-12.17:44:38] total: 40800, inhibited: 2363
+[2025-05-12.17:44:41] total: 40800, inhibited: 5784
+[2025-05-12.17:44:43] total: 40800, inhibited: 5784
+[2025-05-12.17:44:44] total: 40800, inhibited: 5784
+[2025-05-12.17:44:46] total: 40800, inhibited: 5784
+[2025-05-12.17:44:48] total: 40800, inhibited: 7271
+[2025-05-12.17:44:50] total: 40800, inhibited: 17583 
+[2025-05-12.17:44:52] total: 40800, inhibited: 28485
+[2025-05-12.17:44:54] total: 40800, inhibited: 29354
+[2025-05-12.17:44:56] total: 40800, inhibited: 29354
+[2025-05-12.17:44:57] total: 40800, inhibited: 29354
+[2025-05-12.17:44:59] total: 40800, inhibited: 29354
+[2025-05-12.17:45:01] total: 40800, inhibited: 29354
+[2025-05-12.17:45:03] total: 40800, inhibited: 29379
+[2025-05-12.17:45:04] total: 40800, inhibited: 30648
+[2025-05-12.17:45:07] total: 40800, inhibited: 37525
+[2025-05-12.17:45:08] total: 40800, inhibited: 37591
+[2025-05-12.17:45:10] total: 40800, inhibited: 37591
+[2025-05-12.17:45:12] total: 40800, inhibited: 37591
+[2025-05-12.17:45:14] total: 40800, inhibited: 37591
+[2025-05-12.17:45:15] total: 40800, inhibited: 37591
+[2025-05-12.17:45:17] total: 40800, inhibited: 37591
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[2025-05-12.17:45:19] total: 32505, inhibited: 39290
+[2025-05-12.17:45:21] total: 40800, inhibited: 40731
+[2025-05-12.17:45:23] total: 40800, inhibited: 40750
+[2025-05-12.17:45:24] total: 40800, inhibited: 40750
+[2025-05-12.17:45:26] total: 40800, inhibited: 40750
+[2025-05-12.17:45:28] total: 40800, inhibited: 40750
+[2025-05-12.17:45:30] total: 40800, inhibited: 40750
+[2025-05-12.17:45:31] total: 40800, inhibited: 40750
+[2025-05-12.17:45:33] total: 40800, inhibited: 40750
+[2025-05-12.17:45:35] total: 40800, inhibited: 40800
+[2025-05-12.17:45:37] total: 40800, inhibited: 40800
+[2025-05-12.17:45:39] total: 40800, inhibited: 40800
+[2025-05-12.17:45:40] total: 40800, inhibited: 40800
+[2025-05-12.17:45:42] total: 40800, inhibited: 40800
+```
+
+**51000 个 RS**
+
+```
+[2025-05-12.18:07:15] Starting healthcheck program ...
+[2025-05-12.18:07:15] Do Checking ...
+[2025-05-12.18:07:15] total: 51000, inhibited: 0
+[2025-05-12.18:07:17] total: 51000, inhibited: 0
+[2025-05-12.18:07:19] total: 51000, inhibited: 628
+[2025-05-12.18:07:21] total: 51000, inhibited: 3511
+[2025-05-12.18:07:25] total: 51000, inhibited: 8556
+[2025-05-12.18:07:27] total: 51000, inhibited: 8556
+[2025-05-12.18:07:29] total: 51000, inhibited: 8556
+[2025-05-12.18:07:31] total: 51000, inhibited: 17916 
+[2025-05-12.18:07:33] total: 51000, inhibited: 29641 
+[2025-05-12.18:07:36] total: 51000, inhibited: 41320 
+[2025-05-12.18:07:38] total: 51000, inhibited: 41382 
+[2025-05-12.18:07:40] total: 51000, inhibited: 41382
+[2025-05-12.18:07:42] total: 51000, inhibited: 41382
+[2025-05-12.18:07:44] total: 51000, inhibited: 41382
+[2025-05-12.18:07:46] total: 51000, inhibited: 41652
+[2025-05-12.18:07:48] total: 51000, inhibited: 45486
+[2025-05-12.18:07:50] total: 51000, inhibited: 48332
+[2025-05-12.18:07:52] total: 51000, inhibited: 48332
+[2025-05-12.18:07:54] total: 51000, inhibited: 48332
+[2025-05-12.18:07:56] total: 51000, inhibited: 48332
+[2025-05-12.18:07:58] total: 51000, inhibited: 48332
+[2025-05-12.18:08:00] total: 51000, inhibited: 48332
+[2025-05-12.18:08:02] total: 51000, inhibited: 50480
+[2025-05-12.18:08:04] total: 51000, inhibited: 50989
+[2025-05-12.18:08:06] total: 51000, inhibited: 50989
+[2025-05-12.18:08:08] total: 51000, inhibited: 50989
+[2025-05-12.18:08:10] total: 51000, inhibited: 50989
+[2025-05-12.18:08:12] total: 51000, inhibited: 50989
+[2025-05-12.18:08:14] total: 51000, inhibited: 50989
+[2025-05-12.18:08:16] total: 51000, inhibited: 50989
+[2025-05-12.18:08:18] total: 51000, inhibited: 51000
+[2025-05-12.18:08:20] total: 51000, inhibited: 51000
+[2025-05-12.18:08:22] total: 51000, inhibited: 51000
+[2025-05-12.18:08:24] total: 51000, inhibited: 51000
+[2025-05-12.18:08:26] total: 51000, inhibited: 51000
+```
+
+**60280 个 RS**
+
+```
+[2025-05-12.17:12:57] Starting healthcheck program ...
+[2025-05-12.17:12:57] Do Checking ...
+[2025-05-12.17:12:57] total: 60280, inhibited: 0
+[2025-05-12.17:12:59] total: 60280, inhibited: 0
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[2025-05-12.17:13:02] total: 20535, inhibited: 80
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[2025-05-12.17:13:04] total: 12370, inhibited: 217
+[2025-05-12.17:13:06] total: 60280, inhibited: 7778
+[2025-05-12.17:13:09] total: 60280, inhibited: 7778
+[2025-05-12.17:13:12] total: 60280, inhibited: 10078 
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[2025-05-12.17:13:14] total: 21745, inhibited: 36798 
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[2025-05-12.17:13:18] total: 40140, inhibited: 47912 
+[2025-05-12.17:13:21] total: 60280, inhibited: 48056 
+[2025-05-12.17:13:23] total: 60280, inhibited: 48056
+[2025-05-12.17:13:25] total: 60280, inhibited: 48056
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+[2025-05-12.17:13:28] total: 60280, inhibited: 39482
+[2025-05-12.17:13:30] total: 60280, inhibited: 55065
+[2025-05-12.17:13:33] total: 60280, inhibited: 56066
+[2025-05-12.17:13:36] total: 60280, inhibited: 56066
+[2025-05-12.17:13:38] total: 60280, inhibited: 56066
+[2025-05-12.17:13:41] total: 60280, inhibited: 56066
+[sockopt_msg_recv] errcode set in socket msg#21 header: msg callback failed(-23)
+Success
+[2025-05-12.17:13:43] total: 60280, inhibited: 38237
+[2025-05-12.17:13:45] total: 60280, inhibited: 58302
+[2025-05-12.17:13:48] total: 60280, inhibited: 58393
+[2025-05-12.17:13:50] total: 60280, inhibited: 58393
+[2025-05-12.17:13:53] total: 60280, inhibited: 58393
+[2025-05-12.17:13:55] total: 60280, inhibited: 58393
+[2025-05-12.17:13:58] total: 60280, inhibited: 58393
+[2025-05-12.17:14:00] total: 60280, inhibited: 60243
+[2025-05-12.17:14:03] total: 60280, inhibited: 60245
+[2025-05-12.17:14:06] total: 60280, inhibited: 60245
+[2025-05-12.17:14:08] total: 60280, inhibited: 60245
+[2025-05-12.17:14:11] total: 60280, inhibited: 60245
+[2025-05-12.17:14:13] total: 60280, inhibited: 60245
+[2025-05-12.17:14:16] total: 60280, inhibited: 60280
+[2025-05-12.17:14:18] total: 60280, inhibited: 60280
+[2025-05-12.17:14:21] total: 60280, inhibited: 60280
+[2025-05-12.17:14:23] total: 60280, inhibited: 60280
+[2025-05-12.17:14:26] total: 60280, inhibited: 60280
 ```
 
 # 结论
 
-1. 健康检查程序处理能力约为 3000 RS/s；
+1. 健康检查程序最大处理能力约为 5000 RS/s；
 2. RS 状态变化不超过 5000 RS/s 时，健康检查程序能够快速摘除或恢复故障的 RS；
-3. RS 状态变化 10000 RS/s 时，健康检查程序可以在 8s 内摘除或恢复故障的 RS；
-3. 可以支持 50000+ RS/s 的 RS 状态变化，但约 50% 的 RS 故障可能得不到及时发现。
+3. RS 状态变化 10000 RS/s 时，健康检查程序大约可以 10s 摘除或恢复故障的 RS；
+4. 可以支持 40000+ RS/s 的 RS 状态变化，但约 50% 的 RS 故障可能得不到及时发现；
+5. 每 10000 RS 的约占用 0.5核 CPU 和 300MB 内存，且 CPU、内存用量与 RS 数量成良好的线性关系。
 
 此外，在 50000+ 个 RS 配置处于健康状态稳定的场景下，单个 RS 故障的摘除和恢复时间约为 5s，与只有此 1 个 RS 配置时的处理时间区别不大。
 
-> 说明: 以上结论采用健康检查程序默认配置时测试得到，测试过程中 DPVS 服务无数据面流量。
+> 说明: 
+> 1. 测试过程中 DPVS 服务无数据面流量。
+> 2. dpvs-agent 的API接口性能是测试数据出现长尾效应的主要原因，对测试结果有一定的影响，尤其是 RS 超过 40000+ 时。

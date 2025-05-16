@@ -1,0 +1,37 @@
+---
+global:
+  virtual-address:
+    disable: false
+    down-policy: 2
+    action-sync-time: 60s
+    actioner: KernelRouteAddDel
+    action-params:
+      ifname: lo
+  virtual-server:
+    method: 10000
+    interval: 3s
+    down-retry: 1
+    up-retry: 1
+    timeout: 2s
+    action-timeout: 2s
+    action-sync-time: 15s
+virtual-addresses:
+  192.168.88.1:
+    disable: false
+    action-sync-time: 30s
+    down-policy: 1
+    actioner: DpvsAddrKernelRouteAddDel
+    action-params:
+      ifname: lo
+      dpvs-ifname: dpdk0.102
+  "2001::1":
+    disable: true
+virtual-servers:
+  192.168.88.1-TCP-8080:
+    method: 4
+    interval: 5s
+    down-retry: 999999  ## zero retry
+    up-retry: 999999    ## zero retry
+    timeout: 1s
+    action-timeout: 1s
+    action-sync-time: 10s
