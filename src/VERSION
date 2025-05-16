@@ -1,23 +1,16 @@
 #!/bin/sh
 # program: dpvs
-# Jan 9, 2025 #
+# May 16, 2025 #
 ##
 # Features
-# - dpvs: Upgrade dpdk from 20.11 to 24.11.
-# - dpvs: Support virtio-user kni implement.
-# - dpvs: Remove flow director and replace it with rte_flow completely.
-# - dpvs: IPv6 routes support flush and lpm differentiates identical prefix routes on different ports.
+# - tools: Implement a brand new Healthcheck that enables vip/vip-port/backend 3-tier topology, and supports flexible actioner/checker configurations for each layer.
 #
 # Bugfixes
-# - dpvs: Fix packet reception problem caused by TX_OFFLOAD_MBUF_FAST_FREE.
-# - dpvs: Fix dropped packet accounting problem caused by ARP replies from kni devices.
-# - dpvs: Fix some logging and header including problems.
-# - dpvs: Flush addrs and routes when vlan device removed.
-# - conf: Fix init attribute for serveral config items.
-# - script: Fix directory problems in dpdk build script dpdk-build.sh.
+# - dpvs: Fix empty nic bonding offload features.
+# - dpvs: Optimize TOA insertion performance by using memmove.
 #
 
 export VERSION=1.10
-export RELEASE=1
+export RELEASE=2.rc1
 
 echo $VERSION-$RELEASE
