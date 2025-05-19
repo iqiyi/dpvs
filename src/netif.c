@@ -3938,6 +3938,7 @@ static int add_bond_slaves(struct netif_port *port)
     port->mbuf_pool = pktmbuf_pool[port->socket];
     port_mtu_set(port);
     rte_eth_dev_info_get(port->id, &port->dev_info);
+    setup_dev_of_flags(port);
 
     return EDPVS_OK;
 }
@@ -3989,6 +3990,13 @@ int netif_port_start(struct netif_port *port)
                 "but %d rx-queues and %d tx-queues are configured.\n", __func__,
                 port->name, port->dev_info.max_rx_queues,
                 port->dev_info.max_tx_queues, port->nrxq, port->ntxq);
+    }
+
+    // add slaves and update stored info for bonding device
+    if (port->type == PORT_TYPE_BOND_MASTER) {
+        ret = add_bond_slaves(port);
+        if (ret != EDPVS_OK)
+            return ret;
     }
 
     // device configure
@@ -4055,13 +4063,6 @@ int netif_port_start(struct netif_port *port)
                 return EDPVS_DPDKAPIFAIL;
             }
         }
-    }
-
-    // add slaves and update stored info for bonding device
-    if (port->type == PORT_TYPE_BOND_MASTER) {
-        ret = add_bond_slaves(port);
-        if (ret != EDPVS_OK)
-            return ret;
     }
 
     netif_print_port_conf(&port->dev_conf, buf, &buflen);
