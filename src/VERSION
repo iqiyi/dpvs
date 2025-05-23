@@ -3,7 +3,7 @@
 # May 19, 2025 #
 ##
 # Features
-# - dpvs: A brand new Healthcheck that realizes vip/vip-port/backend 3-tier topology, and supports flexible act ioner/checker configurations for each layer.
+# - tools: Implement a brand new Healthcheck that enables vip/vip-port/backend 3-tier topology, and supports flexible actioner/checker configurations for each layer.
 #
 # Bugfixes
 # - dpvs: Optimize TOA insertion performance using memmove.
@@ -12,6 +12,6 @@
 #
 
 export VERSION=1.9
-export RELEASE=10.rc1
+export RELEASE=10.rc2
 
 echo $VERSION-$RELEASE
