@@ -17,7 +17,7 @@
 package actioner
 
 /*
-BackendAction Actioner Params:
+KernelRouteAddDel Actioner Params:
 -------------------------------------------------
 name                value
 -------------------------------------------------

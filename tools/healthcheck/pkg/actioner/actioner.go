@@ -37,6 +37,12 @@ type ActionMethod interface {
 	validate(configs map[string]string) error
 }
 
+type ActionMethodWithVerdict interface {
+	// Verdict checks the real state for an action method.
+	// It's useful to correct inconsistency when action result can be changed externally.
+	Verdict(timeout time.Duration) (types.State, error)
+}
+
 func registerMethod(name string, method ActionMethod) {
 	if methods == nil {
 		methods = make(map[string]ActionMethod)
