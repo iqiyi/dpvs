@@ -11,6 +11,6 @@
 #
 
 export VERSION=1.10
-export RELEASE=2.rc1
+export RELEASE=2.rc2
 
 echo $VERSION-$RELEASE
