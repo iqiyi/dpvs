@@ -126,7 +126,7 @@ func NewVS(sub *comm.VirtualServer, conf *VSConf, va *VirtualAddress) (*VirtualS
 		metric:       va.metric,
 
 		wg:     &sync.WaitGroup{},
-		update: make(chan VSConfExt),
+		update: make(chan VSConfExt, 1),
 		notify: make(chan BackendState, va.m.appConf.CheckerNotifyChanSize),
 		quit:   make(chan bool, 1),
 	}
