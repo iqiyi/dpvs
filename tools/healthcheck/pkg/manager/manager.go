@@ -117,7 +117,8 @@ func (t *svcLister) Job(ctx context.Context) {
 		glog.Warningf("Fail to get services from DPVS: %v.", err)
 		return
 	}
-	glog.V(7).Infof("Succeed to get services from DPVS:\n%v", dsvcs)
+	glog.V(5).Infof("Succeed to get %d services from DPVS", len(dsvcs))
+	glog.V(8).Infof("Got DPVS services: %v", dsvcs)
 
 	// remove staled VAs
 	staled := make(map[VAID]bool)

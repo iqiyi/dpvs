@@ -93,7 +93,7 @@ func NewChecker(target *utils.L3L4Addr, conf *CheckerConf, vs *VirtualService) (
 		metricTicker: nil, // init it in func `Run`
 		metric:       vs.metric,
 
-		update: make(chan CheckerConf),
+		update: make(chan CheckerConf, 1),
 		quit:   make(chan bool, 1),
 	}
 

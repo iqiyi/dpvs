@@ -128,7 +128,7 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 		metric:       m.metricServer.notify,
 
 		wg:     &sync.WaitGroup{},
-		update: make(chan VAConfExt),
+		update: make(chan VAConfExt, 1),
 		notify: make(chan VSState, m.appConf.VSNotifyChanSize),
 		quit:   make(chan bool, 1),
 	}
