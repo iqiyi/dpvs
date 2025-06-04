@@ -22,6 +22,7 @@ KernelRouteAddDelVerdict Actioner Params:
 name                value
 -------------------------------------------------
 ifname              network interface name
+with-route          also add a host route
 
 -------------------------------------------------
 */

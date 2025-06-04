@@ -3,10 +3,12 @@ ActionParamsBlank: none
 ActionParamsBackendUpdate: none
 ActionParamsKernelRouteAddDel(Verdict):
   ifname: string, lo
+  with-route: string, yes|*no|true|*false
 ActionParamsDpvsAddrAddDel:
   dpvs-ifname: string, ""
 ActionParamsDpvsAddrKernelRouteAddDel:
   ifname: string, lo
+  with-route: string, yes|*no|true|*false
   dpvs-ifname: string, ""
 ActionParamScript:
   script: string(filepath), ""

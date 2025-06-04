@@ -22,6 +22,7 @@ DpvsAddrKernelRouteAddDel Actioner Params:
 name                value
 -------------------------------------------------------
 ifname              linux network interface name
+with-route          also add a host route
 dpvs-ifname         dpvs netif port name
 
 -------------------------------------------------------
@@ -101,6 +102,10 @@ func (a *DpvsAddrKernelRouteAction) validate(params map[string]string) error {
 				return fmt.Errorf("empty action param %s", param)
 			}
 			// TODO: check if the interface exists on the system
+		case "with-route":
+			if _, err := utils.String2bool(val); err != nil {
+				return fmt.Errorf("invalid action param %s=%s", param, val)
+			}
 		case "dpvs-ifname":
 			if len(val) == 0 {
 				return fmt.Errorf("empty action param %s", param)
@@ -126,7 +131,7 @@ func (a *DpvsAddrKernelRouteAction) create(target *utils.L3L4Addr, params map[st
 	if err := a.validate(params); err != nil {
 		return nil, fmt.Errorf("%s actioner param validation failed: %v", addrRouteActionerName, err)
 	}
-	krtParams := map[string]string{"ifname": params["ifname"]}
+	krtParams := map[string]string{"ifname": params["ifname"], "with-route": params["with-route"]}
 	daddrParams := map[string]string{"dpvs-ifname": params["dpvs-ifname"]}
 
 	daddrAction, err := a.DpvsAddrAction.create(target, daddrParams, extras...)
