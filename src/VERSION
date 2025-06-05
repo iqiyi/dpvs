@@ -1,6 +1,6 @@
 #!/bin/sh
 # program: dpvs
-# May 19, 2025 #
+# Jun 5, 2025 #
 ##
 # Features
 # - tools: Implement a brand new Healthcheck that enables vip/vip-port/backend 3-tier topology, and supports flexible actioner/checker configurations for each layer.
@@ -12,6 +12,6 @@
 #
 
 export VERSION=1.9
-export RELEASE=10.rc2
+export RELEASE=10.rc3
 
 echo $VERSION-$RELEASE
