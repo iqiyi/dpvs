@@ -1,17 +1,26 @@
 #!/bin/sh
 # program: dpvs
-# Jun 5, 2025 #
+# Jun 12, 2025 #
 ##
 # Features
 # - tools: Implement a brand new Healthcheck that enables vip/vip-port/backend 3-tier topology, and supports flexible actioner/checker configurations for each layer.
+# - dpvs: IPv6 route supports flush operation and LPM can differentiate the same route prefix on different ports.
+# - docs: Update kni-realted docs.
+# - ci: Support workflow for both v1.9 and v1.10.
 #
 # Bugfixes
-# - dpvs: Optimize TOA insertion performance using memmove.
-# - dpvs: Fix empty bond offload features.
-# - toa: Fixed #1012 allocating 'toa_ip6_sk_lock.lock' before using it.
+# - dpvs: Fix some problems about virtio-kni, including netif ports hot plugging, logging, header including, rx/tx-csum offloading.
+# - dpvs: Fix duplicate ARP replies or KNI packets being counted as dropped.
+# - dpvs: Fix packet reception problem caused by TX_OFFLOAD_MBUF_FAST_FREE.
+# - dpvs: Fix empty bonding device offload features.
+# - toa: Fixed #1012, allocating 'toa_ip6_sk_lock.lock' before using it.
+# - toa: Optimize TOA insertion performance using memmove.
+# - script: Enhance directory configs in dpdk-build.sh.
+# - conf: Optimize some init attributes.
+# - Makefile: Use goproxy to download dependent golang package.
 #
 
 export VERSION=1.9
-export RELEASE=10.rc3
+export RELEASE=10
 
 echo $VERSION-$RELEASE
