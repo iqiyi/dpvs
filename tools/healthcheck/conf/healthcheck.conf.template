@@ -1,12 +1,14 @@
 ###### Action Parameters
 ActionParamsBlank: none
 ActionParamsBackendUpdate: none
-ActionParamsKernelRouteAddDel:
+ActionParamsKernelRouteAddDel(Verdict):
   ifname: string, lo
+  with-route: string, yes|*no|true|*false
 ActionParamsDpvsAddrAddDel:
   dpvs-ifname: string, ""
 ActionParamsDpvsAddrKernelRouteAddDel:
   ifname: string, lo
+  with-route: string, yes|*no|true|*false
   dpvs-ifname: string, ""
 ActionParamScript:
   script: string(filepath), ""
@@ -45,7 +47,7 @@ VACONF:
   down-policy: enum(int), VAPolicyOneOf(1)|*VAPolicyAllOf(2)
   action-timeout: duration, 2s
   action-sync-time: duration, 60s
-  actioner: enum(string), Blank|*KernelRouteAddDel|DpvsAddrAddDel|DpvsAddrKernelRouteAddDel|Script
+  actioner: enum(string), Blank|*KernelRouteAddDel(Verdict)|DpvsAddrAddDel|DpvsAddrKernelRouteAddDel|Script
   action-params: ActionParamsBlank|ActionParamsKernelRouteAddDel|ActionParamsDpvsAddrAddDel|ActionParamsDpvsAddrKernelRouteAddDel|ActionParamScript
 
 ###### Virtual Server Action Configuration

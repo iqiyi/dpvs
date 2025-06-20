@@ -128,7 +128,7 @@ func NewVA(sub net.IP, conf *VAConf, m *Manager) (*VirtualAddress, error) {
 		metric:       m.metricServer.notify,
 
 		wg:     &sync.WaitGroup{},
-		update: make(chan VAConfExt),
+		update: make(chan VAConfExt, 1),
 		notify: make(chan VSState, m.appConf.VSNotifyChanSize),
 		quit:   make(chan bool, 1),
 	}
@@ -411,7 +411,21 @@ func (va *VirtualAddress) doResync() {
 	glog.V(7).Infof("VA %s state before resync: %v, upVSs %d, downVSs %d, downPolicy %d",
 		va.id, va.state, va.upVSs, va.downVSs, va.conf.DownPolicy)
 	state := va.calcState()
-	if state != va.state {
+
+	actionState := types.Unknown
+	if state == va.state {
+		if verdictMethod, ok := va.actioner.(actioner.ActionMethodWithVerdict); ok {
+			rc, err := verdictMethod.Verdict(time.Second)
+			if err != nil {
+				glog.Warningf("VA %s get actioner verdict state failed: %v", va.id, err)
+			} else {
+				glog.V(9).Infof("VA %s actioner verdict state: %v, checker state: %v", va.id, rc, state)
+				actionState = rc
+			}
+		}
+	}
+
+	if (state != va.state) || (actionState != types.Unknown && state != actionState) {
 		if err := va.act(state); err != nil {
 			glog.Warningf("VA %s state resync to %s failed: %v", va.id, state, err)
 		} else {

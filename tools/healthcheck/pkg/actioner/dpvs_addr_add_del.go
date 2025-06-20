@@ -17,7 +17,7 @@
 package actioner
 
 /*
-BackendAction Actioner Params:
+DpvsAddrAddDel Actioner Params:
 -------------------------------------------------------
 name                value
 -------------------------------------------------------

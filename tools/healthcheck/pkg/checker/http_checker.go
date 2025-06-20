@@ -246,15 +246,15 @@ func (c *HTTPChecker) validate(params map[string]string) error {
 				return fmt.Errorf("empty http checker param: %s", param)
 			}
 		case "https":
-			if _, err := string2bool(val); err != nil {
+			if _, err := utils.String2bool(val); err != nil {
 				return fmt.Errorf("invalid http checker param %s:%s", param, params[param])
 			}
 		case "tls-verify":
-			if _, err := string2bool(val); err != nil {
+			if _, err := utils.String2bool(val); err != nil {
 				return fmt.Errorf("invalid http checker param %s:%s", param, params[param])
 			}
 		case "proxy":
-			if _, err := string2bool(val); err != nil {
+			if _, err := utils.String2bool(val); err != nil {
 				return fmt.Errorf("invalid http checker param %s:%s", param, params[param])
 			}
 		case ParamProxyProto:
@@ -316,15 +316,15 @@ func (c *HTTPChecker) create(params map[string]string) (CheckMethod, error) {
 	}
 
 	if val, ok := params["https"]; ok {
-		checker.https, _ = string2bool(val)
+		checker.https, _ = utils.String2bool(val)
 	}
 
 	if val, ok := params["tls-verify"]; ok {
-		checker.tlsVerify, _ = string2bool(val)
+		checker.tlsVerify, _ = utils.String2bool(val)
 	}
 
 	if val, ok := params["proxy"]; ok {
-		checker.proxy, _ = string2bool(val)
+		checker.proxy, _ = utils.String2bool(val)
 	}
 
 	if val, ok := params[ParamProxyProto]; ok {
@@ -348,16 +348,6 @@ func (c *HTTPChecker) create(params map[string]string) (CheckMethod, error) {
 	}
 
 	return checker, nil
-}
-
-func string2bool(s string) (bool, error) {
-	switch strings.ToLower(s) {
-	case "yes", "true":
-		return true, nil
-	case "no", "false":
-		return false, nil
-	}
-	return false, fmt.Errorf("invalid boolean string value: %s", s)
 }
 
 func parseHttpHeaderParam(headers string) (map[string]string, error) {

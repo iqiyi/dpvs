@@ -17,11 +17,12 @@
 package actioner
 
 /*
-BackendAction Actioner Params:
+KernelRouteAddDel Actioner Params:
 -------------------------------------------------
 name                value
 -------------------------------------------------
 ifname              network interface name
+with-route          also add a host route
 
 -------------------------------------------------
 */
@@ -50,8 +51,9 @@ func init() {
 }
 
 type KernelRouteAction struct {
-	target *utils.L3L4Addr
-	ifname string
+	target    *utils.L3L4Addr
+	ifname    string
+	withRoute bool
 }
 
 func findLinkByAddr(addr net.IP) (netlink.Link, error) {
@@ -142,14 +144,16 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 				}
 			}
 
-			route := netlink.Route{
-				LinkIndex: link.Attrs().Index,
-				Dst:       ipAddr.IPNet,
-			}
-			if err := netlink.RouteAdd(&route); err != nil {
-				if !isExistError(err) {
-					done <- fmt.Errorf("failed to add host route %v to %s: %w", addr, a.ifname, err)
-					return
+			if a.withRoute {
+				route := netlink.Route{
+					LinkIndex: link.Attrs().Index,
+					Dst:       ipAddr.IPNet,
+				}
+				if err := netlink.RouteAdd(&route); err != nil {
+					if !isExistError(err) {
+						done <- fmt.Errorf("failed to add host route %v to %s: %w", addr, a.ifname, err)
+						return
+					}
 				}
 			}
 		} else { // DELETE
@@ -162,18 +166,19 @@ func (a *KernelRouteAction) Act(signal types.State, timeout time.Duration,
 				}
 			}
 
-			route := netlink.Route{
-				LinkIndex: link.Attrs().Index,
-				Dst:       ipAddr.IPNet,
-			}
-			if err := netlink.RouteDel(&route); err != nil {
-				if !isNotExistError(err) {
-					done <- fmt.Errorf("failed to delete route %v from %s: %w", addr, a.ifname, err)
-					return
+			if a.withRoute {
+				route := netlink.Route{
+					LinkIndex: link.Attrs().Index,
+					Dst:       ipAddr.IPNet,
+				}
+				if err := netlink.RouteDel(&route); err != nil {
+					if !isNotExistError(err) {
+						done <- fmt.Errorf("failed to delete route %v from %s: %w", addr, a.ifname, err)
+						return
+					}
 				}
 			}
 		}
-
 		done <- nil
 	}()
 
@@ -216,6 +221,10 @@ func (a *KernelRouteAction) validate(params map[string]string) error {
 				return fmt.Errorf("empty action param %s", param)
 			}
 			// TODO: check if the interface exists on the system
+		case "with-route":
+			if _, err := utils.String2bool(val); err != nil {
+				return fmt.Errorf("invalid action param %s=%s", param, val)
+			}
 		default:
 			unsupported = append(unsupported, param)
 		}
@@ -237,8 +246,10 @@ func (a *KernelRouteAction) create(target *utils.L3L4Addr, params map[string]str
 		return nil, fmt.Errorf("%s actioner param validation failed: %v", kernelRouteActionerName, err)
 	}
 
+	withRoute, _ := utils.String2bool(params["with-route"])
 	return &KernelRouteAction{
-		target: target.DeepCopy(),
-		ifname: params["ifname"],
+		target:    target.DeepCopy(),
+		ifname:    params["ifname"],
+		withRoute: withRoute,
 	}, nil
 }
