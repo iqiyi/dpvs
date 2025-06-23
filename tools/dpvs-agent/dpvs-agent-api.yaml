@@ -156,6 +156,12 @@ parameters:
       - off
     default: unset
     required: false
+  passive-update:
+    name: passiveUpdate
+    in: query
+    type: boolean
+    default: false
+    required: false
   version:
     name: version
     in: query
@@ -561,6 +567,9 @@ definitions:
         format: "uint32"
       Flags:
         type: "string"
+      RamFlags:
+        type: "integer"
+        format: "uint32"
       SynProxy:
         type: "string"
         enum:
@@ -1164,6 +1173,7 @@ paths:
       tags:
         - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/passive-update"
         - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/vs-config"
@@ -1381,6 +1391,7 @@ paths:
       tags:
         - "virtualserver"
       parameters:
+        - "$ref": "#/parameters/passive-update"
         - "$ref": "#/parameters/snapshot"
         - "$ref": "#/parameters/service-id"
         - "$ref": "#/parameters/rss-config"
