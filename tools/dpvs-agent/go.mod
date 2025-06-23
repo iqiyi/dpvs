@@ -1,6 +1,6 @@
 module github.com/dpvs-agent
 
-go 1.20
+go 1.23.0
 
 require (
 	github.com/go-openapi/errors v0.20.3
@@ -14,8 +14,8 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/vishvananda/netlink v1.1.0
-	golang.org/x/net v0.33.0
-	golang.org/x/sys v0.28.0
+	golang.org/x/net v0.38.0
+	golang.org/x/sys v0.31.0
 )
 
 require (
