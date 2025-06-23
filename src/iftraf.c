@@ -477,7 +477,6 @@ static void inline iftraf_tlb_add(struct iftraf_pkt *param)
             return;
         }
 
-        memset(entry, 0, sizeof(struct iftraf_entry));
         entry->af = param->af;
         entry->cid = param->cid;
         entry->devid = param->devid;
@@ -578,7 +577,6 @@ static void inline iftraf_iftlb_add(struct iftraf_pkt *param)
             return;
         }
 
-        memset(entry, 0, sizeof(struct iftraf_entry));
         entry->af = param->af;
         entry->cid = param->cid;
         entry->devid = param->devid;
