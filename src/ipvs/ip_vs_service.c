@@ -56,12 +56,12 @@ static inline int dp_vs_service_hashkey(int af, unsigned proto, const union inet
 {
     uint32_t addr_fold;
 
-    addr_fold = inet_addr_fold(af, addr);
-
-    if (!addr_fold) {
+    if (af != AF_INET && af != AF_INET6) {
         RTE_LOG(DEBUG, SERVICE, "%s: IP proto not support.\n", __func__);
         return EDPVS_INVAL;
     }
+
+    addr_fold = inet_addr_fold(af, addr);
 
     return (proto ^ rte_be_to_cpu_32(addr_fold)) & DP_VS_SVC_TAB_MASK;
 }
@@ -505,7 +505,7 @@ static int dp_vs_service_add(struct dp_vs_service_conf *u,
 
     ret = dp_vs_service_hash(svc, cid);
     if (ret != EDPVS_OK)
-        return ret;
+        goto out_err;
     rte_atomic16_inc(&dp_vs_num_services[cid]);
 
     rte_atomic32_set(&svc->refcnt, 1);
