@@ -75,6 +75,8 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 					newRs.SetFwdMode(fwdmode)
 					newRs.SetInhibited(rs.Inhibited)
 					newRs.SetOverloaded(rs.Overloaded)
+                    newRs.SetMaxConn(rs.MaxConn)
+                    newRs.SetMinConn(rs.MinConn)
 					if _, existed := activeRSs[newRs.ID()]; existed {
 						validRSs = append(validRSs, newRs)
 						from := activeRSs[newRs.ID()].Spec

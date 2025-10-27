@@ -62,6 +62,8 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 			rss[i].SetWeight(uint32(rs.Weight))
 			rss[i].SetFwdMode(fwdmode)
 			rss[i].SetOverloaded(rs.Overloaded)
+            rss[i].SetMaxConn(rs.MaxConn)
+            rss[i].SetMinConn(rs.MinConn)
 			// NOTE: inhibited set by healthcheck module with API /vs/${ID}/rs/health only
 			// we clear it default
 			inhibited := false

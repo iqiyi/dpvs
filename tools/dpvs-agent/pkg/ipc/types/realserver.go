@@ -101,12 +101,16 @@ func (rs *RealServerSpec) SetFwdMode(fwdmode DpvsFwdMode) {
 	rs.fwdmode = fwdmode
 }
 
-func (rs *RealServerSpec) SetMaxConn(conns uint32) {
-	rs.maxConn = conns
+func (rs *RealServerSpec) SetMaxConn(conns *uint32) {
+    if conns != nil {
+        rs.maxConn = *conns
+    }
 }
 
-func (rs *RealServerSpec) SetMinConn(conns uint32) {
-	rs.minConn = conns
+func (rs *RealServerSpec) SetMinConn(conns *uint32) {
+    if conns != nil {
+        rs.minConn = *conns
+    }
 }
 
 func (rs *RealServerSpec) SetPresistConns(conns uint32) {
