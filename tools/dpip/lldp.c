@@ -98,7 +98,7 @@ static int lldp_do_cmd(struct dpip_obj *obj, dpip_cmd_t cmd, struct dpip_conf *c
             printf("-*-*-*- %s LLDP Message on Port %s -*-*-*-\n",
                     message->param.node == DPVS_LLDP_NODE_NEIGH ? "Neighbour" : "Local",
                     message->param.ifname);
-            printf(message->message);
+            printf("-*-*-*- LLDP Message: %s -*-*-*-\n", message->message);
             dpvs_sockopt_msg_free(message);
             return EDPVS_OK;
         default:
