@@ -78,7 +78,7 @@ type VirtualServerSpecExpand struct {
 	RSs *RealServerExpandList `json:"RSs,omitempty"`
 
 	// sched name
-	// Enum: [rr wrr wlc conhash]
+	// Enum: [rr wrr wlc rnd conhash]
 	SchedName string `json:"SchedName,omitempty"`
 
 	// stats
@@ -321,7 +321,7 @@ var virtualServerSpecExpandTypeSchedNamePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["rr","wrr","wlc","conhash"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["rr","wrr","wlc","rnd","conhash"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
