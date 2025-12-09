@@ -77,7 +77,7 @@ func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
 			continue
 		}
 
-		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", rss)
+		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", FormatRealServerSpecs(rss))
 
 		vsModels.Items[i] = vs.GetModel()
 		vsStats := (*types.ServerStats)(vsModels.Items[i].Stats)

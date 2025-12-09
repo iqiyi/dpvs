@@ -101,7 +101,7 @@ func (h *getVsVipPort) Handle(params apiVs.GetVsVipPortParams) middleware.Respon
 			continue
 		}
 
-		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", rss)
+		h.logger.Info("Get real server list of virtual server success.", "ID", vs.ID(), "rss", FormatRealServerSpecs(rss))
 
 		vsModel := vs.GetModel()
 		vsModels.Items[i] = vsModel

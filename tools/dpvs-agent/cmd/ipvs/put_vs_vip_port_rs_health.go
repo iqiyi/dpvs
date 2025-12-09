@@ -75,13 +75,15 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 					newRs.SetFwdMode(fwdmode)
 					newRs.SetInhibited(rs.Inhibited)
 					newRs.SetOverloaded(rs.Overloaded)
-                    newRs.SetMaxConn(rs.MaxConn)
-                    newRs.SetMinConn(rs.MinConn)
+					newRs.SetMaxConn(rs.MaxConn)
+					newRs.SetMinConn(rs.MinConn)
 					if _, existed := activeRSs[newRs.ID()]; existed {
 						validRSs = append(validRSs, newRs)
 						from := activeRSs[newRs.ID()].Spec
 						to := newRs
-						h.logger.Info("real server update.", "ID", newRs.ID(), "client Version", params.Version, "from", from, "to", to)
+						fromStr := fmt.Sprintf("%s:%d(weight=%d,mode=%s)", from.IP, from.Port, from.Weight, from.Mode)
+						toStr := FormatRealServerSpec(to)
+						h.logger.Info("real server update.", "ID", newRs.ID(), "client Version", params.Version, "from", fromStr, "to", toStr)
 					}
 				}
 			}
@@ -105,16 +107,16 @@ func (h *putVsRsHealth) Handle(params apiVs.PutVsVipPortRsHealthParams) middlewa
 						}
 					}
 				}
-				h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
+				h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "validRSs", FormatRealServerSpecs(validRSs), "result", result.String())
 				return apiVs.NewPutVsVipPortRsHealthOK()
 			case types.EDPVS_NOTEXIST:
 				if existOnly {
-					h.logger.Error("Edit not exist real server.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
+					h.logger.Error("Edit not exist real server.", "VipPort", params.VipPort, "validRSs", FormatRealServerSpecs(validRSs), "result", result.String())
 					return apiVs.NewPutVsVipPortRsHealthInvalidFrontend()
 				}
 				h.logger.Error("Unreachable branch")
 			default:
-				h.logger.Error("Set real server sets failed.", "VipPort", params.VipPort, "validRSs", validRSs, "result", result.String())
+				h.logger.Error("Set real server sets failed.", "VipPort", params.VipPort, "validRSs", FormatRealServerSpecs(validRSs), "result", result.String())
 				return apiVs.NewPutVsVipPortRsHealthInvalidBackend()
 			}
 		}

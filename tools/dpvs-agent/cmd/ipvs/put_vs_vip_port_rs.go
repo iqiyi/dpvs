@@ -62,8 +62,8 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 			rss[i].SetWeight(uint32(rs.Weight))
 			rss[i].SetFwdMode(fwdmode)
 			rss[i].SetOverloaded(rs.Overloaded)
-            rss[i].SetMaxConn(rs.MaxConn)
-            rss[i].SetMinConn(rs.MinConn)
+			rss[i].SetMaxConn(rs.MaxConn)
+			rss[i].SetMinConn(rs.MinConn)
 			// NOTE: inhibited set by healthcheck module with API /vs/${ID}/rs/health only
 			// we clear it default
 			inhibited := false
@@ -72,7 +72,7 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 			}
 			rss[i].SetInhibited(&inhibited)
 		}
-		h.logger.Info("Apply real server update.", "VipPort", params.VipPort, "rss", rss)
+		h.logger.Info("Apply real server update.", "VipPort", params.VipPort, "rss", FormatRealServerSpecs(rss))
 	}
 
 	shareSnapshot := settings.ShareSnapshot()
@@ -86,7 +86,7 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 	// h.logger.Info("Set real server sets done.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
 	switch result {
 	case types.EDPVS_EXIST, types.EDPVS_OK:
-		h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
+		h.logger.Info("Set real server sets success.", "VipPort", params.VipPort, "rss", FormatRealServerSpecs(rss), "result", result.String())
 		// Update Snapshot
 		vsModel := shareSnapshot.ServiceGet(params.VipPort)
 		newRSs := make([]*types.RealServerSpec, 0)
@@ -118,7 +118,7 @@ func (h *putVsRs) Handle(params apiVs.PutVsVipPortRsParams) middleware.Responder
 	case types.EDPVS_NOTEXIST:
 		h.logger.Error("Unreachable branch")
 	default:
-		h.logger.Error("Set real server sets failed.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
+		h.logger.Error("Set real server sets failed.", "VipPort", params.VipPort, "rss", FormatRealServerSpecs(rss), "result", result.String())
 		return apiVs.NewPutVsVipPortRsInvalidBackend()
 	}
 	return apiVs.NewPutVsVipPortRsFailure()
