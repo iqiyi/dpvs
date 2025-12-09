@@ -98,3 +98,72 @@ func FormatRealServerSpecsSimple(rss []*types.RealServerSpec) string {
 	}
 	return fmt.Sprintf("[%s]", strings.Join(ids, ", "))
 }
+
+// FormatVirtualServerSpec 格式化 VirtualServerSpec
+// 格式: IP-Port-Protocol(sched=SCHEDULER,fwmark=FWMARK)
+func FormatVirtualServerSpec(vs *types.VirtualServerSpec) string {
+	if vs == nil {
+		return "nil"
+	}
+
+	// 基本信息: IP-Port-Protocol
+	base := vs.ID()
+
+	var attrs []string
+
+	// 调度器名称
+	schedName := strings.TrimRight(string(vs.GetSchedName()), "\x00")
+	if schedName != "" {
+		attrs = append(attrs, fmt.Sprintf("sched=%s", schedName))
+	}
+
+	// Fwmark (如果设置了)
+	if vs.GetFwmark() > 0 {
+		attrs = append(attrs, fmt.Sprintf("fwmark=%d", vs.GetFwmark()))
+	}
+
+	if len(attrs) > 0 {
+		return fmt.Sprintf("%s(%s)", base, strings.Join(attrs, ","))
+	}
+	return base
+}
+
+// FormatLocalAddrDetails 格式化 LocalAddrDetail 列表
+// 格式: ["IP(device=DEVICE)", ...]
+func FormatLocalAddrDetails(details []*types.LocalAddrDetail) string {
+	if len(details) == 0 {
+		return "[]"
+	}
+
+	var parts []string
+	for _, detail := range details {
+		if detail == nil {
+			parts = append(parts, "nil")
+			continue
+		}
+
+		addr := detail.GetAddr()
+		device := detail.GetIfName()
+
+		if device != "" {
+			parts = append(parts, fmt.Sprintf("%s(device=%s)", addr, device))
+		} else {
+			parts = append(parts, addr)
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
+// FormatVirtualServerSpecs 格式化 VirtualServerSpec 列表
+// 格式: ["IP-Port-Protocol(sched=SCHEDULER)", ...]
+func FormatVirtualServerSpecs(vss []*types.VirtualServerSpec) string {
+	if len(vss) == 0 {
+		return "[]"
+	}
+
+	var parts []string
+	for _, vs := range vss {
+		parts = append(parts, FormatVirtualServerSpec(vs))
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}

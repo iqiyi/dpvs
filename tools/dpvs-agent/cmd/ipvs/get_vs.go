@@ -60,7 +60,7 @@ func (h *getVs) Handle(params apiVs.GetVsParams) middleware.Responder {
 		Items: make([]*models.VirtualServerSpecExpand, len(vss)),
 	}
 
-	h.logger.Info("Get all virtual server done.", "vss", vss)
+	h.logger.Info("Get all virtual server done.", "vss", FormatVirtualServerSpecs(vss))
 	for i, vs := range vss {
 		front := types.NewRealServerFront()
 

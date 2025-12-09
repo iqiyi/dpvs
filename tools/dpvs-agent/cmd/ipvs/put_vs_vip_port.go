@@ -92,7 +92,7 @@ func (h *putVsItem) Handle(params apiVs.PutVsVipPortParams) middleware.Responder
 
 	shareSnapshot := settings.ShareSnapshot()
 	result := vs.Add(h.connPool, h.logger)
-	h.logger.Info("Add virtual server done.", "vs", vs, "result", result.String())
+	h.logger.Info("Add virtual server done.", "vs", FormatVirtualServerSpec(vs), "result", result.String())
 	switch result {
 	case types.EDPVS_OK:
 		// return 201
