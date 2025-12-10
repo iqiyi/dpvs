@@ -1071,22 +1071,19 @@ static int tcp_state_trans(struct dp_vs_proto *proto, struct dp_vs_conn *conn,
     int new_state = DPVS_TCP_S_CLOSE;
     assert(proto && conn && mbuf);
     struct dp_vs_dest *dest = conn->dest;
-    int af = conn->af;
+    int af = dir == DPVS_CONN_DIR_INBOUND ? tuplehash_in(conn).af : tuplehash_out(conn).af;
 #ifdef CONFIG_DPVS_IPVS_DEBUG
     char dbuf[64], cbuf[64];
     const char *daddr, *caddr;
 #endif
 
-    if (dir == DPVS_CONN_DIR_INBOUND && dest->fwdmode == DPVS_FWD_MODE_FNAT)
-        af = tuplehash_in(conn).af;
-    else if (dir == DPVS_CONN_DIR_OUTBOUND && dest->fwdmode == DPVS_FWD_MODE_FNAT)
-        af = tuplehash_out(conn).af;
-
     int iphdrlen = ((AF_INET6 == af) ? ip6_hdrlen(mbuf): ip4_hdrlen(mbuf));
     th = mbuf_header_pointer(mbuf, iphdrlen, sizeof(_tcph), &_tcph);
     if (unlikely(!th))
         return EDPVS_INVPKT;
-    if (dest->fwdmode == DPVS_FWD_MODE_DR || dest->fwdmode == DPVS_FWD_MODE_TUNNEL)
+    /* !conn->local: avoid cache-miss for accessing dest in fnat */
+    if (!conn->local
+            && (dest->fwdmode == DPVS_FWD_MODE_DR || dest->fwdmode == DPVS_FWD_MODE_TUNNEL))
         off = 8;
     else if (dir == DPVS_CONN_DIR_INBOUND)
         off = 0;
