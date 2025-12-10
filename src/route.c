@@ -84,7 +84,7 @@ static struct route_entry *route_new_entry(struct in_addr* dest,
                                            short metric)
 {
     struct route_entry *new_route=NULL;
-    if(!dest)
+    if(!dest || !port)
         return NULL;
     new_route = rte_zmalloc("new_route_entry", sizeof(struct route_entry), 0);
     if (new_route == NULL){
