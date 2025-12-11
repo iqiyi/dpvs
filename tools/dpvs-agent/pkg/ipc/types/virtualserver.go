@@ -514,8 +514,12 @@ func (vs *VirtualServerSpec) read(conn *pool.Conn, len uint64, logger hclog.Logg
 			logger.Error("Dump byte as VirtualServerSpec failed")
 			return nil, errors.New("dump reply virtual server failed")
 		}
-		spec := *vss[i]
-		logger.Info("get virtual server success", "spec", spec)
+		// Format virtual server spec for better readability
+		vsFormat := fmt.Sprintf("%s(sched=%s)", vss[i].ID(), vss[i].GetSchedName())
+		if vss[i].GetFwmark() > 0 {
+			vsFormat = fmt.Sprintf("%s(fwmark=%d)", vsFormat, vss[i].GetFwmark())
+		}
+		logger.Info("get virtual server success", "spec", vsFormat)
 	}
 
 	return vss, nil

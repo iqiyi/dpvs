@@ -189,7 +189,7 @@ func (rs *RealServerSpec) read(conn *pool.Conn, len uint64, logger hclog.Logger)
 		rss[i] = NewRealServerSpec()
 		rss[i].Dump(buf)
 		spec := *rss[i]
-		logger.Info("get real server success", "spec", spec)
+		logger.Info("get real server success", "spec", formatRealServerSpecForLog(&spec))
 	}
 
 	return rss, nil
