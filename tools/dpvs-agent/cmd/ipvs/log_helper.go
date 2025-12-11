@@ -21,8 +21,8 @@ import (
 	"github.com/dpvs-agent/pkg/ipc/types"
 )
 
-// FormatRealServerSpecs 将 RealServerSpec 列表格式化为易读的字符串
-// 格式: ["IP:Port(weight=W,mode=M,inhibited=I,overloaded=O)", ...]
+// FormatRealServerSpecs formats a list of RealServerSpec as a human-readable string
+// Format: ["IP:Port(weight=W,mode=M,inhibited=I,overloaded=O)", ...]
 func FormatRealServerSpecs(rss []*types.RealServerSpec) string {
 	if len(rss) == 0 {
 		return "[]"
@@ -35,12 +35,12 @@ func FormatRealServerSpecs(rss []*types.RealServerSpec) string {
 	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 }
 
-// FormatRealServerSpec 格式化单个 RealServerSpec（导出函数）
+// FormatRealServerSpec formats a single RealServerSpec (exported function)
 func FormatRealServerSpec(rs *types.RealServerSpec) string {
 	return formatRealServerSpec(rs)
 }
 
-// formatRealServerSpec 格式化单个 RealServerSpec（内部函数）
+// formatRealServerSpec formats a single RealServerSpec (internal function)
 func formatRealServerSpec(rs *types.RealServerSpec) string {
 	if rs == nil {
 		return "nil"
@@ -48,34 +48,34 @@ func formatRealServerSpec(rs *types.RealServerSpec) string {
 
 	var attrs []string
 
-	// 基本信息: IP:Port
+	// Basic info: IP:Port
 	base := rs.ID()
 
-	// 权重
+	// Weight
 	weight := rs.GetWeight()
 	if weight > 0 {
 		attrs = append(attrs, fmt.Sprintf("weight=%d", weight))
 	}
 
-	// 转发模式
+	// Forwarding mode
 	mode := rs.GetFwdModeString()
 	if mode != "" {
 		attrs = append(attrs, fmt.Sprintf("mode=%s", mode))
 	}
 
-	// Inhibited 状态
+	// Inhibited status
 	if rs.GetInhibited() {
 		attrs = append(attrs, "inhibited=true")
 	}
 
-	// Overloaded 状态
+	// Overloaded status
 	if rs.GetOverloaded() {
 		attrs = append(attrs, "overloaded=true")
 	}
 
-	// MaxConn/MinConn (如果设置了)
-	// 注意: RealServerSpec 没有直接的 GetMaxConn/GetMinConn 方法
-	// 如果需要，可以通过反射或添加方法获取
+	// MaxConn/MinConn (if set)
+	// Note: RealServerSpec doesn't have direct GetMaxConn/GetMinConn methods
+	// If needed, can be obtained through reflection or by adding methods
 
 	if len(attrs) > 0 {
 		return fmt.Sprintf("%s(%s)", base, strings.Join(attrs, ","))
@@ -83,8 +83,8 @@ func formatRealServerSpec(rs *types.RealServerSpec) string {
 	return base
 }
 
-// FormatRealServerSpecsSimple 简化版本，只显示 IP:Port 列表
-// 格式: ["IP:Port", "IP:Port", ...]
+// FormatRealServerSpecsSimple is a simplified version that only shows IP:Port list
+// Format: ["IP:Port", "IP:Port", ...]
 func FormatRealServerSpecsSimple(rss []*types.RealServerSpec) string {
 	if len(rss) == 0 {
 		return "[]"
@@ -99,25 +99,25 @@ func FormatRealServerSpecsSimple(rss []*types.RealServerSpec) string {
 	return fmt.Sprintf("[%s]", strings.Join(ids, ", "))
 }
 
-// FormatVirtualServerSpec 格式化 VirtualServerSpec
-// 格式: IP-Port-Protocol(sched=SCHEDULER,fwmark=FWMARK)
+// FormatVirtualServerSpec formats VirtualServerSpec
+// Format: IP-Port-Protocol(sched=SCHEDULER,fwmark=FWMARK)
 func FormatVirtualServerSpec(vs *types.VirtualServerSpec) string {
 	if vs == nil {
 		return "nil"
 	}
 
-	// 基本信息: IP-Port-Protocol
+	// Basic info: IP-Port-Protocol
 	base := vs.ID()
 
 	var attrs []string
 
-	// 调度器名称
+	// Scheduler name
 	schedName := strings.TrimRight(string(vs.GetSchedName()), "\x00")
 	if schedName != "" {
 		attrs = append(attrs, fmt.Sprintf("sched=%s", schedName))
 	}
 
-	// Fwmark (如果设置了)
+	// Fwmark (if set)
 	if vs.GetFwmark() > 0 {
 		attrs = append(attrs, fmt.Sprintf("fwmark=%d", vs.GetFwmark()))
 	}
@@ -128,8 +128,8 @@ func FormatVirtualServerSpec(vs *types.VirtualServerSpec) string {
 	return base
 }
 
-// FormatLocalAddrDetails 格式化 LocalAddrDetail 列表
-// 格式: ["IP(device=DEVICE)", ...]
+// FormatLocalAddrDetails formats a list of LocalAddrDetail
+// Format: ["IP(device=DEVICE)", ...]
 func FormatLocalAddrDetails(details []*types.LocalAddrDetail) string {
 	if len(details) == 0 {
 		return "[]"
@@ -154,8 +154,8 @@ func FormatLocalAddrDetails(details []*types.LocalAddrDetail) string {
 	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 }
 
-// FormatVirtualServerSpecs 格式化 VirtualServerSpec 列表
-// 格式: ["IP-Port-Protocol(sched=SCHEDULER)", ...]
+// FormatVirtualServerSpecs formats a list of VirtualServerSpec
+// Format: ["IP-Port-Protocol(sched=SCHEDULER)", ...]
 func FormatVirtualServerSpecs(vss []*types.VirtualServerSpec) string {
 	if len(vss) == 0 {
 		return "[]"

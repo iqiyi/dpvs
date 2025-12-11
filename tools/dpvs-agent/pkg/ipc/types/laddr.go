@@ -312,8 +312,8 @@ func (o *LocalAddrDetail) SetIfName(name string) {
 	copy(o.ifName[:], name[:])
 }
 
-// Format 格式化 LocalAddrDetail 为易读字符串
-// 格式: IP(device=DEVICE)
+// Format formats LocalAddrDetail as a human-readable string
+// Format: IP(device=DEVICE)
 func (o *LocalAddrDetail) Format() string {
 	if o == nil {
 		return "nil"
@@ -328,8 +328,8 @@ func (o *LocalAddrDetail) Format() string {
 	return addr
 }
 
-// FormatLocalAddrDetails 格式化 LocalAddrDetail 列表为易读字符串
-// 格式: ["IP(device=DEVICE)", ...]
+// FormatLocalAddrDetails formats a list of LocalAddrDetail as a human-readable string
+// Format: ["IP(device=DEVICE)", ...]
 func FormatLocalAddrDetails(details []*LocalAddrDetail) string {
 	if len(details) == 0 {
 		return "[]"
