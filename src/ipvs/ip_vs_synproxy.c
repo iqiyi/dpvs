@@ -534,8 +534,31 @@ static unsigned char syn_proxy_parse_wscale_opt(struct rte_mbuf *mbuf, struct tc
     return 0; /* should never reach here */
 }
 
+/* Calculate maximum MSS based on protocol version and MTU
+ * IPv4: MTU(1500) - IPv4 header(20) - TCP header(20) = 1460
+ * IPv6: MTU(1500) - IPv6 header(40) - TCP header(20) = 1440
+ */
+static inline uint16_t syn_proxy_get_max_mss(int af, uint16_t configured_mss)
+{
+    const uint16_t MTU = 1500;
+    const uint16_t TCP_HDR_SIZE = 20;
+    uint16_t ip_hdr_size;
+    uint16_t max_mss;
+
+    if (af == AF_INET6) {
+        ip_hdr_size = 40; /* IPv6 header size */
+    } else {
+        ip_hdr_size = 20; /* IPv4 header size */
+    }
+
+    max_mss = MTU - ip_hdr_size - TCP_HDR_SIZE;
+    
+    /* Use the smaller value between configured_mss and max_mss */
+    return (configured_mss < max_mss) ? configured_mss : max_mss;
+}
+
 /* Replace tcp options in tcp header, called by syn_proxy_reuse_mbuf() */
-static void syn_proxy_parse_set_opts(struct rte_mbuf *mbuf, struct tcphdr *th,
+static void syn_proxy_parse_set_opts(int af, struct rte_mbuf *mbuf, struct tcphdr *th,
         struct dp_vs_synproxy_opt *opt)
 {
     /* mss in received packet */
@@ -543,7 +566,7 @@ static void syn_proxy_parse_set_opts(struct rte_mbuf *mbuf, struct tcphdr *th,
     uint32_t *tmp;
     unsigned char *ptr;
     int length = (th->doff * 4) - sizeof(struct tcphdr);
-    uint16_t user_mss = dp_vs_synproxy_ctrl_init_mss;
+    uint16_t user_mss = syn_proxy_get_max_mss(af, dp_vs_synproxy_ctrl_init_mss);
     struct timespec tsp_now;
 
     memset(opt, '\0', sizeof(struct dp_vs_synproxy_opt));
@@ -652,7 +675,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         return;
 
     /* deal with tcp options */
-    syn_proxy_parse_set_opts(mbuf, th, opt);
+    syn_proxy_parse_set_opts(af, mbuf, th, opt);
 
     /* get cookie */
     if (AF_INET6 == af)
