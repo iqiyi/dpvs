@@ -21,7 +21,8 @@
 #include <fcntl.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
-#include <openssl/md5.h>
+#include <openssl/evp.h>
+#include <openssl/md5.h>  /* For MD5_DIGEST_LENGTH and MD5_LBLOCK constants */
 #include "conf/common.h"
 #include "dpdk.h"
 #include "ipvs/ipvs.h"
@@ -206,6 +207,7 @@ cookie_hash(uint32_t saddr, uint32_t daddr,
     unsigned char hash[MD5_DIGEST_LENGTH];
     uint32_t data[5];
     uint32_t hvalue;
+    unsigned int hash_len;
 
     data[0] = saddr;
     data[1] = daddr;
@@ -213,7 +215,10 @@ cookie_hash(uint32_t saddr, uint32_t daddr,
     data[3] = count;
     data[4] = g_net_secret[c][0];
 
-    MD5((unsigned char *)data, sizeof(data), hash);
+    /* Use EVP API instead of deprecated MD5() for OpenSSL 3.0+ compatibility */
+    if (EVP_Digest((unsigned char*)data, sizeof(data), hash, &hash_len, EVP_md5(), NULL) != 1) {
+        return 0;
+    }
     memcpy(&hvalue, hash, sizeof(hvalue));
 
     return hvalue;
@@ -278,6 +283,7 @@ cookie_hash_v6(const struct in6_addr *saddr,
     int i;
     uint32_t hvalue, data[MD5_LBLOCK];
     unsigned char hash[MD5_DIGEST_LENGTH];
+    unsigned int hash_len;
 
     for (i = 0; i < 4; i++)
         data[i] = g_net_secret[c][i] + ((uint32_t *)saddr)[i];
@@ -290,7 +296,10 @@ cookie_hash_v6(const struct in6_addr *saddr,
     for (i = 10; i < MD5_LBLOCK; i++)
         data[i] = g_net_secret[c][i];
 
-    MD5((unsigned char*)data, sizeof(data), hash);
+    /* Use EVP API instead of deprecated MD5() for OpenSSL 3.0+ compatibility */
+    if (EVP_Digest((unsigned char*)data, sizeof(data), hash, &hash_len, EVP_md5(), NULL) != 1) {
+        return 0;
+    }
     memcpy(&hvalue, hash, sizeof(hvalue));
 
     return hvalue;
