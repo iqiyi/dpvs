@@ -38,6 +38,12 @@ type RealServerSpecTiny struct {
 
 	// weight
 	Weight uint16 `json:"weight"`
+
+    // min Conn
+    MinConn *uint32 `json:"minConn,omitempty"`
+
+    //max Conn
+    MaxConn *uint32 `json:"maxConn,omitempty"`
 }
 
 // Validate validates this real server spec tiny

@@ -57,13 +57,13 @@ func (h *delVsRs) Handle(params apiVs.DeleteVsVipPortRsParams) middleware.Respon
 	result := rs.Del(rss, h.connPool, h.logger)
 	switch result {
 	case types.EDPVS_OK:
-		h.logger.Info("Del rs from virtual server success.", "VipPort", params.VipPort, "rss", rss)
+		h.logger.Info("Del rs from virtual server success.", "VipPort", params.VipPort, "rss", FormatRealServerSpecs(rss))
 		return apiVs.NewDeleteVsVipPortRsOK()
 	case types.EDPVS_NOTEXIST:
-		h.logger.Warn("There is some not exist rs with virtual server delete done.", "VipPort", params.VipPort, "rss", rss)
+		h.logger.Warn("There is some not exist rs with virtual server delete done.", "VipPort", params.VipPort, "rss", FormatRealServerSpecs(rss))
 		return apiVs.NewDeleteVsVipPortRsOK()
 	default:
-		h.logger.Error("Del rs from virtual server failed.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
+		h.logger.Error("Del rs from virtual server failed.", "VipPort", params.VipPort, "rss", FormatRealServerSpecs(rss), "result", result.String())
 	}
 
 	return apiVs.NewDeleteVsVipPortRsFailure()

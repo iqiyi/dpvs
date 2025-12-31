@@ -21,7 +21,8 @@
 #include <fcntl.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
-#include <openssl/md5.h>
+#include <openssl/evp.h>
+#include <openssl/md5.h>  /* For MD5_DIGEST_LENGTH and MD5_LBLOCK constants */
 #include "conf/common.h"
 #include "dpdk.h"
 #include "ipvs/ipvs.h"
@@ -206,6 +207,7 @@ cookie_hash(uint32_t saddr, uint32_t daddr,
     unsigned char hash[MD5_DIGEST_LENGTH];
     uint32_t data[5];
     uint32_t hvalue;
+    unsigned int hash_len;
 
     data[0] = saddr;
     data[1] = daddr;
@@ -213,7 +215,10 @@ cookie_hash(uint32_t saddr, uint32_t daddr,
     data[3] = count;
     data[4] = g_net_secret[c][0];
 
-    MD5((unsigned char *)data, sizeof(data), hash);
+    /* Use EVP API instead of deprecated MD5() for OpenSSL 3.0+ compatibility */
+    if (EVP_Digest((unsigned char*)data, sizeof(data), hash, &hash_len, EVP_md5(), NULL) != 1) {
+        return 0;
+    }
     memcpy(&hvalue, hash, sizeof(hvalue));
 
     return hvalue;
@@ -278,6 +283,7 @@ cookie_hash_v6(const struct in6_addr *saddr,
     int i;
     uint32_t hvalue, data[MD5_LBLOCK];
     unsigned char hash[MD5_DIGEST_LENGTH];
+    unsigned int hash_len;
 
     for (i = 0; i < 4; i++)
         data[i] = g_net_secret[c][i] + ((uint32_t *)saddr)[i];
@@ -290,7 +296,10 @@ cookie_hash_v6(const struct in6_addr *saddr,
     for (i = 10; i < MD5_LBLOCK; i++)
         data[i] = g_net_secret[c][i];
 
-    MD5((unsigned char*)data, sizeof(data), hash);
+    /* Use EVP API instead of deprecated MD5() for OpenSSL 3.0+ compatibility */
+    if (EVP_Digest((unsigned char*)data, sizeof(data), hash, &hash_len, EVP_md5(), NULL) != 1) {
+        return 0;
+    }
     memcpy(&hvalue, hash, sizeof(hvalue));
 
     return hvalue;
@@ -534,8 +543,31 @@ static unsigned char syn_proxy_parse_wscale_opt(struct rte_mbuf *mbuf, struct tc
     return 0; /* should never reach here */
 }
 
+/* Calculate maximum MSS based on protocol version and MTU
+ * IPv4: MTU(1500) - IPv4 header(20) - TCP header(20) = 1460
+ * IPv6: MTU(1500) - IPv6 header(40) - TCP header(20) = 1440
+ */
+static inline uint16_t syn_proxy_get_max_mss(int af, uint16_t configured_mss)
+{
+    const uint16_t MTU = 1500;
+    const uint16_t TCP_HDR_SIZE = 20;
+    uint16_t ip_hdr_size;
+    uint16_t max_mss;
+
+    if (af == AF_INET6) {
+        ip_hdr_size = 40; /* IPv6 header size */
+    } else {
+        ip_hdr_size = 20; /* IPv4 header size */
+    }
+
+    max_mss = MTU - ip_hdr_size - TCP_HDR_SIZE;
+    
+    /* Use the smaller value between configured_mss and max_mss */
+    return (configured_mss < max_mss) ? configured_mss : max_mss;
+}
+
 /* Replace tcp options in tcp header, called by syn_proxy_reuse_mbuf() */
-static void syn_proxy_parse_set_opts(struct rte_mbuf *mbuf, struct tcphdr *th,
+static void syn_proxy_parse_set_opts(int af, struct rte_mbuf *mbuf, struct tcphdr *th,
         struct dp_vs_synproxy_opt *opt)
 {
     /* mss in received packet */
@@ -543,7 +575,7 @@ static void syn_proxy_parse_set_opts(struct rte_mbuf *mbuf, struct tcphdr *th,
     uint32_t *tmp;
     unsigned char *ptr;
     int length = (th->doff * 4) - sizeof(struct tcphdr);
-    uint16_t user_mss = dp_vs_synproxy_ctrl_init_mss;
+    uint16_t user_mss = syn_proxy_get_max_mss(af, dp_vs_synproxy_ctrl_init_mss);
     struct timespec tsp_now;
 
     memset(opt, '\0', sizeof(struct dp_vs_synproxy_opt));
@@ -652,7 +684,7 @@ static void syn_proxy_reuse_mbuf(int af, struct rte_mbuf *mbuf,
         return;
 
     /* deal with tcp options */
-    syn_proxy_parse_set_opts(mbuf, th, opt);
+    syn_proxy_parse_set_opts(af, mbuf, th, opt);
 
     /* get cookie */
     if (AF_INET6 == af)

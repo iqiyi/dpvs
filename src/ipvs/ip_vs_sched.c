@@ -22,6 +22,7 @@
 #include "ipvs/rr.h"
 #include "ipvs/wrr.h"
 #include "ipvs/wlc.h"
+#include "ipvs/rnd.h"
 #include "ipvs/conhash.h"
 #include "ipvs/fo.h"
 #include "ipvs/mh.h"
@@ -239,6 +240,7 @@ int dp_vs_sched_init(void)
     dp_vs_rr_init();
     dp_vs_wrr_init();
     dp_vs_wlc_init();
+    dp_vs_rnd_init();
     dp_vs_conhash_init();
     dp_vs_fo_init();
     dp_vs_mh_init();
@@ -251,6 +253,7 @@ int dp_vs_sched_term(void)
     dp_vs_rr_term();
     dp_vs_wrr_term();
     dp_vs_wlc_term();
+    dp_vs_rnd_term();
     dp_vs_conhash_term();
     dp_vs_fo_term();
     dp_vs_mh_term();

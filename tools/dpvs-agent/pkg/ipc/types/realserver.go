@@ -101,12 +101,16 @@ func (rs *RealServerSpec) SetFwdMode(fwdmode DpvsFwdMode) {
 	rs.fwdmode = fwdmode
 }
 
-func (rs *RealServerSpec) SetMaxConn(conns uint32) {
-	rs.maxConn = conns
+func (rs *RealServerSpec) SetMaxConn(conns *uint32) {
+	if conns != nil {
+		rs.maxConn = *conns
+	}
 }
 
-func (rs *RealServerSpec) SetMinConn(conns uint32) {
-	rs.minConn = conns
+func (rs *RealServerSpec) SetMinConn(conns *uint32) {
+	if conns != nil {
+		rs.minConn = *conns
+	}
 }
 
 func (rs *RealServerSpec) SetPresistConns(conns uint32) {
@@ -185,7 +189,7 @@ func (rs *RealServerSpec) read(conn *pool.Conn, len uint64, logger hclog.Logger)
 		rss[i] = NewRealServerSpec()
 		rss[i].Dump(buf)
 		spec := *rss[i]
-		logger.Info("get real server success", "spec", spec)
+		logger.Info("get real server success", "spec", formatRealServerSpecForLog(&spec))
 	}
 
 	return rss, nil
@@ -252,6 +256,55 @@ func (rs *RealServerSpec) Format(kind string) string {
 	   -> RIP:RPORT\t\t\tFNAT\tWeight\tActive\tInactive
 	*/
 	return fmt.Sprintf("  -> %s:%d\t\t\t%s\t%d\t%d\t%d", rs.GetAddr(), rs.GetPort(), rs.GetFwdModeString(), rs.weight, rs.actConns, rs.inActConns)
+}
+
+// formatRealServerSpecForLog formats a single RealServerSpec for logging
+func formatRealServerSpecForLog(rs *RealServerSpec) string {
+	if rs == nil {
+		return "nil"
+	}
+
+	var attrs []string
+	base := rs.ID()
+
+	// Weight
+	if rs.weight > 0 {
+		attrs = append(attrs, fmt.Sprintf("weight=%d", rs.weight))
+	}
+
+	// Forwarding mode
+	mode := rs.GetFwdModeString()
+	if mode != "" {
+		attrs = append(attrs, fmt.Sprintf("mode=%s", mode))
+	}
+
+	// Inhibited status
+	if rs.GetInhibited() {
+		attrs = append(attrs, "inhibited=true")
+	}
+
+	// Overloaded status
+	if rs.GetOverloaded() {
+		attrs = append(attrs, "overloaded=true")
+	}
+
+	if len(attrs) > 0 {
+		return fmt.Sprintf("%s(%s)", base, strings.Join(attrs, ","))
+	}
+	return base
+}
+
+// formatRealServerSpecsForLog formats a list of RealServerSpec for logging
+func formatRealServerSpecsForLog(rss []*RealServerSpec) string {
+	if len(rss) == 0 {
+		return "[]"
+	}
+
+	var parts []string
+	for _, rs := range rss {
+		parts = append(parts, formatRealServerSpecForLog(rs))
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 }
 
 type RealServerFront struct {
@@ -497,7 +550,7 @@ func (front *RealServerFront) Edit(existOnly bool, rss []*RealServerSpec, cp *po
 
 	for _, rs := range rss {
 		if err := rs.write(conn); err != nil {
-			logger.Error(fmt.Sprintf("Sockopt %s Write rs %v header failed Error=%s", sEdit, *rs, err.Error()))
+			logger.Error(fmt.Sprintf("Sockopt %s Write rs %s header failed Error=%s", sEdit, formatRealServerSpecForLog(rs), err.Error()))
 			return EDPVS_IO
 		}
 	}
@@ -510,7 +563,7 @@ func (front *RealServerFront) Edit(existOnly bool, rss []*RealServerSpec, cp *po
 	}
 
 	errCode := reply.GetErrCode()
-	logger.Info(fmt.Sprintf("%s %v Done result=%s", sEdit, rss, errCode.String()))
+	logger.Info(fmt.Sprintf("%s %s Done result=%s", sEdit, formatRealServerSpecsForLog(rss), errCode.String()))
 	return errCode
 }
 
@@ -635,7 +688,7 @@ func (front *RealServerFront) Update(rss []*RealServerSpec, cp *pool.ConnPool, p
 			unreserved = append(unreserved, expire)
 		}
 	}
-	logger.Info("reserved", reserved, "unreserved", unreserved)
+	logger.Info("reserved", formatRealServerSpecsForLog(rss), "unreserved", formatRealServerSpecsForLog(unreserved))
 
 	status := front.add(rss, cp, logger)
 	if status != EDPVS_OK {
@@ -644,6 +697,6 @@ func (front *RealServerFront) Update(rss []*RealServerSpec, cp *pool.ConnPool, p
 
 	errCode := front.Del(unreserved, cp, logger)
 	result := errCode.String()
-	logger.Info("Set real servers done", "rss", rss, "result", result)
+	logger.Info("Set real servers done", "rss", formatRealServerSpecsForLog(rss), "result", result)
 	return errCode
 }

@@ -312,6 +312,40 @@ func (o *LocalAddrDetail) SetIfName(name string) {
 	copy(o.ifName[:], name[:])
 }
 
+// Format formats LocalAddrDetail as a human-readable string
+// Format: IP(device=DEVICE)
+func (o *LocalAddrDetail) Format() string {
+	if o == nil {
+		return "nil"
+	}
+
+	addr := o.GetAddr()
+	device := o.GetIfName()
+
+	if device != "" {
+		return fmt.Sprintf("%s(device=%s)", addr, device)
+	}
+	return addr
+}
+
+// FormatLocalAddrDetails formats a list of LocalAddrDetail as a human-readable string
+// Format: ["IP(device=DEVICE)", ...]
+func FormatLocalAddrDetails(details []*LocalAddrDetail) string {
+	if len(details) == 0 {
+		return "[]"
+	}
+
+	var parts []string
+	for _, detail := range details {
+		if detail == nil {
+			parts = append(parts, "nil")
+		} else {
+			parts = append(parts, detail.Format())
+		}
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
 func (o *LocalAddrDetail) Copy(src *LocalAddrDetail) bool {
 	if src == nil {
 		return false
@@ -347,7 +381,7 @@ func (o *LocalAddrDetail) read(conn *pool.Conn, len uint64, logger hclog.Logger)
 		details[i].Dump(buf)
 	}
 
-	logger.Info("Get Local Addr Done", "details", details)
+	logger.Info("Get Local Addr Done", "details", FormatLocalAddrDetails(details))
 	return details, nil
 }
 
@@ -456,7 +490,7 @@ func (o *LocalAddrFront) Add(details []*LocalAddrDetail, cp *pool.ConnPool, pare
 
 	errCode := reply.GetErrCode()
 	result := errCode.String()
-	logger.Info("DPVSAGENT_VS_ADD_LADDR Done", "details", details, "result", result)
+	logger.Info("DPVSAGENT_VS_ADD_LADDR Done", "details", FormatLocalAddrDetails(details), "result", result)
 	return errCode
 }
 
@@ -506,6 +540,6 @@ func (o *LocalAddrFront) Del(details []*LocalAddrDetail, cp *pool.ConnPool, pare
 
 	errCode := reply.GetErrCode()
 	result := errCode.String()
-	logger.Info("DPVSAGENT_VS_DEL_LADDR", "details", details, " Done", "result", result)
+	logger.Info("DPVSAGENT_VS_DEL_LADDR", "details", FormatLocalAddrDetails(details), " Done", "result", result)
 	return errCode
 }

@@ -431,17 +431,17 @@ func (vs *VirtualServerSpec) GetDestCheck() []models.DestCheckSpec {
 }
 
 func (vs *VirtualServerSpec) SetSchedName(name string) {
-	sched := strings.ToLower(name)
+	sched := strings.ToLower(strings.TrimSpace(name))
 
-	switch strings.ToLower(name) {
-	case "rr":
-	case "wlc":
-	case "conhash":
-	case "fo":
-	case "mh":
+	// Validate and set scheduler name, default to "wrr" if invalid or empty
+	switch sched {
+	case "rr", "wrr", "wlc", "rnd", "conhash", "fo", "mh":
+		// Valid scheduler name, use as is
 	default:
+		// Invalid or empty scheduler name, use default
 		sched = "wrr"
 	}
+
 	copy(vs.schedName[:], []byte(sched))
 }
 
@@ -514,8 +514,12 @@ func (vs *VirtualServerSpec) read(conn *pool.Conn, len uint64, logger hclog.Logg
 			logger.Error("Dump byte as VirtualServerSpec failed")
 			return nil, errors.New("dump reply virtual server failed")
 		}
-		spec := *vss[i]
-		logger.Info("get virtual server success", "spec", spec)
+		// Format virtual server spec for better readability
+		vsFormat := fmt.Sprintf("%s(sched=%s)", vss[i].ID(), vss[i].GetSchedName())
+		if vss[i].GetFwmark() > 0 {
+			vsFormat = fmt.Sprintf("%s(fwmark=%d)", vsFormat, vss[i].GetFwmark())
+		}
+		logger.Info("get virtual server success", "spec", vsFormat)
 	}
 
 	return vss, nil

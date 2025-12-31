@@ -64,6 +64,8 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 		rss[i].SetAddr(rs.IP)
 		rss[i].SetOverloaded(rs.Overloaded)
 		rss[i].SetFwdMode(fwdmode)
+		rss[i].SetMaxConn(rs.MaxConn)
+		rss[i].SetMinConn(rs.MinConn)
 		// NOTE: inhibited set by healthcheck module with API /vs/${ID}/rs/health only
 		// we clear it default
 		inhibited := false
@@ -114,10 +116,10 @@ func (h *postVsRs) Handle(params apiVs.PostVsVipPortRsParams) middleware.Respond
 
 		shareSnapshot.ServiceVersionUpdate(params.VipPort, h.logger)
 
-		h.logger.Info("Set real server to virtual server success.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
+		h.logger.Info("Set real server to virtual server success.", "VipPort", params.VipPort, "rss", FormatRealServerSpecs(rss), "result", result.String())
 		return apiVs.NewPostVsVipPortRsOK()
 	default:
-		h.logger.Error("Set real server to virtual server failed.", "VipPort", params.VipPort, "rss", rss, "result", result.String())
+		h.logger.Error("Set real server to virtual server failed.", "VipPort", params.VipPort, "rss", FormatRealServerSpecs(rss), "result", result.String())
 		return apiVs.NewPostVsVipPortRsFailure()
 	}
 	return apiVs.NewPostVsVipPortRsInvalidBackend()
