@@ -971,6 +971,9 @@ func init() {
         "summary": "create or update virtual server",
         "parameters": [
           {
+            "$ref": "#/parameters/passive-update"
+          },
+          {
             "$ref": "#/parameters/snapshot"
           },
           {
@@ -1600,6 +1603,9 @@ func init() {
         ],
         "summary": "Update fully real server list to vip:port:proto",
         "parameters": [
+          {
+            "$ref": "#/parameters/passive-update"
+          },
           {
             "$ref": "#/parameters/snapshot"
           },
@@ -2482,6 +2488,10 @@ func init() {
         "RSs": {
           "$ref": "#/definitions/RealServerExpandList"
         },
+        "RamFlags": {
+          "type": "integer",
+          "format": "uint32"
+        },
         "SchedName": {
           "type": "string",
           "enum": [
@@ -2668,6 +2678,12 @@ func init() {
       "type": "string",
       "default": "unset",
       "name": "link",
+      "in": "query"
+    },
+    "passive-update": {
+      "type": "boolean",
+      "default": false,
+      "name": "passiveUpdate",
       "in": "query"
     },
     "promisc": {
@@ -3957,6 +3973,12 @@ func init() {
         "parameters": [
           {
             "type": "boolean",
+            "default": false,
+            "name": "passiveUpdate",
+            "in": "query"
+          },
+          {
+            "type": "boolean",
             "default": true,
             "name": "snapshot",
             "in": "query"
@@ -4688,6 +4710,12 @@ func init() {
         ],
         "summary": "Update fully real server list to vip:port:proto",
         "parameters": [
+          {
+            "type": "boolean",
+            "default": false,
+            "name": "passiveUpdate",
+            "in": "query"
+          },
           {
             "type": "boolean",
             "default": true,
@@ -5597,6 +5625,10 @@ func init() {
         "RSs": {
           "$ref": "#/definitions/RealServerExpandList"
         },
+        "RamFlags": {
+          "type": "integer",
+          "format": "uint32"
+        },
         "SchedName": {
           "type": "string",
           "enum": [
@@ -5783,6 +5815,12 @@ func init() {
       "type": "string",
       "default": "unset",
       "name": "link",
+      "in": "query"
+    },
+    "passive-update": {
+      "type": "boolean",
+      "default": false,
+      "name": "passiveUpdate",
       "in": "query"
     },
     "promisc": {

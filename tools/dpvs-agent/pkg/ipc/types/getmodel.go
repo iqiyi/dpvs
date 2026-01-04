@@ -37,6 +37,7 @@ func (vs *VirtualServerSpec) GetModel() *models.VirtualServerSpecExpand {
 		Match:           vs.match.GetModel(),
 		Stats:           vs.stats.GetModel(),
 		DestCheck:       vs.GetDestCheck(),
+		RAMFlags:        vs.GetFlags(),
 	}
 
 	flags := ""
