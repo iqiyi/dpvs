@@ -27,6 +27,8 @@
 
 #include <fcntl.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/md5.h>
 
 #include "check_ssl.h"
 #include "check_api.h"
@@ -315,8 +317,11 @@ ssl_read_thread(thread_ref_t thread)
 	} else if (req->error) {
 
 		/* All the SSL streal has been parsed */
-		if (url->digest)
-			MD5_Final(digest, &req->context);
+		if (url->digest) {
+			EVP_DigestFinal_ex(req->context, digest, NULL);
+			EVP_MD_CTX_free(req->context);
+			req->context = NULL;
+		}
 		SSL_set_quiet_shutdown(req->ssl, 1);
 
 		r = (req->error == SSL_ERROR_ZERO_RETURN) ? SSL_shutdown(req->ssl) : 0;
