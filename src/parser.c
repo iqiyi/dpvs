@@ -392,9 +392,9 @@ void *set_value(vector_t tokens)
             str = VECTOR_SLOT(tokens, i);
             len += strlen(str);
             if (!alloc)
-                alloc = (char *) MALLOC(sizeof(char *) * (len + 1));
+                alloc = (char *) MALLOC(sizeof(char) * (len + 1));
             else {
-                alloc = REALLOC(alloc, sizeof(char *) * (len + 1));
+                alloc = REALLOC(alloc, sizeof(char) * (len + 1));
                 tmp = VECTOR_SLOT(tokens, i - 1);
                 if ( *str != '"' && *tmp != '"')
                     strncat(alloc, " ", 1);

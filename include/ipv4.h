@@ -100,7 +100,7 @@ extern rte_spinlock_t ip4_stats_lock;
 #define IP4_UPD_PO_STATS(field, val) \
     do { \
         rte_spinlock_lock(&ip4_stats_lock); \
-        __IP4_ADD_STATS(field##pkts, (val)); \
+        __IP4_ADD_STATS(field##pkts, (1)); \
         __IP4_ADD_STATS(field##octets, (val)); \
         rte_spinlock_unlock(&ip4_stats_lock); \
     } while (0)

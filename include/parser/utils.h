@@ -31,8 +31,6 @@
 static inline void* xmalloc(uint32_t sz)
 {
     void *mem = rte_zmalloc("cfgfile", sz, RTE_CACHE_LINE_SIZE);
-    if (mem)
-        memset(mem, 0, sz);
 
     return mem;
 }
