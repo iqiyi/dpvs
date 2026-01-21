@@ -503,14 +503,29 @@ inet_getname_toa(struct socket *sock, struct sockaddr *uaddr,
                     ntohs(tdata.port));
                 sin->sin_port = tdata.port;
                 sin->sin_addr.s_addr = tdata.ip;
-            } else { /* sk_user_data doesn't belong to us */
-                TOA_INC_STATS(ext_stats,
-                        GETNAME_TOA_MISMATCH_CNT);
-                TOA_DBG("inet_getname_toa: invalid toa data, "
-                    "ip "TOA_NIPQUAD_FMT" port %u opcode %u "
-                    "opsize %u\n",
-                    TOA_NIPQUAD(tdata.ip), ntohs(tdata.port),
-                    tdata.opcode, tdata.opsize);
+            } else {
+                struct toa_ip6_entry* ptr_ip6_entry  = sk->sk_user_data;
+                struct toa_ip6_data* ptr_ip6_data = &ptr_ip6_entry->toa_data;
+
+                if (TCPOPT_TOA == ptr_ip6_data->opcode &&
+                    TCPOLEN_IP6_TOA == ptr_ip6_data->opsize) {
+                    TOA_INC_STATS(ext_stats, GETNAME_TOA_OK_CNT);
+                    TOA_DBG("inet_getname_toa: set new sockaddr, ip "
+                        TOA_NIPQUAD_FMT" -> "TOA_NIPQUAD_FMT
+                        ", port %u -> %u\n",
+                        TOA_NIPQUAD(sin->sin_addr.s_addr),
+                        TOA_NIPQUAD(ptr_ip6_data->in6_addr.s6_addr32[3]), ntohs(sin->sin_port),
+                        ntohs(ptr_ip6_data->port));
+                    sin->sin_port = ptr_ip6_data->port;
+                    sin->sin_addr.s_addr = ptr_ip6_data->in6_addr.s6_addr32[3]; // trans v6 to v4
+                } else { /* sk_user_data doesn't belong to us */
+                    TOA_INC_STATS(ext_stats,GETNAME_TOA_MISMATCH_CNT);
+                    TOA_DBG("inet_getname_toa: invalid toa data, "
+                        "ip "TOA_NIPQUAD_FMT" port %u opcode %u "
+                        "opsize %u\n",
+                        TOA_NIPQUAD(tdata.ip), ntohs(tdata.port),
+                        tdata.opcode, tdata.opsize);
+                }
             }
         } else {
             TOA_INC_STATS(ext_stats, GETNAME_TOA_BYPASS_CNT);
