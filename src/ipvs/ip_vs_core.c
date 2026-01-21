@@ -38,6 +38,7 @@
 #include "ipvs/proto_udp.h"
 #include "route6.h"
 #include "ipvs/redirect.h"
+#include "ipvs/proto_ah_esp.h"
 
 static inline int dp_vs_fill_iphdr(int af, struct rte_mbuf *mbuf,
                                    struct dp_vs_iphdr *iph)
@@ -333,7 +334,13 @@ struct dp_vs_conn *dp_vs_schedule(struct dp_vs_service *svc,
                               &iph->daddr, &dest->addr,
                               ports[1], ports[0],
                               0, &param);
-    } else {
+    } else if (unlikely((iph->proto == IPPROTO_AH) || (iph->proto == IPPROTO_ESP))) {
+        dp_vs_conn_fill_param(iph->af, IPPROTO_UDP,
+                              &iph->daddr, &dest->addr,
+                              htons(PORT_ISAKMP), htons(PORT_ISAKMP),
+                              0, &param);        
+
+	} else {
         dp_vs_conn_fill_param(iph->af, iph->proto,
                               &iph->saddr, &iph->daddr,
                               ports[0], ports[1], 0, &param);
