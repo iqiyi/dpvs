@@ -17,6 +17,7 @@
  */
 #include <netinet/ip_icmp.h>
 #include <netinet/icmp6.h>
+#include <linux/rtnetlink.h>
 #include <assert.h>
 #include "dpdk.h"
 #include "ipv4.h"
@@ -26,6 +27,7 @@
 #include "icmp.h"
 #include "icmp6.h"
 #include "neigh.h"
+#include "conf/neigh.h"
 #include "ipvs/xmit.h"
 #include "ipvs/nat64.h"
 #include "parser/parser.h"
@@ -144,6 +146,92 @@ static int __dp_vs_fast_xmit_fnat6(struct dp_vs_proto *proto,
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
 
     /* must return OK since netif_xmit alway consume mbuf */
+    return EDPVS_OK;
+}
+
+static int __dp_vs_fast_xmit_fnat64(struct dp_vs_proto *proto,
+                                    struct dp_vs_conn *conn,
+                                    struct rte_mbuf *mbuf)
+{
+    struct ip6_hdr *ip6h = ip6_hdr(mbuf);
+    struct rte_ipv4_hdr *ip4h;
+    struct rte_ether_hdr *eth;
+    struct neighbour_entry *neigh;
+    unsigned int hashkey;
+    uint16_t packet_type = RTE_ETHER_TYPE_IPV4;
+    int err;
+
+    if (unlikely(conn->in_dev == NULL))
+        return EDPVS_NOROUTE;
+    
+    if (unlikely(rte_is_zero_ether_addr(&conn->in_dmac) ||
+                 rte_is_zero_ether_addr(&conn->in_smac))) {
+        if (conn->in_nexthop.in.s_addr == htonl(INADDR_ANY))
+            return EDPVS_NOTSUPP;
+
+        hashkey = neigh_hashkey(AF_INET, &conn->in_nexthop, conn->in_dev);
+        neigh = neigh_lookup_entry(AF_INET, &conn->in_nexthop,
+                                    conn->in_dev, hashkey);
+        if (!neigh || neigh->state != DPVS_NUD_S_REACHABLE)
+            return EDPVS_NOTSUPP;
+
+        rte_ether_addr_copy(&neigh->eth_addr, &conn->in_dmac);
+        rte_ether_addr_copy(&conn->in_dev->addr, &conn->in_smac);
+    }
+
+    if (proto->fnat_in_pre_handler) {
+        err = proto->fnat_in_pre_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            return err;
+
+        ip6h = ip6_hdr(mbuf);
+    }
+
+    if (xmit_ttl) {
+        if (unlikely(ip6h->ip6_hops <= 1)) {
+            icmp6_send(mbuf, ICMP6_TIME_EXCEEDED, ICMP6_TIME_EXCEED_TRANSIT, 0);
+            return EDPVS_DROP;
+        }
+        ip6h->ip6_hops--;
+    }
+
+    uint32_t pkt_len = mbuf_nat6to4_len(mbuf);
+    uint16_t mtu = conn->in_dev->mtu;
+    if (pkt_len > mtu) {
+        icmp6_send(mbuf, ICMP6_PACKET_TOO_BIG, 0, mtu);
+        return EDPVS_FRAG;
+    }
+
+    err = mbuf_6to4(mbuf, &conn->laddr.in, &conn->daddr.in);
+    if (err)
+        return err;
+    ip4h = ip4_hdr(mbuf);
+    ip4h->hdr_checksum = 0;
+
+    if (proto->fnat_in_handler) {
+        err = proto->fnat_in_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            return err;
+        ip4h = ip4_hdr(mbuf);
+    }
+
+    if (likely(mbuf->ol_flags & RTE_MBUF_F_TX_IP_CKSUM)) {
+        ip4h->hdr_checksum = 0;
+    } else {
+        ip4_send_csum(ip4h);
+    }
+
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct rte_ether_hdr));
+    rte_ether_addr_copy(&conn->in_dmac, &eth->dst_addr);
+    rte_ether_addr_copy(&conn->in_smac, &eth->src_addr);
+    eth->ether_type = rte_cpu_to_be_16(packet_type);
+    mbuf->packet_type = packet_type;
+
+    err = netif_xmit(mbuf, conn->in_dev);
+    if (err != EDPVS_OK)
+        RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
+
     return EDPVS_OK;
 }
 
@@ -266,6 +354,83 @@ static int __dp_vs_fast_outxmit_fnat6(struct dp_vs_proto *proto,
         RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
 
     /* must return OK since netif_xmit alway consume mbuf */
+    return EDPVS_OK;
+}
+
+static int __dp_vs_fast_outxmit_fnat4to6(struct dp_vs_proto *proto,
+                                         struct dp_vs_conn *conn,
+                                         struct rte_mbuf *mbuf)
+{
+    struct rte_ipv4_hdr *ip4h = ip4_hdr(mbuf);
+    struct rte_ether_hdr *eth;
+    struct neighbour_entry *neigh;
+    unsigned int hashkey;
+    uint16_t packet_type = RTE_ETHER_TYPE_IPV6;
+    int err;
+
+    if (unlikely(conn->out_dev == NULL))
+        return EDPVS_NOROUTE;
+
+    if (unlikely(rte_is_zero_ether_addr(&conn->out_dmac) ||
+                 rte_is_zero_ether_addr(&conn->out_smac))) {
+        if (ipv6_addr_any(&conn->out_nexthop.in6))
+            return EDPVS_NOTSUPP;
+
+        hashkey = neigh_hashkey(AF_INET6, &conn->out_nexthop, conn->out_dev);
+        neigh = neigh_lookup_entry(AF_INET6, &conn->out_nexthop,
+                                    conn->out_dev, hashkey);
+        if (!neigh || neigh->state != DPVS_NUD_S_REACHABLE)
+            return EDPVS_NOTSUPP;
+
+        rte_ether_addr_copy(&neigh->eth_addr, &conn->out_dmac);
+        rte_ether_addr_copy(&conn->out_dev->addr, &conn->out_smac);
+    }
+    
+    if (proto->fnat_out_pre_handler) {
+        err = proto->fnat_out_pre_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            return err;
+        
+        ip4h = ip4_hdr(mbuf);
+    }
+
+    if (xmit_ttl) {
+        if (unlikely(ip4h->time_to_live <= 1)) {
+            icmp_send(mbuf, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+            return EDPVS_DROP;
+        }
+        ip4h->time_to_live--;
+    }
+
+    uint32_t pkt_len = mbuf_nat4to6_len(mbuf);
+    uint16_t mtu = conn->out_dev->mtu;
+    if (pkt_len > mtu
+        && (ip4h->fragment_offset & htons(RTE_IPV4_HDR_DF_FLAG))) {
+        icmp_send(mbuf, ICMP_DEST_UNREACH, ICMP_UNREACH_NEEDFRAG, htonl(mtu));
+        return EDPVS_FRAG;
+    }
+
+    err = mbuf_4to6(mbuf, &conn->vaddr.in6, &conn->caddr.in6);
+    if (err)
+        return err;
+
+    if (proto->fnat_out_handler) {
+        err = proto->fnat_out_handler(proto, conn, mbuf);
+        if (err != EDPVS_OK)
+            return err;
+    }
+
+    eth = (struct rte_ether_hdr *)rte_pktmbuf_prepend(mbuf,
+                    (uint16_t)sizeof(struct rte_ether_hdr));
+    rte_ether_addr_copy(&conn->out_dmac, &eth->dst_addr);
+    rte_ether_addr_copy(&conn->out_smac, &eth->src_addr);
+    eth->ether_type = rte_cpu_to_be_16(packet_type);
+    mbuf->packet_type = packet_type;
+
+    err = netif_xmit(mbuf, conn->out_dev);
+    if (err != EDPVS_OK)
+        RTE_LOG(DEBUG, IPVS, "%s: fail to netif_xmit.\n", __func__);
+
     return EDPVS_OK;
 }
 
@@ -606,6 +771,13 @@ static int __dp_vs_xmit_fnat64(struct dp_vs_proto *proto,
     struct route_entry *rt;
     int err, mtu;
 
+    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
+        dp_vs_save_xmit_info(mbuf, proto, conn);
+        if (!__dp_vs_fast_xmit_fnat64(proto, conn, mbuf)) {
+            return EDPVS_OK;
+        }
+    }
+
     /*
      * drop old route. just for safe, because
      * FNAT is PRE_ROUTING, should not have route.
@@ -922,6 +1094,16 @@ static int __dp_vs_out_xmit_fnat46(struct dp_vs_proto *proto,
     uint32_t pkt_len;
     struct route6 *rt6;
     int err, mtu;
+
+    if (!fast_xmit_close && !(conn->flags & DPVS_CONN_F_NOFASTXMIT)) {
+        dp_vs_save_outxmit_info(mbuf, proto, conn);
+        err = __dp_vs_fast_outxmit_fnat4to6(proto, conn, mbuf);
+        if (!err) {
+            return EDPVS_OK;
+        } else {
+            RTE_LOG(DEBUG, IPVS, "%s: fast path failed, err: %d.\n", __func__, err);
+        }
+    }
 
     /*
      * drop old route. just for safe, because
