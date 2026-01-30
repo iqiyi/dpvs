@@ -24,7 +24,7 @@
 
 #include "config.h"
 
-#include <openssl/md5.h>
+#include <openssl/evp.h>
 #include <string.h>
 
 #include "vrrp_ipsecah.h"
@@ -36,10 +36,10 @@ void
 hmac_md5(const unsigned char *buffer1, size_t buffer1_len, const unsigned char *buffer2, size_t buffer2_len,
 	 const unsigned char *key, size_t key_len, unsigned char *digest)
 {
-	MD5_CTX context;
+	EVP_MD_CTX *context;
 	unsigned char k_ipad[BLOCK_SIZE+1];	/* inner padding - key XORd with ipad */
 	unsigned char k_opad[BLOCK_SIZE+1];	/* outer padding - key XORd with opad */
-	unsigned char tk[MD5_DIGEST_LENGTH];
+	unsigned char tk[EVP_MD_size(EVP_md5())];
 	int i;
 
 	/* Initialize data */
@@ -49,15 +49,23 @@ hmac_md5(const unsigned char *buffer1, size_t buffer1_len, const unsigned char *
 
 	/* If the key is longer than 64 bytes => set it to key=MD5(key) */
 	if (key_len > BLOCK_SIZE) {
-		MD5_CTX tctx;
+		EVP_MD_CTX *tctx;
+		unsigned int digest_len;
 
 		/* Compute the MD5 digest */
-		MD5_Init(&tctx);
-		MD5_Update(&tctx, key, key_len);
-		MD5_Final(tk, &tctx);
+		tctx = EVP_MD_CTX_new();
+		if (tctx == NULL)
+			return;
+		if (EVP_DigestInit_ex(tctx, EVP_md5(), NULL) != 1) {
+			EVP_MD_CTX_free(tctx);
+			return;
+		}
+		EVP_DigestUpdate(tctx, key, key_len);
+		EVP_DigestFinal_ex(tctx, tk, &digest_len);
+		EVP_MD_CTX_free(tctx);
 
 		key = tk;
-		key_len = MD5_DIGEST_LENGTH;
+		key_len = EVP_MD_size(EVP_md5());
 	}
 
 	/* The global HMAC_MD5 algo looks like (rfc2085.2.2) :
@@ -79,16 +87,30 @@ hmac_md5(const unsigned char *buffer1, size_t buffer1_len, const unsigned char *
 	}
 
 	/* Compute inner MD5 */
-	MD5_Init(&context);				/* Init context for 1st pass */
-	MD5_Update(&context, k_ipad, BLOCK_SIZE);	/* start with inner pad */
-	MD5_Update(&context, buffer1, buffer1_len);	/* next with buffer datagram */
+	context = EVP_MD_CTX_new();
+	if (context == NULL)
+		return;
+	if (EVP_DigestInit_ex(context, EVP_md5(), NULL) != 1) {
+		EVP_MD_CTX_free(context);
+		return;
+	}
+	EVP_DigestUpdate(context, k_ipad, BLOCK_SIZE);
+	EVP_DigestUpdate(context, buffer1, buffer1_len);
 	if (buffer2)
-		MD5_Update(&context, buffer2, buffer2_len); /* next with buffer datagram */
-	MD5_Final(digest, &context);			/* Finish 1st pass */
+		EVP_DigestUpdate(context, buffer2, buffer2_len);
+	EVP_DigestFinal_ex(context, digest, NULL);
+	EVP_MD_CTX_free(context);
 
 	/* Compute outer MD5 */
-	MD5_Init(&context);				/* Init context for 2nd pass */
-	MD5_Update(&context, k_opad, BLOCK_SIZE);	/* start with inner pad */
-	MD5_Update(&context, digest, MD5_DIGEST_LENGTH); /* next result of 1st pass */
-	MD5_Final(digest, &context);			/* Finish 2nd pass */
+	context = EVP_MD_CTX_new();
+	if (context == NULL)
+		return;
+	if (EVP_DigestInit_ex(context, EVP_md5(), NULL) != 1) {
+		EVP_MD_CTX_free(context);
+		return;
+	}
+	EVP_DigestUpdate(context, k_opad, BLOCK_SIZE);
+	EVP_DigestUpdate(context, digest, EVP_MD_size(EVP_md5()));
+	EVP_DigestFinal_ex(context, digest, NULL);
+	EVP_MD_CTX_free(context);
 }
