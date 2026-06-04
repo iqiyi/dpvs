@@ -21,8 +21,8 @@
 #include <fcntl.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
-#include <openssl/md5.h>
 #include "conf/common.h"
+#include "md5.h"
 #include "dpdk.h"
 #include "ipvs/ipvs.h"
 #include "ipvs/synproxy.h"
@@ -82,10 +82,22 @@ static struct dpvs_timer g_second_timer;
 #endif
 
 /*
- * syncookies using digest function from openssl libray,
- * a little difference from kernel, which uses md5_transform
- * */
-static uint32_t g_net_secret[2][MD5_LBLOCK];
+ * syncookies using the in-tree md5_transform() (include/md5.h), the same
+ * primitive the Linux kernel uses for SYN cookies. This avoids the OpenSSL
+ * MD5() one-shot API deprecated since OpenSSL 3.0, and keeps the hash off the
+ * heap on the per-SYN hot path (no EVP context alloc/free per packet).
+ *
+ * Note: the resulting cookie value differs from the previous full-MD5 output,
+ * so cookies are not interchangeable across this change. During a rolling
+ * upgrade, in-flight cookies minted by the old binary fail validation on the
+ * new one (and vice versa); clients simply retransmit the SYN, so the impact
+ * is a brief transient during the swap.
+ */
+
+/* MD5 consumes the message one 64-byte block (MD5_BLOCK_WORDS words) at a time */
+#define MD5_BLOCK_WORDS (MD5_MESSAGE_BYTES / (int)sizeof(uint32_t))
+
+static uint32_t g_net_secret[2][MD5_BLOCK_WORDS];
 static struct dpvs_timer g_minute_timer;
 static rte_atomic32_t g_minute_count;
 
@@ -145,7 +157,7 @@ int dp_vs_synproxy_init(void)
     struct timeval tv;
 
     if (generate_random_key(g_net_secret, sizeof(g_net_secret))) {
-        for (i = 0; i < MD5_LBLOCK; i++) {
+        for (i = 0; i < MD5_BLOCK_WORDS; i++) {
             g_net_secret[0][i] = (uint32_t)random();
             g_net_secret[1][i] = (uint32_t)random();
         }
@@ -198,14 +210,34 @@ int dp_vs_synproxy_term(void)
 #define COOKIEBITS 24 /* Upper bits store count */
 #define COOKIEMASK (((uint32_t)1 << COOKIEBITS) - 1)
 
+/*
+ * Hash one 64-byte (MD5_BLOCK_WORDS words) message block with a single
+ * md5_transform() round and fold the resulting state into a 32-bit value.
+ * The per-key secret (g_net_secret) is mixed into the block by the callers, so
+ * the result stays keyed and hard to forge without the secret; a raw
+ * single-block transform (no length padding) is enough for SYN cookies, which
+ * only require this keyed self-consistency between generation and validation.
+ * Unlike the OpenSSL EVP path it allocates nothing and cannot fail, so callers
+ * no longer need an error sentinel.
+ */
+static inline uint32_t cookie_md5_hash(const uint32_t block[MD5_BLOCK_WORDS])
+{
+    /* MD5 initial state (RFC 1321) */
+    uint32_t hash[MD5_DIGEST_WORDS] = {
+        0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476,
+    };
+
+    md5_transform(hash, block);
+
+    return hash[0];
+}
+
 static uint32_t
 cookie_hash(uint32_t saddr, uint32_t daddr,
             uint16_t sport, uint16_t dport,
             uint32_t count, int c)
 {
-    unsigned char hash[MD5_DIGEST_LENGTH];
-    uint32_t data[5];
-    uint32_t hvalue;
+    uint32_t data[MD5_BLOCK_WORDS] = { 0 };
 
     data[0] = saddr;
     data[1] = daddr;
@@ -213,10 +245,7 @@ cookie_hash(uint32_t saddr, uint32_t daddr,
     data[3] = count;
     data[4] = g_net_secret[c][0];
 
-    MD5((unsigned char *)data, sizeof(data), hash);
-    memcpy(&hvalue, hash, sizeof(hvalue));
-
-    return hvalue;
+    return cookie_md5_hash(data);
 }
 
 static uint32_t
@@ -276,8 +305,7 @@ cookie_hash_v6(const struct in6_addr *saddr,
                uint32_t count, int c)
 {
     int i;
-    uint32_t hvalue, data[MD5_LBLOCK];
-    unsigned char hash[MD5_DIGEST_LENGTH];
+    uint32_t data[MD5_BLOCK_WORDS];
 
     for (i = 0; i < 4; i++)
         data[i] = g_net_secret[c][i] + ((uint32_t *)saddr)[i];
@@ -287,13 +315,10 @@ cookie_hash_v6(const struct in6_addr *saddr,
     data[8] = g_net_secret[c][8] + ((sport << 16) + dport);
     data[9] = g_net_secret[c][9] + count;
 
-    for (i = 10; i < MD5_LBLOCK; i++)
+    for (i = 10; i < MD5_BLOCK_WORDS; i++)
         data[i] = g_net_secret[c][i];
 
-    MD5((unsigned char*)data, sizeof(data), hash);
-    memcpy(&hvalue, hash, sizeof(hvalue));
-
-    return hvalue;
+    return cookie_md5_hash(data);
 }
 
 static uint32_t
