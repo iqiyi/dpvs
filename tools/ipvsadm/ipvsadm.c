@@ -1867,8 +1867,11 @@ static void list_conn(int is_template, unsigned int format)
     req.flag |= GET_IPVS_CONN_FLAG_ALL;
 
     while((conn_array = dp_vs_get_conns(&req)) != NULL) {
-        for (i = 0; i < conn_array->nconns; i++)
-            print_conn_entry(&conn_array->array[i], format);
+        for (i = 0; i < conn_array->nconns; i++) {
+            /* copy out of the packed array to get an aligned object */
+            ipvs_conn_entry_t entry = conn_array->array[i];
+            print_conn_entry(&entry, format);
+        }
         req.whence = conn_array->curcid;
         more = conn_array->resl & GET_IPVS_CONN_RESL_MORE;
         free(conn_array);
@@ -1898,7 +1901,11 @@ static void list_conn_sockpair(int is_template,
         fprintf(stderr, "connection specified not found\n");
         return;
     }
-    print_conn_entry(&conn_array->array[0], format);
+    {
+        /* copy out of the packed array to get an aligned object */
+        ipvs_conn_entry_t entry = conn_array->array[0];
+        print_conn_entry(&entry, format);
+    }
     free(conn_array);
 }
 
@@ -2441,7 +2448,7 @@ static void list_blklsts_print_title(void)
 
 static void print_service_and_blklsts(const struct dp_vs_blklst_conf *blklst)
 {
-    char subject[64], vip[64], vport[8], proto[8], vip_port[64];
+    char subject[64], vip[64], vport[8], proto[8], vip_port[80];
     const char *pattern = "%-8s %-30s %-30s\n";
 
     switch (blklst->proto) {
@@ -2496,9 +2503,11 @@ static inline void __list_blklst(int af, const union inet_addr *addr, uint16_t p
 {
     int i;
     for (i = 0; i < cfarr->naddr; i++) {
-        if (inet_addr_equal(af, addr, (const union inet_addr *) &cfarr->blklsts[i].vaddr) &&
-                port == cfarr->blklsts[i].vport && protocol == cfarr->blklsts[i].proto) {
-            print_service_and_blklsts(&cfarr->blklsts[i]);
+        /* copy out of the packed array to get an aligned object */
+        struct dp_vs_blklst_conf blklst = cfarr->blklsts[i];
+        if (inet_addr_equal(af, addr, &blklst.vaddr) &&
+                port == blklst.vport && protocol == blklst.proto) {
+            print_service_and_blklsts(&blklst);
         }
     }
 }
@@ -2565,7 +2574,7 @@ static void list_whtlsts_print_title(void)
 
 static void print_service_and_whtlsts(const struct dp_vs_whtlst_conf *whtlst)
 {
-    char subject[64], vip[64], vport[8], proto[8], vip_port[64];
+    char subject[64], vip[64], vport[8], proto[8], vip_port[80];
     const char *pattern = "%-8s %-30s %-30s\n";
 
     switch (whtlst->proto) {
@@ -2608,9 +2617,11 @@ static inline void __list_whtlst(int af, const union inet_addr *addr, uint16_t p
 {
     int i;
     for (i = 0; i < cfarr->naddr; i++) {
-        if (inet_addr_equal(af, addr,(const union inet_addr *) &cfarr->whtlsts[i].vaddr) &&
-                port == cfarr->whtlsts[i].vport && protocol == cfarr->whtlsts[i].proto) {
-            print_service_and_whtlsts(&cfarr->whtlsts[i]);
+        /* copy out of the packed array to get an aligned object */
+        struct dp_vs_whtlst_conf whtlst = cfarr->whtlsts[i];
+        if (inet_addr_equal(af, addr, &whtlst.vaddr) &&
+                port == whtlst.vport && protocol == whtlst.proto) {
+            print_service_and_whtlsts(&whtlst);
         }
     }
 }
