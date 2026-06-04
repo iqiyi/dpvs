@@ -27,6 +27,7 @@
 
 #include <fcntl.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
 
 #include "check_ssl.h"
 #include "check_api.h"
@@ -315,8 +316,19 @@ ssl_read_thread(thread_ref_t thread)
 	} else if (req->error) {
 
 		/* All the SSL streal has been parsed */
-		if (url->digest)
-			MD5_Final(digest, &req->context);
+		if (url->digest) {
+			if (req->context) {
+				if (EVP_DigestFinal_ex(req->context, digest, NULL) != 1) {
+					log_message(LOG_INFO, "SSL digest finalization failed");
+					/* digest is now indeterminate: force a mismatch */
+					memset(digest, 0, MD5_DIGEST_LENGTH);
+				}
+				EVP_MD_CTX_free(req->context);
+				req->context = NULL;
+			} else
+				/* digest could not be computed: force a mismatch */
+				memset(digest, 0, MD5_DIGEST_LENGTH);
+		}
 		SSL_set_quiet_shutdown(req->ssl, 1);
 
 		r = (req->error == SSL_ERROR_ZERO_RETURN) ? SSL_shutdown(req->ssl) : 0;

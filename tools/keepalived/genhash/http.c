@@ -24,6 +24,7 @@
 
 /* system includes */
 #include <openssl/err.h>
+#include <openssl/evp.h>
 
 /* keepalived includes */
 #include "utils.h"
@@ -76,20 +77,66 @@ static const char *request_template_ipv6 =
  *   finalize    /     epilog
  */
 
+/*
+ * EVP adapters behind the hash_init_f/update_f/final_f typedefs.
+ * OpenSSL 3.0 deprecates the legacy MD5/SHA1 one-shot APIs, and their
+ * signatures no longer match the typedefs cleanly, so wrap the EVP API instead.
+ */
+static int
+genhash_md5_init(hash_context_t *ctx)
+{
+	ctx->ctx = EVP_MD_CTX_new();
+	if (ctx->ctx == NULL)
+		return 0;
+	return EVP_DigestInit_ex(ctx->ctx, EVP_md5(), NULL);
+}
+
+#ifdef _WITH_SHA1_
+static int
+genhash_sha1_init(hash_context_t *ctx)
+{
+	ctx->ctx = EVP_MD_CTX_new();
+	if (ctx->ctx == NULL)
+		return 0;
+	return EVP_DigestInit_ex(ctx->ctx, EVP_sha1(), NULL);
+}
+#endif
+
+static int
+genhash_digest_update(hash_context_t *ctx, const void *data, unsigned long len)
+{
+	if (ctx->ctx == NULL)
+		return 0;
+	return EVP_DigestUpdate(ctx->ctx, data, len);
+}
+
+static int
+genhash_digest_final(unsigned char *md, hash_context_t *ctx)
+{
+	int r = 0;
+
+	if (ctx->ctx) {
+		r = EVP_DigestFinal_ex(ctx->ctx, md, NULL);
+		EVP_MD_CTX_free(ctx->ctx);
+		ctx->ctx = NULL;
+	}
+	return r;
+}
+
 const hash_t hashes[hash_guard] = {
 	[hash_md5] = {
-		(hash_init_f) MD5_Init,
-		(hash_update_f) MD5_Update,
-		(hash_final_f) MD5_Final,
+		genhash_md5_init,
+		genhash_digest_update,
+		genhash_digest_final,
 		MD5_DIGEST_LENGTH,
 		"MD5",
 		"MD5SUM",
 	},
 #ifdef _WITH_SHA1_
 	[hash_sha1] = {
-		(hash_init_f) SHA1_Init,
-		(hash_update_f) SHA1_Update,
-		(hash_final_f) SHA1_Final,
+		genhash_sha1_init,
+		genhash_digest_update,
+		genhash_digest_final,
 		SHA_DIGEST_LENGTH,
 		"SHA1",
 		"SHA1SUM",
@@ -105,6 +152,14 @@ const hash_t hashes[hash_guard] = {
 		((sock)->hash->update(&(sock)->context, (buf), (sock)->content_len == -1 || (sock)->content_len - (sock)->rx_bytes >= len ? len : (sock)->content_len - (sock)->rx_bytes))
 #define HASH_FINAL(sock, digest) \
 	((sock)->hash->final((digest), &(sock)->context))
+/* release the EVP context if HASH_FINAL never ran (e.g. timeout/error path) */
+#define HASH_CLEANUP(sock) \
+	do { \
+		if ((sock)->context.ctx) { \
+			EVP_MD_CTX_free((sock)->context.ctx); \
+			(sock)->context.ctx = NULL; \
+		} \
+	} while (0)
 
 /* free allocated pieces */
 static void
@@ -117,6 +172,9 @@ free_all(thread_ref_t thread)
 
 	if (sock_obj->buffer)
 		FREE(sock_obj->buffer);
+
+	/* free the digest context if it was allocated but never finalized */
+	HASH_CLEANUP(sock_obj);
 
 	/*
 	 * Decrement the current global get number.
@@ -145,20 +203,26 @@ finalize(thread_ref_t thread)
 	int i;
 
 	/* Compute final hash digest */
-	HASH_FINAL(sock_obj, digest);
-	if (req->verbose) {
-		printf("\n");
-		printf(HTML_HASH);
-		dump_buffer((char *) digest, digest_length, stdout, 0);
+	if (!HASH_FINAL(sock_obj, digest)) {
+		/* digest could not be computed: report failure instead of
+		 * printing an all-zero digest as if it were valid */
+		fprintf(stderr, "Hash computation failed for [%s]\n", req->url);
+		exit_code = 1;
+	} else {
+		if (req->verbose) {
+			printf("\n");
+			printf(HTML_HASH);
+			dump_buffer((char *) digest, digest_length, stdout, 0);
 
-		printf(HTML_HASH_FINAL);
+			printf(HTML_HASH_FINAL);
+		}
+		printf("%s = ", HASH_LABEL(sock_obj));
+		for (i = 0; i < digest_length; i++)
+			printf("%02x", digest[i]);
+		if (sock_obj->content_len != -1 && sock_obj->content_len != sock_obj->rx_bytes)
+			printf ("\nWARNING - Content-Length (%zd) does not match received bytes (%zd).", sock_obj->content_len, sock_obj->rx_bytes);
+		printf("\n\n");
 	}
-	printf("%s = ", HASH_LABEL(sock_obj));
-	for (i = 0; i < digest_length; i++)
-		printf("%02x", digest[i]);
-	if (sock_obj->content_len != -1 && sock_obj->content_len != sock_obj->rx_bytes)
-		printf ("\nWARNING - Content-Length (%zd) does not match received bytes (%zd).", sock_obj->content_len, sock_obj->rx_bytes);
-	printf("\n\n");
 
 	DBG("Finalize : [%s]\n", req->url);
 	free_all(thread);
@@ -373,7 +437,10 @@ http_request_thread(thread_ref_t thread)
 
 	/* Initalize the hash context */
 	sock_obj->hash = &hashes[req->hash];
-	HASH_INIT(sock_obj);
+	if (!HASH_INIT(sock_obj)) {
+		fprintf(stderr, "Unable to initialize hash context\n");
+		exit_code = 1;
+	}
 
 	sock_obj->rx_bytes = 0;
 

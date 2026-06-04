@@ -24,6 +24,7 @@
 #include "config.h"
 
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -289,6 +290,10 @@ free_http_request(request_t *req)
 {
 	if(!req)
 		return;
+	if (req->context) {
+		EVP_MD_CTX_free(req->context);
+		req->context = NULL;
+	}
 	if (req->ssl)
 		SSL_free(req->ssl);
 	if (req->buffer)
@@ -1345,9 +1350,12 @@ http_process_response(request_t *req, size_t r, url_t *url)
 			req->content_len = extract_content_length(req->buffer, req->len);
 			r = req->len - (size_t)(req->extracted - req->buffer);
 			if (r && url->digest) {
-				if (req->content_len == SIZE_MAX || req->content_len > req->rx_bytes)
-					MD5_Update(&req->context, req->extracted,
-						   req->content_len == SIZE_MAX || req->content_len >= req->rx_bytes + r ? r : req->content_len - req->rx_bytes);
+				if (req->context &&
+				    (req->content_len == SIZE_MAX || req->content_len > req->rx_bytes)) {
+					if (EVP_DigestUpdate(req->context, req->extracted,
+						   req->content_len == SIZE_MAX || req->content_len >= req->rx_bytes + r ? r : req->content_len - req->rx_bytes) != 1)
+						log_message(LOG_INFO, "HTTP digest update failed");
+				}
 			}
 
 			req->rx_bytes = r;
@@ -1357,10 +1365,11 @@ http_process_response(request_t *req, size_t r, url_t *url)
 				req->len = 0;
 		}
 	} else if (req->len) {
-		if (url->digest &&
+		if (url->digest && req->context &&
 		    (req->content_len == SIZE_MAX || req->content_len > req->rx_bytes)) {
-			MD5_Update(&req->context, req->buffer + old_req_len,
-				   req->content_len == SIZE_MAX || req->content_len >= req->rx_bytes + r ? r : req->content_len - req->rx_bytes);
+			if (EVP_DigestUpdate(req->context, req->buffer + old_req_len,
+				   req->content_len == SIZE_MAX || req->content_len >= req->rx_bytes + r ? r : req->content_len - req->rx_bytes) != 1)
+				log_message(LOG_INFO, "HTTP digest update failed");
 		}
 
 		req->rx_bytes += req->len;
@@ -1403,8 +1412,19 @@ http_read_thread(thread_ref_t thread)
 
 	if (r <= 0) {	/* -1:error , 0:EOF */
 		/* All the HTTP stream has been parsed */
-		if (url->digest)
-			MD5_Final(digest, &req->context);
+		if (url->digest) {
+			if (req->context) {
+				if (EVP_DigestFinal_ex(req->context, digest, NULL) != 1) {
+					log_message(LOG_INFO, "HTTP digest finalization failed");
+					/* digest is now indeterminate: force a mismatch */
+					memset(digest, 0, MD5_DIGEST_LENGTH);
+				}
+				EVP_MD_CTX_free(req->context);
+				req->context = NULL;
+			} else
+				/* digest could not be computed: force a mismatch */
+				memset(digest, 0, MD5_DIGEST_LENGTH);
+		}
 
 		if (r == -1) {
 			/* We have encountered a real read error */
@@ -1457,8 +1477,17 @@ http_response_thread(thread_ref_t thread)
 	req->num_match_calls = 0;
 #endif
 #endif
-	if (url->digest)
-		MD5_Init(&req->context);
+	if (url->digest) {
+		req->context = EVP_MD_CTX_new();
+		if (req->context == NULL ||
+		    EVP_DigestInit_ex(req->context, EVP_md5(), NULL) != 1) {
+			log_message(LOG_INFO, "Unable to initialize MD5 digest context");
+			if (req->context) {
+				EVP_MD_CTX_free(req->context);
+				req->context = NULL;
+			}
+		}
+	}
 
 	/* Register asynchronous http/ssl read thread */
 	if (http_get_check->proto == PROTO_SSL)

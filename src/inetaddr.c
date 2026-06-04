@@ -17,6 +17,7 @@
  */
 #include <assert.h>
 #include <openssl/sha.h>
+#include <openssl/evp.h>
 #include "dpdk.h"
 #include "ctrl.h"
 #include "netif.h"
@@ -306,7 +307,9 @@ static int inet6_addr_gen_stable(struct in6_addr secret, struct inet_device *ide
 #define MAX_RETRY   8
     struct in6_addr temp;
     union {
-        unsigned char data[SHA256_DIGEST_LENGTH];
+        /* must hold a full SHA-512 digest (64 bytes); only the first two
+         * words are consumed below */
+        unsigned char data[SHA512_DIGEST_LENGTH];
         uint32_t data_word[2];
     } md;
     struct {
@@ -325,7 +328,9 @@ static int inet6_addr_gen_stable(struct in6_addr secret, struct inet_device *ide
     while (1) {
         data.dad_count = dad_count++;
         memset(&md, 0, sizeof(md));
-        SHA512((const unsigned char*)&data, sizeof(data), md.data);
+        /* OpenSSL 3.0 deprecates the one-shot SHA512(); use the EVP one-shot */
+        if (EVP_Digest(&data, sizeof(data), md.data, NULL, EVP_sha512(), NULL) != 1)
+            return EDPVS_INVAL;
         temp = *addr;
         temp.s6_addr32[2] = md.data_word[0];
         temp.s6_addr32[3] = md.data_word[1];

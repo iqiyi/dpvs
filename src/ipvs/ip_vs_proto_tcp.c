@@ -37,6 +37,7 @@
  * like tcphdr.syn, so use standard definition. */
 #include <netinet/tcp.h>
 #include <openssl/sha.h>
+#include <openssl/evp.h>
 #include "ipvs/redirect.h"
 #include "ipvs/proxy_proto.h"
 
@@ -234,9 +235,17 @@ static inline uint32_t tcp_secure_sequence_number(uint32_t saddr, uint32_t daddr
     data[2] = ((uint16_t)sport << 16) + (uint16_t)dport;
     data[3] = tcp_secret;
 
-    SHA1((unsigned char *)data, sizeof(data), hash);
-    hash0 = hash[0];
-    return seq_scale(*(uint32_t *)&hash0);
+    /* OpenSSL 3.0 deprecates the one-shot SHA1(); use the EVP one-shot.
+     * Only self-consistency matters here (internal ISN), so any digest value
+     * is fine as long as it is deterministic. EVP_Digest of a fixed buffer with
+     * a built-in digest should never fail; if it somehow does, fall back to a
+     * deterministic value rather than 0, which tcp_in_init_seq() treats as the
+     * "uninitialized" sentinel. */
+    if (EVP_Digest(data, sizeof(data), hash, NULL, EVP_sha1(), NULL) == 1)
+        memcpy(&hash0, hash, sizeof(hash0));
+    else
+        hash0 = data[0] ^ data[1] ^ data[2] ^ data[3];
+    return seq_scale(hash0);
 }
 
 static inline void tcp_in_init_seq(struct dp_vs_conn *conn,

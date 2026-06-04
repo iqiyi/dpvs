@@ -957,7 +957,7 @@ AC_CHECK_HEADERS([openssl/ssl.h openssl/err.h], [],
     NEED_SSL=no
     break
   ])
-AC_CHECK_HEADERS([openssl/md5.h], [],
+AC_CHECK_HEADERS([openssl/md5.h openssl/evp.h], [],
   [
     if test $NEED_MD5 = yes; then
       AC_MSG_ERROR([
@@ -978,7 +978,10 @@ else
 fi
 
 EXTRA_LIBS=`echo $OPENSSL_LIBS | sed -e "s/-lcrypto//"`
-AC_CHECK_LIB(crypto, MD5_Init, [],
+dnl MD5 is now used via the EVP API (OpenSSL 3.0 deprecates the MD5_* one-shot
+dnl API); probe a non-deprecated EVP symbol so the check also passes against an
+dnl OpenSSL built with no-deprecated.
+AC_CHECK_LIB(crypto, EVP_DigestInit_ex, [],
   [
     if test $NEED_MD5 = yes; then
       AC_MSG_ERROR([OpenSSL MD5 libraries are required])
@@ -2233,13 +2236,15 @@ dnl ----[ SHA1 or not ? ]----
 SHA1_SUPPORT=No
 if test "${enable_sha1}" = yes; then
   AC_CHECK_HEADERS(openssl/sha.h,,AC_MSG_ERROR([unable to find openssl/sha.h]))
-  AC_CHECK_LIB(crypto, SHA1_Init,,
+  dnl SHA1 is now used via the EVP API; probe the non-deprecated EVP_sha1 symbol
+  dnl so SHA1 support is detected even on an OpenSSL built with no-deprecated.
+  AC_CHECK_LIB(crypto, EVP_sha1,,
     [
       dnl libcrypto can require -fpic
-      AS_UNSET([ac_cv_lib_crypto_SHA1_Init])
+      AS_UNSET([ac_cv_lib_crypto_EVP_sha1])
       SAV_CFLAGS=$CFLAGS
       CFLAGS="$CFLAGS -fpic"
-      AC_CHECK_LIB(crypto, SHA1_Init,,AC_MSG_ERROR([SHA1 in OpenSSL required]))
+      AC_CHECK_LIB(crypto, EVP_sha1,,AC_MSG_ERROR([SHA1 in OpenSSL required]))
       CFLAGS=$SAV_CFLAGS
       add_to_var([KA_CFLAGS],[-fpic])
     ])

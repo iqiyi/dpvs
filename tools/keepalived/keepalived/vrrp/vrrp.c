@@ -511,8 +511,11 @@ vrrp_update_pkt(vrrp_t *vrrp, uint8_t prio, struct sockaddr_storage* addr)
 				   -- rfc2402.3.3.3.1.1.1 & rfc2401.5
 				 */
 				memset(&ah->auth_data, 0, sizeof(ah->auth_data));
-				hmac_md5((const unsigned char *)&iph, sizeof iph, (const unsigned char *)ah, vrrp->send_buffer_size - sizeof (struct iphdr), vrrp->auth_data, sizeof (vrrp->auth_data), digest);
-				memcpy(ah->auth_data, digest, HMAC_MD5_TRUNC);
+				if (hmac_md5((const unsigned char *)&iph, sizeof iph, (const unsigned char *)ah, vrrp->send_buffer_size - sizeof (struct iphdr), vrrp->auth_data, sizeof (vrrp->auth_data), digest) == 0)
+					memcpy(ah->auth_data, digest, HMAC_MD5_TRUNC);
+				else
+					/* leave auth_data zeroed: peers reject the unauthenticated advert */
+					log_message(LOG_INFO, "(%s) IPSEC-AH : HMAC-MD5 computation failed on send", vrrp->iname);
 			}
 		}
 #endif
@@ -577,9 +580,15 @@ vrrp_in_chk_ipsecah(vrrp_t *vrrp, const struct iphdr *ip, const ipsec_ah_t *ah, 
 	memset(digest, 0, MD5_DIGEST_LENGTH);
 
 	/* Compute the ICV */
-	hmac_md5((const unsigned char *)ip_tmp, hdr_len,
+	if (hmac_md5((const unsigned char *)ip_tmp, hdr_len,
 		 (const unsigned char *)hd, buflen - ((const unsigned char *)hd - (const unsigned char *)ip)
-		 , vrrp->auth_data, sizeof (vrrp->auth_data) , digest);
+		 , vrrp->auth_data, sizeof (vrrp->auth_data) , digest) != 0) {
+		/* digest computation failed: fail closed, never compare a zeroed
+		 * digest (an all-zero ICV would otherwise falsely authenticate) */
+		log_message(LOG_INFO, "(%s) IPSEC-AH : HMAC-MD5 computation failed,"
+				      " dropping packet", vrrp->iname);
+		return true;
+	}
 
 	if (memcmp_constant_time(ah->auth_data, digest, HMAC_MD5_TRUNC) != 0) {
 		log_message(LOG_INFO, "(%s) IPSEC-AH : invalid"
@@ -1245,8 +1254,13 @@ vrrp_build_ipsecah(vrrp_t * vrrp, char *buffer, size_t buflen)
 	   => No padding needed.
 	   -- rfc2402.3.3.3.1.1.1 & rfc2401.5
 	 */
-	hmac_md5((unsigned char *) buffer, buflen, NULL, 0, vrrp->auth_data, sizeof (vrrp->auth_data), digest);
-	memcpy(ah->auth_data, digest, HMAC_MD5_TRUNC);
+	if (hmac_md5((unsigned char *) buffer, buflen, NULL, 0, vrrp->auth_data, sizeof (vrrp->auth_data), digest) == 0)
+		memcpy(ah->auth_data, digest, HMAC_MD5_TRUNC);
+	else {
+		/* fail closed: zero ICV so peers reject the unauthenticated advert */
+		memset(ah->auth_data, 0, HMAC_MD5_TRUNC);
+		log_message(LOG_INFO, "(%s) IPSEC-AH : HMAC-MD5 computation failed while building packet", vrrp->iname);
+	}
 }
 #endif
 

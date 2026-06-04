@@ -25,9 +25,10 @@
 #define _HASH_H
 
 /* system includes */
-#include <openssl/md5.h>
+#include <openssl/evp.h>
+#include <openssl/md5.h>	/* for MD5_DIGEST_LENGTH (not deprecated) */
 #ifdef _WITH_SHA1_
-#include <openssl/sha.h>
+#include <openssl/sha.h>	/* for SHA_DIGEST_LENGTH (not deprecated) */
 #endif
 
 /* available hashes enumeration */
@@ -41,15 +42,11 @@ enum feat_hashes {
 	hash_default = hash_md5,
 };
 
-typedef union {
-	MD5_CTX			md5;
-#ifdef _WITH_SHA1_
-	SHA_CTX			sha;
-#endif
-	/* this is due to poor C standard/draft wording (wrapped):
-	   https://groups.google.com/forum/#!msg/comp.lang.c/
-	   1kQMGXhgn4I/0VBEYG_ji44J */
-	char			*dummy;
+typedef struct {
+	/* OpenSSL 3.0 deprecates the legacy MD5/SHA1 one-shot APIs; use a single
+	   EVP context. Allocated by the init wrapper, freed by the final wrapper
+	   (or by HASH_CLEANUP on the error path). */
+	EVP_MD_CTX		*ctx;
 } hash_context_t;
 
 typedef int (*hash_init_f)(hash_context_t *);
