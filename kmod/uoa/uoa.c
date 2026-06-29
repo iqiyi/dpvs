@@ -59,6 +59,16 @@
 #define HAVE_PROC_OPS
 #endif
 
+/*
+ * Upstream v6.16 renamed from_timer() to timer_container_of(). RHEL/AlmaLinux
+ * backport this into 5.14.0-based kernels, so a LINUX_VERSION_CODE check is
+ * unreliable; detect by macro presence instead.
+ */
+#if !defined(from_timer) && defined(timer_container_of)
+#define from_timer(var, callback_timer, timer_fieldname) \
+    timer_container_of(var, callback_timer, timer_fieldname)
+#endif
+
 #define UOA_NEED_EXTRA
 #include "uoa_extra.h"
 #include "uoa.h"
