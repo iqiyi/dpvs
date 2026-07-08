@@ -82,11 +82,24 @@ struct toa_ip6_sk_lock {
 static struct toa_ip6_sk_lock toa_ip6_sk_lock;
 #endif
 
-#ifdef TOA_IPV6_ENABLE
-static struct proto_ops *inet6_stream_ops_p = NULL;
-static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+/* syn_recv_sock 函数指针类型，IPv4/IPv6 共用，故移出 TOA_IPV6_ENABLE */
+/* The syn_recv_sock 7th arg opt_child_init comes from upstream CVE-2026-43198
+ * (commit 858d2a4f67ff, merged in v7.0), backported per stable/distro:
+ * AlmaLinux/RHEL 10 has it since 6.12.0-211.28.1.el10_2 (10.0/10.1 and 10.2
+ * before 211.28.1 do not); Debian/Ubuntu 6.12.y LTS will follow. Gate on the
+ * build-time feature-probe macro TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT (see the
+ * Makefile probing inet_connection_sock.h) rather than a version macro:
+ * RHEL_RELEASE_CODE has only minor granularity and cannot express the
+ * z-stream (211.28.1) boundary. */
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+typedef struct sock *(*syn_recv_sock_func_pt)(
+        const struct sock *sk, struct sk_buff *skb,
+        struct request_sock *req,
+        struct dst_entry *dst,
+        struct request_sock *req_unhash,
+        bool *own_req,
+        void (*opt_child_init)(struct sock *newsk, const struct sock *sk));
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
 typedef struct sock *(*syn_recv_sock_func_pt)(
         const struct sock *sk, struct sk_buff *skb,
         struct request_sock *req,
@@ -99,6 +112,16 @@ typedef struct sock *(*syn_recv_sock_func_pt)(
         struct request_sock *req,
         struct dst_entry *dst);
 #endif
+
+/* ipv4_specific / tcp_v4_syn_recv_sock 在较新内核（如 Debian 6.12.94）已不再
+ * EXPORT_SYMBOL，直接引用会 modpost undefined。改为运行时 kallsyms 解析，
+ * 与下面 IPv6 路径一致。 */
+static struct inet_connection_sock_af_ops *ipv4_specific_p = NULL;
+static syn_recv_sock_func_pt tcp_v4_syn_recv_sock_org_pt = NULL;
+
+#ifdef TOA_IPV6_ENABLE
+static struct proto_ops *inet6_stream_ops_p = NULL;
+static struct inet_connection_sock_af_ops *ipv6_specific_p = NULL;
 static syn_recv_sock_func_pt tcp_v6_syn_recv_sock_org_pt = NULL;
 #endif
 
@@ -731,7 +754,15 @@ get_kernel_ipv6_symbol(void)
  * @param dst [out] route cache entry
  * @return NULL if fail new socket if succeed.
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+static struct sock *
+tcp_v4_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+            struct request_sock *req,
+            struct dst_entry *dst,
+            struct request_sock *req_unhash,
+            bool *own_req,
+            void (*opt_child_init)(struct sock *newsk, const struct sock *sk))
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
 static struct sock *
 tcp_v4_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
             struct request_sock *req,
@@ -750,10 +781,12 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
     TOA_DBG("tcp_v4_syn_recv_sock_toa called\n");
 
     /* call orginal one */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
-    newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst, req_unhash, own_req);
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+    newsock = tcp_v4_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash, own_req, opt_child_init);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+    newsock = tcp_v4_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash, own_req);
 #else
-    newsock = tcp_v4_syn_recv_sock(sk, skb, req, dst);
+    newsock = tcp_v4_syn_recv_sock_org_pt(sk, skb, req, dst);
 #endif
 
     /* set our value if need */
@@ -785,7 +818,15 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 }
 
 #ifdef TOA_IPV6_ENABLE
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+static struct sock *
+tcp_v6_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+             struct request_sock *req,
+             struct dst_entry *dst,
+             struct request_sock *req_unhash,
+             bool *own_req,
+             void (*opt_child_init)(struct sock *newsk, const struct sock *sk))
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
 static struct sock *
 tcp_v6_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
              struct request_sock *req,
@@ -804,7 +845,10 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
     TOA_DBG("tcp_v6_syn_recv_sock_toa called\n");
 
     /* call orginal one */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+    newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash,
+            own_req, opt_child_init);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
     newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash,
             own_req);
 #else
@@ -844,9 +888,8 @@ hook_toa_functions(void)
 {
 
     struct proto_ops *inet_stream_ops_p;
-    struct inet_connection_sock_af_ops *ipv4_specific_p;
     int rw_enable = 0;
-    
+
     /* hook inet_getname for ipv4 */
     inet_stream_ops_p = (struct proto_ops *)&inet_stream_ops;
     
@@ -862,19 +905,17 @@ hook_toa_functions(void)
     TOA_INFO("CPU [%u] hooked inet_getname <%p> --> <%p>\n",
             smp_processor_id(), inet_getname, inet_stream_ops_p->getname);
     
-    ipv4_specific_p = (struct inet_connection_sock_af_ops *)&ipv4_specific;
-    
-    if (is_ro_addr((unsigned long)(&ipv4_specific.syn_recv_sock))) {
-            set_addr_rw((unsigned long)(&ipv4_specific.syn_recv_sock));
+    if (is_ro_addr((unsigned long)(&ipv4_specific_p->syn_recv_sock))) {
+            set_addr_rw((unsigned long)(&ipv4_specific_p->syn_recv_sock));
             rw_enable = 1;
     }
     ipv4_specific_p->syn_recv_sock = tcp_v4_syn_recv_sock_toa;
     if (rw_enable == 1) {
-            set_addr_ro((unsigned long)(&ipv4_specific.syn_recv_sock));
+            set_addr_ro((unsigned long)(&ipv4_specific_p->syn_recv_sock));
             rw_enable = 0;
     }
     TOA_INFO("CPU [%u] hooked tcp_v4_syn_recv_sock <%p> --> <%p>\n",
-            smp_processor_id(), tcp_v4_syn_recv_sock,
+            smp_processor_id(), (void *)tcp_v4_syn_recv_sock_org_pt,
             ipv4_specific_p->syn_recv_sock);
 #ifdef TOA_IPV6_ENABLE
     if (is_ro_addr((unsigned long)(&inet6_stream_ops_p->getname))) {
@@ -912,9 +953,8 @@ unhook_toa_functions(void)
 {
 
     struct proto_ops *inet_stream_ops_p;
-    struct inet_connection_sock_af_ops *ipv4_specific_p;
     int rw_enable = 0;
-    
+
     /* unhook inet_getname for ipv4 */
     inet_stream_ops_p = (struct proto_ops *)&inet_stream_ops;
     
@@ -930,15 +970,14 @@ unhook_toa_functions(void)
     TOA_INFO("CPU [%u] unhooked inet_getname\n", smp_processor_id());
     
     /* unhook tcp_v4_syn_recv_sock for ipv4 */
-    ipv4_specific_p = (struct inet_connection_sock_af_ops *)&ipv4_specific;
-    if (is_ro_addr((unsigned long)(&ipv4_specific.syn_recv_sock))) {
-            set_addr_rw((unsigned long)(&ipv4_specific.syn_recv_sock));
+    if (is_ro_addr((unsigned long)(&ipv4_specific_p->syn_recv_sock))) {
+            set_addr_rw((unsigned long)(&ipv4_specific_p->syn_recv_sock));
             rw_enable = 1;
     }
-    set_addr_rw((unsigned long)(&ipv4_specific.syn_recv_sock));
-    ipv4_specific_p->syn_recv_sock = tcp_v4_syn_recv_sock;
+    set_addr_rw((unsigned long)(&ipv4_specific_p->syn_recv_sock));
+    ipv4_specific_p->syn_recv_sock = tcp_v4_syn_recv_sock_org_pt;
     if (rw_enable == 1) {
-            set_addr_ro((unsigned long)(&ipv4_specific.syn_recv_sock));
+            set_addr_ro((unsigned long)(&ipv4_specific_p->syn_recv_sock));
             rw_enable = 0;
     }
 
@@ -1098,6 +1137,20 @@ toa_init(void)
         goto err;
     }
 
+    /* ipv4_specific / tcp_v4_syn_recv_sock 不再导出，运行时解析 */
+    ipv4_specific_p = (struct inet_connection_sock_af_ops *)
+        kallsyms_lookup_name("ipv4_specific");
+    if (NULL == ipv4_specific_p) {
+        TOA_INFO("cannot find ipv4_specific.\n");
+        goto err;
+    }
+    tcp_v4_syn_recv_sock_org_pt = (syn_recv_sock_func_pt)
+        kallsyms_lookup_name("tcp_v4_syn_recv_sock");
+    if (NULL == tcp_v4_syn_recv_sock_org_pt) {
+        TOA_INFO("cannot find tcp_v4_syn_recv_sock.\n");
+        goto err;
+    }
+
 #if (defined(TOA_IPV6_ENABLE) || defined(TOA_NAT64_ENABLE))
     if (0 != init_toa_ip6()) {
         TOA_INFO("init toa ip6 fail.\n");
@@ -1126,6 +1179,11 @@ toa_init(void)
     return 0;
 
 err:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
+    /* init 失败时 module_exit 不会被调用，必须在此注销已注册的 kprobe，
+     * 否则会遗留悬挂探针、阻塞后续重新加载 */
+    unregister_kprobe(&kp);
+#endif
     proc_net_remove(&init_net, "toa_stats");
     if (NULL != ext_stats) {
         free_percpu(ext_stats);
