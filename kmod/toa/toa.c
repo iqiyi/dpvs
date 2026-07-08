@@ -83,7 +83,23 @@ static struct toa_ip6_sk_lock toa_ip6_sk_lock;
 #endif
 
 /* syn_recv_sock 函数指针类型，IPv4/IPv6 共用，故移出 TOA_IPV6_ENABLE */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+/* The syn_recv_sock 7th arg opt_child_init comes from upstream CVE-2026-43198
+ * (commit 858d2a4f67ff, merged in v7.0), backported per stable/distro:
+ * AlmaLinux/RHEL 10 has it since 6.12.0-211.28.1.el10_2 (10.0/10.1 and 10.2
+ * before 211.28.1 do not); Debian/Ubuntu 6.12.y LTS will follow. Gate on the
+ * build-time feature-probe macro TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT (see the
+ * Makefile probing inet_connection_sock.h) rather than a version macro:
+ * RHEL_RELEASE_CODE has only minor granularity and cannot express the
+ * z-stream (211.28.1) boundary. */
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+typedef struct sock *(*syn_recv_sock_func_pt)(
+        const struct sock *sk, struct sk_buff *skb,
+        struct request_sock *req,
+        struct dst_entry *dst,
+        struct request_sock *req_unhash,
+        bool *own_req,
+        void (*opt_child_init)(struct sock *newsk, const struct sock *sk));
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
 typedef struct sock *(*syn_recv_sock_func_pt)(
         const struct sock *sk, struct sk_buff *skb,
         struct request_sock *req,
@@ -738,7 +754,15 @@ get_kernel_ipv6_symbol(void)
  * @param dst [out] route cache entry
  * @return NULL if fail new socket if succeed.
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+static struct sock *
+tcp_v4_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+            struct request_sock *req,
+            struct dst_entry *dst,
+            struct request_sock *req_unhash,
+            bool *own_req,
+            void (*opt_child_init)(struct sock *newsk, const struct sock *sk))
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
 static struct sock *
 tcp_v4_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
             struct request_sock *req,
@@ -757,7 +781,9 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
     TOA_DBG("tcp_v4_syn_recv_sock_toa called\n");
 
     /* call orginal one */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+    newsock = tcp_v4_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash, own_req, opt_child_init);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
     newsock = tcp_v4_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash, own_req);
 #else
     newsock = tcp_v4_syn_recv_sock_org_pt(sk, skb, req, dst);
@@ -792,7 +818,15 @@ tcp_v4_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
 }
 
 #ifdef TOA_IPV6_ENABLE
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+static struct sock *
+tcp_v6_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
+             struct request_sock *req,
+             struct dst_entry *dst,
+             struct request_sock *req_unhash,
+             bool *own_req,
+             void (*opt_child_init)(struct sock *newsk, const struct sock *sk))
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
 static struct sock *
 tcp_v6_syn_recv_sock_toa(const struct sock *sk, struct sk_buff *skb,
              struct request_sock *req,
@@ -811,7 +845,10 @@ tcp_v6_syn_recv_sock_toa(struct sock *sk, struct sk_buff *skb,
     TOA_DBG("tcp_v6_syn_recv_sock_toa called\n");
 
     /* call orginal one */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
+#ifdef TOA_SYN_RECV_SOCK_HAS_OPT_CHILD_INIT
+    newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash,
+            own_req, opt_child_init);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,1)
     newsock = tcp_v6_syn_recv_sock_org_pt(sk, skb, req, dst, req_unhash,
             own_req);
 #else
